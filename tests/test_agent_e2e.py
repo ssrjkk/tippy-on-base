@@ -11,11 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.tools import _agent_markets
-
 # Agent state files live in STATE_DIR (agent/ by default, AGENT_STATE_DIR in
 # read-only containers) — see agent/config.py.
 from agent.config import STATE_DIR
+from agent.tools import _agent_markets
 
 _STATE_DIR = Path(STATE_DIR)
 

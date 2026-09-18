@@ -190,7 +190,16 @@ Full production walkthrough: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 bot/
 ├─ main.py        entrypoint, background watchers (deposits, withdrawals, deadlines)
 ├─ handlers/      aiogram handlers by domain (_common, menu, wallet, tips, bets, markets, stats, paywall, onchain, ai)
-├─ ledger.py      PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
+├─ ledger/        PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
+│  ├─ __init__.py    Ledger facade + singletons + lmsr_* re-exports
+│  ├─ _core.py       connect/schema/ping                   _schema.py  DDL
+│  ├─ _users.py      accounts, wallet links, create2       _conn.py    ReconnectingConn
+│  ├─ _pay/_paywall/_transfer  x402, paywalls, transfers
+│  ├─ _withdraw.py   AMl, batches, refunds
+│  ├─ _bets/_markets       parimutuel + LMSR AMM (buy/sell/resolve)
+│  ├─ _onchain.py    on-chain outcome markets registry
+│  ├─ _messages/_notify/_admin/_views   messaging, outbox, settings, views
+│  └─ _base.py      audit_log, MICRO, LMSR math
 ├─ base.py        web3 layer: USDC transfers, deposit scanning, tx decoding
 ├─ chain/         relayer pool (persisted daily caps) + tx status helpers
 ├─ ai.py          OpenAI-compatible client (stdlib urllib, no new deps)

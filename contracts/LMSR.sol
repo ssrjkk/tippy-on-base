@@ -5,7 +5,7 @@ import {SD59x18, convert, exp, ln, UNIT} from "prb-math/SD59x18.sol";
 
 /// @title LMSR
 /// @notice Logarithmic Market Scoring Rule math for on-chain prediction markets.
-/// @dev Direct port of the off-chain reference implementation in bot/ledger.py.
+/// @dev Direct port of the off-chain reference implementation in bot/ledger/_base.py.
 ///
 ///      cost(q, b)   = b * ln( sum_i exp(q_i / b) )
 ///      price_i(q,b) = exp(q_i / b) / sum_j exp(q_j / b)
@@ -42,7 +42,7 @@ library LMSR {
     }
 
     /// @dev Numerical-stability shift, mirrors the `m = max(q_micro)` trick in
-    ///      bot/ledger.py: b*ln(sum(exp(q_i/b))) == m + b*ln(sum(exp((q_i-m)/b))).
+    ///      bot/ledger/_base.py: b*ln(sum(exp(q_i/b))) == m + b*ln(sum(exp((q_i-m)/b))).
     ///      Without this, exp() overflows/underflows badly once q gets large.
     function cost(int256[] memory q, int256 b) internal pure returns (SD59x18) {
         int256 m = q[0];
@@ -80,7 +80,7 @@ library LMSR {
 
     /// @notice Cost in USDC micro-units to buy `shares` of outcome `idx`,
     ///         rounded UP (house-favorable, mirrors the off-chain ceil-on-buy
-    ///         convention — see bot/ledger.py buy_shares comment).
+    ///         convention — see bot/ledger/_base.py lmsr_buy_shares).
     function buyCost(int256[] memory q, int256 b, uint256 idx, uint256 shares) internal pure returns (uint256) {
         _checkShares(shares);
         SD59x18 before = cost(q, b);

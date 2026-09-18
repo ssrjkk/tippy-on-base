@@ -4,7 +4,6 @@ Network is never touched: _sources/_fetch_feed are monkeypatched to canned
 RSS payloads; the seen-file is redirected to tmp_path so the repo stays clean.
 """
 
-import asyncio
 
 import pytest
 
@@ -80,7 +79,7 @@ def test_falls_back_to_next_source(monkeypatch):
     )
 
     items = agent_news.fetch_news(max_items=5)
-    assert items and all(i.source == "Test" for i in items) or items
+    assert (items and all(i.source == "Test" for i in items)) or items
 
 
 def test_all_sources_down_returns_empty(monkeypatch):
@@ -92,7 +91,6 @@ def test_all_sources_down_returns_empty(monkeypatch):
 
 
 def test_cryptopanic_token_in_sources(monkeypatch):
-    import os
     monkeypatch.setenv("CRYPTOPANIC_TOKEN", "secret-token")
     sources = agent_news._sources()
     assert sources[0][0] == "CryptoPanic"

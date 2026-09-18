@@ -46,14 +46,14 @@
 - Уже есть: `/tip`, `/rain`, эмодзи-реакции, донаты, `/withdraw`, `/link`+`/confirm`, CREATE2-классы.
 - Секретные команды (`/withdraw`, `/deposit`, `/claim`, `/link`, `/confirm`) работают только
   в личке — защита от утечки адресов/инвайтов в группы.
-- Швы: `bot/handlers/tips.py`, `bot/handlers/wallet.py`, `bot/ledger.py` (transfer/credit/debit), `bot/create2.py`.
+- Швы: `bot/handlers/tips.py`, `bot/handlers/wallet.py`, `bot/ledger/` (transfer/credit/debit), `bot/create2.py`.
 - **Дизайн-решение для экосистемы:** чаевые как «смазка» между рынками и сигналами —
   выигрыши и сгенерированные ставки «протекают» обратно в чат через тропы. Вводим
   **каналы вовлечения** (см. §5), чтобы циркуляция была видимой и виральной.
 
 ### 2.2 Cally — Polymarket-слой (рынки на Base)
 - Уже есть: ончейн `OutcomeMarket.sol` + ERC-1155, `/oc_create|buy|sell|redeem|pos`,
-  офчейн гибридный LMSR (`bot/ledger.py`), `/market`, `/trade`, `/positions`.
+  офчейн гибридный LMSR (`bot/ledger/`), `/market`, `/trade`, `/positions`.
 - Швы: контракты в `contracts/`, ончейн-слой `bot/handlers/onchain*.py`, регистр `onchain_registry`.
 - **Дизайн-решение:** ончейн-рынки Cally = «публичный товарный слой», офчейн-маркеты = «внутричатовый
   соальный слой». Их соединяет **общий API прогнозирования** — та же модель PnL/портфель,
@@ -74,9 +74,9 @@
 |---|---|---|
 | USDC (native, микро-юниты 1e6) | `bot/consuming.py`, конфиг | единая валюта всей экономики |
 | Proof-of-reserves `/api/solvency` | `web/server.py`, TipBotVault | публичное доверие к «виртуальным» чаевым |
-| Аудит-логгер `tipbot.audit` | `bot/ledger.py` | каждый credit/transfer/debit записан |
+| Аудит-логгер `tipbot.audit` | `bot/ledger/` | каждый credit/transfer/debit записан |
 | Notification outbox | `main.py` watcher | возврат и надёжная доставка выплат |
-| Гибридный LMSR+паримутуэльный | `bot/ledger.py` | ценообразование рынков, гарантированная платёжеспособность |
+| Гибридный LMSR+паримутуэльный | `bot/ledger/` | ценообразование рынков, гарантированная платёжеспособность |
 | x402 (invoice→pay→replay-proof) | `web/server.py` | агентные платежи «из коробки» |
 | CREATE2-классы и валидация | `bot/create2.py` | self-custody депозиты без кастомного hot-path |
 | Basenames резолв | `web/` / mini app | человеко-читаемая идентичность |

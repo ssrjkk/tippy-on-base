@@ -1,6 +1,6 @@
 # BACKLOG — незакрытые моменты и улучшения
 
-Обновлён: 2026-09-11. Состояние кодовой базы: 750/750 pytest, ruff/i18n/validate_env — зелёные. Всё ниже — то, что ОСТАЛОСЬ.
+Обновлён: 2026-09-18. Состояние кодовой базы: 750/750 pytest, ruff/i18n/validate_env — зелёные. Всё ниже — то, что ОСТАЛОСЬ.
 
 ## 🔴 P0 — перед включением ончейн-слоя в проде
 
@@ -42,6 +42,9 @@
 | ~~17~~ | ~~`eip1559_fees_sync`: `priority_wei` → `priority_gwei`~~ | ✅ переименован |
 | ~~18~~ | CSP `unsafe-inline` → nonce-based CSP для всех шаблонов | ✅ `_nonce_inject()` в middleware: per-request nonce на inline `<script>`, `esm.sh`/`jsdelivr` в whitelist. Все inline-обработчики (`onclick=` и т.п.) заменены на data-act делегирование. `style-src 'self' 'unsafe-inline'` оставлен намеренно — иначе браузер блокирует style-атрибуты |
 | ~~19~~ | ~~README roadmap: отметить Cally как shipped~~ | ✅ |
+| R6.1 | **Сплит монолита `bot/ledger.py` (3782 стр.) в пакет миксинов** | ✅ `bot/ledger/` — 13 domain-миксинов + `_base/_conn/_schema`, фасад `__init__.py`. 164 тела методов байт-в-байт идентичны оригиналу (AST-verified), 750/750 тестов |
+| R6.2 | **Агент: убраны блокирующие RPC-вызовы из event loop** | ✅ `fetch_news`/`decide`/`_attest_action` → `asyncio.to_thread` |
+| R6.3 | **Доки актуализированы под новый пакет** | ✅ README architecture tree, ECOSYSTEM_DESIGN, env.py, LMSR.sol, test_outcome_market_evm, ci.yml комментарий |
 
 ### ✅ Round 5 (2026-09-11) — деньги, безопасность, доки
 

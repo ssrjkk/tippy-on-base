@@ -150,7 +150,7 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
     unexpectedly) is logged instead of being invisible, and cancels the whole
     process via the stop event so the supervisor/health check can restart it.
     """
-    from aiogram import Bot, Dispatcher, types
+    from aiogram import Bot, Dispatcher
     from aiogram.client.default import DefaultBotProperties
     from aiogram.enums import ParseMode
     from aiogram.exceptions import TelegramNetworkError
@@ -166,7 +166,7 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
         from bot.handlers import AI_BOT_COMMAND
         from bot.main import BOT_COMMANDS
         # Single source of truth for the command menu: bot.main.BOT_COMMANDS.
-        await tg_bot.set_my_commands([AI_BOT_COMMAND] + BOT_COMMANDS)
+        await tg_bot.set_my_commands([AI_BOT_COMMAND, *BOT_COMMANDS])
     except Exception as e:
         log.warning("set_my_commands failed: %s", e)
 

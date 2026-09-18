@@ -179,7 +179,7 @@ async def run_loop(stop: asyncio.Event | None = None) -> None:
                 await asyncio.wait_for(stop.wait(), timeout=config.NEWS_CHECK_INTERVAL)
                 log.info("Agent loop stopped (stop event)")
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
         await asyncio.sleep(config.NEWS_CHECK_INTERVAL)
 

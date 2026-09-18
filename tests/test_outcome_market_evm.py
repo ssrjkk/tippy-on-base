@@ -329,7 +329,7 @@ def test_trading_blocked_after_cancel(env):
 
 # ---------------------------------------------------------------------------
 # Money parity: the bot prices /oc_* trades with the pure-Python LMSR in
-# bot/ledger.py, while settlement runs on the PRB-math SD59x18 contract.
+# bot/ledger/_base.py, while settlement runs on the PRB-math SD59x18 contract.
 # The /oc_buy and /oc_sell flows are only safe if BOTH hold across market
 # shapes and trade sizes (verified here on a real EVM, no mocks):
 #   1. BUY:  the locally-estimated share count never costs more on-chain

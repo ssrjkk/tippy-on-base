@@ -63,7 +63,6 @@ def test_agent_watcher_death_sets_stop(monkeypatch):
     """Same contract as other watchers: a silent agent death must stop the
     process — simulate by monkeypatching run_loop to raise immediately."""
     import agent.main as agent_main
-    from agent import config as agent_config
 
     async def _die(stop=None):
         raise RuntimeError("agent died")

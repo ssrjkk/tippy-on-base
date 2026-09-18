@@ -39,7 +39,8 @@ async def cmd_agent(message: types.Message) -> None:
         return
 
     try:
-        from agent import caps, config as agent_config
+        from agent import caps
+        from agent import config as agent_config
     except Exception:
         await message.answer(i18n.t(await common.user_lang(message.from_user.id), 'agent_admin_only'))
         return

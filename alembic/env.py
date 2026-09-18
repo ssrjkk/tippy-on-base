@@ -3,7 +3,7 @@
 Reads DATABASE_URL from the environment (same as bot.config).  The
 ``env.py`` is intentionally minimal — Alembic is used only for schema
 versioning and migration tracking.  The actual DDL still lives in
-``bot/ledger.py`` (SCHEMA_DLL) for backward compatibility with the
+``bot/ledger/_schema.py`` (SCHEMA_DDL) for backward compatibility with the
 ``ensure_schema()`` fallback.
 """
 

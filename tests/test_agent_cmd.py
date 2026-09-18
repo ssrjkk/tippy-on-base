@@ -4,7 +4,6 @@ import asyncio
 
 import pytest
 
-from bot import i18n
 from bot.handlers import cmd_agent
 from bot.handlers.agent import _audit_tail
 
@@ -74,7 +73,8 @@ def test_agent_disabled_message(admin_cfg, monkeypatch):
 
 
 def test_agent_shows_status(admin_cfg, monkeypatch):
-    from agent import caps, config as agent_config
+    from agent import caps
+    from agent import config as agent_config
     monkeypatch.setattr(agent_config, "AGENT_TG_ID", 42)
     monkeypatch.setattr(caps, "get_status", lambda: _status(spent=7.25))
     m = Message(from_id=ADMIN)
@@ -85,7 +85,8 @@ def test_agent_shows_status(admin_cfg, monkeypatch):
 
 
 def test_agent_shows_circuit_breaker(admin_cfg, monkeypatch):
-    from agent import caps, config as agent_config
+    from agent import caps
+    from agent import config as agent_config
     monkeypatch.setattr(agent_config, "AGENT_TG_ID", 42)
     monkeypatch.setattr(caps, "get_status", lambda: _status(errors=3, cooldown=True))
     m = Message(from_id=ADMIN)
@@ -94,8 +95,9 @@ def test_agent_shows_circuit_breaker(admin_cfg, monkeypatch):
 
 
 def test_agent_shows_audit_tail(admin_cfg, monkeypatch, tmp_path):
-    from agent import caps, config as agent_config
     import agent.config as ac
+    from agent import caps
+    from agent import config as agent_config
 
     audit = tmp_path / "agent_audit.jsonl"
     audit.write_text(
@@ -125,7 +127,8 @@ def test_audit_tail_handles_missing_file(tmp_path):
 
 
 def test_agent_never_crashes_on_caps_failure(admin_cfg, monkeypatch):
-    from agent import caps, config as agent_config
+    from agent import caps
+    from agent import config as agent_config
 
     def _boom():
         raise RuntimeError("state corrupted")

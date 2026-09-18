@@ -166,7 +166,7 @@ WITHDRAW_BATCH_FALLBACK_DIRECT: bool = os.environ.get("WITHDRAW_BATCH_FALLBACK_D
 MARKET_GRACE_HOURS: int = int(os.environ.get("MARKET_GRACE_HOURS", "72"))
 GRACE_WARN_BEFORE_HOURS: int = int(os.environ.get("GRACE_WARN_BEFORE_HOURS", "12"))
 
-# Prediction markets v2 (Polymarket-style LMSR AMM, see bot/ledger.py).
+# Prediction markets v2 (Polymarket-style LMSR AMM, see bot/ledger/).
 # The creator deposits a subsidy; b = subsidy / ln(n_options) guarantees the
 # AMM can always cover the worst-case payout (b*ln(n) funding theorem).
 MARKET_MIN_SUBSIDY_USDC: Decimal = Decimal(os.environ.get("MARKET_MIN_SUBSIDY_USDC", "10"))
