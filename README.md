@@ -1,7 +1,7 @@
 # Tippy - Community Economy in USDC on Base
 
 [![CI](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-750%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-782%20passed-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12+-blue)
 ![Network](https://img.shields.io/badge/network-Base-0052FF)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -216,14 +216,14 @@ contracts/OutcomeMarket.sol on-chain markets (ERC-1155 shares, LMSR on-chain)
 contracts/SmartAccount.sol   ERC-4337 account (CREATE2)
 contracts/SmartAccountFactory.sol  deterministic account factory
 contracts/VerifyingPaymaster.sol   gas-sponsoring paymaster
-tests/           750+ tests: real Postgres, real dispatcher, real crypto, local EVM
+tests/           782 tests: real Postgres, real dispatcher, real crypto, local EVM
 ```
 
 ## Testing
 
 ```bash
 docker compose up -d db       # PostgreSQL for tests (port 5433)
-python -m pytest tests -q     # 750+ passed
+python -m pytest tests -q     # 782 passed
 ```
 
 What is tested *for real* (not mocked): money conservation across every flow
