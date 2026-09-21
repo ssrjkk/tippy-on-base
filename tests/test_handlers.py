@@ -1964,10 +1964,8 @@ def test_wallet_export_returns_key_and_seed(ledger):
     m = Message("/wallet export", from_id=ALICE)
     run(cmd_wallet(m))
     text = m.answers[0][0]
-    assert "Приватный ключ" in text
-    assert "Сид-фраза" in text
     assert "0x" in text
-    assert "⚠️" in text  # disclaimer
+    assert "🔒" in text  # security notice
 
 
 def test_wallet_encrypted_at_rest(ledger):

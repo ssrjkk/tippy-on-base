@@ -261,7 +261,7 @@ def _scan_deposits(from_block: int, to_block: int) -> list[dict]:
             {
                 "sender": args["from"],
                 "amount_micro": args["value"],
-                "tx_hash": "0x" + entry["transactionHash"].hex(),
+                "tx_hash": ("0x" + entry["transactionHash"].hex()) if isinstance(entry["transactionHash"], bytes) else entry["transactionHash"],
                 "block": int(entry.get("blockNumber") or 0),
             }
         )

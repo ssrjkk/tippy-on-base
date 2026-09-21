@@ -7,8 +7,8 @@ from ._base import audit_log
 
 class LedgerPayMixin:
     def credit(self, tg_id: int, amount_micro: int, kind: str, counterparty: str = "", tx_hash: str = "", note: str = "", commit: bool = True) -> None:
-        if amount_micro < 0:
-            raise ValueError(f"credit amount must be >= 0 (got {amount_micro})")
+        if amount_micro <= 0:
+            raise ValueError(f"credit amount must be positive (got {amount_micro})")
         with self._lock:
             self.ensure_user(tg_id, None, commit=commit)
             self._conn.execute(

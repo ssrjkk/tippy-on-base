@@ -129,6 +129,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     // ---------------------------------------------------------------------
 
     function setOracle(address newOracle) external onlyOwner {
+        if (newOracle == address(0)) revert ZeroAddress();
         emit OracleUpdated(oracle, newOracle);
         oracle = newOracle;
     }

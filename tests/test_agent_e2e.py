@@ -25,8 +25,11 @@ def _clean_state():
     state = _STATE_DIR / ".agent_state.json"
     audit = _STATE_DIR / "agent_audit.jsonl"
     attest = _STATE_DIR / "agent_attestations.jsonl"
+    markets = _STATE_DIR / ".agent_markets.json"
     if state.exists():
         state.unlink()
+    if markets.exists():
+        markets.unlink()
     yield
     if state.exists():
         state.unlink()
@@ -34,6 +37,8 @@ def _clean_state():
         audit.unlink()
     if attest.exists():
         attest.unlink()
+    if markets.exists():
+        markets.unlink()
     _agent_markets.clear()
 
 

@@ -102,7 +102,10 @@ def _call_llm(messages: list[dict], model: str | None = None, temperature: float
             content = content.split("\n", 1)[1]
         if content.endswith("```"):
             content = content.rsplit("```", 1)[0]
-        return json.loads(content.strip())
+        parsed = json.loads(content.strip())
+        if not isinstance(parsed, dict):
+            return {"error": "LLM returned non-object JSON"}
+        return parsed
     except Exception as e:
         return {"error": str(e)}
 
@@ -177,19 +180,35 @@ def decide(news_items: list[str], balance: float) -> MarketDecision | None:
         return None
 
     # Enforce caps
-    bet_amount = float(raw.get("bet_amount_usdc", 1.0))
+    try:
+        bet_amount = float(raw.get("bet_amount_usdc", 1.0))
+    except (TypeError, ValueError):
+        bet_amount = 1.0
     bet_amount = min(bet_amount, config.PER_TX_CAP_USDC)
     bet_amount = max(bet_amount, 0.0)
 
-    hours = float(raw.get("hours", 24))
+    try:
+        hours = float(raw.get("hours", 24))
+    except (TypeError, ValueError):
+        hours = 24.0
     hours = max(1.0, min(hours, 168))
+
+    try:
+        bet_outcome = int(raw.get("bet_outcome", 0)) % len(options)
+    except (TypeError, ValueError):
+        bet_outcome = 0
+
+    try:
+        confidence = float(raw.get("confidence", 0.5))
+    except (TypeError, ValueError):
+        confidence = 0.5
 
     return MarketDecision(
         question=question,
         options=[str(o)[:64] for o in options[:4]],
         hours=hours,
-        bet_outcome=int(raw.get("bet_outcome", 0)) % len(options),
+        bet_outcome=bet_outcome,
         bet_amount_usdc=bet_amount,
-        confidence=float(raw.get("confidence", 0.5)),
+        confidence=confidence,
         reasoning=str(raw.get("reasoning", ""))[:500],
     )

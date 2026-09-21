@@ -14,6 +14,7 @@ import logging
 import os
 import time
 import urllib.parse
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -72,6 +73,11 @@ async def _user(request: Request) -> int:
 
 def _fmt(micro: int) -> float:
     return round(micro / MICRO, 2)
+
+
+def _to_micro(amount: Decimal) -> int:
+    """Convert Decimal USDC amount to micro-units with exact arithmetic."""
+    return int((amount * MICRO).to_integral_value())
 
 
 def _cap_micro(usdc: float) -> int:
@@ -200,7 +206,7 @@ class SmartBuyBody(BaseModel):
     market_id: int
     outcome: int
     shares: int = Field(gt=0)
-    max_cost_usdc: float = Field(gt=0, allow_inf_nan=False)
+    max_cost_usdc: Decimal = Field(gt=0, allow_inf_nan=False)
 
 @router.post('/api/mini/smartbuy', tags=['wallet'])
 async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
@@ -239,7 +245,7 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
 
     # The account must actually hold enough USDC to cover the spend.
     balance_micro = await asyncio.to_thread(sw.smart_balance, tg_id)
-    max_cost_micro = round(body.max_cost_usdc * MICRO)
+    max_cost_micro = _to_micro(body.max_cost_usdc)
     if balance_micro < max_cost_micro:
         raise HTTPException(400, 'insufficient smart-wallet USDC balance')
 
@@ -250,14 +256,14 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
 
 class TipBody(BaseModel):
     to: str
-    amount: float = Field(allow_inf_nan=False)
+    amount: Decimal = Field(allow_inf_nan=False)
 _ERR_MSG = {'closed': 'market closed', 'deadline': 'deadline passed', 'badopt': 'no such option', 'balance': 'insufficient balance'}
 
 @router.post('/api/mini/tip', tags=['users'])
 async def mini_tip(body: TipBody, request: Request) -> dict:
     tg_id = await _user(request)
     _throttle(tg_id, 'tip')
-    micro = round(body.amount * MICRO)
+    micro = _to_micro(body.amount)
     if micro <= 0:
         raise HTTPException(400, 'amount must be positive')
     max_micro = _cap_micro(config.MAX_TIP_USDC)
@@ -288,13 +294,13 @@ async def mini_tip(body: TipBody, request: Request) -> dict:
 class TradeBody(BaseModel):
     market_id: int
     option: int
-    amount: float = Field(allow_inf_nan=False)
+    amount: Decimal = Field(allow_inf_nan=False)
 
 @router.post('/api/mini/trade', tags=['markets'])
 async def mini_trade(body: TradeBody, request: Request) -> dict:
     tg_id = await _user(request)
     _throttle(tg_id, 'trade')
-    micro = round(body.amount * MICRO)
+    micro = _to_micro(body.amount)
     if micro <= 0:
         raise HTTPException(400, 'amount must be positive')
     max_micro = _cap_micro(config.MARKET_MAX_TRADE_USDC)
@@ -310,13 +316,13 @@ async def mini_trade(body: TradeBody, request: Request) -> dict:
 class BetPlaceBody(BaseModel):
     bet_id: int
     option: int
-    amount: float = Field(allow_inf_nan=False)
+    amount: Decimal = Field(allow_inf_nan=False)
 
 @router.post('/api/mini/betplace', tags=['markets'])
 async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
     tg_id = await _user(request)
     _throttle(tg_id, 'betplace')
-    micro = round(body.amount * MICRO)
+    micro = _to_micro(body.amount)
     if micro <= 0:
         raise HTTPException(400, 'amount must be positive')
     max_micro = _cap_micro(config.MAX_BET_USDC)
@@ -376,7 +382,7 @@ class CreateBody(BaseModel):
     question: str
     options: list[str]
     hours: float | None = None
-    subsidy_usdc: float = 10.0
+    subsidy_usdc: Decimal = Decimal("10.0")
 
 def _parse_deadline(hours: float | None) -> int | None:
     if not hours or hours <= 0:
@@ -397,7 +403,7 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
         raise HTTPException(400, 'question too long (max 200 chars)')
     close_at = _parse_deadline(body.hours)
     if body.kind == 'market':
-        subsidy_micro = round(body.subsidy_usdc * MICRO)
+        subsidy_micro = _to_micro(body.subsidy_usdc)
         min_micro = _cap_micro(config.MARKET_MIN_SUBSIDY_USDC)
         max_micro = _cap_micro(config.MARKET_MAX_SUBSIDY_USDC)
         if subsidy_micro < min_micro:

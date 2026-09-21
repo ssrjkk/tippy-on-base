@@ -20,14 +20,31 @@ from . import _common as common
 
 
 def _audit_tail(limit: int = 3) -> list[dict]:
-    """Last N audit entries (newest last in file, so read all and slice)."""
+    """Last N audit entries without reading the entire file."""
     from agent.config import STATE_DIR
 
     path = os.path.join(STATE_DIR, "agent_audit.jsonl")
     try:
-        with open(path, encoding="utf-8") as f:
-            lines = [ln for ln in f.read().splitlines() if ln.strip()]
-        return [json.loads(ln) for ln in lines[-limit:]]
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            chunk = 4096
+            lines: list[str] = []
+            pos = size
+            while pos > 0 and len(lines) < limit:
+                read_size = min(chunk, pos)
+                pos -= read_size
+                f.seek(pos)
+                buf = f.read(read_size).decode("utf-8", errors="replace")
+                if pos == 0:
+                    lines = buf.splitlines() + lines
+                else:
+                    parts = buf.splitlines()
+                    lines = parts[1:] + lines
+                    if not buf.startswith("\n"):
+                        lines = parts[:1] + lines
+        filtered = [ln for ln in lines[-limit:] if ln.strip()]
+        return [json.loads(ln) for ln in filtered]
     except (OSError, ValueError):
         return []
 

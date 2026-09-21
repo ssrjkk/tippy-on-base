@@ -889,7 +889,7 @@ def test_paywall_channel_crud(ledger):
     assert ledger.paywall_channel(-100123)["price_micro"] == 7_000_000
     assert ledger.paywall_channel(-100123)["period_days"] == 7
     assert [int(r["chat_id"]) for r in ledger.paywall_channels_list()] == [-100123]
-    ledger.disable_paywall_channel(-100123)
+    ledger.disable_paywall_channel(-100123, ALICE)
     assert ledger.paywall_channel(-100123) is None
 
 

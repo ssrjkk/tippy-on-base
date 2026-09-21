@@ -152,6 +152,10 @@ contract TipBotVault {
         emit OwnershipTransferStarted(owner, newOwner);
     }
 
+    function cancelOwnershipTransfer() external onlyOwner {
+        pendingOwner = address(0);
+    }
+
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert NotPendingOwner();
         emit OwnershipTransferred(owner, pendingOwner);

@@ -264,7 +264,7 @@ async def cmd_broadcast(message: types.Message) -> None:
     sent = 0
     for row in await common.ledger.all_users():
         try:
-            await message.bot.send_message(row['tg_id'], parts[1])
+            await message.bot.send_message(row['tg_id'], parts[1], parse_mode=None)
             sent += 1
         except Exception:
             pass

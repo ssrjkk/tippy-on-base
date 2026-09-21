@@ -23,6 +23,7 @@ contract SmartAccount {
     address public owner;
     uint256 public nonce;
     bool public initialized;
+    address public factory;
 
     struct UserOperation {
         address sender;
@@ -58,7 +59,23 @@ contract SmartAccount {
         }
 
         bytes calldata sig = userOp.signature;
-        bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
+        // Recompute the hash WITHOUT the signature field (ERC-4337 standard):
+        // the EntryPoint's userOpHash includes signature, but we signed the hash
+        // of the UserOp with signature excluded (chicken-and-egg: can't sign a
+        // hash that depends on the signature we're creating).
+        bytes32 hashWithoutSig = keccak256(abi.encode(
+            userOp.sender,
+            userOp.nonce,
+            userOp.initCode,
+            userOp.callData,
+            userOp.callGasLimit,
+            userOp.verificationGasLimit,
+            userOp.preVerificationGas,
+            userOp.maxFeePerGas,
+            userOp.maxPriorityFeePerGas,
+            userOp.paymasterAndData
+        ));
+        bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hashWithoutSig));
         address signer = _recover(hash, sig);
 
         if (signer == owner) {
@@ -129,6 +146,7 @@ contract SmartAccount {
         require(!initialized, "SmartAccount: already initialized");
         require(_owner != address(0), "SmartAccount: zero owner");
         initialized = true;
+        factory = msg.sender;
         owner = _owner;
         emit AccountInitialized(_owner);
     }

@@ -225,7 +225,7 @@ def _h(s: object) -> str:
 
 
 def _esc(s: str, n: int = 4) -> str:
-    return f"{s[:6]}…{s[-n:]}"
+    return html.escape(f"{s[:6]}…{s[-n:]}")
 
 
 def _now() -> float:

@@ -27,6 +27,12 @@ from eth_account.messages import encode_defunct
 from web3 import Web3
 
 from . import config
+
+def _tx_hex(raw) -> str:
+    if isinstance(raw, bytes):
+        return "0x" + raw.hex()
+    s = str(raw)
+    return s if s.startswith("0x") else "0x" + s
 from .chain.transfers import _send_lock  # shared hot-wallet nonce/send lock
 
 log = logging.getLogger("tipbot.smart_wallet")
@@ -279,10 +285,10 @@ def create_account_sync(tg_id: int) -> str:
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
     if receipt["status"] != 1:
-        raise RuntimeError(f"SmartAccount deploy reverted: {tx_hash.hex()}")
+        raise RuntimeError(f"SmartAccount deploy reverted: {_tx_hex(tx_hash)}")
 
     addr = predict_address(tg_id)
-    log.info("SmartAccount deployed for tg_id=%s at %s (tx=%s)", tg_id, addr, tx_hash.hex())
+    log.info("SmartAccount deployed for tg_id=%s at %s (tx=%s)", tg_id, addr, _tx_hex(tx_hash))
     return addr
 
 
@@ -350,11 +356,21 @@ def _encode_execute_batch(dest1: str, data1: bytes, dest2: str, data2: bytes) ->
 # ---------------------------------------------------------------------------
 
 def _sign_user_op(user_op: dict, key_hex: str) -> bytes:
-    """Sign a UserOperation with the given private key."""
-    ep = _entrypoint()
-    user_op_hash = ep.functions.getUserOpHash(
-        _pack_user_op(user_op)
-    ).call()
+    """Sign a UserOperation with the given private key.
+
+    The hash excludes the signature field (ERC-4337 standard): we can't sign a
+    hash that depends on the signature we're about to create. The SmartAccount's
+    validateUserOp recomputes the same hash (without signature) for verification.
+    """
+    w3 = _get_w3()
+    ep_addr = Web3.to_checksum_address(config.SMART_WALLET_ENTRYPOINT)
+    chain_id = w3.eth.chain_id
+    # Hash = keccak256(abi.encode(userOp WITHOUT signature, entryPoint, chainId))
+    hash_input = _user_op_hash_input(user_op)
+    user_op_hash = Web3.keccak(abi_encode(
+        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256", "bytes", "address", "uint256"],
+        [*hash_input, ep_addr, chain_id],
+    ))
     # Sign as an EIP-191 "Ethereum Signed Message" so SmartAccount.validateUserOp
     # (which prefixes with \x19Ethereum Signed Message:\n32) recovers the owner.
     signed = Account.sign_message(
@@ -523,9 +539,9 @@ def approve_and_trade_sync(
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
     if receipt["status"] != 1:
-        raise RuntimeError(f"UserOp reverted: {tx_hash.hex()}")
+        raise RuntimeError(f"UserOp reverted: {_tx_hex(tx_hash)}")
 
-    return "0x" + tx_hash.hex()
+    return _tx_hex(tx_hash)
 
 
 async def approve_and_trade(

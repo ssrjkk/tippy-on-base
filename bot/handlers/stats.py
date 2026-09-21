@@ -52,7 +52,7 @@ async def _history_text(tg_id: int, limit: int=15) -> str:
         if r['kind'] == 'tip':
             cid = int(r['counterparty']) if r['counterparty'].isdigit() else None
             cname = await common.ledger.username_of(cid) if cid else None
-            who = f'@{common._h(cname)}' if cname else r['counterparty'] or '?'
+            who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
             lines.append(f'{emoji} {amt} → {who}')
         elif r['kind'] == 'deposit':
             lines.append(f"{emoji} +{amt} <code>{common._esc(r['counterparty'])}</code>")

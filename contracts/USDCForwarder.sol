@@ -34,6 +34,15 @@ contract USDCForwarder {
     /// @notice USDC contract this forwarder sweeps (network-dependent).
     address public immutable usdc;
 
+    uint256 private _locked;
+
+    modifier nonReentrant() {
+        require(_locked == 0, "USDCForwarder: reentrant");
+        _locked = 1;
+        _;
+        _locked = 0;
+    }
+
     constructor(address hotWallet_, address usdc_) {
         require(hotWallet_ != address(0), "USDCForwarder: zero hot wallet");
         require(usdc_ != address(0), "USDCForwarder: zero usdc");
@@ -45,7 +54,7 @@ contract USDCForwarder {
     ///         wallet. Safe to call by anyone at any time.
     /// @return usdcForwarded USDC amount moved (micro units).
     /// @return ethForwarded  ETH amount moved (wei).
-    function forward() external returns (uint256 usdcForwarded, uint256 ethForwarded) {
+    function forward() external nonReentrant returns (uint256 usdcForwarded, uint256 ethForwarded) {
         uint256 bal = IERC20Minimal(usdc).balanceOf(address(this));
         if (bal > 0) {
             require(IERC20Minimal(usdc).transfer(hotWallet, bal), "USDCForwarder: usdc transfer failed");

@@ -14,15 +14,47 @@ For the demo, the agent uses ledger directly (same-process). Production
 would call the HTTP API with an agent-specific auth token.
 """
 
+import json
+import os
+import tempfile
 import time
+from pathlib import Path
 
 from bot.ledger import async_ledger as ledger
 
 from . import caps, config
 
+_MARKETS_FILE = Path(config.STATE_DIR) / ".agent_markets.json"
+
 # Track markets created by this agent (for oracle protection)
 _agent_markets: set[int] = set()
 _AGENT_MARKET_PCT_CAP = 0.10  # max 10% of pool on own markets
+
+
+def _load_markets() -> None:
+    try:
+        data = json.loads(_MARKETS_FILE.read_text())
+        _agent_markets.update(int(x) for x in data)
+    except (FileNotFoundError, json.JSONDecodeError, TypeError):
+        pass
+
+
+def _save_markets() -> None:
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(dir=str(_MARKETS_FILE.parent), suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(sorted(_agent_markets), f)
+        os.replace(tmp, _MARKETS_FILE)
+    except OSError:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+_load_markets()
 
 
 async def create_market(
@@ -54,6 +86,7 @@ async def create_market(
             caps.record_error()
             return {"error": f"create_market failed: {market_id}"}
         _agent_markets.add(market_id)
+        _save_markets()
         return {
             "market_id": market_id,
             "options": options,

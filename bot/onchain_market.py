@@ -17,6 +17,13 @@ from web3 import Web3
 
 from . import config
 
+def _tx_hex(raw) -> str:
+    """Normalize a tx hash to a 0x-prefixed hex string."""
+    if isinstance(raw, bytes):
+        return "0x" + raw.hex()
+    s = str(raw)
+    return s if s.startswith("0x") else "0x" + s
+
 # Shared hot-wallet send lock (gas drips go through chain.transfers).
 from .chain.transfers import _send_lock  # noqa: F401
 
@@ -320,22 +327,22 @@ def _buy_sync(market_id: int, outcome: int, shares: int, max_cost_micro: int,
 
     # 3) Execute buy
     contract = _market_contract(w3)
-    tx = contract.functions.buy(
-        market_id, outcome, shares, max_cost_micro
-    ).build_transaction({
-        "from": user_addr,
-        "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
-        "gas": 300000,
-        **_eip1559_fee_fields(w3),
-    })
-    signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     with _send_lock:
+        tx = contract.functions.buy(
+            market_id, outcome, shares, max_cost_micro
+        ).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 300000,
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    tx_hash = raw_hash.hex() if isinstance(raw_hash, bytes) else raw_hash
+    tx_hash = _tx_hex(raw_hash)
     receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
     if receipt.status != 1:
-        raise RuntimeError(f"buy reverted: {tx_hash.hex()}")
-    return tx_hash.hex()
+        raise RuntimeError(f"buy reverted: {tx_hash}")
+    return tx_hash
 
 
 async def sell(market_id: int, outcome: int, shares: int,
@@ -359,22 +366,22 @@ def _sell_sync(market_id: int, outcome: int, shares: int, min_proceeds_micro: in
                user_private_key: str, user_addr: str, w3: Web3) -> str:
     """Blocking half of :func:`sell` (runs in a worker thread)."""
     contract = _market_contract(w3)
-    tx = contract.functions.sell(
-        market_id, outcome, shares, min_proceeds_micro
-    ).build_transaction({
-        "from": user_addr,
-        "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
-        "gas": 300000,
-        **_eip1559_fee_fields(w3),
-    })
-    signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     with _send_lock:
+        tx = contract.functions.sell(
+            market_id, outcome, shares, min_proceeds_micro
+        ).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 300000,
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    tx_hash = raw_hash.hex() if isinstance(raw_hash, bytes) else raw_hash
+    tx_hash = _tx_hex(raw_hash)
     receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
     if receipt.status != 1:
-        raise RuntimeError(f"sell reverted: {tx_hash.hex()}")
-    return tx_hash.hex()
+        raise RuntimeError(f"sell reverted: {tx_hash}")
+    return tx_hash
 
 
 async def redeem(market_id: int, user_private_key: str) -> int:
@@ -391,16 +398,16 @@ async def redeem(market_id: int, user_private_key: str) -> int:
 def _redeem_sync(market_id: int, user_private_key: str, user_addr: str, w3: Web3) -> int:
     """Blocking half of :func:`redeem` (runs in a worker thread)."""
     contract = _market_contract(w3)
-    tx = contract.functions.redeem(market_id).build_transaction({
-        "from": user_addr,
-        "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
-        "gas": 200000,
-        **_eip1559_fee_fields(w3),
-    })
-    signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     with _send_lock:
+        tx = contract.functions.redeem(market_id).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 200000,
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    tx_hash = raw_hash.hex() if isinstance(raw_hash, bytes) else raw_hash
+    tx_hash = _tx_hex(raw_hash)
     receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
     if receipt.status != 1:
         raise RuntimeError(f"redeem reverted: {tx_hash}")
@@ -432,16 +439,16 @@ def _redeem_many_sync(market_ids: list[int], user_private_key: str,
                       user_addr: str, w3: Web3) -> int:
     """Blocking half of :func:`redeem_many` (runs in a worker thread)."""
     contract = _market_contract(w3)
-    tx = contract.functions.redeemMany(market_ids).build_transaction({
-        "from": user_addr,
-        "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
-        "gas": 200000 * len(market_ids),
-        **_eip1559_fee_fields(w3),
-    })
-    signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
     with _send_lock:
+        tx = contract.functions.redeemMany(market_ids).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 200000 * len(market_ids),
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    tx_hash = raw_hash.hex() if isinstance(raw_hash, bytes) else raw_hash
+    tx_hash = _tx_hex(raw_hash)
     receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
     if receipt.status != 1:
         raise RuntimeError(f"redeemMany reverted: {tx_hash}")
@@ -498,19 +505,20 @@ def _create_market_sync(num_outcomes: int, subsidy_micro: int, closes_at: int,
         w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
 
     contract = _market_contract(w3)
-    tx = contract.functions.createMarket(
-        num_outcomes, subsidy_micro, closes_at
-    ).build_transaction({
-        "from": user_addr,
-        "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
-        "gas": 500000,
-        **_eip1559_fee_fields(w3),
-    })
-    signed = w3.eth.account.sign_transaction(tx, private_key=creator_private_key)
-    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    with _send_lock:
+        tx = contract.functions.createMarket(
+            num_outcomes, subsidy_micro, closes_at
+        ).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 500000,
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=creator_private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
     if receipt.status != 1:
-        raise RuntimeError(f"createMarket reverted: {tx_hash.hex()}")
+        raise RuntimeError(f"createMarket reverted: {_tx_hex(tx_hash)}")
     # Parse market_id from MarketCreated event
     market_id = contract.events.MarketCreated().process_receipt(receipt)["args"]["marketId"]
     return market_id
@@ -533,21 +541,21 @@ def _oracle_resolve_sync(market_id: int, winning_outcome: int,
                          oracle_private_key: str, user_addr: str, w3: Web3) -> str:
     """Blocking half of :func:`oracle_resolve` (runs in a worker thread)."""
     contract = _market_contract(w3)
-    tx = contract.functions.oracleResolve(
-        market_id, winning_outcome
-    ).build_transaction({
-        "from": user_addr,
-        "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
-        "gas": 100000,
-        **_eip1559_fee_fields(w3),
-    })
-    signed = w3.eth.account.sign_transaction(tx, private_key=oracle_private_key)
     with _send_lock:
+        tx = contract.functions.oracleResolve(
+            market_id, winning_outcome
+        ).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 100000,
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=oracle_private_key)
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
     if receipt.status != 1:
-        raise RuntimeError(f"oracleResolve reverted: {tx_hash.hex()}")
-    return tx_hash.hex()
+        raise RuntimeError(f"oracleResolve reverted: {_tx_hex(tx_hash)}")
+    return _tx_hex(tx_hash)
 
 
 def _resolve_like(contract, w3: Web3, fn_name: str, args: tuple,
@@ -569,8 +577,8 @@ def _resolve_like(contract, w3: Web3, fn_name: str, args: tuple,
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
     if receipt.status != 1:
-        raise RuntimeError(f"{fn_name} reverted: {raw_hash.hex()}")
-    return raw_hash.hex()
+        raise RuntimeError(f"{fn_name} reverted: {_tx_hex(raw_hash)}")
+    return _tx_hex(raw_hash)
 
 
 async def owner_resolve(market_id: int, winning_outcome: int,

@@ -50,8 +50,8 @@ class LedgerTransferMixin:
         # back here so the shared connection never carries a stale write into
         # the next unrelated ledger call; callers that roll back after a
         # failed debit are unaffected (rollback is idempotent).
-        if amount_micro < 0:
-            raise ValueError(f"debit amount must be non-negative (got {amount_micro})")
+        if amount_micro <= 0:
+            raise ValueError(f"debit amount must be positive (got {amount_micro})")
         with self._lock:
             cur = self._conn.execute(
                 "UPDATE users SET balance = balance - %s WHERE tg_id = %s AND balance >= %s",

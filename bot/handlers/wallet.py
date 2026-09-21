@@ -191,16 +191,14 @@ async def cmd_wallet(message: types.Message) -> None:
     lang = await common.user_lang(message.from_user.id)
     parts = message.text.strip().split()
 
-    # /wallet export — export active wallet
+    # /wallet export — show address only (key export disabled for security)
     if len(parts) > 1 and parts[1].lower() == 'export':
         if not await common.require_private(message):
             return
         row = await common.ledger.get_active_wallet(message.from_user.id)
         if not row:
             row = await _ensure_wallet(message.from_user.id)
-        privkey = common.wallets.decrypt(row['key_enc'])
-        seed = common.wallets.decrypt(row['seed_enc'])
-        await message.answer(i18n.t(lang, 'wallet_key_export', addr=row['address'], privkey=privkey, seed=seed))
+        await message.answer(i18n.t(lang, 'wallet_export_secure', addr=row['address']))
         return
 
     # /wallet new — create new wallet slot
@@ -466,6 +464,6 @@ async def cmd_tx(message: types.Message) -> None:
         status = '⏳ pending' if info['status'] is None else '✅ confirmed' if info['status'] else '❌ reverted'
         usdc_line = ''
         if info['value_micro'] is not None:
-            usdc_line = f"🪙 USDC: <b>{common._fmt(info['value_micro'])} USDC</b> → <code>{info['usdc_to']}</code>"
-        to_addr = info['to'] or 'contract creation'
-        await message.answer(i18n.t(lang, 'tx_info', from_addr=info['from'], to_addr=to_addr, status=status, usdc_line=usdc_line, url=f"{common.config.BASESCAN_URL}/tx/{info['hash']}"))
+            usdc_line = f"🪙 USDC: <b>{common._fmt(info['value_micro'])} USDC</b> → <code>{common._h(info['usdc_to'])}</code>"
+        to_addr = common._h(info['to'] or 'contract creation')
+        await message.answer(i18n.t(lang, 'tx_info', from_addr=common._h(info['from']), to_addr=to_addr, status=status, usdc_line=usdc_line, url=f"{common.config.BASESCAN_URL}/tx/{info['hash']}"))

@@ -302,4 +302,16 @@ CREATE TABLE IF NOT EXISTS login_nonces (
     nonce_hash TEXT PRIMARY KEY,
     created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())::bigint)
 );
+-- Defense-in-depth: DB-level guard against negative balances / shares.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_balance_nn') THEN
+        ALTER TABLE users ADD CONSTRAINT chk_users_balance_nn CHECK (balance >= 0);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_market_shares_nn') THEN
+        ALTER TABLE market_shares ADD CONSTRAINT chk_market_shares_nn CHECK (shares >= 0);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_treasury_balance_nn') THEN
+        ALTER TABLE community_treasuries ADD CONSTRAINT chk_treasury_balance_nn CHECK (balance >= 0);
+    END IF;
+END $$;
 """

@@ -202,10 +202,20 @@ async def _run_sse(port: int):
         async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
             await server.run(streams[0], streams[1], server.create_initialization_options())
 
+    async def handle_post_with_auth(request):
+        # Explicit auth check for the POST endpoint (defense-in-depth: the
+        # middleware should cover this, but Mount sub-apps can sometimes bypass
+        # middleware in edge cases). Fail closed for fund-moving tools.
+        import hmac as _hmac
+        auth = request.headers.get("authorization", "")
+        if not _hmac.compare_digest(auth, f"Bearer {mcp_token}"):
+            return _JSONResponse({"detail": "unauthorized"}, status_code=401)
+        return await sse.handle_post_message(request.scope, request.receive, request._send)
+
     app = Starlette(
         routes=[
             Route("/sse", endpoint=handle_sse),
-            Mount("/messages/", app=sse.handle_post_message),
+            Mount("/messages/", app=handle_post_with_auth),
         ],
     )
 

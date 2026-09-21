@@ -9,7 +9,7 @@ import types
 from eth_abi import decode as abi_decode
 from web3 import Web3
 
-from bot import smart_wallet as sw
+from bot import config, smart_wallet as sw
 
 
 class _Fn:
@@ -269,8 +269,17 @@ def test_sign_user_op_uses_mocked_entrypoint_hash(monkeypatch):
     }
     sig = sw._sign_user_op(op, key)
     assert len(sig) == 65
+    # The hash is now computed locally (excluding signature field), not from EntryPoint.
+    # Recompute it the same way _sign_user_op does to verify the signature.
+    from eth_abi import encode as abi_encode
+    w3 = sw._get_w3()
+    hash_input = sw._user_op_hash_input(op)
+    user_op_hash = Web3.keccak(abi_encode(
+        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256", "bytes", "address", "uint256"],
+        [*hash_input, Web3.to_checksum_address(config.SMART_WALLET_ENTRYPOINT), w3.eth.chain_id],
+    ))
     recovered = Account.recover_message(
-        encode_defunct(primitive=b"\x00" * 32), signature=sig
+        encode_defunct(primitive=user_op_hash), signature=sig
     )
     assert recovered.lower() == acct.address.lower()
 

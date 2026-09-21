@@ -3,6 +3,7 @@
 Requires: AIGRAM_BOT_TOKEN and ALERT_CHAT_ID env vars.
 """
 
+import html
 import os
 import time
 
@@ -53,20 +54,20 @@ async def alert_circuit_breaker(cooldown_secs: int, consecutive_errors: int) -> 
 
 async def alert_error(error_msg: str, context: str = "") -> None:
     """Alert on agent error."""
-    ctx = f"\nContext: {context}" if context else ""
+    ctx = f"\nContext: {html.escape(context)}" if context else ""
     await send_alert(
         f"⚠️ <b>Agent Error</b>\n"
-        f"{error_msg[:200]}{ctx}\n"
+        f"{html.escape(error_msg[:200])}{ctx}\n"
         f"Time: {time.strftime('%H:%M:%S')}"
     )
 
 
 async def alert_market_created(market_id: int, question: str, options: list[str]) -> None:
     """Alert when agent creates a new market."""
-    opts = "\n".join(f"  • {o}" for o in options)
+    opts = "\n".join(f"  • {html.escape(o)}" for o in options)
     await send_alert(
         f"📊 <b>New Market Created</b> #{market_id}\n"
-        f"Q: {question}\n"
+        f"Q: {html.escape(question)}\n"
         f"Options:\n{opts}"
     )
 

@@ -161,23 +161,27 @@ class LedgerPaywallMixin:
     ) -> bool:
         """Register a channel whose access costs price_micro per period_days.
 
-        Returns False when the per-user channel cap is reached (anti-spam).
+        Returns False when the per-user channel cap is reached (anti-spam)
+        or when the caller is not the existing owner.
         """
         self.ensure_user(owner_tg, None)
         with self._lock:
-            if self._conn.execute(
-                "SELECT 1 FROM paywall_channels WHERE chat_id = %s", (chat_id,)
-            ).fetchone() is None:
+            existing = self._conn.execute(
+                "SELECT owner_tg FROM paywall_channels WHERE chat_id = %s", (chat_id,)
+            ).fetchone()
+            if existing is None:
                 row = self._conn.execute(
                     "SELECT COUNT(*) AS c FROM paywall_channels WHERE owner_tg = %s",
                     (owner_tg,),
                 ).fetchone()
                 if int(row["c"]) >= config.PAYWALL_MAX_CHANNELS_PER_USER:
                     return False
+            elif existing["owner_tg"] != owner_tg:
+                return False
             self._conn.execute(
                 "INSERT INTO paywall_channels (chat_id, owner_tg, price_micro, period_days) "
                 "VALUES (%s, %s, %s, %s) ON CONFLICT (chat_id) DO UPDATE SET "
-                "owner_tg = EXCLUDED.owner_tg, price_micro = EXCLUDED.price_micro, "
+                "price_micro = EXCLUDED.price_micro, "
                 "period_days = EXCLUDED.period_days",
                 (chat_id, owner_tg, price_micro, period_days),
             )
@@ -186,9 +190,12 @@ class LedgerPaywallMixin:
 
 
 
-    def disable_paywall_channel(self, chat_id: int) -> None:
+    def disable_paywall_channel(self, chat_id: int, owner_tg: int) -> None:
         with self._lock:
-            self._conn.execute("DELETE FROM paywall_channels WHERE chat_id = %s", (chat_id,))
+            self._conn.execute(
+                "DELETE FROM paywall_channels WHERE chat_id = %s AND owner_tg = %s",
+                (chat_id, owner_tg),
+            )
             self._conn.commit()
 
 

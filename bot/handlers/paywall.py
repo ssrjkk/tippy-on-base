@@ -124,7 +124,7 @@ async def _paywall_channel_cmd(message: types.Message, args: list[str]) -> None:
         await message.answer(i18n.t(await common.user_lang(uid), 'paywall_check_error'))
         return
     if not args or args[0] == 'off':
-        await common.ledger.disable_paywall_channel(chat.id)
+        await common.ledger.disable_paywall_channel(chat.id, uid)
         await message.answer(i18n.t(await common.user_lang(uid), 'paywall_channel_disabled'))
         return
     m = re.match('^(\\d{1,9}(?:\\.\\d{1,6})?)$', args[0])

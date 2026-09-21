@@ -144,7 +144,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "Ставь на исходы событий в /bets, торгуй на рынках предсказаний /markets — "
             "угадал, забрал больше.\n\n"
             "🔓 <b>Это твой кошелёк.</b>\n"
-            "Ключ только у тебя (/wallet export), вывод куда угодно (/withdraw). "
+            "Вывод куда угодно (/withdraw). "
             "Все операции видны в блокчейне Base — ничего не спрятано.\n\n"
             "🟦 Мы строим на <b>Base</b> — официальной L2-экосистеме от Coinbase · base.org\n"
             "🧑‍💻 Автор и поддержка: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk"
@@ -160,7 +160,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "Back your predictions in /bets, trade on prediction markets in /markets — "
             "guess right and take the pot.\n\n"
             "🔓 <b>The wallet is yours.</b>\n"
-            "Only you hold the key (/wallet export), withdraw anywhere (/withdraw). "
+            "Withdraw anywhere (/withdraw). "
             "Every move is visible on the Base blockchain — nothing hidden.\n\n"
             "🟦 Built on <b>Base</b> — Coinbase's secure and scalable Ethereum L2 · base.org\n"
             "🧑‍💻 Team & support: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk"
@@ -175,7 +175,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "🎯 <b>边玩边赢。</b>\n"
             "在 /bets 押注事件结果，在 /markets 预测市场交易——猜对了就能赢走奖池。\n\n"
             "🔓 <b>钱包属于你。</b>\n"
-            "钥匙只在你手里（/wallet export），可以提到任何地方（/withdraw）。"
+            "可以提到任何地方（/withdraw）。"
             "每笔操作都能在 Base 区块链上查到——没有任何隐瞒。\n\n"
             "🟦 基于 <b>Base</b> 构建 —— Coinbase 推出的安全可扩展的 Ethereum L2 · base.org\n"
             "🧑‍💻 作者与支持：@b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk"
@@ -256,9 +256,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "🏗️ 链上操作，人人可见：basescan.org",
     },
     "dep_disclaimer": {
-        "ru": "⚠️ <b>Дисклеймер:</b> средства хранит бот (кастодиальный кошелёк). Свой ключ и сид-фразу можно забрать в любой момент: /wallet export",
-        "en": "⚠️ <b>Disclaimer:</b> funds are held by the bot (custodial wallet). You can export your key and seed anytime: /wallet export",
-        "zh": "⚠️ <b>免责声明：</b>资金由机器人托管。你可以随时导出密钥和助记词：/wallet export",
+        "ru": "⚠️ <b>Дисклеймер:</b> средства хранит бот (кастодиальный кошелёк). Ключи зашифрованы и защищены.",
+        "en": "⚠️ <b>Disclaimer:</b> funds are held by the bot (custodial wallet). Keys are encrypted and secured.",
+        "zh": "⚠️ <b>免责声明：</b>资金由机器人托管。密钥已加密并受到保护。",
     },
     # ----- donate -----
     "donate_text": {
@@ -307,7 +307,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /paywall subscribe @канал — доступ к платному каналу\n\n"
             "🟦 <b>На Base</b> · 🪙 USDC (ERC-20) · 🔍 все транзакции в блокчейне\n"
             "🏗️ <b>Base</b> — быстрорастущая, безопасная L2-экосистема от Coinbase: base.org\n"
-            "👛 Свой кошелёк: /wallet · выгрузить ключ и сид: /wallet export · импорт по сид-фразе: /import"
+            "👛 Свой кошелёк: /wallet · импорт по сид-фразе: /import"
         ),
         "en": (
             "🤖 <b>Tippy</b> — a community economy in USDC on <b>Base</b>.\n"
@@ -348,7 +348,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /paywall subscribe @channel — access to a paid channel\n\n"
             "🟦 <b>On Base</b> · 🪙 USDC (ERC-20) · 🔍 all transactions on-chain\n"
             "🏗️ <b>Base</b> — a fast, secure L2 ecosystem by Coinbase: base.org\n"
-            "👛 Your wallet: /wallet · export key & seed: /wallet export · import seed: /import"
+            "👛 Your wallet: /wallet · import seed: /import"
         ),
         "zh": (
             "🤖 <b>Tippy</b> —— 建立在 <b>Base</b> 上的 USDC 社区经济。\n"
@@ -389,7 +389,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /paywall subscribe @频道 —— 访问付费频道\n\n"
             "🟦 <b>基于 Base</b> · 🪙 USDC（ERC-20）· 🔍 所有交易上链\n"
             "🏗️ <b>Base</b> —— Coinbase 推出、快速安全的 L2 生态：base.org\n"
-            "👛 你的钱包：/wallet · 导出密钥与助记词：/wallet export · 用助记词导入：/import"
+            "👛 你的钱包：/wallet · 用助记词导入：/import"
         ),
     },
     # ----- tip -----
@@ -776,24 +776,24 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     # ----- wallet extra -----
     "wallet_help": {
-        "ru": "Формат:\n• /wallet — адрес\n• /wallet export — ключ и сид\n• /wallet export hot — ключ горячего кошелька (админ)",
-        "en": "Format:\n• /wallet — address\n• /wallet export — key and seed\n• /wallet export hot — hot wallet key (admin)",
-        "zh": "格式：\n• /wallet —— 地址\n• /wallet export —— 密钥与助记词\n• /wallet export hot —— 热钱包密钥（管理员）",
+        "ru": "Формат:\n• /wallet — адрес\n• /wallet new — новый кошелёк\n• /wallet export hot — ключ горячего кошелька (админ)",
+        "en": "Format:\n• /wallet — address\n• /wallet new — new wallet\n• /wallet export hot — hot wallet key (admin)",
+        "zh": "格式：\n• /wallet —— 地址\n• /wallet new —— 新钱包\n• /wallet export hot —— 热钱包密钥（管理员）",
     },
-"wallet_key_export": {
-        "ru": "🔑 <b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\nПриватный ключ: <code>{privkey}</code>\nСид-фраза: <code>{seed}</code>\n\n⚠️ Не показывай это никому.",
-        "en": "🔑 <b>Your wallet</b>\n\nAddress: <code>{addr}</code>\nPrivate key: <code>{privkey}</code>\nSeed phrase: <code>{seed}</code>\n\n⚠️ Do not share this with anyone.",
-        "zh": "🔑 <b>你的钱包</b>\n\n地址：<code>{addr}</code>\n私钥：<code>{privkey}</code>\n助记词：<code>{seed}</code>\n\n⚠️ 请勿向任何人展示。",
+"wallet_export_secure": {
+        "ru": "🔑 <b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\n\n🔒 Экспорт приватного ключа и сид-фразы отключён в целях безопасности. Ключи зашифрованы и хранятся на сервере.",
+        "en": "🔑 <b>Your wallet</b>\n\nAddress: <code>{addr}</code>\n\n🔒 Private key and seed export is disabled for security. Keys are encrypted and stored on the server.",
+        "zh": "🔑 <b>你的钱包</b>\n\n地址：<code>{addr}</code>\n\n🔒 出于安全考虑，已禁用私钥和助记词导出。密钥已加密并存储在服务器上。",
     },
     "wallet_addr": {
-        "ru": "👛 <b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\n🟦 Сеть Base · монета USDC\n\nКлюч и сид: /wallet export",
-        "en": "👛 <b>Your wallet</b>\n\nAddress: <code>{addr}</code>\n🟦 Base network · USDC coin\n\nKey & seed: /wallet export",
-        "zh": "👛 <b>你的钱包</b>\n\n地址：<code>{addr}</code>\n🟦 Base 网络 · USDC 代币\n\n密钥与助记词：/wallet export",
+        "ru": "👛 <b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\n🟦 Сеть Base · монета USDC",
+        "en": "👛 <b>Your wallet</b>\n\nAddress: <code>{addr}</code>\n🟦 Base network · USDC coin",
+        "zh": "👛 <b>你的钱包</b>\n\n地址：<code>{addr}</code>\n🟦 Base 网络 · USDC 代币",
     },
     "wallet_list": {
-        "ru": "👛 <b>Твои кошельки</b> ({count}/{max})\n\n{slots}\n\nАктивный: слот {active_slot} · <code>{active_addr}</code>\n\n➕ Создать новый: /wallet new\n📤 Экспорт активного: /wallet export",
-        "en": "👛 <b>Your wallets</b> ({count}/{max})\n\n{slots}\n\nActive: slot {active_slot} · <code>{active_addr}</code>\n\n➕ Create new: /wallet new\n📤 Export active: /wallet export",
-        "zh": "👛 <b>你的钱包</b> ({count}/{max})\n\n{slots}\n\n当前活跃：槽位 {active_slot} · <code>{active_addr}</code>\n\n➕ 创建新钱包：/wallet new\n📤 导出活跃钱包：/wallet export",
+        "ru": "👛 <b>Твои кошельки</b> ({count}/{max})\n\n{slots}\n\nАктивный: слот {active_slot} · <code>{active_addr}</code>\n\n➕ Создать новый: /wallet new",
+        "en": "👛 <b>Your wallets</b> ({count}/{max})\n\n{slots}\n\nActive: slot {active_slot} · <code>{active_addr}</code>\n\n➕ Create new: /wallet new",
+        "zh": "👛 <b>你的钱包</b> ({count}/{max})\n\n{slots}\n\n当前活跃：槽位 {active_slot} · <code>{active_addr}</code>\n\n➕ 创建新钱包：/wallet new",
     },
     "wallet_new_ok": {
         "ru": "✅ Новый кошелёк создан!\n\nАдрес: <code>{addr}</code>\nСлот: {slot}\n\nОн стал активным. Выбери другой: тапни на кнопку ниже.",
@@ -851,9 +851,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "❌ 助记词必须为 12 或 24 个词。",
     },
     "import_ok": {
-        "ru": "✅ Кошелёк <code>{addr}</code> импортирован.\nКлюч и сид зашифрованы: /wallet export",
-        "en": "✅ Wallet <code>{addr}</code> imported.\nKey and seed are encrypted: /wallet export",
-        "zh": "✅ 钱包 <code>{addr}</code> 已导入。\n密钥和助记词已加密：/wallet export",
+        "ru": "✅ Кошелёк <code>{addr}</code> импортирован.\nКлюч и сид зашифрованы.",
+        "en": "✅ Wallet <code>{addr}</code> imported.\nKey and seed are encrypted.",
+        "zh": "✅ 钱包 <code>{addr}</code> 已导入。\n密钥和助记词已加密。",
     },
     "withdraw_format": {
         "ru": "Формат: /withdraw <i>&lt;адрес&gt; &lt;сумма&gt;</i>",

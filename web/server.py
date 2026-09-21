@@ -418,17 +418,18 @@ async def api_agent_status(request: Request) -> dict:
     market_count = 0
     bet_count = 0
     if audit_file.exists():
-        for line in audit_file.read_text().splitlines():
-            if not line.strip():
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue  # torn last line (concurrent append) — skip it
-            if entry.get('action_type') == 'create_market' or 'market_id' in entry:
-                market_count += 1
-            if entry.get('bet_amount_usdc', 0) > 0:
-                bet_count += 1
+        with audit_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get('action_type') == 'create_market' or 'market_id' in entry:
+                    market_count += 1
+                if entry.get('bet_amount_usdc', 0) > 0:
+                    bet_count += 1
     return {
         'balance_usdc': _usdc(v['balance_micro']),
         'markets_created': market_count,
@@ -446,14 +447,32 @@ async def api_agent_audit(request: Request) -> list[dict]:
     if not audit_file.exists():
         return []
     entries = []
-    for line in audit_file.read_text().splitlines():
+    with audit_file.open("rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        chunk = 8192
+        lines: list[str] = []
+        pos = size
+        while pos > 0 and len(lines) < 60:
+            read_size = min(chunk, pos)
+            pos -= read_size
+            f.seek(pos)
+            buf = f.read(read_size).decode("utf-8", errors="replace")
+            if pos == 0:
+                lines = buf.splitlines() + lines
+            else:
+                parts = buf.splitlines()
+                lines = parts[1:] + lines
+                if not buf.startswith("\n"):
+                    lines = parts[:1] + lines
+    for line in lines[-50:]:
         if not line.strip():
             continue
         try:
             entries.append(json.loads(line))
         except json.JSONDecodeError:
-            continue  # torn last line (concurrent append) — skip it
-    return entries[-50:]
+            continue
+    return entries
 
 @app.get('/api/onchain/markets', tags=['markets'])
 async def api_onchain_markets() -> list[dict]:
