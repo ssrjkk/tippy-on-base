@@ -17,6 +17,7 @@ from web3 import Web3
 
 from . import config
 
+
 def _tx_hex(raw) -> str:
     """Normalize a tx hash to a 0x-prefixed hex string."""
     if isinstance(raw, bytes):

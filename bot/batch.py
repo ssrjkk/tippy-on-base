@@ -4,15 +4,12 @@ Leverages ERC-4337 to execute tip + create_market + bet in one transaction.
 Saves ~60% gas compared to separate transactions.
 """
 
-import asyncio
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-from bot import config
 
-
-class ActionType(str, Enum):
+class ActionType(StrEnum):
     TIP = "tip"
     BET = "bet"
     CREATE_MARKET = "create_market"

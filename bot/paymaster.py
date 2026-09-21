@@ -7,11 +7,8 @@ Uses Base Paymaster API for ERC-4337 UserOperations.
 import os
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import httpx
-
-from bot import config
 
 FREE_TRANSACTIONS_COUNT = int(os.environ.get("PAYMASTER_FREE_TX", "10"))
 PAYMASTER_URL = os.environ.get("PAYMASTER_URL", "https://api.pimlico.io/v2/base/rpc")
@@ -56,7 +53,7 @@ async def sponsor_user_operation(
     user_op: dict,
     entry_point: str,
     user_address: str,
-) -> Optional[dict]:
+) -> dict | None:
     """Request paymaster sponsorship for UserOperation.
 
     Returns paymasterData if user is eligible, None otherwise.

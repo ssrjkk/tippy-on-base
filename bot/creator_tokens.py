@@ -8,11 +8,8 @@ This is a breakthrough for Base — enables creator economy natively on-chain.
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
-from bot import config
 
 
 @dataclass
@@ -176,7 +173,7 @@ class CreatorTokenRegistry:
         self,
         token_id: str,
         amount_micro: int,
-    ) -> Optional[DividendRecord]:
+    ) -> DividendRecord | None:
         """Distribute dividend to all token holders.
 
         Called when creator earns revenue. Automatically distributes
@@ -237,7 +234,7 @@ class CreatorTokenRegistry:
         self,
         token_id: str,
         holder_tg_id: int,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Get holder's token balance and pending dividends."""
         holders = self._holders.get(token_id, {})
         holder = holders.get(holder_tg_id)
@@ -250,7 +247,7 @@ class CreatorTokenRegistry:
             "last_claim": holder.last_dividend_claim,
         }
 
-    async def get_token_info(self, token_id: str) -> Optional[dict]:
+    async def get_token_info(self, token_id: str) -> dict | None:
         """Get token metadata and stats."""
         token = self._tokens.get(token_id)
         if not token:

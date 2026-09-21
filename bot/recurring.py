@@ -7,11 +7,8 @@ on a schedule (daily, weekly, monthly). Uses cron-style scheduling.
 import asyncio
 import enum
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
-from bot import config
 
 
 class RecurrenceInterval(enum.Enum):
@@ -139,5 +136,5 @@ class RecurringPaymentStore:
             if p.from_tg_id == tg_id or p.to_tg_id == tg_id
         ]
 
-    async def get(self, payment_id: str) -> Optional[RecurringPayment]:
+    async def get(self, payment_id: str) -> RecurringPayment | None:
         return self._payments.get(payment_id)

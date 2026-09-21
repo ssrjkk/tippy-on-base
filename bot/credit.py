@@ -11,9 +11,6 @@ trustless P2P lending without collateral. Uses multiple factors:
 
 import time
 from dataclasses import dataclass
-from typing import Optional
-
-from bot import config
 
 
 @dataclass

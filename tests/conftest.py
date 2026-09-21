@@ -96,6 +96,22 @@ def _clean_shared_ledger():
 
 
 @pytest.fixture(autouse=True)
+def _reset_rpc_breaker():
+    """Close the bot.chain.core circuit breaker before every test.
+
+    The breaker is module-level state; a test that touches the real RPC
+    layer (CI has no .env, so providers fail) opens it, and every later
+    mocked test inherits the RuntimeError. Reset both knobs so tests are
+    isolated from each other's RPC failures.
+    """
+    from bot.chain import core
+
+    core._cb_fail_times.clear()
+    core._cb_open_until = 0.0
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_create2(monkeypatch):
     """Disable the CREATE2 deposit flow for tests by default.
 

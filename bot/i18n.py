@@ -1360,7 +1360,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Channel not found.",
         "zh": "频道未找到。",
     },
-    "claim_format": {
+    "claim_format_tx": {
         "ru": "Формат: /claim &lt;0x...tx_hash&gt;",
         "en": "Format: /claim &lt;0x...tx_hash&gt;",
         "zh": "格式：/claim &lt;0x...tx_hash&gt;",

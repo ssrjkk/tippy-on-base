@@ -114,7 +114,7 @@ async def cmd_claim(message: types.Message) -> None:
     lang = await common.user_lang(message.from_user.id)
     parts = message.text.strip().split()
     if len(parts) != 2 or not common.TX_HASH_RE.match(parts[1]):
-        await message.answer(i18n.t(lang, 'claim_format'))
+        await message.answer(i18n.t(lang, 'claim_format_tx'))
         return
     # Enforce the same DEPOSIT_CONFIRM_BLOCKS maturity gate as the scanner:
     # crediting a deposit that may still be reorged mints unbacked balance.

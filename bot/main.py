@@ -184,8 +184,9 @@ async def housekeeping_watcher() -> None:
 
 async def recurring_payment_executor() -> None:
     """Execute due recurring payments (subscriptions)."""
-    from .recurring import RecurringPaymentStore
     import os
+
+    from .recurring import RecurringPaymentStore
     state_dir = os.environ.get("STATE_DIR", ".")
     store = RecurringPaymentStore(state_dir)
 

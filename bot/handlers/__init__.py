@@ -43,16 +43,6 @@ from .ai import (
     cmd_ask,
 )
 from .basename import cb_basename, cmd_basename
-from .breakthrough import (
-    cmd_gasless,
-    cmd_subscribe,
-    cmd_subscriptions,
-    cmd_cancel_sub,
-    cmd_credit,
-    cmd_create_token,
-    cmd_buy_token,
-    cmd_claim_dividends,
-)
 from .bets import (
     _bet_card,
     _bet_create,
@@ -72,6 +62,16 @@ from .bets import (
     cmd_cancel,
     cmd_mybets,
     cmd_resolve,
+)
+from .breakthrough import (
+    cmd_buy_token,
+    cmd_cancel_sub,
+    cmd_claim_dividends,
+    cmd_create_token,
+    cmd_credit,
+    cmd_gasless,
+    cmd_subscribe,
+    cmd_subscriptions,
 )
 from .markets import (
     _market_card,

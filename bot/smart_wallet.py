@@ -28,6 +28,7 @@ from web3 import Web3
 
 from . import config
 
+
 def _tx_hex(raw) -> str:
     if isinstance(raw, bytes):
         return "0x" + raw.hex()

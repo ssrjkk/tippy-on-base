@@ -9,7 +9,8 @@ import types
 from eth_abi import decode as abi_decode
 from web3 import Web3
 
-from bot import config, smart_wallet as sw
+from bot import config
+from bot import smart_wallet as sw
 
 
 class _Fn:
@@ -342,6 +343,7 @@ def test_smart_nonce_uses_entrypoint_not_storage(monkeypatch):
     """smart_nonce() must read EntryPoint.getNonce(sender,0), never the
     SmartAccount's own storage nonce (never incremented -> would break the
     EntryPoint sequential-nonce check on a real chain)."""
+    _monkeypatch_smart_wallet(monkeypatch)  # config must not depend on .env
     # Any contract lookup that is NOT the factory returns a getNonce result;
     # this proves smart_nonce reads EntryPoint.getNonce (not account storage).
     def fake_contract(address=None, abi=None):
