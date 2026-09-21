@@ -14,7 +14,7 @@ import logging
 import os
 import time
 import urllib.parse
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse

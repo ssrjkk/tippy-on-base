@@ -246,6 +246,9 @@ run-it-yourself guide, and contract deployment stays with the team
 
 ## Commands
 
+A plain-language walkthrough for Telegram users lives in
+**[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — the table below is the short form.
+
 | Command | What it does |
 |---|---|
 | `/start` | Menu with all sections |
