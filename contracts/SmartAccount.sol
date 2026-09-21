@@ -63,7 +63,20 @@ contract SmartAccount {
         // the EntryPoint's userOpHash includes signature, but we signed the hash
         // of the UserOp with signature excluded (chicken-and-egg: can't sign a
         // hash that depends on the signature we're creating).
-        bytes32 hashWithoutSig = keccak256(abi.encode(
+        bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _hashUserOp(userOp)));
+        address signer = _recover(hash, sig);
+
+        if (signer == owner) {
+            return 0; // validation succeeded
+        } else {
+            return 1; // validation failed
+        }
+    }
+
+    /// @dev Keccak256 over the UserOp fields excluding the signature. Kept in a
+    ///      separate frame so validateUserOp does not hit the stack-too-deep limit.
+    function _hashUserOp(UserOperation calldata userOp) internal pure returns (bytes32) {
+        return keccak256(abi.encode(
             userOp.sender,
             userOp.nonce,
             userOp.initCode,
@@ -75,14 +88,6 @@ contract SmartAccount {
             userOp.maxPriorityFeePerGas,
             userOp.paymasterAndData
         ));
-        bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hashWithoutSig));
-        address signer = _recover(hash, sig);
-
-        if (signer == owner) {
-            return 0; // validation succeeded
-        } else {
-            return 1; // validation failed
-        }
     }
 
     /// @notice Execute a single call from the account.

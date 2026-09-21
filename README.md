@@ -1,7 +1,7 @@
 # Tippy - Community Economy in USDC on Base
 
 [![CI](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-782%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-787%20passed-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.12+-blue)
 ![Network](https://img.shields.io/badge/network-Base-0052FF)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -61,8 +61,6 @@ accounting backed by public proof-of-reserves.
 - Labels live in a bot-side registry (the contract stores numbers only); gas
   for first trades is auto-topped-up from the hot wallet with a per-wallet
   anti-drain cooldown
-- Deploy: `python scripts/deploy_outcome_market.py` (owner should be a
-  multisig, not the hot wallet)
 
 ### 🧠 AI assistant
 - `/ask <question>` — ask about crypto, Base, market strategy, bot usage
@@ -238,36 +236,13 @@ accounting backed by public proof-of-reserves.
 - Users deposit USDC into the vault contract — visible to anyone on Base
 - Relayer distributes under a daily limit; owner (multisig) keeps full control
 - `Distributed` events make every payout publicly auditable
-- Deploy: `python scripts/deploy_vault.py` (compiles with solc 0.8.24, EIP-1559 fees)
 
-## Quick start
+## Operations
 
-```bash
-pip install -r requirements.txt          # + requirements-dev.txt for tests
-cp .env.example .env                     # fill BOT_TOKEN, BASE_RPC_URL, HOT_WALLET_KEY
-python -m bot.main                       # bot
-python -m uvicorn web.server:app --host 0.0.0.0 --port 8000   # dashboard
-```
-
-1. Create a bot with [@BotFather](https://t.me/BotFather)
-2. Get a Base RPC (Alchemy / Infura / QuickNode free tier — the public
-   `mainnet.base.org` is unstable for `eth_getLogs`)
-3. Fund the hot wallet with ~$5 ETH for withdrawal gas
-4. Optional: set `AI_API_KEY` to enable `/ask`
-5. Optional: set `PAYMASTER_API_KEY` to enable gasless onboarding (`/gasless`)
-   — free transactions for new users via Base Paymaster (Pimlico)
-
-### Docker
-
-```bash
-docker compose up -d --build   # postgres + bot + dashboard + hourly backups
-```
-
-Services: `db` (PostgreSQL 16), `bot`, `web` (healthcheck on `/api/health`),
-`backup` (pg_dump every 6h, 14-day rotation). Local port 5433 to avoid clashing
-with a system Postgres.
-
-Full production walkthrough: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+Tippy runs as a private production deployment operated by its maintainers.
+The source is published for transparency and audit; there is no public
+run-it-yourself guide, and contract deployment stays with the team
+(vault/market owners are multisigs, never the hot wallet).
 
 ## Commands
 
@@ -317,7 +292,7 @@ bot/
 ├─ recurring.py    Recurring payments: subscriptions executor (hourly watcher)
 ├─ batch.py        Batch transactions: multiple actions in one UserOperation
 ├─ credit.py       Credit scoring: 300-850 P2P lending score
-└─ creator_tokens.py  Revenue sharing: creator tokens + dividend distribution
+├─ creator_tokens.py  Revenue sharing: creator tokens + dividend distribution
 └─ config.py      env-driven configuration
 agent/            autonomous market-maker: news → LLM → markets, EAS attestations
 web/
@@ -355,8 +330,6 @@ worst-case payout.
 ## Security
 
 - `HOT_WALLET_KEY` is money — never commit `.env`
-- Recommended treasury setup: hot wallet = relayer only (daily-limit capped by
-  TipBotVault), owner = multisig
 - Official USDC only: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
 - Prediction markets rely on the creator resolving honestly; deadline + grace
   auto-refund bounds the damage of abandoned markets

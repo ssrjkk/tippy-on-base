@@ -61,6 +61,10 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Install solc 0.8.24 (EVM contract tests)
+        run: python -c "import solcx; solcx.install_solc('0.8.24')"
+      - name: Vendor contract dependencies (OZ/prb-math for EVM tests)
+        run: bash scripts/setup_foundry.sh
       - name: Run tests
         run: python -m pytest -q
 
