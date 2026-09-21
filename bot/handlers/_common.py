@@ -16,6 +16,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from .. import base, config, i18n, wallets
 from .. import qr as qrlib
 from ..ledger import async_ledger as ledger
+from .. import paymaster, recurring, creator_tokens, batch, credit
 
 log = logging.getLogger("tipbot.handlers")
 
@@ -46,6 +47,11 @@ __all__ = [
     "base",
     "config",
     "ledger",
+    "paymaster",
+    "recurring",
+    "creator_tokens",
+    "batch",
+    "credit",
     "qrlib",
     "require_private",
     "router",

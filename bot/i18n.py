@@ -2188,6 +2188,102 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Couldn't check the name (RPC unavailable). Try again later.",
         "zh": "无法检查该名字（RPC 不可用）。请稍后再试。",
     },
+    # ----- breakthrough features -----
+    "gasless_eligible": {
+        "ru": "🎁 У тебя осталось <b>{remaining}</b> из {total} бесплатных транзакций!\n\nГаз оплачивается базой — ты ничего не платишь.",
+        "en": "🎁 You have <b>{remaining}</b> of {total} free transactions left!\n\nGas is sponsored by Base — you pay nothing.",
+        "zh": "🎁 你还剩 <b>{remaining}</b> / {total} 笔免费交易！\n\nGas 由 Base 赞助——你无需支付。",
+    },
+    "gasless_not_eligible": {
+        "ru": "ℹ️ Бесплатные транзакции закончились. Но газ на Base всё равно копеечный!",
+        "en": "ℹ️ Free transactions used up. But Base gas is still pennies!",
+        "zh": "ℹ️ 免费交易已用完。但 Base 的 gas 仍然很便宜！",
+    },
+    "subscribe_format": {
+        "ru": "Формат: /subscribe @username сумма интервал\nПример: /subscribe @alice 10 weekly\nИнтервалы: daily, weekly, biweekly, monthly",
+        "en": "Format: /subscribe @username amount interval\nExample: /subscribe @alice 10 weekly\nIntervals: daily, weekly, biweekly, monthly",
+        "zh": "格式：/subscribe @username 金额 间隔\n示例：/subscribe @alice 10 weekly\n间隔：daily, weekly, biweekly, monthly",
+    },
+    "subscribe_invalid_interval": {
+        "ru": "❌ Неверный интервал. Используй: daily, weekly, biweekly, monthly",
+        "en": "❌ Invalid interval. Use: daily, weekly, biweekly, monthly",
+        "zh": "❌ 间隔无效。请使用：daily, weekly, biweekly, monthly",
+    },
+    "subscribe_created": {
+        "ru": "✅ Подписка создана!\n\n📤 @{to_username}: ${amount:.2f} каждые {interval}\n\nИспользуй /subscriptions чтобы увидеть все.",
+        "en": "✅ Subscription created!\n\n📤 @{to_username}: ${amount:.2f} every {interval}\n\nUse /subscriptions to see all.",
+        "zh": "✅ 订阅已创建！\n\n📤 @{to_username}：每 {interval} ${amount:.2f}\n\n使用 /subscriptions 查看全部。",
+    },
+    "no_subscriptions": {
+        "ru": "📭 У тебя нет активных подписок.\n\nСоздай: /subscribe @user сумма интервал",
+        "en": "📭 You have no active subscriptions.\n\nCreate one: /subscribe @user amount interval",
+        "zh": "📭 你没有活跃的订阅。\n\n创建一个：/subscribe @user 金额 间隔",
+    },
+    "subscriptions_list": {
+        "ru": "📋 <b>Мои подписки:</b>\n\n{list}",
+        "en": "📋 <b>My subscriptions:</b>\n\n{list}",
+        "zh": "📋 <b>我的订阅：</b>\n\n{list}",
+    },
+    "cancel_sub_format": {
+        "ru": "Формат: /cancelsub <id>\n\nИспользуй /subscriptions чтобы увидеть ID.",
+        "en": "Format: /cancelsub <id>\n\nUse /subscriptions to see IDs.",
+        "zh": "格式：/cancelsub <id>\n\n使用 /subscriptions 查看 ID。",
+    },
+    "subscription_cancelled": {
+        "ru": "✅ Подписка отменена.",
+        "en": "✅ Subscription cancelled.",
+        "zh": "✅ 订阅已取消。",
+    },
+    "subscription_not_found": {
+        "ru": "❌ Подписка не найдена или у тебя нет прав.",
+        "en": "❌ Subscription not found or you don't have permission.",
+        "zh": "❌ 未找到订阅或你没有权限。",
+    },
+    "credit_score": {
+        "ru": "📊 <b>Кредитный рейтинг:</b>\n\nОценка: <b>{score}</b> ({grade})\nДостоверность: {confidence}%\nМакс. займ: <b>${max_loan:.2f}</b>\n\nРейтинг растёт с активностью: транзакции, рынки, история.",
+        "en": "📊 <b>Credit Score:</b>\n\nScore: <b>{score}</b> ({grade})\nConfidence: {confidence}%\nMax loan: <b>${max_loan:.2f}</b>\n\nScore grows with activity: transactions, markets, history.",
+        "zh": "📊 <b>信用评分：</b>\n\n评分：<b>{score}</b>（{grade}）\n可信度：{confidence}%\n最大贷款：<b>${max_loan:.2f}</b>\n\n活跃度提升评分：交易、市场、历史。",
+    },
+    "create_token_format": {
+        "ru": "Формат: /createtoken <name> <SYMBOL> <supply> <price>\nПример: /createtoken \"My Token\" MTK 1000000 0.10",
+        "en": "Format: /createtoken <name> <SYMBOL> <supply> <price>\nExample: /createtoken \"My Token\" MTK 1000000 0.10",
+        "zh": "格式：/createtoken <名称> <符号> <供应量> <价格>\n示例：/createtoken \"My Token\" MTK 1000000 0.10",
+    },
+    "token_created": {
+        "ru": "🪙 <b>Токен создан!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nДержатели получают дивиденды от твоего заработка автоматически.",
+        "en": "🪙 <b>Token created!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nHolders receive dividends from your earnings automatically.",
+        "zh": "🪙 <b>代币已创建！</b>\n\n{name}（${symbol}）\nID：<code>{token_id}</code>\n\n持有者自动从你的收入中获得分红。",
+    },
+    "buy_token_format": {
+        "ru": "Формат: /buytoken <token_id> <amount>",
+        "en": "Format: /buytoken <token_id> <amount>",
+        "zh": "格式：/buytoken <token_id> <数量>",
+    },
+    "token_buy_failed": {
+        "ru": "❌ Не удалось купить токены. Проверь ID и баланс.",
+        "en": "❌ Failed to buy tokens. Check ID and balance.",
+        "zh": "❌ 购买代币失败。请检查 ID 和余额。",
+    },
+    "token_bought": {
+        "ru": "✅ Куплено <b>{amount}</b> токенов за ${cost:.2f}!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
+        "en": "✅ Bought <b>{amount}</b> tokens for ${cost:.2f}!\n\nYou'll receive dividends. Check: /claim <token_id>",
+        "zh": "✅ 已购买 <b>{amount}</b> 个代币，花费 ${cost:.2f}！\n\n你将获得分红。查看：/claim <token_id>",
+    },
+    "claim_format": {
+        "ru": "Формат: /claim <token_id>",
+        "en": "Format: /claim <token_id>",
+        "zh": "格式：/claim <token_id>",
+    },
+    "no_dividends": {
+        "ru": "ℹ️ Нет дивидендов для получения.",
+        "en": "ℹ️ No dividends to claim.",
+        "zh": "ℹ️ 没有可领取的分红。",
+    },
+    "dividends_claimed": {
+        "ru": "💰 Получено <b>${amount:.2f}</b> дивидендов!",
+        "en": "💰 Claimed <b>${amount:.2f}</b> in dividends!",
+        "zh": "💰 已领取 <b>${amount:.2f}</b> 分红！",
+    },
 }
 
 

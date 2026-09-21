@@ -4,6 +4,8 @@ Public API (router, handlers, state objects, module refs) must stay identical so
 that bot/main.py, web/hook.py and the test-suite keep working unchanged.
 """
 
+from aiogram.filters import Command
+
 from ._common import (
     AMOUNT_RE,
     BET_ID_RE,
@@ -41,6 +43,16 @@ from .ai import (
     cmd_ask,
 )
 from .basename import cb_basename, cmd_basename
+from .breakthrough import (
+    cmd_gasless,
+    cmd_subscribe,
+    cmd_subscriptions,
+    cmd_cancel_sub,
+    cmd_credit,
+    cmd_create_token,
+    cmd_buy_token,
+    cmd_claim_dividends,
+)
 from .bets import (
     _bet_card,
     _bet_create,
@@ -143,6 +155,16 @@ from .wallet import (
     cmd_wallet,
     cmd_withdraw,
 )
+
+# Register breakthrough feature handlers
+router.message.register(cmd_gasless, Command('gasless'))
+router.message.register(cmd_subscribe, Command('subscribe'))
+router.message.register(cmd_subscriptions, Command('subscriptions'))
+router.message.register(cmd_cancel_sub, Command('cancelsub'))
+router.message.register(cmd_credit, Command('credit'))
+router.message.register(cmd_create_token, Command('createtoken'))
+router.message.register(cmd_buy_token, Command('buytoken'))
+router.message.register(cmd_claim_dividends, Command('claim'))
 
 # IMPORTANT: the filter-less catch-all `_index_message` must be registered AFTER
 # every command handler — aiogram stops on the first matching handler, so a
