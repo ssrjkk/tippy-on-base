@@ -2,8 +2,8 @@
 """Test script for breakthrough features."""
 
 import asyncio
-import sys
 import os
+import sys
 
 import pytest
 
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.asyncio
 async def test_paymaster():
     """Test gasless onboarding."""
     print("\n=== Testing Paymaster (Gasless Onboarding) ===")
-    from bot.paymaster import check_eligibility, get_state, FREE_TRANSACTIONS_COUNT
+    from bot.paymaster import FREE_TRANSACTIONS_COUNT, check_eligibility, get_state
 
     # Test with a dummy address
     test_addr = "0x1234567890123456789012345678901234567890"
@@ -38,9 +38,10 @@ async def test_paymaster():
 async def test_recurring():
     """Test recurring payments."""
     print("\n=== Testing Recurring Payments ===")
-    from bot.recurring import RecurringPaymentStore, RecurrenceInterval
     import tempfile
     import time
+
+    from bot.recurring import RecurrenceInterval, RecurringPaymentStore
 
     # Create temp directory for test
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -87,8 +88,9 @@ async def test_credit():
     """Test credit scoring."""
     print("\n=== Testing Credit Score ===")
     import time
-    from bot.credit import CreditScorer
     from unittest.mock import AsyncMock, MagicMock
+
+    from bot.credit import CreditScorer
 
     # Mock ledger
     mock_ledger = MagicMock()
@@ -121,72 +123,13 @@ async def test_credit():
     print("[OK] Credit score tests passed!")
 
 
-async def test_creator_tokens():
-    """Test creator tokens."""
-    print("\n=== Testing Creator Tokens ===")
-    from bot.creator_tokens import CreatorTokenRegistry
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        registry = CreatorTokenRegistry(tmpdir)
-
-        # Create a token
-        token = await registry.create_token(
-            creator_tg_id=123456,
-            name="Test Token",
-            symbol="TST",
-            total_supply=1_000_000,
-            initial_price_micro=100_000,  # $0.10
-        )
-        print(f"[OK] Created token: {token.name} (${token.symbol})")
-        print(f"  Token ID: {token.token_id}")
-
-        # Buy tokens
-        success, cost = await registry.buy_tokens(
-            token_id=token.token_id,
-            buyer_tg_id=789012,
-            amount=1000,
-        )
-        print(f"[OK] Bought 1000 tokens, cost: ${cost / 1e6:.2f}")
-        assert success is True
-
-        # Get holder info
-        info = await registry.get_holder_info(token.token_id, 789012)
-        print(f"[OK] Holder balance: {info['balance']} tokens")
-        assert info["balance"] == 1000
-
-        # Distribute dividend
-        dividend = await registry.distribute_dividend(
-            token_id=token.token_id,
-            amount_micro=5_000_000,  # $5
-        )
-        print(f"[OK] Distributed dividend: ${dividend.amount_micro / 1e6:.2f}")
-        assert dividend is not None
-
-        # Check pending dividends
-        info = await registry.get_holder_info(token.token_id, 789012)
-        print(f"[OK] Pending dividends: ${info['pending_dividends_micro'] / 1e6:.2f}")
-        assert info["pending_dividends_micro"] > 0
-
-        # Claim dividends
-        claimed = await registry.claim_dividends(token.token_id, 789012)
-        print(f"[OK] Claimed: ${claimed / 1e6:.2f}")
-        assert claimed > 0
-
-        # Verify claimed
-        info = await registry.get_holder_info(token.token_id, 789012)
-        print(f"[OK] Pending after claim: ${info['pending_dividends_micro'] / 1e6:.2f}")
-        assert info["pending_dividends_micro"] == 0
-
-        print("[OK] Creator tokens tests passed!")
-
-
 async def test_batch():
     """Test batch transactions."""
     print("\n=== Testing Batch Transactions ===")
-    from bot.batch import BatchExecutor, BatchAction, ActionType
-    from unittest.mock import AsyncMock, MagicMock
     import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from bot.batch import ActionType, BatchAction, BatchExecutor
 
     # Mock ledger
     mock_ledger = MagicMock()
@@ -237,7 +180,6 @@ async def main():
         await test_paymaster()
         await test_recurring()
         await test_credit()
-        await test_creator_tokens()
         await test_batch()
 
         print("\n" + "=" * 60)

@@ -302,6 +302,39 @@ CREATE TABLE IF NOT EXISTS login_nonces (
     nonce_hash TEXT PRIMARY KEY,
     created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())::bigint)
 );
+-- Creator tokens (revenue sharing): migrated from JSON state files so the
+-- data lives in the same backed-up PostgreSQL as every other balance.
+CREATE TABLE IF NOT EXISTS creator_tokens (
+    token_id      TEXT PRIMARY KEY,
+    creator_tg_id BIGINT NOT NULL,
+    name          TEXT NOT NULL,
+    symbol        TEXT NOT NULL,
+    total_supply  BIGINT NOT NULL,
+    price_micro   BIGINT NOT NULL,
+    created_at    BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())::bigint),
+    total_revenue_micro        BIGINT NOT NULL DEFAULT 0,
+    total_dividends_paid_micro BIGINT NOT NULL DEFAULT 0,
+    dividend_per_token_micro   DOUBLE PRECISION NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_creator_tokens_creator ON creator_tokens (creator_tg_id);
+CREATE TABLE IF NOT EXISTS creator_token_holders (
+    token_id     TEXT NOT NULL REFERENCES creator_tokens (token_id),
+    holder_tg_id BIGINT NOT NULL,
+    balance      BIGINT NOT NULL DEFAULT 0,
+    pending_dividends_micro BIGINT NOT NULL DEFAULT 0,
+    last_dividend_claim DOUBLE PRECISION NOT NULL DEFAULT 0,
+    PRIMARY KEY (token_id, holder_tg_id)
+);
+CREATE INDEX IF NOT EXISTS idx_creator_holders_holder ON creator_token_holders (holder_tg_id);
+CREATE TABLE IF NOT EXISTS creator_dividends (
+    id          BIGSERIAL PRIMARY KEY,
+    token_id    TEXT NOT NULL,
+    amount_micro BIGINT NOT NULL,
+    dividend_per_token DOUBLE PRECISION NOT NULL,
+    total_holders BIGINT NOT NULL,
+    created_at  BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())::bigint)
+);
+CREATE INDEX IF NOT EXISTS idx_creator_dividends_token ON creator_dividends (token_id);
 -- Defense-in-depth: DB-level guard against negative balances / shares.
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_balance_nn') THEN
@@ -312,6 +345,10 @@ DO $$ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_treasury_balance_nn') THEN
         ALTER TABLE community_treasuries ADD CONSTRAINT chk_treasury_balance_nn CHECK (balance >= 0);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_creator_holders_balance_nn') THEN
+        ALTER TABLE creator_token_holders ADD CONSTRAINT chk_creator_holders_balance_nn
+            CHECK (balance >= 0 AND pending_dividends_micro >= 0);
     END IF;
 END $$;
 """

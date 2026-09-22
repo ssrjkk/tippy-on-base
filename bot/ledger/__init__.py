@@ -14,6 +14,7 @@ from ._base import (
 from ._bets import LedgerBetsMixin
 from ._conn import ReconnectingConn
 from ._core import LedgerCoreMixin
+from ._creator import LedgerCreatorMixin
 from ._markets import LedgerMarketsMixin
 from ._messages import LedgerMessagesMixin
 from ._notify import LedgerNotifyMixin
@@ -41,7 +42,7 @@ __all__ = [
     "lmsr_sell_value",
 ]
 
-class Ledger(LedgerCoreMixin, LedgerUsersMixin, LedgerPayMixin, LedgerPaywallMixin, LedgerTransferMixin, LedgerWithdrawMixin, LedgerBetsMixin, LedgerMarketsMixin, LedgerOnchainMixin, LedgerMessagesMixin, LedgerAdminMixin, LedgerNotifyMixin, LedgerViewsMixin):
+class Ledger(LedgerCoreMixin, LedgerUsersMixin, LedgerPayMixin, LedgerPaywallMixin, LedgerTransferMixin, LedgerWithdrawMixin, LedgerBetsMixin, LedgerMarketsMixin, LedgerOnchainMixin, LedgerMessagesMixin, LedgerAdminMixin, LedgerNotifyMixin, LedgerViewsMixin, LedgerCreatorMixin):
     'Full ledger facade combining all domain mixins.'
     pass
 

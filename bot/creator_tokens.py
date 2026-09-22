@@ -4,9 +4,15 @@ Creators issue tokens that represent a share of their future revenue.
 Holders automatically receive proportional dividends when the creator
 earns income (tips, market winnings, etc).
 
-This is a breakthrough for Base — enables creator economy natively on-chain.
+State lives in PostgreSQL (bot.ledger.LedgerCreatorMixin) so it survives
+restarts and is covered by the same backups as every other balance. A
+pre-existing JSON state (creator_tokens.json / token_holders.json) is
+imported once, then archived as *.json.migrated.
 """
 
+import asyncio
+import json
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,52 +53,81 @@ class DividendRecord:
 
 
 class CreatorTokenRegistry:
-    """Manage creator tokens and dividend distribution."""
+    """Manage creator tokens and dividend distribution (PostgreSQL-backed).
+
+    The ledger handle is resolved per call (not bound in __init__) so test
+    fixtures can rebind bot.ledger.async_ledger and stay hermetic.
+    """
 
     def __init__(self, state_dir: str):
         self._state_dir = Path(state_dir)
-        self._tokens: dict[str, CreatorToken] = {}
-        self._holders: dict[str, dict[int, TokenHolder]] = {}  # token_id -> {tg_id -> holder}
-        self._dividends: list[DividendRecord] = []
-        self._load()
+        self._legacy = self._read_legacy()
+        self._migrated = False
+        self._migrate_lock = asyncio.Lock()
 
-    def _load(self) -> None:
-        import json
+    # ---------- legacy JSON import (one-time) ----------
+
+    def _read_legacy(self) -> tuple[list[dict], dict[str, list[dict]]] | None:
         tokens_path = self._state_dir / "creator_tokens.json"
         holders_path = self._state_dir / "token_holders.json"
 
-        if tokens_path.exists():
-            try:
-                data = json.loads(tokens_path.read_text())
-                for item in data:
-                    self._tokens[item["token_id"]] = CreatorToken(**item)
-            except Exception:
-                pass
+        tokens: list[dict] = []
+        try:
+            if tokens_path.exists():
+                tokens = json.loads(tokens_path.read_text(encoding="utf-8"))
+        except Exception:
+            tokens = []
 
-        if holders_path.exists():
-            try:
-                data = json.loads(holders_path.read_text())
-                for token_id, holders_dict in data.items():
-                    self._holders[token_id] = {
-                        int(k): TokenHolder(**v) for k, v in holders_dict.items()
-                    }
-            except Exception:
-                pass
+        holders: dict[str, list[dict]] = {}
+        try:
+            if holders_path.exists():
+                raw = json.loads(holders_path.read_text(encoding="utf-8"))
+                holders = {
+                    token_id: list(hmap.values())
+                    for token_id, hmap in raw.items()
+                    if isinstance(hmap, dict)
+                }
+        except Exception:
+            holders = {}
 
-    def _save(self) -> None:
-        import json
-        tokens_path = self._state_dir / "creator_tokens.json"
-        holders_path = self._state_dir / "token_holders.json"
+        if not tokens and not holders:
+            return None
+        return tokens, holders
 
-        tokens_data = [t.__dict__ for t in self._tokens.values()]
-        tokens_path.write_text(json.dumps(tokens_data, indent=2))
+    def _archive_legacy(self) -> None:
+        for name in ("creator_tokens.json", "token_holders.json"):
+            p = self._state_dir / name
+            if p.exists():
+                try:
+                    p.rename(p.with_suffix(".json.migrated"))
+                except OSError:
+                    pass  # emptiness check already prevents re-import
 
-        holders_data = {}
-        for token_id, holders in self._holders.items():
-            holders_data[token_id] = {
-                str(k): v.__dict__ for k, v in holders.items()
-            }
-        holders_path.write_text(json.dumps(holders_data, indent=2))
+    async def _ensure_migrated(self) -> None:
+        if self._migrated:
+            return
+        async with self._migrate_lock:
+            if self._migrated:
+                return
+            if self._legacy is not None:
+                tokens, holders = self._legacy
+                await asyncio.to_thread(self._import_legacy, tokens, holders)
+            self._migrated = True
+
+    def _import_legacy(self, tokens: list[dict], holders: dict[str, list[dict]]) -> None:
+        from . import ledger as ledger_mod
+
+        led = ledger_mod.ledger
+        imported = led.creator_legacy_import(tokens, holders)
+        if imported or led.creator_tokens_count() > 0:
+            self._archive_legacy()
+
+    def _led(self):
+        from . import ledger as ledger_mod
+
+        return ledger_mod.async_ledger
+
+    # ---------- API (unchanged signatures) ----------
 
     async def create_token(
         self,
@@ -103,9 +138,8 @@ class CreatorTokenRegistry:
         initial_price_micro: int,
     ) -> CreatorToken:
         """Create a new creator token."""
-        token_id = f"ct_{creator_tg_id}_{int(time.time())}"
         token = CreatorToken(
-            token_id=token_id,
+            token_id=f"ct_{creator_tg_id}_{int(time.time())}",
             creator_tg_id=creator_tg_id,
             name=name,
             symbol=symbol,
@@ -113,9 +147,9 @@ class CreatorTokenRegistry:
             price_micro=initial_price_micro,
             created_at=time.time(),
         )
-        self._tokens[token_id] = token
-        self._holders[token_id] = {}
-        self._save()
+        await self._ensure_migrated()
+        row = token.__dict__ | {"created_at": int(token.created_at)}
+        await self._led().creator_token_upsert(row)
         return token
 
     async def buy_tokens(
@@ -125,26 +159,14 @@ class CreatorTokenRegistry:
         amount: int,
     ) -> tuple[bool, int]:
         """Buy creator tokens. Returns (success, cost_micro)."""
-        token = self._tokens.get(token_id)
+        await self._ensure_migrated()
+        led = self._led()
+        token = await led.creator_token_get(token_id)
         if not token:
             return False, 0
 
-        cost_micro = (amount * token.price_micro) // 1000000  # Convert to micro
-
-        if token_id not in self._holders:
-            self._holders[token_id] = {}
-
-        if buyer_tg_id not in self._holders[token_id]:
-            self._holders[token_id][buyer_tg_id] = TokenHolder(
-                token_id=token_id,
-                holder_tg_id=buyer_tg_id,
-                balance=0,
-            )
-
-        holder = self._holders[token_id][buyer_tg_id]
-        holder.balance += amount
-
-        self._save()
+        cost_micro = (amount * token["price_micro"]) // 1000000  # Convert to micro
+        await led.creator_holder_add(token_id, buyer_tg_id, amount)
         return True, cost_micro
 
     async def sell_tokens(
@@ -154,19 +176,17 @@ class CreatorTokenRegistry:
         amount: int,
     ) -> tuple[bool, int]:
         """Sell creator tokens. Returns (success, proceeds_micro)."""
-        token = self._tokens.get(token_id)
+        await self._ensure_migrated()
+        led = self._led()
+        token = await led.creator_token_get(token_id)
         if not token:
             return False, 0
 
-        holders = self._holders.get(token_id, {})
-        holder = holders.get(seller_tg_id)
-        if not holder or holder.balance < amount:
+        sold = await led.creator_holder_sub(token_id, seller_tg_id, amount)
+        if not sold:
             return False, 0
 
-        proceeds_micro = (amount * token.price_micro) // 1000000
-        holder.balance -= amount
-
-        self._save()
+        proceeds_micro = (amount * token["price_micro"]) // 1000000
         return True, proceeds_micro
 
     async def distribute_dividend(
@@ -179,38 +199,30 @@ class CreatorTokenRegistry:
         Called when creator earns revenue. Automatically distributes
         proportionally to all holders.
         """
-        token = self._tokens.get(token_id)
+        await self._ensure_migrated()
+        led = self._led()
+        token = await led.creator_token_get(token_id)
         if not token:
             return None
 
-        holders = self._holders.get(token_id, {})
-        if not holders:
-            return None
-
-        total_held = sum(h.balance for h in holders.values())
+        total_held, holder_count = await led.creator_holders_summary(token_id)
         if total_held == 0:
             return None
 
         dividend_per_token = amount_micro / total_held
+        applied = await led.creator_dividend_apply(
+            token_id, amount_micro, dividend_per_token, holder_count
+        )
+        if applied is None:
+            return None
 
-        for holder in holders.values():
-            holder.pending_dividends_micro += int(holder.balance * dividend_per_token)
-
-        token.total_revenue_micro += amount_micro
-        token.total_dividends_paid_micro += amount_micro
-        token.dividend_per_token_micro += dividend_per_token
-
-        record = DividendRecord(
+        return DividendRecord(
             token_id=token_id,
             amount_micro=amount_micro,
             dividend_per_token=dividend_per_token,
-            timestamp=time.time(),
-            total_holders=len(holders),
+            timestamp=applied["timestamp"],
+            total_holders=holder_count,
         )
-        self._dividends.append(record)
-
-        self._save()
-        return record
 
     async def claim_dividends(
         self,
@@ -218,17 +230,8 @@ class CreatorTokenRegistry:
         holder_tg_id: int,
     ) -> int:
         """Claim pending dividends. Returns amount claimed."""
-        holders = self._holders.get(token_id, {})
-        holder = holders.get(holder_tg_id)
-        if not holder:
-            return 0
-
-        amount = holder.pending_dividends_micro
-        holder.pending_dividends_micro = 0
-        holder.last_dividend_claim = time.time()
-
-        self._save()
-        return amount
+        await self._ensure_migrated()
+        return await self._led().creator_holder_claim(token_id, holder_tg_id)
 
     async def get_holder_info(
         self,
@@ -236,40 +239,45 @@ class CreatorTokenRegistry:
         holder_tg_id: int,
     ) -> dict | None:
         """Get holder's token balance and pending dividends."""
-        holders = self._holders.get(token_id, {})
-        holder = holders.get(holder_tg_id)
-        if not holder:
+        await self._ensure_migrated()
+        row = await self._led().creator_holder_get(token_id, holder_tg_id)
+        if not row:
             return None
 
         return {
-            "balance": holder.balance,
-            "pending_dividends_micro": holder.pending_dividends_micro,
-            "last_claim": holder.last_dividend_claim,
+            "balance": row["balance"],
+            "pending_dividends_micro": row["pending_dividends_micro"],
+            "last_claim": row["last_dividend_claim"],
         }
 
     async def get_token_info(self, token_id: str) -> dict | None:
         """Get token metadata and stats."""
-        token = self._tokens.get(token_id)
+        await self._ensure_migrated()
+        led = self._led()
+        token = await led.creator_token_get(token_id)
         if not token:
             return None
 
-        holders = self._holders.get(token_id, {})
-        holder_count = len(holders)
-        total_held = sum(h.balance for h in holders.values())
+        total_held, holder_count = await led.creator_holders_summary(token_id)
 
         return {
-            "token_id": token.token_id,
-            "creator_tg_id": token.creator_tg_id,
-            "name": token.name,
-            "symbol": token.symbol,
-            "total_supply": token.total_supply,
-            "price_micro": token.price_micro,
+            "token_id": token["token_id"],
+            "creator_tg_id": token["creator_tg_id"],
+            "name": token["name"],
+            "symbol": token["symbol"],
+            "total_supply": token["total_supply"],
+            "price_micro": token["price_micro"],
             "holder_count": holder_count,
             "total_held": total_held,
-            "total_revenue_micro": token.total_revenue_micro,
-            "total_dividends_paid_micro": token.total_dividends_paid_micro,
+            "total_revenue_micro": token["total_revenue_micro"],
+            "total_dividends_paid_micro": token["total_dividends_paid_micro"],
         }
 
     async def list_creator_tokens(self, creator_tg_id: int) -> list[CreatorToken]:
         """List all tokens created by a user."""
-        return [t for t in self._tokens.values() if t.creator_tg_id == creator_tg_id]
+        await self._ensure_migrated()
+        rows = await self._led().creator_tokens_by_creator(creator_tg_id)
+        return [CreatorToken(**row) for row in rows]
+
+
+registry = CreatorTokenRegistry(os.environ.get("STATE_DIR", "."))

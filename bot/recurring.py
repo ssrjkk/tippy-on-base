@@ -6,6 +6,7 @@ on a schedule (daily, weekly, monthly). Uses cron-style scheduling.
 
 import asyncio
 import enum
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -138,3 +139,8 @@ class RecurringPaymentStore:
 
     async def get(self, payment_id: str) -> RecurringPayment | None:
         return self._payments.get(payment_id)
+
+
+# Process-wide store: handlers (bot.handlers._common) and the executor in
+# bot.main share one instance so they never race on the JSON file.
+store = RecurringPaymentStore(os.environ.get("STATE_DIR", "."))
