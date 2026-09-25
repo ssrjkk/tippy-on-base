@@ -61,23 +61,42 @@ class RecurringPaymentStore:
 
     def _load(self) -> None:
         import json
-        if self._path.exists():
-            try:
-                data = json.loads(self._path.read_text())
-                for item in data:
-                    item["interval"] = RecurrenceInterval(item["interval"])
-                    self._payments[item["id"]] = RecurringPayment(**item)
-            except Exception:
-                self._payments = {}
+        if not self._path.exists():
+            return
+        try:
+            data = json.loads(self._path.read_text())
+        except Exception:
+            # A corrupt file must not silently reset the store to empty: that
+            # would make the scheduler re-fire payments that already executed
+            # (double debit). Keep the previous in-memory state and raise a
+            # loud marker instead so an operator notices and restores a backup.
+            raise RuntimeError(
+                f"recurring_payments.json is corrupt at {self._path}; refusing to "
+                "reset the store (would re-execute payments). Fix/restore the file."
+            )
+        if not isinstance(data, list):
+            raise RuntimeError(f"recurring_payments.json has an invalid shape at {self._path}")
+        for item in data:
+            if not isinstance(item, dict) or "id" not in item:
+                continue
+            item["interval"] = RecurrenceInterval(item["interval"])
+            self._payments[item["id"]] = RecurringPayment(**item)
 
     def _save(self) -> None:
         import json
+        import os
         data = []
         for p in self._payments.values():
             d = p.__dict__.copy()
             d["interval"] = d["interval"].value
             data.append(d)
-        self._path.write_text(json.dumps(data, indent=2))
+        # Atomic write: tmp file + os.replace so a crash mid-write can never
+        # truncate the store. A truncated store previously meant the payment
+        # was NOT marked executed -> the scheduler re-fired it -> double debit.
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=2))
+        os.replace(tmp, self._path)
 
     async def create(
         self,

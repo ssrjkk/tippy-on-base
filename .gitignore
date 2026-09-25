@@ -67,6 +67,7 @@ scripts/*
 !scripts/setup_foundry.sh
 !scripts/deploy_vault.py
 !scripts/deploy_outcome_market.py
+!scripts/deploy_create2_factory.py
 !scripts/reencrypt_wallets.py
 !scripts/validate_env.py
 !scripts/smoke_onchain.py

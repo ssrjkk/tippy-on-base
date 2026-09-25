@@ -1,6 +1,7 @@
 ﻿"""Web dashboard: public stats, markets, leaderboard, wallet transparency.
 
 Run:  python -m web.server
+Made by @ssrjkk — github.com/ssrjkk
 """
 import asyncio
 import base64

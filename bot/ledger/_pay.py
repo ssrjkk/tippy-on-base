@@ -108,6 +108,20 @@ class LedgerPayMixin:
             self._conn.commit()
             return booked
 
+    def release_gas_drip(self) -> None:
+        """Return a previously-booked gas-drip slot when the actual ETH send
+        failed (RPC error, dropped tx, insufficient hot-wallet balance). Without
+        this, a failed send silently burns a slot of the UTC daily budget and an
+        attacker could drain it with fake sends."""
+        with self._lock:
+            day = int(time.time()) // 86400
+            self._conn.execute(
+                "UPDATE gas_drips SET count = GREATEST(0, count - 1) "
+                "WHERE day = %s AND count > 0",
+                (day,),
+            )
+            self._conn.commit()
+
 
 
     def x402_auth_reservations(self, older_than_seconds: int) -> list[dict]:

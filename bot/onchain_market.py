@@ -121,7 +121,16 @@ async def _ensure_gas(w3: Web3, user_addr: str, needed_wei: int) -> None:
     # the send-then-count race between processes.
     if not await ledger.try_book_gas_drip(daily_max):
         raise RuntimeError("daily gas top-up budget exhausted — try tomorrow")
-    await send_eth(user_addr, drip_wei)
+    try:
+        await send_eth(user_addr, drip_wei)
+    except Exception:
+        # A failed send must not silently burn the booked budget slot — an
+        # attacker could otherwise drain the UTC drip budget with fake sends.
+        try:
+            await asyncio.to_thread(ledger.release_gas_drip)
+        except Exception:
+            pass
+        raise
     if len(_last_drip) >= _DRIP_TRACK_MAX:
         _last_drip.clear()  # crude bound; entries repopulate on demand
     _last_drip[user_addr.lower()] = now
@@ -308,27 +317,30 @@ async def buy(market_id: int, outcome: int, shares: int, max_cost_micro: int,
 def _buy_sync(market_id: int, outcome: int, shares: int, max_cost_micro: int,
               user_private_key: str, user_addr: str, w3: Web3) -> str:
     """Blocking half of :func:`buy` (runs in a worker thread)."""
-    # 2) Ensure USDC approval
     usdc = _usdc_contract(w3)
-    current_allowance = usdc.functions.allowance(
-        user_addr, config.OUTCOME_MARKET_ADDRESS
-    ).call()
-    if current_allowance < max_cost_micro:
-        approve_tx = usdc.functions.approve(
-            Web3.to_checksum_address(config.OUTCOME_MARKET_ADDRESS), max_cost_micro
-        ).build_transaction({
-            "from": user_addr,
-            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
-            "gas": 60000,
-            **_eip1559_fee_fields(w3),
-        })
-        signed = w3.eth.account.sign_transaction(approve_tx, private_key=user_private_key)
-        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-        w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
-
-    # 3) Execute buy
-    contract = _market_contract(w3)
     with _send_lock:
+        # 2) Ensure USDC approval. The whole approve+buy sequence is under the
+        # send lock: the pending-nonce is read atomically, so two concurrent
+        # buys from one wallet can no longer build/send an approve and a buy
+        # with the same nonce (one tx silently replacing the other).
+        current_allowance = usdc.functions.allowance(
+            user_addr, config.OUTCOME_MARKET_ADDRESS
+        ).call()
+        if current_allowance < max_cost_micro:
+            approve_tx = usdc.functions.approve(
+                Web3.to_checksum_address(config.OUTCOME_MARKET_ADDRESS), max_cost_micro
+            ).build_transaction({
+                "from": user_addr,
+                "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+                "gas": 60000,
+                **_eip1559_fee_fields(w3),
+            })
+            signed = w3.eth.account.sign_transaction(approve_tx, private_key=user_private_key)
+            raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+            w3.eth.wait_for_transaction_receipt(raw_hash, timeout=30)
+
+        # 3) Execute buy
+        contract = _market_contract(w3)
         tx = contract.functions.buy(
             market_id, outcome, shares, max_cost_micro
         ).build_transaction({

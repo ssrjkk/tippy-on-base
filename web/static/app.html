@@ -701,6 +701,7 @@ function renderBets() {
 function renderMore() {
   document.getElementById('aboutCard').innerHTML = `<div style="font-size:14px;line-height:1.6;color:var(--text2)">
     <strong style="color:var(--text)">Tippy</strong> — ${STATE.lang === 'ru' ? 'USDC экономика в Telegram. Чаевые, рынки предсказаний и ставки на Base.' : STATE.lang === 'zh' ? 'Telegram 中的 USDC 经济。小费、预测市场和 Base 网络投注。' : 'USDC economy in Telegram. Tips, prediction markets & pool bets on Base.'}
+    <div style="margin-top:6px;color:var(--text3)">by <a href="https://github.com/ssrjkk" target="_blank" rel="noopener" style="color:var(--accent)">@ssrjkk</a></div>
   </div>`;
 
   const top = STATE.top || [];

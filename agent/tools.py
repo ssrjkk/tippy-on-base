@@ -18,6 +18,7 @@ import json
 import os
 import tempfile
 import time
+from decimal import Decimal
 from pathlib import Path
 
 from bot.ledger import async_ledger as ledger
@@ -25,6 +26,16 @@ from bot.ledger import async_ledger as ledger
 from . import caps, config
 
 _MARKETS_FILE = Path(config.STATE_DIR) / ".agent_markets.json"
+
+
+def _usdc_to_micro(usdc: float) -> int:
+    """Exact Decimal conversion of a USDC amount to micro-units.
+
+    Avoids `round(usdc * 1_000_000)` on a float, which can land one micro-unit
+    off for fractional amounts (e.g. 0.10 * 1e6 == 99999.999...). Truncate
+    toward zero, matching the bot's canonical converter.
+    """
+    return int(Decimal(str(usdc)) * Decimal(1_000_000))
 
 # Track markets created by this agent (for oracle protection)
 _agent_markets: set[int] = set()
@@ -79,7 +90,7 @@ async def create_market(
     try:
         market_id = await ledger.create_market(
             tg_id, question, options,
-            round(subsidy_usdc * 1_000_000), close_at=close_at
+            _usdc_to_micro(subsidy_usdc), close_at=close_at
         )
         if market_id is None or market_id == "balance":
             caps.release_action(subsidy_usdc)
@@ -118,7 +129,7 @@ async def place_bet(
     if err:
         return {"error": err}
 
-    micro = round(amount_usdc * 1_000_000)
+    micro = _usdc_to_micro(amount_usdc)
     tg_id = config.AGENT_TG_ID
 
     try:

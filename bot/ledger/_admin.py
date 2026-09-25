@@ -10,6 +10,10 @@ class LedgerAdminMixin:
     def prune_housekeeping(self, retention_seconds: int, x402_payment_retention_seconds: int) -> dict:
         """Bound the growth of the x402/deposit side-tables.
 
+        Note: `x402_payment_retention_seconds` is accepted for caller
+        compatibility but intentionally unused — x402_payments is the
+        anti-replay ledger and is never pruned (see below).
+
         Nothing money-critical is touched:
         - `x402_invoices` that are credited AND swept are pure audit rows; the
           reconcile path only reads invoices with credited=false.
@@ -17,10 +21,11 @@ class LedgerAdminMixin:
           ever reads claimed=0. (Legacy rows got a `created_at` via the ALTER
           default backfill, so they age out from when the column was added.)
         - `x402_payments` is the anti-replay ledger (a paid tx hash must never
-          be re-deposited). The deposit scanner only re-scans the newest
-          confirm/lookback window on Base (~hours), so hashes older than one
-          year can never collide with a scanned deposit again; keeping the
-          tail is overkill. The longer retention (365d) is used for these.
+          be re-deposited). It is intentionally NOT pruned: it is the replay
+          guard, and a manual rescan of an old block range (e.g. after a deep
+          reorg or an operator-initiated backfill) must never credit the same
+          hash twice. Rows are tiny; keeping them is cheaper than the audit
+          cost of a double credit.
 
         Keep the final tx_log audit trail untouched.
         Returns {'x402_invoices': n, 'pending_deposits': n, 'x402_payments': n}.
@@ -37,12 +42,8 @@ class LedgerAdminMixin:
                 "DELETE FROM pending_deposits WHERE claimed = 1 AND created_at < %s",
                 (now - retention_seconds,),
             ).rowcount
-            z = self._conn.execute(
-                "DELETE FROM x402_payments WHERE created_at < %s",
-                (now - x402_payment_retention_seconds,),
-            ).rowcount
             self._conn.commit()
-        return {"x402_invoices": x, "pending_deposits": y, "x402_payments": z}
+        return {"x402_invoices": x, "pending_deposits": y, "x402_payments": 0}
 
 
 

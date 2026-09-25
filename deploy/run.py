@@ -6,6 +6,8 @@ The bot needs the web server for:
   - x402 endpoints for AI agents
   - Health checks
 
+Made by @ssrjkk — github.com/ssrjkk.
+
 Usage:
     python run.py                    # bot + web server on WEB_PORT
     python run.py --web-only         # web server only (no Telegram)

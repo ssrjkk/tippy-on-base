@@ -585,6 +585,33 @@ def test_cmd_withdraw_below_min(ledger):
     assert ledger.balance(ALICE) == Decimal("10.000000")
 
 
+def test_cmd_withdraw_blocks_contract_destination(ledger, monkeypatch):
+    """A withdrawal to a smart contract (e.g. the USDC token, a router) must be
+    refused up front — funds sent to a contract can be burned permanently."""
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    from bot.chain import network
+
+    contract_addr = "0x" + "c0" * 20  # arbitrary contract-looking address
+
+    async def _contract(addr):
+        return addr.lower() == contract_addr.lower()
+
+    monkeypatch.setattr(handlers.config, "MONEY_CMD_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(network, "is_contract", _contract)
+
+    # EOA address (is_contract == False) -> withdraw proceeds normally.
+    m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
+    run(cmd_withdraw(m))
+    assert "очередь" in m.answers[0][0]
+    assert ledger.balance(ALICE) == Decimal("4.950000")  # 5 + 1% fee debited
+
+    # Contract address (is_contract == True) -> refused up front, no debit.
+    m2 = Message(f"/withdraw {contract_addr} 1", from_id=ALICE)
+    run(cmd_withdraw(m2))
+    assert "заблокирован" in m2.answers[0][0]
+    assert ledger.balance(ALICE) == Decimal("4.950000")  # unchanged
+
+
 def test_cmd_withdraw_throttled(ledger):
     ledger.credit(ALICE, 10_000_000, "deposit")
     m1 = Message(f"/withdraw {ACC.address} 1", from_id=ALICE)

@@ -147,7 +147,8 @@ STRINGS: dict[str, dict[str, str]] = {
             "Вывод куда угодно (/withdraw). "
             "Все операции видны в блокчейне Base — ничего не спрятано.\n\n"
             "🟦 Мы строим на <b>Base</b> — официальной L2-экосистеме от Coinbase · base.org\n"
-            "🧑‍💻 Автор и поддержка: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk"
+            "🧑‍💻 Автор и поддержка: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
+            "⚡ by <b>@ssrjkk</b>"
         ),
         "en": (
             "💵 <b>It's money for chats.</b>\n"
@@ -163,7 +164,8 @@ STRINGS: dict[str, dict[str, str]] = {
             "Withdraw anywhere (/withdraw). "
             "Every move is visible on the Base blockchain — nothing hidden.\n\n"
             "🟦 Built on <b>Base</b> — Coinbase's secure and scalable Ethereum L2 · base.org\n"
-            "🧑‍💻 Team & support: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk"
+            "🧑‍💻 Team & support: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
+            "⚡ by <b>@ssrjkk</b>"
         ),
         "zh": (
             "💵 <b>这是聊天里的钱。</b>\n"
@@ -178,7 +180,8 @@ STRINGS: dict[str, dict[str, str]] = {
             "可以提到任何地方（/withdraw）。"
             "每笔操作都能在 Base 区块链上查到——没有任何隐瞒。\n\n"
             "🟦 基于 <b>Base</b> 构建 —— Coinbase 推出的安全可扩展的 Ethereum L2 · base.org\n"
-            "🧑‍💻 作者与支持：@b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk"
+            "🧑‍💻 作者与支持：@b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
+            "⚡ by <b>@ssrjkk</b>"
         ),
     },
     # ----- start -----
@@ -894,6 +897,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "❌ Непохоже на адрес Base (0x + 40 hex).",
         "en": "❌ Doesn't look like a Base address (0x + 40 hex).",
         "zh": "❌ 看起来不像 Base 地址（0x + 40 位十六进制）。",
+    },
+    "withdraw_contract": {
+        "ru": "❌ Вывод на контракт заблокирован: средства на контрактном адресе могут быть навсегда утеряны. Укажите личный (EOA) адрес.",
+        "en": "❌ Withdrawal to a smart contract is blocked: funds sent to a contract address can be lost forever. Use a personal (EOA) address.",
+        "zh": "❌ 禁止向合约地址提现：转入合约的资金可能永久丢失。请使用个人（EOA）地址。",
     },
     "tx_not_found": {
         "ru": "Транзакция не найдена (ещё не mined или неверный хэш).",

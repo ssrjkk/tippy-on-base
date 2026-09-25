@@ -76,8 +76,14 @@ def _fmt(micro: int) -> float:
 
 
 def _to_micro(amount: Decimal) -> int:
-    """Convert Decimal USDC amount to micro-units with exact arithmetic."""
-    return int((amount * MICRO).to_integral_value())
+    """Convert Decimal USDC amount to micro-units with exact arithmetic.
+
+    Truncate toward zero — identical to the Telegram-path converter
+    (bot/handlers/_common.py:_to_micro). Keeping both truncating prevents a
+    1-micro-unit drift between the Mini App and the bot for amounts with more
+    than 6 decimals.
+    """
+    return int(amount * MICRO)
 
 
 def _cap_micro(usdc: float) -> int:

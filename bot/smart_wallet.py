@@ -20,6 +20,7 @@ Requires: config.SMART_WALLET_ENTRYPOINT, SMART_WALLET_FACTORY_ADDRESS,
 import asyncio
 import json
 import logging
+import threading
 
 from eth_abi import encode as abi_encode
 from eth_account import Account
@@ -39,6 +40,23 @@ from .chain.transfers import _send_lock  # shared hot-wallet nonce/send lock
 log = logging.getLogger("tipbot.smart_wallet")
 
 MICRO = 10 ** config.USDC_DECIMALS
+
+# Per-account lock for UserOp sequencing. EntryPoint nonces (getNonce) are
+# per-SmartAccount, NOT the hot wallet's: two concurrent approve_and_trade for
+# the SAME tg_id could otherwise read the same UserOp nonce and one handleOps
+# would silently replace the other. The shared hot-wallet `_send_lock` protects
+# the handleOps FROM-nonce, not the per-account UserOp nonce.
+_user_op_locks: dict[int, threading.Lock] = {}
+_user_op_locks_guard = threading.Lock()
+
+
+def _user_op_lock(tg_id: int) -> threading.Lock:
+    with _user_op_locks_guard:
+        lock = _user_op_locks.get(tg_id)
+        if lock is None:
+            lock = threading.Lock()
+            _user_op_locks[tg_id] = lock
+        return lock
 
 # ---------------------------------------------------------------------------
 # ABIs (minimal — just the functions we call)
@@ -494,50 +512,55 @@ def approve_and_trade_sync(
     # sequential nonce it manages). The SmartAccount's own storage `nonce`,
     # though present, is NEVER incremented and using it would fail the
     # EntryPoint's non-sequence check and break the UserOp/paymaster hash.
-    nonce = smart_nonce(tg_id)
+    # The whole nonce→build→sign→broadcast is under the PER-ACCOUNT lock: the
+    # EntryPoint nonce is per-SmartAccount, so two concurrent operations for
+    # the same tg_id must not both read the same nonce (one handleOps would
+    # silently replace the other).
+    with _user_op_lock(tg_id):
+        nonce = smart_nonce(tg_id)
 
-    # Build paymaster data: paymaster addr(20) + tgId(32) + relayer sig(65).
-    # The relayer signs a hash of the UserOp fields EXCLUDING paymasterAndData,
-    # breaking the chicken-and-egg (signature depends on hash, hash depends on paymasterAndData).
-    # First, build the UserOp WITHOUT paymaster to compute the signable hash.
-    user_op = _build_user_op(
-        sender=smart_addr,
-        call_data=batch_data,
-        paymaster_and_data=b"",
-        call_gas_limit=200_000,
-        verification_gas_limit=150_000,
-    )
-    user_op["nonce"] = nonce
-    # Sign the paymaster hash (excludes paymasterAndData).
-    relayer_sig = _sign_paymaster(user_op, relayer_key)
-    paymaster_data = _build_paymaster_data(tg_id, relayer_sig)
-    user_op["paymasterAndData"] = paymaster_data
+        # Build paymaster data: paymaster addr(20) + tgId(32) + relayer sig(65).
+        # The relayer signs a hash of the UserOp fields EXCLUDING paymasterAndData,
+        # breaking the chicken-and-egg (signature depends on hash, hash depends on paymasterAndData).
+        # First, build the UserOp WITHOUT paymaster to compute the signable hash.
+        user_op = _build_user_op(
+            sender=smart_addr,
+            call_data=batch_data,
+            paymaster_and_data=b"",
+            call_gas_limit=200_000,
+            verification_gas_limit=150_000,
+        )
+        user_op["nonce"] = nonce
+        # Sign the paymaster hash (excludes paymasterAndData).
+        relayer_sig = _sign_paymaster(user_op, relayer_key)
+        paymaster_data = _build_paymaster_data(tg_id, relayer_sig)
+        user_op["paymasterAndData"] = paymaster_data
 
-    # Sign with relayer key
-    user_op["signature"] = _sign_user_op(user_op, relayer_key)
+        # Sign with relayer key
+        user_op["signature"] = _sign_user_op(user_op, relayer_key)
 
-    # Send via bundler (or direct handleOps for now)
-    ep = _entrypoint()
-    base_fee = w3.eth.get_block("latest")["baseFeePerGas"]
-    priority = w3.to_wei("0.01", "gwei")
-    # Nonce read + build + sign + broadcast under the shared hot-wallet lock:
-    # handleOps is sent FROM the hot wallet, whose nonce the withdraw/batch/
-    # x402 paths also consume — a nonce read outside the lock could collide
-    # and silently replace a withdrawal tx.
-    with _send_lock:
-        tx = ep.functions.handleOps(
-            [_pack_user_op(user_op)],
-            acct.address,
-        ).build_transaction({
-            "from": acct.address,
-            "nonce": w3.eth.get_transaction_count(acct.address, "pending"),
-            "gas": 1_000_000,
-            "maxFeePerGas": base_fee * 2 + priority,
-            "maxPriorityFeePerGas": priority,
-            "chainId": w3.eth.chain_id,
-        })
-        signed = acct.sign_transaction(tx)
-        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        # Send via bundler (or direct handleOps for now)
+        ep = _entrypoint()
+        base_fee = w3.eth.get_block("latest")["baseFeePerGas"]
+        priority = w3.to_wei("0.01", "gwei")
+        # Nonce read + build + sign + broadcast under the shared hot-wallet lock:
+        # handleOps is sent FROM the hot wallet, whose nonce the withdraw/batch/
+        # x402 paths also consume — a nonce read outside the lock could collide
+        # and silently replace a withdrawal tx.
+        with _send_lock:
+            tx = ep.functions.handleOps(
+                [_pack_user_op(user_op)],
+                acct.address,
+            ).build_transaction({
+                "from": acct.address,
+                "nonce": w3.eth.get_transaction_count(acct.address, "pending"),
+                "gas": 1_000_000,
+                "maxFeePerGas": base_fee * 2 + priority,
+                "maxPriorityFeePerGas": priority,
+                "chainId": w3.eth.chain_id,
+            })
+            signed = acct.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
     if receipt["status"] != 1:
         raise RuntimeError(f"UserOp reverted: {_tx_hex(tx_hash)}")

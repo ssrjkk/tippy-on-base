@@ -406,6 +406,21 @@ async def cmd_withdraw(message: types.Message) -> None:
     if not is_address(to_address):
         await message.answer(i18n.t(lang, 'withdraw_bad_address'))
         return
+    # Block withdrawals to smart contracts: USDC sent to a contract (e.g. the
+    # USDC token address, a router, a multisig without a handler) is burned —
+    # the funds become unrecoverable. Known first-party destinations (hot
+    # wallet, vault, x402 pool) are allowed even if they are contracts.
+    from ..base import hot_wallet
+    from ..chain.network import is_contract
+    _dest = to_address.strip().lower()
+    _allowed = {
+        (hot_wallet().lower() if hot_wallet() else None),
+        (common.config.VAULT_ADDRESS or "").strip().lower() or None,
+        (common.config.X402_RECEIVE_ADDRESS or "").strip().lower() or None,
+    } - {None}
+    if _dest not in _allowed and await is_contract(to_address):
+        await message.answer(i18n.t(lang, 'withdraw_contract'))
+        return
     amount = Decimal(parts[2])
     if amount <= 0:
         await message.answer(i18n.t(lang, 'rain_need_positive'))

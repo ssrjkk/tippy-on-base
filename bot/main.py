@@ -1,4 +1,4 @@
-﻿"""Tippy entrypoint. Run: python -m bot.main"""
+﻿"""Tippy entrypoint. Run: python -m bot.main. Made by @ssrjkk — github.com/ssrjkk"""
 import asyncio
 import logging
 import os

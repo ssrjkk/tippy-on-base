@@ -1,4 +1,5 @@
 """Ledger domain mixin: LedgerCoreMixin (split from bot/ledger.py)."""
+import logging
 import threading
 import time
 
@@ -41,10 +42,12 @@ class LedgerCoreMixin:
     def _run_alembic(database: str) -> None:
         """Run ``alembic upgrade head`` to apply tracked schema migrations.
 
-        This is a best-effort non-blocking call: if alembic is not installed
-        or the alembic.ini / versions/ directory is missing (e.g. during
-        tests or clean installs), we silently fall back to ensure_schema()
-        which applies the full DDL idempotently.
+        Best-effort: if alembic is not installed or alembic.ini / versions/
+        is missing (tests, clean installs), we fall back to ensure_schema()
+        which applies the full DDL idempotently. But a REAL migration failure
+        (e.g. a conflicting or partially-applied migration) must not be
+        silent: it is logged loudly so an operator knows the tracked schema
+        (alembic/versions/*) diverged from the live DDL before money flows.
         """
         try:
             import pathlib
@@ -58,8 +61,12 @@ class LedgerCoreMixin:
             cfg = Config(str(ini))
             cfg.set_main_option("sqlalchemy.url", database)
             command.upgrade(cfg, "head")
-        except Exception:
-            pass  # ensure_schema() is the safety net
+        except Exception as e:  # ensure_schema() remains the safety net
+            logging.getLogger("tipbot.alembic").exception(
+                "alembic upgrade head failed: %s. ensure_schema() will apply the "
+                "idempotent DDL, but the tracked migration state may be stale — "
+                "check alembic_version vs the migration chain.", e
+            )
 
 
 
