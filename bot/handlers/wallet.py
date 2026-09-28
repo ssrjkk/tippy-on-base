@@ -10,6 +10,7 @@ from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboar
 from eth_utils import is_address, to_checksum_address
 
 from bot import i18n
+from bot.ledger import blocked_destination
 
 from . import _common as common
 
@@ -393,6 +394,15 @@ async def _ensure_wallet(tg_id: int) -> dict:
     await common.ledger.save_wallet(tg_id, address, common.wallets.encrypt(key), common.wallets.encrypt(seed))
     return await common.ledger.get_wallet(tg_id)
 
+# First-party destinations the ledger refuses outright (see blocked_destination).
+_WD_BLOCK_KEY = {
+    "zero": "withdraw_block_zero",
+    "hot_wallet": "withdraw_block_hot",
+    "vault": "withdraw_block_vault",
+    "x402": "withdraw_block_x402",
+}
+
+
 @common.router.message(Command('withdraw'))
 async def cmd_withdraw(message: types.Message) -> None:
     if not await common.require_private(message):
@@ -406,20 +416,12 @@ async def cmd_withdraw(message: types.Message) -> None:
     if not is_address(to_address):
         await message.answer(i18n.t(lang, 'withdraw_bad_address'))
         return
-    # Block withdrawals to smart contracts: USDC sent to a contract (e.g. the
-    # USDC token address, a router, a multisig without a handler) is burned —
-    # the funds become unrecoverable. Known first-party destinations (hot
-    # wallet, vault, x402 pool) are allowed even if they are contracts.
-    from ..base import hot_wallet
-    from ..chain.network import is_contract
-    _dest = to_address.strip().lower()
-    _allowed = {
-        (hot_wallet().lower() if hot_wallet() else None),
-        (common.config.VAULT_ADDRESS or "").strip().lower() or None,
-        (common.config.X402_RECEIVE_ADDRESS or "").strip().lower() or None,
-    } - {None}
-    if _dest not in _allowed and await is_contract(to_address):
-        await message.answer(i18n.t(lang, 'withdraw_contract'))
+    # First-party destinations come before the contract probe: a payout to the
+    # hot wallet, vault or x402 pool IS a contract call that succeeds and loses
+    # the money, so the RPC answer would only ever confirm the refusal below.
+    blocked = blocked_destination(to_address)
+    if blocked:
+        await message.answer(i18n.t(lang, _WD_BLOCK_KEY[blocked]))
         return
     amount = Decimal(parts[2])
     if amount <= 0:
@@ -435,6 +437,13 @@ async def cmd_withdraw(message: types.Message) -> None:
     if wait:
         await message.answer(wait)
         return
+    # Block withdrawals to smart contracts: USDC sent to a contract (e.g. the
+    # USDC token address, a router, a multisig without a handler) is burned —
+    # the funds become unrecoverable.
+    from ..chain.network import is_contract
+    if await is_contract(to_address):
+        await message.answer(i18n.t(lang, 'withdraw_contract'))
+        return
     amount_micro = common._to_micro(amount)
     fee_micro = common.base.withdraw_fee(amount_micro)
     total_micro = amount_micro + fee_micro
@@ -443,27 +452,98 @@ async def cmd_withdraw(message: types.Message) -> None:
         bal_str = f'{bal:.6f}'.rstrip('0').rstrip('.')
         await message.answer(i18n.t(lang, 'withdraw_balance_short', need=common._fmt(total_micro), fee=common._fmt(fee_micro), bal=bal_str))
         return
-    # AML check: flag large/rapid withdrawals and ALERT the admin so the P0
-    # monitor is actually actionable (flags were previously only persisted).
+    # Nothing has moved yet: /withdraw only stages the payout. A mistyped
+    # address is irreversible on-chain, so the debit waits for a deliberate
+    # second tap on the summary above.
+    token = await common.ledger.stage_withdraw(
+        message.from_user.id, to_address, amount_micro, fee_micro
+    )
+    mins = max(1, common.config.WITHDRAW_CONFIRM_TTL_SECONDS // 60)
+    await message.answer(
+        i18n.t(lang, 'withdraw_confirm',
+               amount=common._fmt(amount_micro), fee=common._fmt(fee_micro),
+               total=common._fmt(total_micro), addr=common._esc(to_address),
+               after=f'{(bal - Decimal(total_micro) / Decimal(10 ** common.config.USDC_DECIMALS)):.6f}'.rstrip('0').rstrip('.'),
+               mins=str(mins)),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text=i18n.t(lang, 'withdraw_confirm_btn'),
+                                 callback_data=f'wd:y:{token}'),
+            InlineKeyboardButton(text=i18n.t(lang, 'withdraw_cancel_btn'),
+                                 callback_data=f'wd:n:{token}'),
+        ]])
+    )
+
+
+@common.router.callback_query(F.data.startswith('wd:'))
+async def cb_withdraw_confirm(cb: types.CallbackQuery) -> None:
+    """Second half of /withdraw: the tap that actually debits the balance."""
+    if not cb.from_user:
+        return
+    lang = await common.user_lang(cb.from_user.id)
+    _, verdict, token = cb.data.split(':', 2)
+    # take_withdraw is the single-use gate: one tap consumes the staged row, so
+    # a double-click or a replayed callback cannot reserve the payout twice.
+    staged = await common.ledger.take_withdraw(cb.from_user.id, token)
+    if staged is None:
+        await cb.answer(i18n.t(lang, 'withdraw_confirm_expired'), show_alert=True)
+        await _edit_withdraw_prompt(cb, i18n.t(lang, 'withdraw_confirm_expired'))
+        return
+    if verdict != 'y':
+        await cb.answer(i18n.t(lang, 'withdraw_cancelled'))
+        await _edit_withdraw_prompt(cb, i18n.t(lang, 'withdraw_cancelled'))
+        return
+    amount_micro = int(staged['amount_micro'])
+    fee_micro = int(staged['fee_micro'])
+    total_micro = amount_micro + fee_micro
+    # AML runs where the money actually moves: a staged-then-cancelled request
+    # must not age the user's flags.
     warnings = await common.ledger.check_aml_withdraw(
-        message.from_user.id, amount_micro, to_address
+        cb.from_user.id, amount_micro, staged['to_address']
     )
     if warnings:
         try:
-            await _notify_aml(message.bot, message.from_user.id, warnings)
+            await _notify_aml(cb.message.bot, cb.from_user.id, warnings)
         except Exception as e:  # never block a withdrawal on a notify failure
             logging.getLogger("tipbot.aml").warning("failed to send AML alert: %s", e)
-    wd_id = await common.ledger.reserve_withdraw(message.from_user.id, to_address, amount_micro, fee_micro)
-    if wd_id is None:
-        await message.answer(i18n.t(lang, 'tip_no_balance'))
-        return
-    # Batching (P1): the withdrawal is enqueued and flushed on-chain by the
-    # batch watcher (TipBotVault.batchDistribute) once a time/count/amount
-    # threshold is hit — many withdrawals settle in ONE tx (gas savings).
-    await message.answer(
-        i18n.t(lang, 'withdraw_queued',
-               amount=common._fmt(amount_micro), fee=common._fmt(fee_micro))
+    wd_id, reason = await common.ledger.reserve_withdraw(
+        cb.from_user.id, staged['to_address'], amount_micro, fee_micro
     )
+    if wd_id is None:
+        text = await _withdraw_refusal(cb.from_user.id, lang, reason, total_micro, fee_micro)
+        await cb.answer(text, show_alert=True)
+        await _edit_withdraw_prompt(cb, text)
+        return
+    await cb.answer(i18n.t(lang, 'withdraw_queued_short'))
+    await _edit_withdraw_prompt(
+        cb, i18n.t(lang, 'withdraw_queued',
+                   amount=common._fmt(amount_micro), fee=common._fmt(fee_micro))
+    )
+
+
+async def _withdraw_refusal(tg_id: int, lang: str, reason: str,
+                            total_micro: int, fee_micro: int) -> str:
+    """Name the real reason the payout was refused.
+
+    'cap' and 'blocked' are not balance problems. Telling a funded user they
+    are broke sends them off fixing something that is not broken.
+    """
+    if reason == 'cap':
+        return i18n.t(lang, 'withdraw_daily_limit',
+                      n=str(common.config.MAX_WITHDRAWS_PER_DAY))
+    if reason == 'blocked':
+        return i18n.t(lang, 'withdraw_block_changed')
+    bal = await common.ledger.balance(tg_id)
+    return i18n.t(lang, 'withdraw_balance_short',
+                  need=common._fmt(total_micro), fee=common._fmt(fee_micro),
+                  bal=f'{bal:.6f}'.rstrip('0').rstrip('.'))
+
+
+async def _edit_withdraw_prompt(cb: types.CallbackQuery, text: str) -> None:
+    """Replace the confirm prompt with its outcome — no button may survive it."""
+    try:
+        await cb.message.edit_text(text)
+    except Exception:
+        pass  # no permission / message not modified
 
 @common.router.message(Command('tx'))
 async def cmd_tx(message: types.Message) -> None:

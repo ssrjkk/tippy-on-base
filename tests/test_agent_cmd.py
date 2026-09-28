@@ -101,8 +101,9 @@ def test_agent_shows_audit_tail(admin_cfg, monkeypatch, tmp_path):
 
     audit = tmp_path / "agent_audit.jsonl"
     audit.write_text(
-        '{"market_id": 1, "question": "Will BTC pump?", "bet_amount_usdc": 2.0, "confidence": 0.8}\n'
-        '{"market_id": 2, "question": "ETH ATH by Friday?", "bet_amount_usdc": 3.5, "confidence": 0.6}\n',
+        '{"market_id": 1, "question": "Will BTC pump?", "bet_amount_usdc": 2.0, "bet_placed": true, "confidence": 0.8}\n'
+        '{"market_id": 2, "question": "ETH ATH by Friday?", "bet_amount_usdc": 3.5, "bet_placed": true, "confidence": 0.6}\n'
+        '{"market_id": 3, "question": "SOL flips BNB?", "bet_amount_usdc": 5.0, "bet_placed": false, "confidence": 0.4}\n',
         encoding="utf-8",
     )
     monkeypatch.setattr(agent_config, "AGENT_TG_ID", 42)
@@ -111,13 +112,15 @@ def test_agent_shows_audit_tail(admin_cfg, monkeypatch, tmp_path):
     m = Message(from_id=ADMIN)
     run(cmd_agent(m))
     text = m.answers[0]
-    assert "#2" in text          # newest entry first
-    assert "3.50" in text
+    assert "#3" in text          # newest entry first
+    assert "3.50" in text        # a placed bet reports its size
+    assert "market only" in text  # a rejected bet is not reported as spend
+    assert "5.00" not in text
 
 
 def test_audit_tail_handles_missing_file(tmp_path):
     import agent.config as ac
-    # _audit_tail reads the module-level STATE_DIR via a local import.
+    # _audit_tail resolves the path through agent.config.audit_file() at call time.
     monkey = pytest.MonkeyPatch()
     monkey.setattr(ac, "STATE_DIR", str(tmp_path))
     try:

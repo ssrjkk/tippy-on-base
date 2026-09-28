@@ -9,6 +9,7 @@ already in requirements.txt.
 """
 import asyncio
 import json
+import logging
 import time
 from decimal import Decimal
 from pathlib import Path
@@ -16,6 +17,8 @@ from pathlib import Path
 from web3 import Web3
 
 from . import config
+
+log = logging.getLogger(__name__)
 
 
 def _tx_hex(raw) -> str:
@@ -36,6 +39,13 @@ _DRIP_COOLDOWN_SECONDS = 3600
 _DRIP_TRACK_MAX = 4096
 _last_drip: dict[str, float] = {}
 
+# ETH a user wallet must hold before the bot stops dripping. Same configured
+# threshold the x402 sweeper uses, and it must stay under GAS_DRIP_ETH: one
+# drip has to clear it, or the per-wallet cooldown locks every second exit.
+# Every user-signed operation (buy/sell/redeem/claim) checks against this, so
+# a wallet created by /oc_buy is never stranded without gas for its own exits.
+_NEEDED_GAS_WEI = int(config.GAS_DRIP_THRESHOLD_ETH * Decimal(10**18))
+
 # Short-lived read caches: priceOf / markets() are state-changing only when a
 # trade lands, so a dashboard or mini-app refresh a few seconds later can reuse
 # the snapshot. Bounds cache growth instead of letting an unauthenticated
@@ -44,6 +54,7 @@ _READ_CACHE_TTL_SECONDS = 3.0
 _READ_CACHE_MAX = 256
 _market_info_cache: dict[int, tuple[float, dict]] = {}
 _prices_cache: dict[tuple[int, int], tuple[float, list[Decimal]]] = {}
+_cancel_claim_cache: dict[tuple[int], tuple[float, tuple[int, int]]] = {}
 
 
 def _cache_read(cache: dict, key: tuple) -> object | None:
@@ -92,12 +103,18 @@ def _eip1559_fee_fields(w3: Web3) -> dict:
     }
 
 
+# `send_eth` only broadcasts: signing before the drip is mined puts the caller's
+# tx in the mempool against an unfunded wallet, where the node drops it.
+_DRIP_RECEIPT_TIMEOUT_SECONDS = 45  # ~20 Base blocks
+
+
 async def _ensure_gas(w3: Web3, user_addr: str, needed_wei: int) -> None:
     """Drip gas from the hot wallet if `user_addr` cannot pay for a tx.
 
     Two limits: a per-wallet cooldown (in-memory, short-lived) and a global
     per-UTC-day budget persisted in the DB — the budget survives bot
     restarts, so a restart cannot be used to re-arm a drained budget.
+    Blocks until the drip is confirmed — a pending drip is not spendable gas.
     """
     if await asyncio.to_thread(
         lambda: w3.eth.get_balance(Web3.to_checksum_address(user_addr))
@@ -113,6 +130,10 @@ async def _ensure_gas(w3: Web3, user_addr: str, needed_wei: int) -> None:
     drip_wei = int(config.GAS_DRIP_ETH * Decimal(10**18))
     if drip_wei <= 0:
         raise RuntimeError("on-chain gas top-up disabled (GAS_DRIP_ETH=0)")
+    if drip_wei <= needed_wei:
+        raise RuntimeError(
+            f"GAS_DRIP_ETH ({config.GAS_DRIP_ETH}) cannot clear the gas "
+            f"threshold — raise GAS_DRIP_ETH or lower GAS_DRIP_THRESHOLD_ETH")
     from .chain.transfers import send_eth
 
     # Book FIRST (atomically), drip second: an over-booking on a failed send
@@ -122,18 +143,29 @@ async def _ensure_gas(w3: Web3, user_addr: str, needed_wei: int) -> None:
     if not await ledger.try_book_gas_drip(daily_max):
         raise RuntimeError("daily gas top-up budget exhausted — try tomorrow")
     try:
-        await send_eth(user_addr, drip_wei)
+        drip_hash = await send_eth(user_addr, drip_wei)
     except Exception:
-        # A failed send must not silently burn the booked budget slot — an
-        # attacker could otherwise drain the UTC drip budget with fake sends.
+        # Nothing left the hot wallet — hand the booked slot back, or failing
+        # sends would burn the UTC drip budget without funding anyone.
         try:
-            await asyncio.to_thread(ledger.release_gas_drip)
+            await ledger.release_gas_drip()
         except Exception:
             pass
         raise
+    # The ETH is committed from here on: the cooldown arms even if the receipt
+    # never shows up, because re-dripping on a lost receipt would double the
+    # spend this booking just authorized.
     if len(_last_drip) >= _DRIP_TRACK_MAX:
         _last_drip.clear()  # crude bound; entries repopulate on demand
     _last_drip[user_addr.lower()] = now
+    try:
+        await asyncio.to_thread(
+            w3.eth.wait_for_transaction_receipt, drip_hash,
+            _DRIP_RECEIPT_TIMEOUT_SECONDS,
+        )
+    except Exception as e:
+        log.warning("gas drip %s unconfirmed: %s", drip_hash, e)
+        raise RuntimeError("gas top-up still confirming — retry in a minute") from e
 
 # Minimal ERC20 ABI — only the functions we need (approve/allowance/balanceOf).
 _ERC20_EXTRAS_ABI = json.loads("""[
@@ -297,13 +329,12 @@ async def buy(market_id: int, outcome: int, shares: int, max_cost_micro: int,
     `max_cost_micro`: slippage cap — tx reverts if cost exceeds this.
     """
     _check_chain()
-    needed_wei = int(Decimal("0.0003") * Decimal(10**18))
     w3 = _w3()
     account = w3.eth.account.from_key(user_private_key)
     user_addr = account.address
 
     # 1) Ensure user has gas for approve + buy (rate-limited drip)
-    await _ensure_gas(w3, user_addr, needed_wei)
+    await _ensure_gas(w3, user_addr, _NEEDED_GAS_WEI)
 
     # 2) + 3) Full send path off the event loop so a slow/hung RPC never
     # freezes the single event-loop thread (all concurrent watchers depend on
@@ -369,6 +400,9 @@ async def sell(market_id: int, outcome: int, shares: int,
     w3 = _w3()
     account = w3.eth.account.from_key(user_private_key)
     user_addr = account.address
+    # Exiting must never need ETH the user does not have: gas for a sell is
+    # dripped on the same budgeted path as gas for a buy.
+    await _ensure_gas(w3, user_addr, _NEEDED_GAS_WEI)
     return await asyncio.to_thread(
         _sell_sync, market_id, outcome, shares, min_proceeds_micro,
         user_private_key, user_addr, w3,
@@ -397,12 +431,33 @@ def _sell_sync(market_id: int, outcome: int, shares: int, min_proceeds_micro: in
     return tx_hash
 
 
+def _usdc_received(receipt, user_addr: str) -> int:
+    """Micro-USDC paid to `user_addr` by a mined tx, read from its Transfer logs."""
+    from . import base
+
+    payout = 0
+    for log in receipt.get("logs", []):
+        if log.get("address", "").lower() == config.USDC_ADDRESS.lower():
+            try:
+                ev = base.usdc.events.Transfer().process_log(log)
+                if ev["args"]["to"].lower() == user_addr.lower():
+                    payout += int(ev["args"]["value"])
+            except Exception:
+                pass
+    return payout
+
+
 async def redeem(market_id: int, user_private_key: str) -> int:
-    """Redeem winning shares after resolution. Returns payout in micro-USDC."""
+    """Redeem winning shares after resolution. Returns payout in micro-USDC.
+
+    A CANCELLED market is not redeemable (the contract reverts with
+    AlreadyCancelled) — the pull-side refund there is :func:`claim_cancelled`.
+    """
     _check_chain()
     w3 = _w3()
     account = w3.eth.account.from_key(user_private_key)
     user_addr = account.address
+    await _ensure_gas(w3, user_addr, _NEEDED_GAS_WEI)
     return await asyncio.to_thread(
         _redeem_sync, market_id, user_private_key, user_addr, w3,
     )
@@ -424,25 +479,18 @@ def _redeem_sync(market_id: int, user_private_key: str, user_addr: str, w3: Web3
     receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
     if receipt.status != 1:
         raise RuntimeError(f"redeem reverted: {tx_hash}")
-    payout = 0
-    from . import base
-    for log in receipt.get("logs", []):
-        if log.get("address", "").lower() == config.USDC_ADDRESS.lower():
-            try:
-                ev = base.usdc.events.Transfer().process_log(log)
-                if ev["args"]["to"].lower() == user_addr.lower():
-                    payout += int(ev["args"]["value"])
-            except Exception:
-                pass
-    return payout
+    return _usdc_received(receipt, user_addr)
 
 
 async def redeem_many(market_ids: list[int], user_private_key: str) -> int:
     """Batch redeem winnings from multiple resolved markets. Returns total payout in micro-USDC."""
     _check_chain()
+    if not market_ids:
+        return 0
     w3 = _w3()
     account = w3.eth.account.from_key(user_private_key)
     user_addr = account.address
+    await _ensure_gas(w3, user_addr, _NEEDED_GAS_WEI)
     return await asyncio.to_thread(
         _redeem_many_sync, market_ids, user_private_key, user_addr, w3,
     )
@@ -465,17 +513,133 @@ def _redeem_many_sync(market_ids: list[int], user_private_key: str,
     receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
     if receipt.status != 1:
         raise RuntimeError(f"redeemMany reverted: {tx_hash}")
-    payout = 0
-    from . import base
-    for log in receipt.get("logs", []):
-        if log.get("address", "").lower() == config.USDC_ADDRESS.lower():
-            try:
-                ev = base.usdc.events.Transfer().process_log(log)
-                if ev["args"]["to"].lower() == user_addr.lower():
-                    payout += int(ev["args"]["value"])
-            except Exception:
-                pass
-    return payout
+    return _usdc_received(receipt, user_addr)
+
+
+async def claim_cancelled(market_id: int, user_private_key: str) -> int:
+    """Pull-side refund for a CANCELLED market: burns every outcome token the
+    holder still owns and pays their pro-rata share of the escrow reserve.
+    Returns micro-USDC received.
+
+    This is the only exit for an abandoned market — `redeem()` reverts with
+    AlreadyCancelled, so without it a cancelled market's USDC stays in
+    unclaimedEscrowMicro forever.
+    """
+    _check_chain()
+    w3 = _w3()
+    account = w3.eth.account.from_key(user_private_key)
+    user_addr = account.address
+    await _ensure_gas(w3, user_addr, _NEEDED_GAS_WEI)
+    return await asyncio.to_thread(
+        _claim_cancelled_sync, market_id, user_private_key, user_addr, w3,
+    )
+
+
+def _claim_cancelled_sync(market_id: int, user_private_key: str,
+                          user_addr: str, w3: Web3) -> int:
+    """Blocking half of :func:`claim_cancelled` (runs in a worker thread)."""
+    contract = _market_contract(w3)
+    with _send_lock:
+        tx = contract.functions.claimCancelled(market_id).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 300000,
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
+        raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    tx_hash = _tx_hex(raw_hash)
+    receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
+    if receipt.status != 1:
+        raise RuntimeError(f"claimCancelled reverted: {tx_hash}")
+    return _usdc_received(receipt, user_addr)
+
+
+async def claim_cancelled_many(market_ids: list[int], user_private_key: str) -> int:
+    """Refund every listed cancelled market in one tx. Returns total micro-USDC."""
+    _check_chain()
+    if not market_ids:
+        return 0
+    w3 = _w3()
+    account = w3.eth.account.from_key(user_private_key)
+    user_addr = account.address
+    await _ensure_gas(w3, user_addr, _NEEDED_GAS_WEI)
+    return await asyncio.to_thread(
+        _claim_cancelled_many_sync, market_ids, user_private_key, user_addr, w3,
+    )
+
+
+def _claim_cancelled_many_sync(market_ids: list[int], user_private_key: str,
+                               user_addr: str, w3: Web3) -> int:
+    """Blocking half of :func:`claim_cancelled_many` (runs in a worker thread)."""
+    contract = _market_contract(w3)
+    with _send_lock:
+        tx = contract.functions.claimCancelledMany(market_ids).build_transaction({
+            "from": user_addr,
+            "nonce": w3.eth.get_transaction_count(user_addr, "pending"),
+            "gas": 300000 * len(market_ids),
+            **_eip1559_fee_fields(w3),
+        })
+        signed = w3.eth.account.sign_transaction(tx, private_key=user_private_key)
+        raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    tx_hash = _tx_hex(raw_hash)
+    receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
+    if receipt.status != 1:
+        raise RuntimeError(f"claimCancelledMany reverted: {tx_hash}")
+    return _usdc_received(receipt, user_addr)
+
+
+async def cancel_claim_state(market_id: int) -> tuple[int, int]:
+    """(claimRatePerShare, unclaimedEscrowMicro) — a cancelled market's refund reserve.
+
+    Either value being zero makes claimCancelled revert with NothingToClaim
+    (nobody ever traded, or the reserve is already drained), so a batch claim
+    must filter those markets out instead of losing the whole tx.
+    """
+    cached = _cache_read(_cancel_claim_cache, (market_id,))
+    if cached is not None:
+        return cached
+    w3 = _w3()
+    contract = _market_contract(w3)
+
+    def _read() -> tuple[int, int]:
+        return (
+            contract.functions.claimRatePerShare(market_id).call(),
+            contract.functions.unclaimedEscrowMicro(market_id).call(),
+        )
+
+    state = await asyncio.to_thread(_read)
+    _cache_write(_cancel_claim_cache, (market_id,), state)
+    return state
+
+
+async def outcome_shares(market_id: int, outcome: int, addr: str) -> int:
+    """ERC-1155 balance of ONE outcome token held by `addr` (micro-shares)."""
+    _check_chain()
+    w3 = _w3()
+    contract = _market_contract(w3)
+    checksum = Web3.to_checksum_address(addr)
+
+    def _read() -> int:
+        return contract.functions.balanceOf(checksum, market_id * 256 + outcome).call()
+
+    return await asyncio.to_thread(_read)
+
+
+async def holder_shares(market_id: int, num_outcomes: int, addr: str) -> int:
+    """Total ERC-1155 shares `addr` owns in `market_id` across all outcomes."""
+    _check_chain()
+    w3 = _w3()
+    contract = _market_contract(w3)
+    checksum = Web3.to_checksum_address(addr)
+
+    def _read() -> int:
+        return sum(
+            contract.functions.balanceOf(checksum, market_id * 256 + i).call()
+            for i in range(num_outcomes)
+        )
+
+    return await asyncio.to_thread(_read)
 
 
 async def create_market(num_outcomes: int, subsidy_micro: int, closes_at: int,

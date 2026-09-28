@@ -77,6 +77,7 @@ accounting backed by public proof-of-reserves.
   a deposit can only be claimed by the wallet's owner — never by tx-hash sniping)
 - `/wallet` — built-in custodial wallet, export/import by seed phrase
 - `/withdraw <address> <amount>` — on-chain payout (1% fee, min 1 USDC, ≤5/day),
+  staged behind an explicit Confirm tap before anything is debited,
   full auto-refund for stuck/reverted transactions
 - `/tx <hash>` — look up any Base transaction and decode its USDC transfer
 
@@ -261,7 +262,7 @@ A plain-language walkthrough for Telegram users lives in
 | `/bet create Q \| A \| B [24h]` · `/bets` · `/resolve` · `/cancel` | Parimutuel polls |
 | `/ask <question>` | AI assistant |
 | `/deposit` / `/claim <tx>` / `/link` / `/confirm` | Fund your account (private chat only) |
-| `/withdraw <addr> <amt>` | On-chain payout — 1% fee, min 1 USDC, ≤5/day (atomic DB cap), private chat only |
+| `/withdraw <addr> <amt>` | On-chain payout — 1% fee, min 1 USDC, ≤5/day (atomic DB cap), needs a Confirm tap, private chat only |
 | `/tx <hash>` | Decode a Base transaction |
 | `/rain 10 [N]` | Group giveaway |
 | `/paywall ...` | Paid posts and channels |
@@ -342,6 +343,15 @@ worst-case payout.
 - Sensitive commands (`/withdraw`, `/deposit`, `/claim`, `/link`, `/confirm`,
   `/export`, `/import`, `/paywall subscribe`) answer only in private chats;
   the daily withdrawal cap is enforced atomically in the database
+- `/withdraw` is two-step: it only *stages* a payout, and the debit happens on
+  an explicit Confirm tap. The staged request is single-use (`DELETE ...
+  RETURNING`), expires in `WITHDRAW_CONFIRM_TTL_SECONDS` (default 10 min), is
+  bound to the requesting tg_id, and the fee is frozen at staging time — so
+  the number you confirm is the number that is charged
+- First-party destinations (zero address, hot wallet, vault, x402 pool) are
+  blocked by one shared `blocked_destination()` helper used by both the handler
+  and the ledger, so the refusal reason shown can never drift from the one
+  enforced — and each reason gets its own message
 - All bot output is HTML-escaped (no Markdown injection from user titles);
   the dashboard serves a strict CSP (nonce-based scripts) with zero inline
   event handlers; web login nonces are single-use with a TTL and pruned

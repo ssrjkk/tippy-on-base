@@ -20,12 +20,14 @@ from ._messages import LedgerMessagesMixin
 from ._notify import LedgerNotifyMixin
 from ._onchain import LedgerOnchainMixin
 from ._pay import LedgerPayMixin
+from ._paymaster import LedgerPaymasterMixin
 from ._paywall import LedgerPaywallMixin
+from ._recurring import LedgerRecurringMixin
 from ._schema import SCHEMA_DDL
 from ._transfer import LedgerTransferMixin
 from ._users import LedgerUsersMixin
 from ._views import LedgerViewsMixin
-from ._withdraw import LedgerWithdrawMixin
+from ._withdraw import LedgerWithdrawMixin, blocked_destination
 
 __all__ = [
     "MICRO",
@@ -35,6 +37,7 @@ __all__ = [
     "ReconnectingConn",
     "async_ledger",
     "audit_log",
+    "blocked_destination",
     "ledger",
     "lmsr_buy_shares",
     "lmsr_cost",
@@ -42,7 +45,7 @@ __all__ = [
     "lmsr_sell_value",
 ]
 
-class Ledger(LedgerCoreMixin, LedgerUsersMixin, LedgerPayMixin, LedgerPaywallMixin, LedgerTransferMixin, LedgerWithdrawMixin, LedgerBetsMixin, LedgerMarketsMixin, LedgerOnchainMixin, LedgerMessagesMixin, LedgerAdminMixin, LedgerNotifyMixin, LedgerViewsMixin, LedgerCreatorMixin):
+class Ledger(LedgerCoreMixin, LedgerUsersMixin, LedgerPayMixin, LedgerPaywallMixin, LedgerTransferMixin, LedgerWithdrawMixin, LedgerBetsMixin, LedgerMarketsMixin, LedgerOnchainMixin, LedgerMessagesMixin, LedgerAdminMixin, LedgerNotifyMixin, LedgerViewsMixin, LedgerCreatorMixin, LedgerRecurringMixin, LedgerPaymasterMixin):
     'Full ledger facade combining all domain mixins.'
     pass
 

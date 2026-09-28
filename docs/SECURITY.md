@@ -111,6 +111,41 @@ the user: a guarded `INSERT ... WHERE (SELECT COUNT(*) ...) < cap`. Two
 concurrent `/withdraw` commands (or two bot processes) can never both pass
 the check — there is no check-then-act window.
 
+## Withdrawals need a second, single-use tap
+
+`/withdraw` does not move money. It writes a row to `withdraw_confirmations`
+(`stage_withdraw`) and the debit happens only when the user taps **✅ Confirm**
+on the summary. The Mini App has the same two-step flow (`POST
+/api/mini/withdraw` to stage, `POST /api/mini/withdraw/confirm` to debit) over
+the same table and the same `stage_withdraw` / `take_withdraw` calls — the
+webhook UI adds no separate money path.
+
+- **Staging holds no funds.** Nothing is debited until the confirm callback
+  runs, so cancelling, ignoring or losing the prompt costs nothing — there is
+  no half-taken state to refund.
+- **`DELETE ... RETURNING` is the single arbiter.** `take_withdraw` consumes
+  the row in the same statement that reads it: a double-click, a replayed
+  callback or a second tap on an old message all get `NULL`.
+- **The TTL is in the read, not a janitor.** `take_withdraw` also filters on
+  `created_at >= now - WITHDRAW_CONFIRM_TTL_SECONDS` (default 600 s), so an
+  aged prompt is refused inline and no cleanup job is needed. Staging deletes
+  the user's previous row, so at most one live confirmation exists per user
+  and the table stays bounded by the user count.
+- **Bound to the owner.** The row is matched on `tg_id` as well as `token`, so
+  a leaked token is worthless to anyone else.
+- **The fee is frozen at staging.** The amount, fee and total shown in the
+  prompt are exactly the ones charged — the confirm step re-reads the stored
+  values instead of recomputing them.
+- **AML runs where the money moves.** `check_aml_withdraw` executes at
+  confirm time, so staged-then-cancelled requests cannot age a user's flags.
+- **Refusal reasons cannot drift.** `blocked_destination()` in
+  `bot/ledger/_withdraw.py` is the one source of truth for first-party
+  destinations (zero address, hot wallet, vault, `X402_RECEIVE_ADDRESS`). The
+  handler calls it before the balance check, and `reserve_withdraw` calls it
+  again at debit time and returns `(id, reason)` — so a user is never shown
+  "insufficient balance" for an address the bot was going to refuse anyway.
+  A mismatch is recorded in `suspicious_activity` with the exact reason.
+
 ## Multi-relayer pool
 
 `RELAYER_PRIVATE_KEYS` runs a pool of dedicated relayer keys, each capped by

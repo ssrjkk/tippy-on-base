@@ -3,13 +3,15 @@
 Invariants:
   - The agent starts ONLY when AGENT_TG_ID > 0 AND its config validates
     (fail-closed: a misconfigured agent must never run with real money).
-  - The agent is NOT part of WATCHERS (that set mirrors bot.main exactly).
+  - The agent is NOT part of bot.main.WATCHER_TASKS (it runs nowhere else, and
+    it is gated, so it can never be a plain entry in that list).
   - _agent_watcher must be an awaitable wired to the same stop-event
     semantics as every other watcher.
 """
 
 import asyncio
 
+from bot import main as bot_main
 from deploy import run as deploy_run
 
 
@@ -46,11 +48,13 @@ def test_agent_enabled_never_raises(monkeypatch):
 
 
 def test_agent_not_in_watchers_set():
-    """The WATCHERS tuple mirrors bot.main; the agent is started separately
-    (gated), so its presence there would break the sync invariant."""
-    names = {name for name, _ in deploy_run.WATCHERS}
-    assert "agent" not in names
-    assert "agent" not in names  # stable across the tuple
+    """bot.main's watcher list is started unconditionally by _spawn_watchers(); the
+    agent is gated (AGENT_TG_ID > 0 + valid caps), so an entry here would run a
+    misconfigured agent with real money on every deploy."""
+    from bot import main as bot_main
+
+    assert "agent" not in {name for name, _ in deploy_run._watcher_tasks()}
+    assert deploy_run._watcher_tasks() is bot_main.WATCHER_TASKS
 
 
 def test_agent_watcher_is_awaitable():
@@ -61,7 +65,9 @@ def test_agent_watcher_is_awaitable():
 
 def test_agent_watcher_death_sets_stop(monkeypatch):
     """Same contract as other watchers: a silent agent death must stop the
-    process — simulate by monkeypatching run_loop to raise immediately."""
+    process — simulate by monkeypatching run_loop to raise immediately. The
+    callback comes from bot.main.spawn_watchers, the same helper the watchers
+    use, so there is no second copy of the wiring to drift."""
     import agent.main as agent_main
 
     async def _die(stop=None):
@@ -73,9 +79,10 @@ def test_agent_watcher_death_sets_stop(monkeypatch):
     stop = asyncio.Event()
 
     async def _scene():
-        task = asyncio.create_task(deploy_run._agent_watcher(None, None, stop))
-        task.add_done_callback(lambda t: deploy_run._watcher_done("agent", t, stop))
-        await asyncio.sleep(0.01)
+        tasks = bot_main.spawn_watchers(
+            [("agent", lambda: deploy_run._agent_watcher(None, None, stop))], stop
+        )
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     asyncio.run(_scene())
     assert stop.is_set()

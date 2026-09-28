@@ -26,6 +26,7 @@ from bot import main as botmain
 from bot.handlers import (
     cb_bet_amount,
     cb_bet_place,
+    cb_withdraw_confirm,
     cmd_balance,
     cmd_bet,
     cmd_bets,
@@ -139,6 +140,15 @@ class Callback:
 
 def run(coro):
     return asyncio.run(coro)
+
+
+def confirm_withdraw(m):
+    """Tap the Confirm button that /withdraw's prompt just put on screen."""
+    confirm, _cancel = m.answers[0][1].inline_keyboard[0]
+    token = confirm.callback_data.split(":", 2)[2]
+    cb = Callback(f"wd:y:{token}", m.from_user.id, bot=m.bot)
+    run(cb_withdraw_confirm(cb))
+    return cb
 
 
 # ---------- RPC mock (real ABI decoding, fake network) ----------
@@ -362,11 +372,14 @@ def test_e2e_user_journey_deposit_tip_withdraw(e2e, monkeypatch):
     assert "Отправил" in m.answers[0][0]
 
     # withdraw 10 USDC (1% fee = 0.1): balance 110 - 10 - 0.1 = 99.9.
-    # /withdraw only ENQUEUES (P1 batching); the watcher flushes later.
+    # /withdraw only ASKS; the confirm tap enqueues (P1 batching) and the
+    # watcher flushes later.
     to_addr = ACC2.address
     m = Message(f"/withdraw {to_addr} 10", from_id=ALICE, bot=bot)
     run(cmd_withdraw(m))
-    assert "очередь" in m.answers[0][0]
+    assert e2e.balance(ALICE) == Decimal("110.000000")  # nothing moved yet
+    confirm = confirm_withdraw(m)
+    assert "очередь" in confirm.message.text
     assert e2e.balance(ALICE) == Decimal("99.900000")
     assert e2e.withdrawals_today(ALICE) == 1
     q = e2e.withdraw_queue()
@@ -399,10 +412,12 @@ def test_e2e_user_journey_deposit_tip_withdraw(e2e, monkeypatch):
     run(cmd_history(m))
     assert "комиссия вывода" in m.answers[0][0]
 
-    # daily withdraw limit kicks in after MAX_WITHDRAWS_PER_DAY
+    # daily withdraw limit kicks in after MAX_WITHDRAWS_PER_DAY. Each request
+    # has to be confirmed — staging alone never reaches the ledger's cap.
     for _ in range(4):
         m = Message(f"/withdraw {to_addr} 1", from_id=ALICE, bot=bot)
         run(cmd_withdraw(m))
+        confirm_withdraw(m)
     m = Message(f"/withdraw {to_addr} 1", from_id=ALICE, bot=bot)
     run(cmd_withdraw(m))
     assert "Лимит" in m.answers[0][0]
@@ -941,13 +956,13 @@ def test_e2e_withdraw_refund_paths(e2e, monkeypatch):
     fund(e2e, ALICE, 100)
     to_addr = ACC2.address
 
-    # 1) /withdraw only ENQUEUES; the batch FLUSH then fails on-chain (after
+    # 1) The confirm tap ENQUEUES; the batch FLUSH then fails on-chain (after
     # broadcast) -> row stays pending with the pre-computed tx hash; the
     # watcher settles from the real receipt later. NEVER an immediate refund —
     # that would double-pay if the tx confirmed.
     m = Message(f"/withdraw {to_addr} 10", from_id=ALICE, bot=bot)
     run(cmd_withdraw(m))
-    assert "очередь" in m.answers[0][0]
+    assert "очередь" in confirm_withdraw(m).message.text
     assert e2e.balance(ALICE) == Decimal("89.900000")  # debited (amount+fee), not refunded
     assert e2e.withdraw_queue()[0]["status"] == "queued"
 

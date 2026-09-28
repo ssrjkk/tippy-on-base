@@ -883,3 +883,75 @@ def test_csp_non_html_untouched(client):
     r = client.get('/api/info')
     assert r.status_code == 200
     assert 'nonce="' not in r.text
+
+
+# --- agent operator endpoints read the audit trail from STATE_DIR, not CWD ---
+
+def _agent_env(ledger, monkeypatch, tmp_path):
+    """Point bot.config.AGENT_TG_ID at a funded user and agent state at tmp_path,
+    with a separate fake CWD holding a decoy trail. Returns (state_dir, cwd_dir)."""
+    from agent import config as agent_config
+    from bot import config as bot_config
+
+    state_dir = tmp_path / "state"
+    cwd_dir = tmp_path / "cwd"
+    state_dir.mkdir()
+    cwd_dir.mkdir()
+    monkeypatch.setattr(bot_config, "AGENT_TG_ID", 42)
+    monkeypatch.setattr(agent_config, "STATE_DIR", str(state_dir))
+    ledger.credit(42, 10_000_000, "deposit")
+    return state_dir, cwd_dir
+
+
+def test_agent_status_reads_state_dir_not_cwd(client, ledger, monkeypatch, tmp_path):
+    """Regression: agent.main writes agent_audit.jsonl into STATE_DIR while
+    /api/agent/status used to open a CWD-relative copy, so the owner dashboard
+    reported markets_created=0 and bets_placed=0 for an agent that was working."""
+    state_dir, cwd_dir = _agent_env(ledger, monkeypatch, tmp_path)
+    (state_dir / "agent_audit.jsonl").write_text(
+        '{"market_id": 1, "bet_amount_usdc": 2.0, "bet_placed": true}\n'
+        '{"market_id": 2, "bet_amount_usdc": 5.0, "bet_placed": false}\n',
+        encoding="utf-8",
+    )
+    # A decoy in the working directory must be ignored, not counted.
+    (cwd_dir / "agent_audit.jsonl").write_text(
+        '{"market_id": 99, "bet_amount_usdc": 9.0, "bet_placed": true}\n', encoding="utf-8",
+    )
+    monkeypatch.chdir(cwd_dir)
+    _auth(client, 111)
+    data = client.get("/api/agent/status").json()
+    assert data["markets_created"] == 2
+    assert data["bets_placed"] == 1  # only the bet the ledger actually took
+
+
+def test_agent_status_without_trail(client, ledger, monkeypatch, tmp_path):
+    state_dir, _ = _agent_env(ledger, monkeypatch, tmp_path)
+    assert not (state_dir / "agent_audit.jsonl").exists()
+    _auth(client, 111)
+    data = client.get("/api/agent/status").json()
+    assert data["markets_created"] == 0 and data["bets_placed"] == 0
+    assert "caps" in data
+
+
+def test_agent_status_requires_admin(client, ledger, monkeypatch, tmp_path):
+    _agent_env(ledger, monkeypatch, tmp_path)
+    assert client.get("/api/agent/status").status_code == 403
+    assert client.get("/api/agent/audit").status_code == 403
+
+
+def test_agent_audit_tail_reads_state_dir(client, ledger, monkeypatch, tmp_path):
+    """The tail reader seeks from the end of the file, so it must resolve the
+    same path the writer used — and return the newest entries in file order."""
+    state_dir, _ = _agent_env(ledger, monkeypatch, tmp_path)
+    lines = [f'{{"market_id": {i}, "bet_amount_usdc": 1.0, "bet_placed": true}}' for i in range(1, 61)]
+    (state_dir / "agent_audit.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _auth(client, 111)
+    entries = client.get("/api/agent/audit").json()
+    assert len(entries) == 50
+    assert [entries[0]["market_id"], entries[-1]["market_id"]] == [11, 60]
+
+
+def test_agent_audit_missing_trail_is_empty(client, ledger, monkeypatch, tmp_path):
+    state_dir, _ = _agent_env(ledger, monkeypatch, tmp_path)
+    _auth(client, 111)
+    assert client.get("/api/agent/audit").json() == []

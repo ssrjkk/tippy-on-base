@@ -92,6 +92,27 @@ class LedgerUsersMixin:
 
 
 
+    def usernames_bulk(self, tg_ids: list[int]) -> dict[int, str | None]:
+        """tg_id -> username for many users in one query.
+
+        Every id asked for comes back as a key, with None when there is no users
+        row or the username is empty — the same answer username_of() gives them,
+        so callers can look up without guarding against a missing key. Duplicate
+        ids in the input are collapsed.
+        """
+        ids = list(dict.fromkeys(int(i) for i in tg_ids))
+        if not ids:
+            return {}
+        placeholders = ",".join(["%s"] * len(ids))
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT tg_id, username FROM users WHERE tg_id IN ({placeholders})", ids
+            ).fetchall()
+        found = {int(r["tg_id"]): r["username"] for r in rows}
+        return {i: found.get(i) for i in ids}
+
+
+
     def balance(self, tg_id: int) -> Decimal:
         with self._lock:
             row = self._conn.execute(

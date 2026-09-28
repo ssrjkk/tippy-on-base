@@ -515,8 +515,19 @@ def approve_and_trade_sync(
     # The whole nonce→build→sign→broadcast is under the PER-ACCOUNT lock: the
     # EntryPoint nonce is per-SmartAccount, so two concurrent operations for
     # the same tg_id must not both read the same nonce (one handleOps would
-    # silently replace the other).
+    # silently replace the other). The balance check also lives under this
+    # lock so a concurrent spend cannot slip through between the check and
+    # the sign (TOCTOU overspend race).
     with _user_op_lock(tg_id):
+        # Re-check balance under the lock: the caller's pre-check was outside
+        # the lock, so another operation could have spent the USDC between
+        # then and now.
+        balance = _usdc().functions.balanceOf(smart_addr).call()
+        if balance < approve_amount:
+            raise RuntimeError(
+                f"insufficient USDC: have {balance}, need {approve_amount}"
+            )
+
         nonce = smart_nonce(tg_id)
 
         # Build paymaster data: paymaster addr(20) + tgId(32) + relayer sig(65).
@@ -564,6 +575,11 @@ def approve_and_trade_sync(
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
     if receipt["status"] != 1:
         raise RuntimeError(f"UserOp reverted: {_tx_hex(tx_hash)}")
+
+    # Track gasless usage: the paymaster sponsored this UserOp, so increment
+    # the user's counter (enforces FREE_TRANSACTIONS_COUNT limit).
+    from bot.paymaster import increment_usage
+    increment_usage(smart_addr)
 
     return _tx_hex(tx_hash)
 

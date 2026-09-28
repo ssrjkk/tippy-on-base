@@ -405,9 +405,9 @@ async def api_agent_status(request: Request) -> dict:
     must not be public (could be front-run via its public markets)."""
     _require_admin(request)
     import json
-    import pathlib
 
     from agent.caps import get_status
+    from agent.config import audit_file
     tg_id = int(config.AGENT_TG_ID) if hasattr(config, 'AGENT_TG_ID') else 0
     if not tg_id:
         return {'error': 'AGENT_TG_ID not configured'}
@@ -415,11 +415,11 @@ async def api_agent_status(request: Request) -> dict:
         return {'error': 'Agent user not found'}
     v = await ledger.user_view(tg_id)
     caps_status = get_status()
-    audit_file = pathlib.Path('agent_audit.jsonl')
+    trail = audit_file()
     market_count = 0
     bet_count = 0
-    if audit_file.exists():
-        with audit_file.open("r", encoding="utf-8") as f:
+    if trail.exists():
+        with trail.open("r", encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
@@ -427,9 +427,10 @@ async def api_agent_status(request: Request) -> dict:
                     entry = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if entry.get('action_type') == 'create_market' or 'market_id' in entry:
-                    market_count += 1
-                if entry.get('bet_amount_usdc', 0) > 0:
+                # One audit line per cycle, and a line is only written after
+                # create_market succeeded — so lines are markets, not actions.
+                market_count += 1
+                if entry.get('bet_placed'):
                     bet_count += 1
     return {
         'balance_usdc': _usdc(v['balance_micro']),
@@ -443,12 +444,14 @@ async def api_agent_audit(request: Request) -> list[dict]:
     """Agent audit trail — last 50 actions from local JSONL log (owner-only)."""
     _require_admin(request)
     import json
-    import pathlib
-    audit_file = pathlib.Path('agent_audit.jsonl')
-    if not audit_file.exists():
+
+    from agent.config import audit_file
+
+    trail = audit_file()
+    if not trail.exists():
         return []
     entries = []
-    with audit_file.open("rb") as f:
+    with trail.open("rb") as f:
         f.seek(0, 2)
         size = f.tell()
         chunk = 8192

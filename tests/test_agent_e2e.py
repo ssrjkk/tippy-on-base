@@ -129,9 +129,13 @@ class TestE2EAgentCycle:
         entries = [json.loads(l) for l in audit_file.read_text().splitlines() if l.strip()]
         assert len(entries) == 1
         assert entries[0]["market_id"] == 42
+        # The bet was decided but never reached the ledger (oracle protection),
+        # so the trail must not report it as placed — readers count this flag.
+        assert entries[0]["bet_amount_usdc"] == 5.0
+        assert entries[0]["bet_placed"] is False
 
-        # Verify EAS attestation log
-        attest_file = Path("agent_attestations.jsonl")
+        # Verify EAS attestation log — same STATE_DIR as the audit trail, not CWD.
+        attest_file = _STATE_DIR / "agent_attestations.jsonl"
         assert attest_file.exists()
 
     @pytest.mark.asyncio

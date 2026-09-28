@@ -8,7 +8,7 @@ from bot import i18n, tip_targets
 
 from . import _common as common
 
-__all__ = ['_history_text', '_stats_text', '_top_text', 'cmd_history', 'cmd_stats', 'cmd_top']
+__all__ = ['_history_text', '_stats_text', '_tip_counterparties', '_top_text', 'cmd_history', 'cmd_stats', 'cmd_top']
 
 @common.router.message(Command('stats'))
 async def cmd_stats(message: types.Message) -> None:
@@ -29,9 +29,10 @@ async def _top_text() -> str:
     rows = await common.ledger.top_tippers(10)
     if not rows:
         return i18n.t('ru', 'top_empty')
+    names = await common.ledger.usernames_bulk([int(r['tg_id']) for r in rows])
     lines = []
     for i, row in enumerate(rows, 1):
-        uname = await common.ledger.username_of(row['tg_id'])
+        uname = names[int(row['tg_id'])]
         if not uname:
             # No Telegram username — show the user's PRIMARY basename
             # (Base identity) instead of a bare id.
@@ -40,18 +41,29 @@ async def _top_text() -> str:
         lines.append(f"{medal} <b>@{common._h(uname)}</b> — {common._fmt(row['total'])} USDC")
     return i18n.t('ru', 'top_title') + '\n\n' + '\n'.join(lines)
 
+
+def _tip_counterparties(rows: list[dict]) -> list[int]:
+    """Telegram ids named by tip rows — the users whose names a history page needs."""
+    return [
+        int(r['counterparty'])
+        for r in rows
+        if r['kind'] == 'tip' and str(r['counterparty'] or '').isdigit()
+    ]
+
+
 async def _history_text(tg_id: int, limit: int=15) -> str:
     rows = await common.ledger.history(tg_id, limit)
     if not rows:
         return i18n.t(await common.user_lang(tg_id), 'history_empty')
     lines = []
     lang = await common.user_lang(tg_id)
+    names = await common.ledger.usernames_bulk(_tip_counterparties(rows))
     for r in rows:
         emoji = common.KIND_EMOJI.get(r['kind'], '•')
         amt = common._fmt(r['amount'])
         if r['kind'] == 'tip':
             cid = int(r['counterparty']) if r['counterparty'].isdigit() else None
-            cname = await common.ledger.username_of(cid) if cid else None
+            cname = names.get(cid) if cid else None
             who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
             lines.append(f'{emoji} {amt} → {who}')
         elif r['kind'] == 'deposit':
@@ -90,7 +102,45 @@ async def cmd_top(message: types.Message) -> None:
 async def cmd_history(message: types.Message) -> None:
     await common.ledger.ensure_user(message.from_user.id, message.from_user.username)
     parts = message.text.strip().split()
+    lang = await common.user_lang(message.from_user.id)
+    if len(parts) >= 2 and parts[1].lower() == 'export':
+        csv = await common.ledger.history_csv(message.from_user.id)
+        if len(csv.split('\n')) <= 1:
+            await message.answer(i18n.t(lang, 'history_empty'))
+            return
+        from aiogram.types import BufferedInputFile
+        doc = BufferedInputFile(csv.encode('utf-8'), filename=f'history_{message.from_user.id}.csv')
+        await message.answer_document(doc, caption=i18n.t(lang, 'history_export_caption'))
+        return
     limit = 15
-    if len(parts) == 2 and parts[1].isdigit():
-        limit = min(max(int(parts[1]), 1), 50)
+    kind = None
+    valid_kinds = {'tip', 'bet', 'bet_win', 'deposit', 'withdraw', 'fee', 'x402', 'paywall', 'market_buy', 'market_sell'}
+    for p in parts[1:]:
+        if p.isdigit():
+            limit = min(max(int(p), 1), 50)
+        elif p.lower() in valid_kinds:
+            kind = p.lower()
+    if kind:
+        rows = await common.ledger.history_filtered(message.from_user.id, kind, limit)
+        if not rows:
+            await message.answer(i18n.t(lang, 'history_empty_filter', kind=kind))
+            return
+        lines = [i18n.t(lang, 'history_title_filter', kind=kind)]
+        names = await common.ledger.usernames_bulk(_tip_counterparties(rows))
+        for r in rows:
+            emoji = common.KIND_EMOJI.get(r['kind'], '•')
+            amt = common._fmt(r['amount'])
+            if r['kind'] == 'tip':
+                cid = int(r['counterparty']) if r['counterparty'].isdigit() else None
+                cname = names.get(cid) if cid else None
+                who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
+                lines.append(f'{emoji} {amt} → {who}')
+            elif r['kind'] == 'bet':
+                lines.append(f"{emoji} −{amt} #{r['counterparty']}")
+            elif r['kind'] == 'bet_win':
+                lines.append(f"{emoji} +{amt} #{r['counterparty']}")
+            else:
+                lines.append(f"{emoji} {amt}")
+        await message.answer('\n\n'.join(lines))
+        return
     await message.answer(await _history_text(message.from_user.id, limit))

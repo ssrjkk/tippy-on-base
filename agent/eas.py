@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from eth_abi import encode as abi_encode
 from web3 import Web3
 
+from . import config
+
 # EAS contract on Base mainnet
 EAS_ADDRESS = "0xC2679fBD36d5E93C340e118209b9F0D949c0b167"
 
@@ -53,8 +55,6 @@ SCHEMA_STR = "string action_type,uint256 market_id,uint256 amount_micro,uint8 co
 # A fabricated UID used to be computed here — every attest would revert and
 # the code silently degraded to the local log. Set EAS_SCHEMA_UID only after
 # registering the schema; without it the agent logs attestations locally.
-import os
-
 SCHEMA_UID = os.environ.get("EAS_SCHEMA_UID", "").strip()
 
 
@@ -163,9 +163,13 @@ def attest_action(data: AttestationData) -> str | None:
 
 
 def _log_local(data: AttestationData) -> None:
-    """Fallback: log attestation to local JSONL file."""
-    import pathlib
-    log_file = pathlib.Path("agent_attestations.jsonl")
+    """Fallback: append the attestation to the local JSONL trail in STATE_DIR.
+
+    This is the fallback for an attestation that already failed, so a full
+    filesystem must not turn it into a second failure — the caller has nothing
+    to do with the exception. Still loud in the log, because an attestation
+    nobody recorded is an action with no audit trail.
+    """
     entry = {
         "ts": time.time(),
         "action_type": data.action_type,
@@ -175,5 +179,10 @@ def _log_local(data: AttestationData) -> None:
         "reasoning_hash": data.reasoning_hash.hex(),
         "schema_uuid": SCHEMA_UID or "local-only",
     }
-    with open(log_file, "a") as f:
-        f.write(json.dumps(entry) + "\n")
+    path = config.attestations_file()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError as e:
+        logging.getLogger("agent.eas").warning("Local attestation log write failed: %s", e)

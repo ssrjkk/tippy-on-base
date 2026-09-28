@@ -32,6 +32,7 @@ from bot.handlers import (
     cb_menu,
     cb_res,
     cb_settings,
+    cb_withdraw_confirm,
     cmd_balance,
     cmd_bet,
     cmd_bets,
@@ -126,12 +127,14 @@ class ChannelBot(Bot):
         self.title = title
         self.members = members or {}  # tg_id -> status
         self.invites = []
+        self.chat_calls = []  # chat_ids get_chat was asked about
 
     async def get_chat_member(self, chat_id, user_id):
         status = self.members.get(user_id, "left")
         return SimpleNamespace(status=status)
 
     async def get_chat(self, chat_id):
+        self.chat_calls.append(chat_id)
         if isinstance(chat_id, int):
             cid = chat_id
         else:
@@ -174,6 +177,32 @@ class Callback:
 
 def run(coro):
     return asyncio.run(coro)
+
+
+def statements_used(ledger, coro_factory):
+    """(result, the SQL statements that run issued).
+
+    A list renderer that reads one row per item and one that reads them in bulk
+    answer with byte-identical text, so the count is the only thing that can
+    tell them apart. The spy is installed and removed by hand instead of through
+    monkeypatch: monkeypatch.undo() would also tear down the `ledger` fixture's
+    rebinding of every module-level singleton, and the handler would then run
+    against whatever DATABASE_URL points at — a developer's live database, not
+    tipbot_test.
+    """
+    seen = []
+    real = ledger._conn.execute
+
+    def spy(query, *args, **kwargs):
+        seen.append(query)
+        return real(query, *args, **kwargs)
+
+    ledger._conn.execute = spy
+    try:
+        out = run(coro_factory())
+    finally:
+        del ledger._conn.execute
+    return out, seen
 
 
 # ---------- parsing ----------
@@ -530,12 +559,33 @@ def test_cmd_tip_throttled(ledger):
 # ---------- withdraw ----------
 
 
-def test_cmd_withdraw_success(ledger):
+def _wd_token(m):
+    """Pull the one-shot confirmation token out of a /withdraw prompt."""
+    confirm, cancel = m.answers[0][1].inline_keyboard[0]
+    assert confirm.callback_data.startswith("wd:y:")
+    assert cancel.callback_data.startswith("wd:n:")
+    return confirm.callback_data.split(":", 2)[2]
+
+
+def _wd_tap(token, verdict="y", from_id=ALICE):
+    cb = Callback(f"wd:{verdict}:{token}", from_id)
+    run(cb_withdraw_confirm(cb))
+    return cb
+
+
+def test_cmd_withdraw_stages_before_debiting(ledger):
+    """/withdraw only asks; the money moves on the confirm tap."""
     ledger.credit(ALICE, 10_000_000, "deposit")
     m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
     run(cmd_withdraw(m))
+    token = _wd_token(m)
+    assert "5.05" in m.answers[0][0]  # the exact total is what gets confirmed
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+    assert ledger.withdraw_queue() == []
+
+    cb = _wd_tap(token)
     # Batching: the withdrawal is QUEUED (not instantly sent), flushed later.
-    assert "очередь" in m.answers[0][0]
+    assert "очередь" in cb.message.text
     # 5 USDC enqueued + 1% fee (50_000 micro) debited.
     assert ledger.balance(ALICE) == Decimal("4.950000")
     q = ledger.withdraw_queue()
@@ -546,21 +596,62 @@ def test_cmd_withdraw_success(ledger):
     assert ledger.pending_withdraws() == []  # not yet broadcast
 
 
-def test_cmd_withdraw_queued_not_refunded_by_handler(ledger):
-    """A failed chain send no longer refunds at the handler: the row stays
-    queued and the batch flush (watcher) handles success/refund, so a crash
-    between enqueue and flush cannot silently lose the user's debited USDC."""
+def test_cmd_withdraw_cancel_tap_moves_nothing(ledger):
     ledger.credit(ALICE, 10_000_000, "deposit")
     m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
     run(cmd_withdraw(m))
-    assert "очередь" in m.answers[0][0]
+    cb = _wd_tap(_wd_token(m), verdict="n")
+    assert "отмен" in cb.message.text
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+    assert ledger.withdraw_queue() == []
+
+
+def test_cmd_withdraw_confirm_is_single_use(ledger):
+    """A double-click must not reserve the payout twice."""
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
+    run(cmd_withdraw(m))
+    token = _wd_token(m)
+    _wd_tap(token)
+    second = _wd_tap(token)
+    assert "устарел" in second.message.text
     assert ledger.balance(ALICE) == Decimal("4.950000")
+    assert len(ledger.withdraw_queue()) == 1
+
+
+def test_cmd_withdraw_stale_prompt_cannot_be_confirmed(ledger, monkeypatch):
+    """Staging a newer request retires the older prompt's buttons."""
+    monkeypatch.setattr(handlers.config, "MONEY_CMD_COOLDOWN_SECONDS", 0)
+    ledger.credit(ALICE, 20_000_000, "deposit")
+    m1 = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
+    run(cmd_withdraw(m1))
+    old = _wd_token(m1)
+    m2 = Message(f"/withdraw {ACC.address} 7", from_id=ALICE)
+    run(cmd_withdraw(m2))
+    assert _wd_token(m2) != old
+    cb = _wd_tap(old)
+    assert "устарел" in cb.message.text
+    assert ledger.balance(ALICE) == Decimal("20.000000")
+    assert ledger.withdraw_queue() == []
+
+
+def test_cmd_withdraw_queued_row_is_not_refunded(ledger):
+    """A confirmed withdrawal leaves exactly one queued row.
+
+    The handler never sends to the chain, so it can never refund either: the
+    batch flush (watcher) owns success and refund, which is what keeps a crash
+    between enqueue and flush from silently losing the user's debited USDC.
+    """
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
+    run(cmd_withdraw(m))
+    _wd_tap(_wd_token(m))
     rows = ledger._conn.execute(
         "SELECT kind, status FROM tx_log WHERE tg_id = %s AND kind = 'withdraw' ORDER BY id",
         (ALICE,),
     ).fetchall()
-    # Enqueued, not refunded — the row waits in the batch queue.
     assert [(r["kind"], r["status"]) for r in rows] == [("withdraw", "queued")]
+    assert ledger.balance(ALICE) == Decimal("4.950000")
 
 
 def test_cmd_withdraw_bad_format(ledger):
@@ -573,6 +664,7 @@ def test_cmd_withdraw_insufficient(ledger):
     m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
     run(cmd_withdraw(m))
     assert "Недостаточно" in m.answers[0][0]
+    assert m.answers[0][1] is None  # a refusal never offers a confirm button
 
 
 def test_cmd_withdraw_below_min(ledger):
@@ -583,6 +675,33 @@ def test_cmd_withdraw_below_min(ledger):
     run(cmd_withdraw(m))
     assert "Минимум" in m.answers[0][0]
     assert ledger.balance(ALICE) == Decimal("10.000000")
+
+
+def test_cmd_withdraw_refuses_first_party_addresses(ledger, monkeypatch):
+    """Each refused destination gets its own reason.
+
+    The handler used to keep an allow-list that contradicted the ledger's
+    block-list, so a funded user who typed the bot's own address was told they
+    had no balance.
+    """
+    from bot.base import hot_wallet
+
+    monkeypatch.setattr(handlers.config, "MONEY_CMD_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(handlers.config, "VAULT_ADDRESS", "0x" + "a" * 40)
+    monkeypatch.setattr(handlers.config, "X402_RECEIVE_ADDRESS", "0x" + "c" * 40)
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    for addr, reason in (
+        ("0x" + "0" * 40, "Нулевой адрес"),
+        (str(hot_wallet()).lower(), "самого бота"),
+        ("0x" + "a" * 40, "хранилище бота"),
+        ("0x" + "c" * 40, "приёмный пул x402"),
+    ):
+        m = Message(f"/withdraw {addr} 5", from_id=ALICE)
+        run(cmd_withdraw(m))
+        assert reason in m.answers[0][0], addr
+        assert "Недостаточно" not in m.answers[0][0], addr
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+    assert ledger.withdraw_queue() == []
 
 
 def test_cmd_withdraw_blocks_contract_destination(ledger, monkeypatch):
@@ -599,28 +718,28 @@ def test_cmd_withdraw_blocks_contract_destination(ledger, monkeypatch):
     monkeypatch.setattr(handlers.config, "MONEY_CMD_COOLDOWN_SECONDS", 0)
     monkeypatch.setattr(network, "is_contract", _contract)
 
-    # EOA address (is_contract == False) -> withdraw proceeds normally.
+    # EOA address (is_contract == False) -> withdrawal is staged for confirm.
     m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
     run(cmd_withdraw(m))
-    assert "очередь" in m.answers[0][0]
-    assert ledger.balance(ALICE) == Decimal("4.950000")  # 5 + 1% fee debited
+    assert "Подтверди" in m.answers[0][0]
+    assert ledger.balance(ALICE) == Decimal("10.000000")
 
-    # Contract address (is_contract == True) -> refused up front, no debit.
+    # Contract address (is_contract == True) -> refused up front, no stage.
     m2 = Message(f"/withdraw {contract_addr} 1", from_id=ALICE)
     run(cmd_withdraw(m2))
     assert "заблокирован" in m2.answers[0][0]
-    assert ledger.balance(ALICE) == Decimal("4.950000")  # unchanged
+    assert ledger.balance(ALICE) == Decimal("10.000000")
 
 
 def test_cmd_withdraw_throttled(ledger):
     ledger.credit(ALICE, 10_000_000, "deposit")
     m1 = Message(f"/withdraw {ACC.address} 1", from_id=ALICE)
     run(cmd_withdraw(m1))
-    assert "очередь" in m1.answers[0][0]
+    assert "Подтверди" in m1.answers[0][0]
     m2 = Message(f"/withdraw {ACC.address} 1", from_id=ALICE)
     run(cmd_withdraw(m2))
     assert "Слишком часто" in m2.answers[0][0]
-    assert ledger.balance(ALICE) == Decimal("8.990000")  # no double debit
+    assert ledger.balance(ALICE) == Decimal("10.000000")  # nothing debited yet
 
 
 def test_cmd_withdraw_daily_limit(ledger, monkeypatch):
@@ -632,10 +751,38 @@ def test_cmd_withdraw_daily_limit(ledger, monkeypatch):
     for _ in range(config.MAX_WITHDRAWS_PER_DAY):
         m = Message(f"/withdraw {ACC.address} 1", from_id=ALICE)
         run(cmd_withdraw(m))
-        assert "очередь" in m.answers[0][0]
+        _wd_tap(_wd_token(m))
+    assert len(ledger.withdraw_queue()) == config.MAX_WITHDRAWS_PER_DAY
     m = Message(f"/withdraw {ACC.address} 1", from_id=ALICE)
     run(cmd_withdraw(m))
     assert "Лимит" in m.answers[0][0]
+
+
+def test_withdraw_refusal_names_each_reason(ledger):
+    """A refused payout never claims the user is broke unless that is why."""
+    from bot.handlers.wallet import _withdraw_refusal
+
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    assert "Лимит" in run(_withdraw_refusal(ALICE, "ru", "cap", 5_000_000, 50_000))
+    text = run(_withdraw_refusal(ALICE, "ru", "blocked", 5_000_000, 50_000))
+    assert "служебный" in text and "Недостаточно" not in text
+    assert "Недостаточно" in run(
+        _withdraw_refusal(ALICE, "ru", "balance", 5_000_000, 50_000)
+    )
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+
+
+def test_cmd_withdraw_balance_gone_by_confirm_tap(ledger):
+    """Staging holds no funds — if the balance moved on, the confirm tap says
+    'not enough' rather than queueing a payout that cannot be paid."""
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    m = Message(f"/withdraw {ACC.address} 5", from_id=ALICE)
+    run(cmd_withdraw(m))
+    assert ledger.debit(ALICE, 6_000_000)  # spent elsewhere while prompting
+    cb = _wd_tap(_wd_token(m))
+    assert "Недостаточно" in cb.message.text
+    assert ledger.balance(ALICE) == Decimal("4.000000")
+    assert ledger.withdraw_queue() == []
 
 
 # ---------- bets ----------
@@ -801,11 +948,89 @@ def test_cmd_top(ledger):
     assert "alice" in m.answers[0][0]
 
 
+def test_cmd_top_reads_names_once_whatever_the_leaderboard_size(ledger):
+    """/top called username_of() for every row, so ten names cost ten statements on
+    top of the ranking query — each one waiting on the ledger lock.
+
+    Every tipper here has a username on purpose: a nameless one makes the handler
+    fall back to tip_targets.display_name_for(), whose ENSIP reverse lookup costs
+    queries of its own, and the count would then measure the fixture's network
+    state rather than the row count."""
+
+    def top_statements():
+        return statements_used(ledger, lambda: cmd_top(Message("/top", from_id=ALICE)))[1]
+
+    def tipper(tg_id, username, amount):
+        ledger.ensure_user(tg_id, username)
+        ledger.credit(tg_id, 10_000_000, "deposit")
+        ledger.transfer(tg_id, ALICE, amount)
+
+    tipper(ALICE, "alice", 3_000_000)
+    tipper(BOB, "bob", 2_000_000)
+    first = top_statements()
+    for i in range(4):
+        tipper(3001 + i, f"tipper{i}", 1_000_000 - i)  # distinct totals, all inside top-10
+    second = top_statements()
+    assert len(second) == len(first), (
+        f"/top cost {len(second) - len(first)} more statements for 4 extra tippers"
+    )
+    assert any("IN (" in q for q in second), "the leaderboard reads usernames one by one"
+
+    m = Message("/top", from_id=ALICE)
+    run(cmd_top(m))
+    text = m.answers[0][0]
+    for name in ("alice", "bob", "tipper0", "tipper1", "tipper2", "tipper3"):
+        assert f"@{name}" in text
+    assert text.count("USDC") == 6
+
+
 def test_cmd_history(ledger):
     ledger.credit(ALICE, 10_000_000, "deposit")
     m = Message("/history", from_id=ALICE)
     run(cmd_history(m))
     assert "операции" in m.answers[0][0]
+
+
+def test_cmd_history_reads_tipper_names_once_whatever_the_row_count(ledger):
+    """Each tip line used to resolve its @username with a statement of its own.
+    The plain page and the `/history tip` filtered page have separate render
+    loops, so both are measured: fixing only one leaves the other paying per row."""
+
+    def history_statements(text):
+        return statements_used(
+            ledger, lambda: cmd_history(Message(text, from_id=ALICE))
+        )[1]
+
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    ledger.ensure_user(BOB, "bob")
+    ledger.transfer(ALICE, BOB, 1_000_000)
+    plain = history_statements("/history")
+    filtered = history_statements("/history tip")
+
+    anonymous = 3005  # tipped, but never given a username
+    for i, tg in enumerate((3001, 3002, 3003, anonymous)):
+        if tg != anonymous:
+            ledger.ensure_user(tg, f"payer{i}")
+        ledger.transfer(ALICE, tg, 500_000 + i)
+    plain2 = history_statements("/history")
+    filtered2 = history_statements("/history tip")
+
+    assert len(plain2) == len(plain), (
+        f"/history cost {len(plain2) - len(plain)} more statements for 4 extra tips"
+    )
+    assert len(filtered2) == len(filtered), (
+        f"/history tip cost {len(filtered2) - len(filtered)} more statements for 4 extra tips"
+    )
+    assert any("IN (" in q for q in plain2), "the page resolves names row by row again"
+    assert any("IN (" in q for q in filtered2), "the filtered page resolves names row by row"
+
+    m = Message("/history", from_id=ALICE)
+    run(cmd_history(m))
+    text = m.answers[0][0]
+    assert "@bob" in text
+    assert "@payer0" in text
+    assert str(anonymous) in text  # no username -> the bare id, as before
+    assert text.count("→") == 5  # one line per tip, none lost or duplicated
 
 
 # ---------- inline bet flow ----------
@@ -1466,6 +1691,37 @@ def test_cmd_rain_no_members(ledger):
     assert "мало активных" in m.answers[0][0]
 
 
+def test_cmd_rain_reads_the_recipient_names_in_one_go(ledger):
+    """/rain resolved each recipient's @name with a query of its own, so the
+    eight-name line-up it prints cost eight round trips on the one serialized
+    ledger connection — before the message rendered at all."""
+    ledger.credit(ALICE, 100_000_000, "deposit")
+    # rain() excludes the sender from the pool, so the eight candidates below are
+    # deliberately ids other than ALICE; eight candidates for count=8 makes the
+    # draw deterministic and the whole line-up visible.
+    for i in range(7):
+        ledger.ensure_user(2100 + i, f"payer{i}")
+        ledger.record_message(-1000, 2100 + i, 2100 + i)
+    ledger.ensure_user(2200, None)  # tipped, but no Telegram username on file
+    ledger.record_message(-1000, 2200, 2200)
+
+    m = Message("/rain 5 8", from_id=ALICE, chat=Chat(id=-1000, type="group"))
+    _, queries = statements_used(ledger, lambda: cmd_rain(m))
+
+    # Checked first: if the handler short-circuited before the line-up, the name
+    # queries below are absent and this test proves nothing.
+    text = m.answers[0][0]
+    assert "Получили:" in text
+    for i in range(7):
+        assert f"@payer{i}" in text
+    assert "id2200" in text  # the same fallback the per-row reader gave
+
+    assert sum("SELECT username FROM users WHERE tg_id = %s" in q for q in queries) == 0, (
+        "the line-up resolves names one recipient at a time"
+    )
+    assert sum("FROM users WHERE tg_id IN (" in q for q in queries) == 1
+
+
 # ---------- settings ----------
 
 
@@ -1634,6 +1890,43 @@ def test_cmd_bets_no_markets_still_has_create_button(ledger):
     assert rows[-1][0].callback_data == "betcreate"
 
 
+def test_cmd_bets_keeps_the_newest_first_order_of_open_bets(ledger):
+    """bulk_market_views() returns views in the id order it was handed, which is
+    the order open_bets() chose (id DESC). A batched read that reordered the
+    list would look correct in every other test and silently shuffle the UI."""
+    old = ledger.create_bet(ALICE, "Старый рынок?", ["Да", "Нет"])
+    new = ledger.create_bet(ALICE, "Новый рынок?", ["Да", "Нет"])
+    m = Message("/bets", from_id=ALICE)
+    run(cmd_bets(m))
+    text = m.answers[0][0]
+    assert text.index("Новый рынок?") < text.index("Старый рынок?")
+    rows = m.answers[0][1].inline_keyboard
+    assert [r[0].callback_data for r in rows[:2]] == [f"market:{new}", f"market:{old}"]
+
+
+def test_cmd_bets_queries_do_not_grow_with_the_market_count(ledger):
+    """/bets used to call market_view() once per row — four statements each, so a
+    ten-market list cost forty queries on every open. bulk_market_views()
+    replaces that with a fixed few. Counting statements is the only way to pin
+    this down: the rendered text is identical either way."""
+
+    def run_bets():
+        return statements_used(ledger, lambda: cmd_bets(Message("/bets", from_id=ALICE)))[1]
+
+    # A market must exist for both runs: with an empty list the handler returns
+    # before reading positions, so comparing empty-vs-full would only measure the
+    # branch, not the batch.
+    ledger.create_bet(ALICE, "Первый рынок?", ["Да", "Нет"])
+    first = run_bets()
+    for i in range(4):
+        ledger.create_bet(ALICE, f"Рынок {i}?", ["Да", "Нет"])
+    second = run_bets()
+    assert len(second) == len(first), (
+        f"/bets cost {len(second) - len(first)} more statements for 4 extra markets"
+    )
+    assert any("IN (" in q for q in second), "the list reads markets one by one again"
+
+
 def test_cb_settings_unknown_key_ignored(ledger):
     cb = Callback("set:bogus", ALICE)
     run(cb_settings(cb))  # must not raise, nothing toggled
@@ -1711,7 +2004,10 @@ def test_cmd_paywall_draft_captures_content(ledger):
     assert len(items) == 1
     assert items[0]["title"] == "Мой отчёт"
     assert items[0]["price_micro"] == 5_000_000
-    assert items[0]["content"] == "вот секретный текст контента"
+    # The list reader no longer carries `content`, so the stored text is checked
+    # through the single-item reader the buy path uses.
+    assert "content" not in items[0]
+    assert ledger.paywall_item(items[0]["id"])["content"] == "вот секретный текст контента"
     # a command cancels the draft
     m = Message("/paywall create 5 Ещё")
     run(cmd_paywall(m, CommandObject(command="paywall", args="create 5 Ещё")))
@@ -1773,6 +2069,96 @@ def test_cmd_paywall_list_sends_one_message(ledger):
     assert f"#{item_id}" in text
     assert "0.4 USDC" in text
     assert "Купить: /paywall buy" in text
+
+
+def test_cmd_paywall_list_reads_ownership_once_whatever_the_post_count(ledger):
+    """The ✅ marker used to cost one paywall_purchased() per post — so opening the
+    list was a query for every post any user ever put up for sale, each one behind
+    the ledger lock."""
+
+    def list_statements():
+        return statements_used(
+            ledger,
+            lambda: cmd_paywall(
+                Message("/paywall list", from_id=ALICE),
+                CommandObject(command="paywall", args="list"),
+            ),
+        )[1]
+
+    ledger.ensure_user(BOB, "bob")
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    bought = ledger.create_paywall(BOB, "Купленный пост", 400_000, "контент")
+    assert ledger.buy_paywall(ALICE, bought) == "ok"
+    first = list_statements()
+    for i in range(4):
+        assert ledger.create_paywall(BOB, f"Пост {i}", 100_000 + i, "контент")
+    second = list_statements()
+    assert len(second) == len(first), (
+        f"/paywall list cost {len(second) - len(first)} more statements for 4 extra posts"
+    )
+    assert any("IN (" in q for q in second), "the list checks ownership post by post"
+
+    m = Message("/paywall list", from_id=ALICE)
+    run(cmd_paywall(m, CommandObject(command="paywall", args="list")))
+    text = m.answers[0][0]
+    lines = {l.split(" ")[0]: l for l in text.split("\n") if l.startswith("#")}
+    assert len(lines) == 5
+    # Parity with the single-row reader the batch replaced, post by post.
+    for r in ledger.paywall_items_list():
+        assert ("✅" in lines[f"#{r['id']}"]) == bool(ledger.paywall_purchased(r["id"], ALICE))
+    assert sum("✅" in l for l in lines.values()) == 1
+
+
+def test_cmd_paywall_list_shows_a_page_and_says_so(ledger):
+    """/paywall list used to render every post on sale. Telegram hard-caps a text
+    message at 4096 characters and an over-long answer is not trimmed by the server —
+    the send is refused and the user receives nothing at all. So the list is a page
+    of the newest posts, and it says how many it shows."""
+    from bot import config as cfg
+    from bot.handlers.paywall import TG_MESSAGE_MAX
+
+    ledger.ensure_user(BOB, "bob")
+    for i in range(cfg.PAYWALL_LIST_MAX + 5):
+        assert ledger.create_paywall(BOB, f"Пост {i}", 100_000 + i, "контент")
+
+    m = Message("/paywall list", from_id=ALICE)
+    run(cmd_paywall(m, CommandObject(command="paywall", args="list")))
+    assert len(m.answers) == 1
+    text = m.answers[0][0]
+    shown = {int(l.split(" ")[0][1:]) for l in text.split("\n") if l.startswith("#")}
+    assert len(shown) == cfg.PAYWALL_LIST_MAX
+    all_ids = sorted(int(r["id"]) for r in ledger.paywall_items_list())
+    assert shown == set(all_ids[-cfg.PAYWALL_LIST_MAX:])  # the newest, none older
+    assert str(cfg.PAYWALL_LIST_MAX) in text
+    assert len(text) <= TG_MESSAGE_MAX
+
+
+def test_cmd_paywall_list_trims_to_what_telegram_accepts(ledger):
+    """The row cap alone does not guarantee the page fits: titles are user-written
+    and html.escape can turn one 120-character title into 600 characters, so a page
+    well inside PAYWALL_LIST_MAX can still cross 4096 and be rejected outright."""
+    from bot.handlers.paywall import TG_MESSAGE_MAX
+
+    ledger.ensure_user(BOB, "bob")
+    ids = [ledger.create_paywall(BOB, "&" * 120, 100_000 + i, "контент") for i in range(8)]
+
+    m = Message("/paywall list", from_id=ALICE)
+    run(cmd_paywall(m, CommandObject(command="paywall", args="list")))
+    text = m.answers[0][0]
+    assert len(text) <= TG_MESSAGE_MAX
+    shown = {int(l.split(" ")[0][1:]) for l in text.split("\n") if l.startswith("#")}
+    assert 1 <= len(shown) < 8, "the page was not trimmed to fit"
+    assert max(ids) in shown  # trimming drops the older posts, never the newest
+    assert min(ids) not in shown
+
+
+def test_paywall_list_shown_renders_in_every_language():
+    from bot import i18n
+
+    for lang in ("ru", "en", "zh"):
+        msg = i18n.t(lang, "paywall_list_shown", n=20)
+        assert "20" in msg
+        assert "{n}" not in msg
 
 
 def test_on_menu_paywall_list_shows_posts(ledger):
@@ -1974,6 +2360,105 @@ def test_paywall_channels_lists_my_subs(ledger):
     m3 = Message("/paywall channels", bot=bot)
     run(cmd_paywall(m3, CommandObject(command="paywall", args="channels")))
     assert "🔑" in m3.answers[0][0]
+
+
+def test_paywall_owner_notification_uses_the_owner_language(ledger):
+    """The seller's receipt was built with a hardcoded 'ru', so an English or Chinese
+    owner was told about money they had earned in a language they never picked. The
+    buyer's language cannot decide it either — the message goes to the seller."""
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    ledger.set_setting(BOB, "lang", "en")
+    ledger.set_paywall_channel(CHANNEL_ID, BOB, 5_000_000)
+    bot = ChannelBot(members={BOB: "creator", 123456: "administrator"})
+    m = Message("/paywall subscribe " + str(CHANNEL_ID), bot=bot)
+    run(cmd_paywall(m, CommandObject(command="paywall", args="subscribe " + str(CHANNEL_ID))))
+    notice = [text for cid, text in bot.sent if cid == BOB]
+    assert len(notice) == 1
+    assert "subscription to channel" in notice[0]
+    assert "подписка" not in notice[0]
+
+
+def test_paywall_channels_advertise_the_real_period(ledger):
+    """The listing line read "30д" whatever the channel actually sold access for, so
+    a weekly channel advertised a monthly price."""
+    ledger.set_paywall_channel(CHANNEL_ID, BOB, 5_000_000, 7)
+    bot = ChannelBot()
+    m = Message("/paywall channels", bot=bot)
+    run(cmd_paywall(m, CommandObject(command="paywall", args="channels")))
+    text = m.answers[0][0]
+    assert "5 USDC/7д" in text
+    assert "30д" not in text
+
+
+def test_paywall_channels_reads_subs_and_lang_once_whatever_the_channel_count(ledger):
+    """/paywall channels asked two things per channel: the subscription row, and a
+    settings query for the language. Both are now fixed-cost — the language is read
+    once by the dispatcher and passed down, the subscriptions in one bulk read."""
+
+    def channel_statements():
+        bot = ChannelBot(members={BOB: "creator", 123456: "administrator"})
+        return statements_used(
+            ledger,
+            lambda: cmd_paywall(
+                Message("/paywall channels", bot=bot),
+                CommandObject(command="paywall", args="channels"),
+            ),
+        )[1]
+
+    ledger.credit(ALICE, 20_000_000, "deposit")
+    assert ledger.set_paywall_channel(-1001, BOB, 500_000)
+    assert ledger.set_paywall_channel(-1002, BOB, 500_000)
+    assert ledger.subscribe_channel(-1001, ALICE) == "ok"
+    first = channel_statements()
+    # BOB stops at the per-owner cap, so the sixth channel belongs to someone else.
+    for chat in (-1003, -1004, -1005):
+        assert ledger.set_paywall_channel(chat, BOB, 500_000)
+    assert ledger.set_paywall_channel(-1006, 2003, 500_000)
+    assert ledger.subscribe_channel(-1005, ALICE) == "ok"
+    second = channel_statements()
+    assert len(second) == len(first), (
+        f"/paywall channels cost {len(second) - len(first)} more statements for 4 extra channels"
+    )
+    assert any("IN (" in q for q in second), "the list reads subscriptions channel by channel"
+    assert sum("paywall_subscriptions" in q for q in second) == 1
+    assert sum("FROM user_settings" in q for q in second) == 1
+
+    bot = ChannelBot()
+    m = Message("/paywall channels", bot=bot)
+    run(cmd_paywall(m, CommandObject(command="paywall", args="channels")))
+    lines = [l for l in m.answers[0][0].split("\n") if l.startswith("•")]
+    assert len(lines) == 6
+    assert sum("🔑" in l for l in lines) == 2  # -1001 and -1005, nobody else's
+
+
+def test_paywall_channels_pages_and_trims_to_fit(ledger):
+    """/paywall channels had the same unbounded render as the post list, and worse:
+    every row it builds asks Telegram for that channel's title, so an oversized page
+    was a page of round trips ending in a send the server refuses."""
+    from bot import config as cfg
+    from bot.handlers.paywall import TG_MESSAGE_MAX
+
+    page = cfg.PAYWALL_LIST_MAX
+    for i in range(page + 3):
+        # one owner each: the per-owner channel cap is far below the page size
+        assert ledger.set_paywall_channel(-2000 - i, 4000 + i, 500_000)
+    bot = ChannelBot()
+    m = Message("/paywall channels", bot=bot)
+    run(cmd_paywall(m, CommandObject(command="paywall", args="channels")))
+    assert len(m.answers) == 1
+    text = m.answers[0][0]
+    assert len([l for l in text.split("\n") if l.startswith("•")]) == page
+    assert str(page) in text  # the page says how many it shows
+    # one get_chat per rendered row, no more
+    assert len(bot.chat_calls) == page
+
+    wide = ChannelBot(title="&" * 120)
+    m2 = Message("/paywall channels", bot=wide)
+    run(cmd_paywall(m2, CommandObject(command="paywall", args="channels")))
+    text2 = m2.answers[0][0]
+    assert len(text2) <= TG_MESSAGE_MAX
+    rows = [l for l in text2.split("\n") if l.startswith("•")]
+    assert 1 <= len(rows) < page, "the page was not trimmed to fit"
 
 
 # ---------- per-user wallets ----------

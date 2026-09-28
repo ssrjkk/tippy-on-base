@@ -409,6 +409,131 @@ def test_amm_market_view_shape(ledger):
     assert view["liquidity_micro"] == 50 * USDC
 
 
+# ---------- batched reads (/markets, /positions, /predictions) ----------
+
+
+def test_quantities_batch_pads_unheld_options(ledger):
+    """A traded market yields one GROUP BY row per *held* option. The batch must
+    still report 0 for the others, in option order, exactly like the single read."""
+    traded = make_market(ledger, options=("А", "Б", "В"))
+    untouched = make_market(ledger, options=("А", "Б"))
+    ledger.credit(BOB, 100 * USDC, "deposit")
+    assert ledger.buy_shares(traded, BOB, 1, 10 * USDC)[0] == "ok"
+    batch = ledger.market_quantities_batch([traded, untouched])
+    assert batch == {
+        traded: ledger.market_quantities(traded),
+        untouched: ledger.market_quantities(untouched),
+    }
+    assert batch[untouched] == [0, 0]
+    held = batch[traded]
+    assert len(held) == 3 and held[1] > 0 and held[0] == 0 and held[2] == 0
+
+
+def test_quantities_batch_edge_cases(ledger):
+    assert ledger.market_quantities_batch([]) == {}
+    assert ledger.market_quantities_batch([424242]) == {}  # unknown: absent, not []
+    mid = make_market(ledger)
+    assert list(ledger.market_quantities_batch([mid, mid])) == [mid]
+
+
+def test_prices_batch_matches_market_prices_exactly(ledger):
+    m1 = make_market(ledger)
+    m2 = make_market(ledger, options=("X", "Y", "Z"))
+    ledger.credit(BOB, 200 * USDC, "deposit")
+    ledger.buy_shares(m1, BOB, 0, 20 * USDC)
+    ledger.buy_shares(m2, BOB, 2, 10 * USDC)
+    batch = ledger.market_prices_batch([m1, m2, 424242])
+    assert set(batch) == {m1, m2}  # unknown id: no key, and no KeyError
+    for mid in (m1, m2):
+        assert batch[mid] == ledger.market_prices(mid)  # Decimals, not floats
+        assert abs(sum(batch[mid]) - 1) < Decimal("1e-9")
+    assert batch[m1][0] > batch[m1][1]  # the 20 USDC bought option 0 up
+
+
+def test_bulk_amm_views_match_amm_market_view_field_for_field(ledger):
+    """bulk_amm_market_views replaced an amm_market_view-per-market loop on
+    /predictions and in agent/pnl, so it owes the caller the same dict."""
+    m1 = make_market(ledger)
+    m2 = make_market(ledger, options=("X", "Y", "Z"))
+    ledger.credit(BOB, 200 * USDC, "deposit")
+    ledger.credit(CAROL, 200 * USDC, "deposit")
+    ledger.buy_shares(m1, BOB, 0, 20 * USDC)
+    ledger.buy_shares(m1, CAROL, 1, 5 * USDC)
+    ledger.buy_shares(m2, CAROL, 2, 7 * USDC)
+    views = ledger.bulk_amm_market_views([m1, m2])
+    assert set(views) == {m1, m2}
+    for mid in (m1, m2):
+        assert views[mid] == ledger.amm_market_view(mid)
+    assert views[m1]["traders"] == 2
+    assert views[m2]["traders"] == 1
+    assert views[m1]["volume_micro"] == sum(ledger.market_quantities(m1))
+
+
+def test_bulk_amm_views_keep_request_order(ledger):
+    m1 = make_market(ledger)
+    m2 = make_market(ledger)
+    assert list(ledger.bulk_amm_market_views([m2, m1])) == [m2, m1]
+    assert list(ledger.bulk_amm_market_views([m1, m1])) == [m1]
+    assert ledger.bulk_amm_market_views([]) == {}
+    assert ledger.bulk_amm_market_views([424242]) == {}
+    assert ledger.bulk_amm_market_views([m1, 424242]) == {
+        m1: ledger.amm_market_view(m1)
+    }
+
+
+def test_bulk_amm_views_drop_sold_out_traders(ledger):
+    # `traders` counts holders, and the batch carries its own shares > 0 filter:
+    # a seller who is back to zero shares must stop being counted.
+    mid = make_market(ledger)
+    ledger.credit(BOB, 100 * USDC, "deposit")
+    _, b = ledger.buy_shares(mid, BOB, 0, 10 * USDC)
+    assert ledger.bulk_amm_market_views([mid])[mid]["traders"] == 1
+    assert ledger.sell_shares(mid, BOB, 0, b["shares"])[0] == "ok"
+    assert ledger.bulk_amm_market_views([mid])[mid]["traders"] == 0
+    assert ledger.amm_market_view(mid)["traders"] == 0
+
+
+def test_user_market_positions_prices_across_markets(ledger):
+    """One row per open position, priced from the batched quantities — and only
+    this user's shares, never another backer's."""
+    m1 = make_market(ledger)
+    m2 = make_market(ledger, options=("X", "Y", "Z"))
+    ledger.credit(BOB, 200 * USDC, "deposit")
+    _, a = ledger.buy_shares(m1, BOB, 0, 10 * USDC)
+    _, c = ledger.buy_shares(m2, BOB, 2, 20 * USDC)
+    ledger.credit(CAROL, 100 * USDC, "deposit")
+    ledger.buy_shares(m1, CAROL, 1, 5 * USDC)
+    rows = ledger.user_market_positions(BOB)
+    assert [r["market_id"] for r in rows] == [m2, m1]  # newest market first
+    by_mid = {r["market_id"]: r for r in rows}
+    assert by_mid[m1]["shares"] == a["shares"]
+    assert by_mid[m1]["cost"] == a["cost"]
+    assert by_mid[m1]["price"] == ledger.market_prices(m1)[0]
+    assert by_mid[m2]["price"] == ledger.market_prices(m2)[2]
+    for r in rows:
+        assert r["value"] == r["shares"] * r["price"]
+    assert {r["option"] for r in rows} == {"Алиса", "Z"}
+    # Scoping: CAROL's money belongs in her rows only, and the pooled quantity
+    # per option is the sum of the two of them.
+    carol_rows = ledger.user_market_positions(CAROL)
+    assert [(r["market_id"], r["option"]) for r in carol_rows] == [(m1, "Боб")]
+    q1 = ledger.market_quantities(m1)
+    assert q1[0] == by_mid[m1]["shares"]
+    assert q1[1] == carol_rows[0]["shares"]
+
+
+def test_user_market_positions_drops_closed_markets(ledger):
+    mid = make_market(ledger)
+    other = make_market(ledger)
+    ledger.credit(BOB, 200 * USDC, "deposit")
+    ledger.buy_shares(mid, BOB, 0, 10 * USDC)
+    ledger.buy_shares(other, BOB, 0, 10 * USDC)
+    assert len(ledger.user_market_positions(BOB)) == 2
+    ok, _, _ = ledger.resolve_market(mid, 0, ALICE)
+    assert ok
+    assert [r["market_id"] for r in ledger.user_market_positions(BOB)] == [other]
+
+
 # ---------- handlers ----------
 
 

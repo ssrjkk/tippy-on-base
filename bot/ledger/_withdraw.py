@@ -1,46 +1,76 @@
 """Ledger domain mixin: LedgerWithdrawMixin (split from bot/ledger.py)."""
+import csv
+import io
+import secrets
 import time
 
 from .. import config
 
 
+def _csv_text(value: str | None) -> str:
+    """Neutralise CSV formula injection: Excel and Google Sheets evaluate a
+    cell that starts with = + - @ (or a tab/CR), so a user who names a bet
+    option '=HYPERLINK(...)' would otherwise run a formula in whoever next
+    opens their own exported history.
+    """
+    text = value or ""
+    return f"'{text}" if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
+def blocked_destination(to_address: str) -> str | None:
+    """Why this payout address is refused, or None if it is a real destination.
+
+    Every address below is money the user can never spend again: zero burns it,
+    the hot wallet is the bot's own wallet (a self-send is a plain loss), and
+    the vault / x402 pool only ever drain back into the hot wallet.
+
+    Both the /withdraw handler and reserve_withdraw call this, so the reason a
+    user is shown can never drift from the reason the ledger refuses.
+    """
+    from ..base import hot_wallet
+
+    dest = (to_address or "").strip().lower()
+    if not dest or dest == "0x" + "0" * 40:
+        return "zero"
+    hot = hot_wallet()
+    if hot and dest == str(hot).lower():
+        return "hot_wallet"
+    if config.VAULT_ADDRESS and dest == config.VAULT_ADDRESS.strip().lower():
+        return "vault"
+    if config.X402_RECEIVE_ADDRESS and dest == config.X402_RECEIVE_ADDRESS.strip().lower():
+        return "x402"
+    return None
+
+
 class LedgerWithdrawMixin:
     def reserve_withdraw(
         self, tg_id: int, to_address: str, amount_micro: int, fee_micro: int
-    ) -> int | None:
+    ) -> tuple[int | None, str]:
         """Atomically debit amount+fee and enqueue a withdrawal.
 
-        Returns the tx_log id, or None if the user lacks the balance. The row is
-        written BEFORE any on-chain send and starts as **queued**: it sits in the
-        batch-payout queue until the batch watcher flushes it (via
-        TipBotVault.batchDistribute or a direct transfer). Crash between debit and
-        send is safe — the queued row survives and is flushed/refunded later.
+        Returns ``(tx_log id, '')`` on success, or ``(None, reason)`` where
+        reason is 'blocked' (refused destination), 'balance' (the debit could
+        not be paid) or 'cap' (MAX_WITHDRAWS_PER_DAY reached between the
+        handler's pre-check and here). Callers must map the reason to a real
+        message: a refused destination is not a balance problem, and telling a
+        user they are broke when they are not is how money bugs get reported
+        as UI bugs.
 
-        Returns None (no funds move) for any refused destination too, and for
-        the daily-request cap, and flags the attempt for AML review.
+        The row is written BEFORE any on-chain send and starts as **queued**: it
+        sits in the batch-payout queue until the batch watcher flushes it (via
+        TipBotVault.batchDistribute or a direct transfer). Crash between debit
+        and send is safe — the queued row survives and is flushed/refunded later.
         """
         with self._lock:
             # ---- destination blocklist (anti self-send / burn / lock-in) ----
-            from ..base import hot_wallet
-            dest = (to_address or "").strip().lower()
-            blocked: list[tuple[str, str]] = []
-            dead_addr = "0x" + "0" * 40
-            if dest in (dead_addr, "0x" + "0" * 40):
-                blocked.append(("burn", "zero address"))
-            hot = hot_wallet()
-            if hot and dest and dest == hot.lower():
-                blocked.append(("self", "hot wallet"))
-            if config.VAULT_ADDRESS and dest == config.VAULT_ADDRESS.strip().lower():
-                blocked.append(("vault", "vault contract"))
-            if config.X402_RECEIVE_ADDRESS and dest == config.X402_RECEIVE_ADDRESS.strip().lower():
-                blocked.append(("x402", "x402 receive pool"))
-            if blocked:
+            reason = blocked_destination(to_address)
+            if reason:
                 self._flag_suspicious(
                     tg_id, "withdraw_blocked",
-                    {"to_address": to_address, "reason": blocked[0][1]}, severity="critical",
+                    {"to_address": to_address, "reason": reason}, severity="critical",
                 )
                 self._conn.rollback()
-                return None
+                return None, "blocked"
             # ---- atomic daily-request cap (closes the check-then-act hole:
             #      two concurrent /withdraw commands can no longer both pass
             #      the pre-check in the command handler) ----
@@ -59,7 +89,7 @@ class LedgerWithdrawMixin:
                 )
                 if cur.rowcount == 0:
                     self._conn.rollback()
-                    return None
+                    return None, "balance"
                 cur = self._conn.execute(
                     "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note, status) "
                     "SELECT 'withdraw', %s, %s, %s, %s, 'queued' "
@@ -74,7 +104,7 @@ class LedgerWithdrawMixin:
                 if wd_row is None:
                     # cap reached: already debited, so this whole tx rolls back
                     self._conn.rollback()
-                    return None
+                    return None, "cap"
                 wd_id = int(wd_row["id"])
                 if fee_micro > 0:
                     self._conn.execute(
@@ -84,7 +114,7 @@ class LedgerWithdrawMixin:
                     )
                 self._conn.commit()
                 committed = True
-                return wd_id
+                return wd_id, ""
             finally:
                 if not committed:
                     # Safety net: an unexpected exception mid-operation must not
@@ -95,6 +125,52 @@ class LedgerWithdrawMixin:
                         self._conn.rollback()
                     except Exception:
                         pass
+
+    # ---------------- two-step confirmation (nothing moves on the first tap) ----------------
+
+    def stage_withdraw(
+        self, tg_id: int, to_address: str, amount_micro: int, fee_micro: int
+    ) -> str:
+        """Park a pending withdrawal until the user confirms it; return the token.
+
+        A mistyped address is unrecoverable on-chain, so the debit waits for an
+        explicit second step. Staging replaces any earlier pending request: one
+        user has at most one live confirmation, so an old prompt cannot be
+        confirmed after a newer one superseded it.
+        """
+        token = secrets.token_hex(8)
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM withdraw_confirmations WHERE tg_id = %s", (tg_id,)
+            )
+            self._conn.execute(
+                "INSERT INTO withdraw_confirmations "
+                "(token, tg_id, to_address, amount_micro, fee_micro, created_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (token, tg_id, to_address, amount_micro, fee_micro, int(time.time())),
+            )
+            self._conn.commit()
+        return token
+
+    def take_withdraw(self, tg_id: int, token: str) -> dict | None:
+        """Consume a live staged withdrawal, or None if unknown/expired/not yours.
+
+        DELETE ... RETURNING is the single arbiter: the row is gone the moment
+        one caller reads it, so two taps on the same button (or a replay of the
+        callback) cannot reserve the payout twice. The TTL lives in the
+        statement, so an expired prompt is refused without a cleanup job.
+        """
+        cutoff = int(time.time()) - config.WITHDRAW_CONFIRM_TTL_SECONDS
+        with self._lock:
+            row = self._conn.execute(
+                "DELETE FROM withdraw_confirmations "
+                "WHERE token = %s AND tg_id = %s AND created_at >= %s "
+                "RETURNING to_address, amount_micro, fee_micro",
+                (token, tg_id, cutoff),
+            ).fetchone()
+            self._conn.commit()
+        return row
+
 
 
 
@@ -311,6 +387,58 @@ class LedgerWithdrawMixin:
                 (tg_id, limit),
             ).fetchall()
         return rows
+
+
+
+    def history_filtered(
+        self, tg_id: int, kind: str | None = None, limit: int = 50
+    ) -> list[dict]:
+        """History with optional kind filter (tip, bet, deposit, etc.)."""
+        with self._lock:
+            if kind:
+                rows = self._conn.execute(
+                    "SELECT id, kind, counterparty, amount, tx_hash, note, created_at "
+                    "FROM tx_log WHERE tg_id = %s AND kind = %s "
+                    "ORDER BY id DESC LIMIT %s",
+                    (tg_id, kind, limit),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT id, kind, counterparty, amount, tx_hash, note, created_at "
+                    "FROM tx_log WHERE tg_id = %s ORDER BY id DESC LIMIT %s",
+                    (tg_id, limit),
+                ).fetchall()
+        return rows
+
+
+
+    def history_csv(self, tg_id: int) -> str:
+        """Export full transaction history as CSV, every field written by the csv
+        module. Hand-rolled rows are not safe here: `note` holds user-authored
+        text (a bet's note is the option label its creator typed), so quotes,
+        commas and newlines in it must not be able to shift columns.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, kind, counterparty, amount, tx_hash, note, created_at "
+                "FROM tx_log WHERE tg_id = %s ORDER BY id DESC",
+                (tg_id,),
+            ).fetchall()
+        buf = io.StringIO()
+        writer = csv.writer(buf, lineterminator="\n")
+        writer.writerow(("id", "kind", "counterparty", "amount", "tx_hash", "note", "created_at"))
+        for r in rows:
+            writer.writerow((
+                r["id"],
+                r["kind"],
+                _csv_text(r["counterparty"]),
+                r["amount"],
+                _csv_text(r["tx_hash"]),
+                _csv_text(r["note"]),
+                r["created_at"],
+            ))
+        # Strip the record terminator: callers count lines to spot an empty export.
+        return buf.getvalue().rstrip("\n")
 
 
 

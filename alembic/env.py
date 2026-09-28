@@ -16,24 +16,33 @@ from sqlalchemy import engine_from_config, pool
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Alembic's template defaults to disable_existing_loggers=True, which would
+    # silence every logger already created at import time (agent.caps, agent.pnl,
+    # bot.*) for the rest of the process — the migration runs inside the bot/agent
+    # process, so the app would go quiet mid-flight.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-# Override sqlalchemy.url from environment if available.
-db_url = os.environ.get("DATABASE_URL")
-if db_url:
-    # The project's driver is psycopg v3 (psycopg[binary]); SQLAlchemy defaults
-    # postgresql:// to psycopg2, which may not be installed. Pin the driver so
-    # `alembic upgrade head` works everywhere (Docker and bare-metal alike).
-    if db_url.startswith("postgresql://"):
-        db_url = "postgresql+psycopg://" + db_url.split("://", 1)[1]
-    config.set_main_option("sqlalchemy.url", db_url)
-else:
+# Which database to migrate. A programmatic caller (Ledger._run_alembic) hands
+# alembic the exact DSN it is about to use through Config.attributes;
+# $DATABASE_URL is the fallback for a plain `alembic upgrade head`. Honoring the
+# caller is not cosmetic: the test suite points every Ledger at a throwaway
+# schema, and inheriting DATABASE_URL made those runs ALTER the developer's
+# live database instead.
+db_url = config.attributes.get("tippy.database_url") or os.environ.get("DATABASE_URL")
+if not db_url:
     # No DATABASE_URL: fail loudly instead of silently migrating the stale
     # alembic.ini fallback database (wrong host = wrong schema, silent drift).
     raise SystemExit(
         "alembic: DATABASE_URL is not set; refusing to fall back to alembic.ini's "
         "sqlalchemy.url (it may point at a different server than the app uses)"
     )
+
+# The project's driver is psycopg v3 (psycopg[binary]); SQLAlchemy defaults
+# postgresql:// to psycopg2, which is not installed. Pin the driver so
+# `alembic upgrade head` works everywhere (Docker and bare-metal alike).
+if db_url.startswith("postgresql://"):
+    db_url = "postgresql+psycopg://" + db_url.split("://", 1)[1]
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Operator visibility: log WHICH database is being migrated (credentials
 # masked). Migrating the wrong host silently is far worse than a loud marker.

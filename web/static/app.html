@@ -125,6 +125,8 @@ input,textarea{font-family:inherit;outline:none}
 /* Deposit Section */
 .deposit-box{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px;margin-top:8px}
 .deposit-addr{font-size:12px;color:var(--text2);word-break:break-all;flex:1;user-select:all}
+.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;color:var(--text2);padding:5px 0}
+.wd-row b{color:var(--text);font-variant-numeric:tabular-nums}
 .deposit-qr{width:80px;height:80px;border-radius:8px;background:#fff;padding:4px;flex-shrink:0}
 .deposit-qr img{width:100%;height:100%}
 
@@ -378,9 +380,9 @@ input,textarea{font-family:inherit;outline:none}
 
 <script>
 const I18N = {
-  ru: { wallet: "Кошелёк", balance: "Баланс", tip: "Чаевые", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", amount: "Сумма", username: "Никнейм", address: "Адрес", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", creating: "Создаём...", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", deposit_note: "Отправь USDC на этот адрес (сеть Base)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн (часы, опционально)", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут - пополните USDC для активации", smart_deposit_hint: "Пополните USDC на Base по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ" },
-  en: { wallet: "Wallet", balance: "Balance", tip: "Tips", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", amount: "Amount", username: "Username", address: "Address", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", creating: "Creating...", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", deposit_note: "Send USDC to this address (Base network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline (hours, optional)", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed - deposit USDC to activate", smart_deposit_hint: "Deposit USDC on Base to this address to trade gasless", smart_enabled: "Gasless trading is ON" },
-  zh: { wallet: "钱包", balance: "余额", tip: "打赏", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", amount: "金额", username: "用户名", address: "地址", copied: "已复制!", copy: "复制", fill_fields: "请填写所有字段", creating: "创建中...", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", deposit_note: "将 USDC 发送到此地址（Base 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，可选）", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署 - 存入 USDC 激活", smart_deposit_hint: "在 Base 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启" }
+  ru: { wallet: "Кошелёк", balance: "Баланс", tip: "Чаевые", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", amount: "Сумма", username: "Никнейм", address: "Адрес", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", creating: "Создаём...", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", deposit_note: "Отправь USDC на этот адрес (сеть Base)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн (часы, опционально)", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут - пополните USDC для активации", smart_deposit_hint: "Пополните USDC на Base по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", wd_hint: "1% комиссия, минимум 1 USDC, не более 5 в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "✅ Подтвердить", wd_cancel_btn: "✖️ Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе" },
+  en: { wallet: "Wallet", balance: "Balance", tip: "Tips", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", amount: "Amount", username: "Username", address: "Address", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", creating: "Creating...", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", deposit_note: "Send USDC to this address (Base network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline (hours, optional)", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed - deposit USDC to activate", smart_deposit_hint: "Deposit USDC on Base to this address to trade gasless", smart_enabled: "Gasless trading is ON", wd_hint: "1% fee, min 1 USDC, up to 5 per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "✅ Confirm", wd_cancel_btn: "✖️ Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance" },
+  zh: { wallet: "钱包", balance: "余额", tip: "打赏", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", amount: "金额", username: "用户名", address: "地址", copied: "已复制!", copy: "复制", fill_fields: "请填写所有字段", creating: "创建中...", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", deposit_note: "将 USDC 发送到此地址（Base 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，可选）", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署 - 存入 USDC 激活", smart_deposit_hint: "在 Base 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", wd_hint: "手续费 1%，最低 1 USDC，每天最多 5 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "✅ 确认", wd_cancel_btn: "✖️ 取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中" }
 };
 
 const OPT_COLORS = ['#0052FF','#7c3aed','#f59e0b','#ef4444'];
@@ -727,6 +729,10 @@ function updateLangHighlight() {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+// FastAPI puts the rejection reason in `detail`; a non-error response carries
+// `error`. Without both, every refusal toast says just "Error".
+function errMsg(d) { return d && (d.error || d.detail) || 'Error'; }
+
 // ─── Tip ───
 function openTipSheet() {
   openModal(`
@@ -766,7 +772,7 @@ async function doTip() {
       closeModalForce();
       toast('+' + amount.toFixed(2) + ' USDC → @' + to);
       loadState();
-    } else { toast(d.error || 'Error', 'error'); }
+    } else { toast(errMsg(d), 'error'); }
   } catch(e) { toast('Network error', 'error'); }
 }
 
@@ -791,7 +797,7 @@ function copyAddr(addr) {
   navigator.clipboard.writeText(addr).then(() => toast(t('copied'))).catch(() => {});
 }
 
-// ─── Withdraw ───
+// ─── Withdraw (two-step: stage, then confirm) ───
 function openWithdrawSheet() {
   openModal(`
     <div class="modal-title">${t('withdraw')}</div>
@@ -803,16 +809,74 @@ function openWithdrawSheet() {
       <label class="input-label">${t('amount')} (USDC)</label>
       <input class="input" id="wdAmt" type="number" step="0.01" min="0" placeholder="0.00">
     </div>
-    <button class="btn btn-primary btn-full" data-act="doWithdraw">${t('withdraw')}</button>
+    <p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">${t('wd_hint')}</p>
+    <button class="btn btn-primary btn-full" data-act="stageWithdraw">${t('withdraw')}</button>
   `);
 }
 
-async function doWithdraw() {
+let _wdBusy = false;
+
+async function stageWithdraw() {
+  if (_wdBusy) return;
   const addr = document.getElementById('wdAddr').value.trim();
-  const amount = parseFloat(document.getElementById('wdAmt').value);
-  if (!addr || !amount || amount <= 0) { toast(t('fill_fields'), 'error'); return; }
-  toast('Withdrawal requested', 'success');
-  closeModalForce();
+  const raw = document.getElementById('wdAmt').value.trim();
+  if (!addr || !raw || !(parseFloat(raw) > 0)) { toast(t('fill_fields'), 'error'); return; }
+  _wdBusy = true;
+  try {
+    const r = await fetch('/api/mini/withdraw', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: addr, amount: raw })
+    });
+    const d = await r.json();
+    if (d.ok && d.staged) showWithdrawConfirm(d);
+    else toast(errMsg(d), 'error');
+  } catch(e) { toast('Network error', 'error'); }
+  finally { _wdBusy = false; }
+}
+
+function showWithdrawConfirm(d) {
+  const tok = esc(d.token);
+  openModal(`
+    <div class="modal-title">${t('wd_confirm_title')}</div>
+    <div class="input-group">
+      <div class="wd-row"><span>${t('amount')}</span><b>${esc(d.amount)} USDC</b></div>
+      <div class="wd-row"><span>${t('wd_fee')}</span><b>${esc(d.fee)} USDC</b></div>
+      <div class="wd-row"><span>${t('wd_total')}</span><b>${esc(d.total)} USDC</b></div>
+      <div class="wd-row"><span>${t('wd_after')}</span><b>${esc(d.balance_after)} USDC</b></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px">${t('address')}</div>
+      <div class="deposit-addr">${esc(d.address)}</div>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 12px">${t('wd_check')}</p>
+    <button class="btn btn-primary btn-full" data-act="confirmWithdraw" data-token="${tok}" data-yes="1">${t('wd_confirm_btn')}</button>
+    <button class="btn btn-secondary btn-full" style="margin-top:8px" data-act="confirmWithdraw" data-token="${tok}" data-yes="0">${t('wd_cancel_btn')}</button>
+  `);
+}
+
+async function confirmWithdraw(token, yes) {
+  if (_wdBusy) return;
+  _wdBusy = true;
+  try {
+    const r = await fetch('/api/mini/withdraw/confirm', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, confirm: !!yes })
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      STATE.balance_usdc = d.new_balance;
+      renderBalance();
+      closeModalForce();
+      toast(t('wd_queued'), 'success');
+      loadState();
+    } else if (r.ok) {
+      closeModalForce();
+      toast(t('wd_cancelled'));
+    } else {
+      toast(errMsg(d), 'error');
+    }
+  } catch(e) { toast('Network error', 'error'); }
+  finally { _wdBusy = false; }
 }
 
 // ─── Markets Detail ───
@@ -871,7 +935,7 @@ async function doTrade(marketId, option) {
       toast('Bought for ' + amt.toFixed(2) + ' USDC');
       hideDetail();
       loadState();
-    } else { toast(d.error || 'Error', 'error'); }
+    } else { toast(errMsg(d), 'error'); }
   } catch(e) { toast('Network error', 'error'); }
 }
 
@@ -928,7 +992,7 @@ async function doBet(betId, option) {
       toast('Bet placed: ' + amt.toFixed(2) + ' USDC');
       hideDetail();
       loadState();
-    } else { toast(d.error || 'Error', 'error'); }
+    } else { toast(errMsg(d), 'error'); }
   } catch(e) { toast('Network error', 'error'); }
 }
 
@@ -1017,7 +1081,7 @@ async function doCreateMarket() {
       closeModalForce();
       toast('Market created!');
       loadState();
-    } else { toast(d.error || 'Error', 'error'); }
+    } else { toast(errMsg(d), 'error'); }
   } catch(e) { toast('Network error', 'error'); }
 }
 
@@ -1037,7 +1101,7 @@ async function doCreateBet() {
       closeModalForce();
       toast('Bet created!');
       loadState();
-    } else { toast(d.error || 'Error', 'error'); }
+    } else { toast(errMsg(d), 'error'); }
   } catch(e) { toast('Network error', 'error'); }
 }
 
@@ -1137,7 +1201,8 @@ document.addEventListener('click', (e) => {
   if (act === 'toast') { toast(el.dataset.msg); return; }
   if (act === 'pickChip') { pickChip(el, el.dataset.target, parseInt(el.dataset.val, 10)); return; }
   if (act === 'doTip') { doTip(); return; }
-  if (act === 'doWithdraw') { doWithdraw(); return; }
+  if (act === 'stageWithdraw') { stageWithdraw(); return; }
+  if (act === 'confirmWithdraw') { confirmWithdraw(el.dataset.token, el.dataset.yes === '1'); return; }
   if (act === 'doTrade') { doTrade(el.dataset.mid, parseInt(el.dataset.opt, 10)); return; }
   if (act === 'doBet') { doBet(el.dataset.betid, parseInt(el.dataset.opt, 10)); return; }
   if (act === 'addCreateOpt') { addCreateOpt(el.dataset.container); return; }

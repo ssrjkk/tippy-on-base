@@ -133,11 +133,13 @@ async def _markets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMark
     markets = await common.ledger.open_markets(8)
     if not markets:
         return (i18n.t(lang, 'market_open'), InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='mkcreate')]]))
+    market_ids = [int(m['id']) for m in markets]
+    prices_map = await common.ledger.market_prices_batch(market_ids)
     lines = [i18n.t(lang, 'market_list_header'), '']
     kb_rows = []
     for m in markets:
         mid = int(m['id'])
-        prices = await common.ledger.market_prices(mid) or []
+        prices = prices_map.get(mid) or []
         top = max(range(len(prices)), key=lambda i: prices[i]) if prices else 0
         leader = json.loads(m['options'])[top] if prices else '?'
         lines.append(f"#{mid} {common._h(m['question'])}{i18n.t(lang, 'market_fav', leader=f'{common._h(leader[:30])} {_pct(prices[top])}')}" if prices else f"#{mid} {common._h(m['question'])}")

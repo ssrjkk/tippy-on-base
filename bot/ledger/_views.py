@@ -52,13 +52,33 @@ class LedgerViewsMixin:
                 "GROUP BY bet_id, option_idx",
                 (tg_id,),
             ).fetchall()
+        if not rows:
+            return []
+        bet_ids = list({int(r["bet_id"]) for r in rows})
+        placeholders = ",".join(["%s"] * len(bet_ids))
+        with self._lock:
+            bets = self._conn.execute(
+                f"SELECT * FROM bets WHERE id IN ({placeholders})", bet_ids
+            ).fetchall()
+            totals_rows = self._conn.execute(
+                f"SELECT bet_id, option_idx, SUM(amount_micro) AS total "
+                f"FROM bet_positions WHERE bet_id IN ({placeholders}) "
+                f"GROUP BY bet_id, option_idx",
+                bet_ids,
+            ).fetchall()
+        bets_map = {int(b["id"]): b for b in bets}
+        totals_map: dict[int, dict[int, int]] = {}
+        for r in totals_rows:
+            bid = int(r["bet_id"])
+            totals_map.setdefault(bid, {})[int(r["option_idx"])] = int(r["total"])
         out = []
         for r in rows:
-            bet = self.get_bet(int(r["bet_id"]))
+            bet_id = int(r["bet_id"])
+            bet = bets_map.get(bet_id)
             if not bet or bet["status"] != "open":
                 continue
             options = json.loads(bet["options"])
-            totals = self.bet_totals(int(r["bet_id"]))
+            totals = totals_map.get(bet_id, {})
             pot = sum(totals.values())
             opt_idx = int(r["option_idx"])
             stake = int(r["amount"])
@@ -66,7 +86,7 @@ class LedgerViewsMixin:
             gross = stake * pot // win_stake if win_stake else 0
             out.append(
                 {
-                    "bet_id": int(r["bet_id"]),
+                    "bet_id": bet_id,
                     "question": bet["question"],
                     "option": options[opt_idx],
                     "option_idx": opt_idx,
@@ -171,23 +191,36 @@ class LedgerViewsMixin:
 
 
     def bulk_market_views(self, bet_ids: list[int]) -> list[dict]:
-        """Batch market_view for multiple bet IDs — fixes N+1 query pattern."""
+        """Batch market_view for multiple bet IDs — fixes N+1 query pattern.
+
+        Results come back in bet_ids order, not the database's: callers take the
+        ids from bets_by_status (ORDER BY id DESC) and /api/markets shows that
+        order, while `WHERE id IN (...)` returns rows in whatever order the
+        planner picks. And every key market_view has is reproduced — `expired`
+        especially, because app.js renders "истёк — можно вернуть деньги" from it,
+        so the list used to contradict the detail page for the same bet. The
+        creator's username comes from a join, not a per-row username_of().
+        """
         if not bet_ids:
             return []
-        placeholders = ",".join(["%s"] * len(bet_ids))
+        ids = list(dict.fromkeys(int(i) for i in bet_ids))
+        placeholders = ",".join(["%s"] * len(ids))
         with self._lock:
             bets = self._conn.execute(
-                f"SELECT * FROM bets WHERE id IN ({placeholders})", bet_ids
+                f"SELECT b.*, u.username AS creator_username FROM bets b "
+                f"LEFT JOIN users u ON u.tg_id = b.creator "
+                f"WHERE b.id IN ({placeholders})",
+                ids,
             ).fetchall()
             totals_rows = self._conn.execute(
                 f"SELECT bet_id, option_idx, SUM(amount_micro) AS total "
                 f"FROM bet_positions WHERE bet_id IN ({placeholders}) "
-                f"GROUP BY bet_id, option_idx", bet_ids
+                f"GROUP BY bet_id, option_idx", ids
             ).fetchall()
             backers_rows = self._conn.execute(
                 f"SELECT bet_id, option_idx, COUNT(DISTINCT tg_id) AS c "
                 f"FROM bet_positions WHERE bet_id IN ({placeholders}) "
-                f"GROUP BY bet_id, option_idx", bet_ids
+                f"GROUP BY bet_id, option_idx", ids
             ).fetchall()
         totals_map: dict[int, dict[int, int]] = {}
         for r in totals_rows:
@@ -197,9 +230,12 @@ class LedgerViewsMixin:
         for r in backers_rows:
             bid = int(r["bet_id"])
             backers_map.setdefault(bid, {})[int(r["option_idx"])] = int(r["c"])
+        bets_map = {int(b["id"]): b for b in bets}
         out = []
-        for bet in bets:
-            bid = int(bet["id"])
+        for bid in ids:
+            bet = bets_map.get(bid)
+            if not bet:
+                continue
             options = json.loads(bet["options"])
             totals = totals_map.get(bid, {})
             pot = sum(totals.values())
@@ -209,13 +245,14 @@ class LedgerViewsMixin:
                 pool = totals.get(i, 0)
                 prob = round(pool / pot * 100, 1) if pot else 0.0
                 items.append({"index": i, "label": opt, "pool": pool, "probability": prob, "backers": backers.get(i, 0)})
-            creator_name = self.username_of(bet["creator"])
             out.append({
                 "id": bid, "question": bet["question"], "status": bet["status"],
                 "winner": bet["winner"], "close_at": bet["close_at"],
-                "creator": {"id": bet["creator"], "username": creator_name},
+                "creator": {"id": bet["creator"], "username": bet["creator_username"]},
                 "options": items, "pot": pot,
                 "total_backers": sum(backers.values()),
+                "expired": bet["status"] == "open" and self.is_expired(bet),
+                "created_at": bet["created_at"],
             })
         return out
 
@@ -316,9 +353,10 @@ class LedgerViewsMixin:
 
     def leaderboard(self, limit: int = 10) -> list[dict]:
         rows = self.top_tippers(limit)
+        names = self.usernames_bulk([r["tg_id"] for r in rows])
         return [
             {
-                "username": self.username_of(r["tg_id"]) or f"id{r['tg_id']}",
+                "username": names[int(r["tg_id"])] or f"id{r['tg_id']}",
                 "total_micro": int(r["total"]),
             }
             for r in rows

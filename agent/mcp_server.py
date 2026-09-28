@@ -15,6 +15,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from . import config, pnl
 from .signals import sell_signal
 from .tools import create_market, get_balance, get_market, list_open_markets, place_bet
 
@@ -105,6 +106,14 @@ async def list_tools() -> list[Tool]:
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
+            name="tippy_get_pnl",
+            description=(
+                "PnL attribution report: realized/unrealized PnL, equity, "
+                "drawdown and whether the stop-loss is tripped."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
             name="tippy_sell_signal",
             description="Create a paywall post with market analysis and sell it via x402.",
             inputSchema={
@@ -149,6 +158,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "tippy_get_balance":
             bal = await get_balance()
             result = {"balance_usdc": bal}
+        elif name == "tippy_get_pnl":
+            result = await pnl.get_pnl_report(config.AGENT_TG_ID)
         elif name == "tippy_sell_signal":
             result = await sell_signal(
                 market_id=arguments["market_id"],

@@ -36,11 +36,25 @@ class LedgerPaywallMixin:
 
 
 
-    def paywall_items_list(self) -> list[dict]:
+    def paywall_items_list(self, limit: int | None = None) -> list[dict]:
+        """Posts on sale, newest first. `limit` caps the rows; None means all.
+
+        `content` is deliberately not selected: a list render never shows it, and
+        pulling it for every post on sale meant every page read the whole
+        marketplace's text (PAYWALL_MAX_CONTENT_LEN bytes each) across the one
+        serialized ledger connection. The buyer's path reads it by id through
+        paywall_item().
+        """
+        sql = (
+            "SELECT id, owner_tg, title, price_micro, created_at "
+            "FROM paywall_items ORDER BY id DESC"
+        )
+        args: tuple = ()
+        if limit is not None:
+            sql += " LIMIT %s"
+            args = (int(limit),)
         with self._lock:
-            return self._conn.execute(
-                "SELECT * FROM paywall_items ORDER BY id DESC"
-            ).fetchall()
+            return self._conn.execute(sql, args).fetchall()
 
 
 
@@ -51,6 +65,26 @@ class LedgerPaywallMixin:
                 (item_id, buyer_tg),
             ).fetchone()
             return row is not None
+
+
+
+    def paywall_purchased_bulk(self, item_ids: list[int], buyer_tg: int) -> set[int]:
+        """The subset of item_ids that buyer already owns — one query.
+
+        paywall_purchased() once per row turned /paywall list into a query per
+        post, each one waiting on the ledger lock.
+        """
+        ids = list(dict.fromkeys(int(i) for i in item_ids))
+        if not ids:
+            return set()
+        placeholders = ",".join(["%s"] * len(ids))
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT item_id FROM paywall_purchases "
+                f"WHERE buyer_tg = %s AND item_id IN ({placeholders})",
+                [buyer_tg, *ids],
+            ).fetchall()
+        return {int(r["item_id"]) for r in rows}
 
 
 
@@ -208,11 +242,20 @@ class LedgerPaywallMixin:
 
 
 
-    def paywall_channels_list(self) -> list[dict]:
+    def paywall_channels_list(self, limit: int | None = None) -> list[dict]:
+        """Channels for sale, newest first. `limit` caps the rows; None means all.
+
+        created_at only has second resolution, so channels registered together tie;
+        chat_id breaks those ties to keep a bounded page a stable prefix of the
+        unbounded one.
+        """
+        sql = "SELECT * FROM paywall_channels ORDER BY created_at DESC, chat_id DESC"
+        args: tuple = ()
+        if limit is not None:
+            sql += " LIMIT %s"
+            args = (int(limit),)
         with self._lock:
-            return self._conn.execute(
-                "SELECT * FROM paywall_channels ORDER BY created_at DESC"
-            ).fetchall()
+            return self._conn.execute(sql, args).fetchall()
 
 
 
@@ -222,6 +265,26 @@ class LedgerPaywallMixin:
                 "SELECT * FROM paywall_subscriptions WHERE chat_id = %s AND tg_id = %s",
                 (chat_id, tg_id),
             ).fetchone()
+
+
+
+    def channel_subscriptions_bulk(self, chat_ids: list[int], tg_id: int) -> dict[int, dict]:
+        """chat_id -> that user's subscription row; a channel with no row is absent.
+
+        Replaces one channel_subscription() per listed channel, which made
+        /paywall channels cost a query per channel.
+        """
+        ids = list(dict.fromkeys(int(i) for i in chat_ids))
+        if not ids:
+            return {}
+        placeholders = ",".join(["%s"] * len(ids))
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT chat_id, tg_id, expires_at, created_at FROM paywall_subscriptions "
+                f"WHERE tg_id = %s AND chat_id IN ({placeholders})",
+                [tg_id, *ids],
+            ).fetchall()
+        return {int(r["chat_id"]): dict(r) for r in rows}
 
 
 

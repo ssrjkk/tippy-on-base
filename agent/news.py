@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from . import config
 
-SEEN_FILE = os.path.join(config.STATE_DIR, ".agent_seen_news.json")
+SEEN_FILENAME = ".agent_seen_news.json"
 
 
 @dataclass
@@ -66,11 +66,11 @@ def _score_relevance(title: str, summary: str) -> float:
 
 def _load_seen() -> set:
     import json
-    from pathlib import Path
-    p = Path(SEEN_FILE)
+
+    p = config.state_file(SEEN_FILENAME)
     if p.exists():
         try:
-            return set(json.loads(p.read_text()))
+            return set(json.loads(p.read_text(encoding="utf-8")))
         except (ValueError, OSError):
             return set()
     return set()
@@ -78,13 +78,14 @@ def _load_seen() -> set:
 
 def _save_seen(seen: set) -> None:
     import json
-    from pathlib import Path
+
     # Cap the file: without pruning it grows (and is re-read) forever.
     if len(seen) > 5000:
         seen = set(sorted(seen)[-5000:])
+    p = config.state_file(SEEN_FILENAME)
     try:
-        Path(SEEN_FILE).parent.mkdir(parents=True, exist_ok=True)
-        Path(SEEN_FILE).write_text(json.dumps(sorted(seen)))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(sorted(seen)), encoding="utf-8")
     except OSError:
         pass  # read-only FS: dedupe simply does not survive restarts
 

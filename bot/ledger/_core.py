@@ -10,6 +10,15 @@ from .. import config
 from ._conn import ReconnectingConn
 from ._schema import SCHEMA_DDL
 
+# Alembic installs the names an env.py script reads (`context`, `config`, ...)
+# into process-global module dicts when an EnvironmentContext is entered and
+# deletes them on exit. Two threads calling `command.upgrade` inside one
+# process nest those installs, so the second exit raises `KeyError: 'config'`
+# for names that are already gone. _run_alembic() logs and swallows it, which
+# leaves the tracked migrations unapplied while ensure_schema() papers over it.
+# The advisory lock in env.py only serialises across processes, hence this one.
+_ALEMBIC_LOCK = threading.Lock()
+
 
 class LedgerCoreMixin:
     def __init__(self, database: str = config.DATABASE_URL) -> None:
@@ -48,6 +57,11 @@ class LedgerCoreMixin:
         (e.g. a conflicting or partially-applied migration) must not be
         silent: it is logged loudly so an operator knows the tracked schema
         (alembic/versions/*) diverged from the live DDL before money flows.
+
+        `database` travels in Config.attributes rather than sqlalchemy.url
+        because env.py rewrites sqlalchemy.url from $DATABASE_URL; without the
+        marker every programmatic caller migrated the environment's database,
+        which made the test suite ALTER the developer's live ledger.
         """
         try:
             import pathlib
@@ -58,9 +72,9 @@ class LedgerCoreMixin:
             ini = pathlib.Path(__file__).resolve().parent.parent.parent / "alembic.ini"
             if not ini.exists():
                 return
-            cfg = Config(str(ini))
-            cfg.set_main_option("sqlalchemy.url", database)
-            command.upgrade(cfg, "head")
+            cfg = Config(str(ini), attributes={"tippy.database_url": database})
+            with _ALEMBIC_LOCK:
+                command.upgrade(cfg, "head")
         except Exception as e:  # ensure_schema() remains the safety net
             logging.getLogger("tipbot.alembic").exception(
                 "alembic upgrade head failed: %s. ensure_schema() will apply the "

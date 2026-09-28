@@ -288,16 +288,21 @@ async def _sell_core(tg_id: int, mid: int, outcome: int, pct: int, lang: str) ->
     m = await common.ledger.get_onchain_market(mid)
     if not m or outcome < 0 or outcome >= len(json.loads(m['options'])):
         return False, i18n.t(lang, 'oc_unknown')
+    if m['close_at'] and int(time.time()) > m['close_at']:
+        return False, i18n.t(lang, 'market_trade_deadline')
     wait = await common._throttle(tg_id, 'oc')
     if wait:
         return False, wait
     addr, key = await _wallet_key(tg_id)
-
-    def _held():
-        c = om._market_contract(om._w3())
-        return c.functions.balanceOf(om.Web3.to_checksum_address(addr), mid * 256 + outcome).call()
-
-    held = await asyncio.to_thread(_held)
+    try:
+        info = await om.get_market_info(mid)
+    except Exception as e:
+        return False, i18n.t(lang, 'oc_tx_failed', err=esc(str(e)[:200]))
+    if info.get('resolved') or info.get('cancelled'):
+        # The contract refuses sells on a settled pool (AlreadyResolved /
+        # AlreadyCancelled) — the gas is better spent on /oc_redeem.
+        return False, i18n.t(lang, 'market_closed')
+    held = await om.outcome_shares(mid, outcome, addr)
     if held <= 0:
         return False, i18n.t(lang, 'oc_no_shares')
     shares = held * pct // 100
@@ -312,6 +317,12 @@ async def _sell_core(tg_id: int, mid: int, outcome: int, pct: int, lang: str) ->
         tx_hash = await om.sell(mid, outcome, shares, min_proceeds, key)
     except Exception as e:
         return False, i18n.t(lang, 'oc_tx_failed', err=esc(str(e)[:200]))
+    try:
+        # Negative row: the registry nets to what the wallet still holds, so
+        # winner DMs never chase a trader who already exited.
+        await common.ledger.record_onchain_trade(mid, tg_id, outcome, -shares, tx_hash)
+    except Exception as e:
+        log.warning('onchain sell log failed for #%s: %s', mid, e)
     return True, i18n.t(lang, 'oc_sold', label=esc(options[outcome]), shares=common._fmt(shares), value=common._fmt(value), url=_tx_link(tx_hash))
 
 
@@ -364,12 +375,17 @@ async def cmd_oc_sell(message: types.Message) -> None:
 
 @common.router.message(Command('oc_redeem'))
 async def cmd_oc_redeem(message: types.Message) -> None:
-    """/oc_redeem <id> — pull resolution winnings from the contract."""
+    """/oc_redeem [id] — pull settled money out of the contract: winnings from
+    resolved markets, pro-rata refunds from cancelled ones. Without an id it
+    sweeps every position the caller can currently cash out."""
     lang = await common.user_lang(message.from_user.id)
     if not common.config.OUTCOME_MARKET_ADDRESS:
         await message.answer(i18n.t(lang, 'oc_disabled'))
         return
     parts = message.text.strip().split()
+    if len(parts) == 1:
+        await _settle_all(message, lang)
+        return
     if len(parts) != 2 or not common.BET_ID_RE.match(parts[1]):
         await message.answer(i18n.t(lang, 'oc_format_redeem'))
         return
@@ -382,13 +398,102 @@ async def cmd_oc_redeem(message: types.Message) -> None:
         await message.answer(wait)
         return
     addr, key = await _wallet_key(message.from_user.id)
+    try:
+        info = await om.get_market_info(mid)
+    except Exception as e:
+        await message.answer(i18n.t(lang, 'oc_tx_failed', err=esc(str(e)[:200])))
+        return
+    cancelled = bool(info.get('cancelled'))
+    if not cancelled and not info.get('resolved'):
+        # A live market has nothing to pull; without this pre-check redeem()
+        # reverts with a raw smart-contract error string.
+        await message.answer(i18n.t(lang, 'oc_redeem_not_ready', id=mid))
+        return
+    n = len(json.loads((await common.ledger.get_onchain_market(mid))['options']))
+    held = await (om.holder_shares(mid, n, addr) if cancelled
+                  else om.outcome_shares(mid, int(info['winning_outcome']), addr))
+    if held <= 0:
+        await message.answer(i18n.t(lang, 'oc_no_shares'))
+        return
     status = await message.answer(i18n.t(lang, 'oc_pending'))
     try:
-        payout = await om.redeem(mid, key)
+        payout = await (om.claim_cancelled(mid, key) if cancelled
+                        else om.redeem(mid, key))
     except Exception as e:
         await status.edit_text(i18n.t(lang, 'oc_tx_failed', err=esc(str(e)[:200])))
         return
-    await status.edit_text(i18n.t(lang, 'oc_redeemed', amount=common._fmt(payout), addr=addr))
+    await status.edit_text(i18n.t(
+        lang, 'oc_refunded' if cancelled else 'oc_redeemed',
+        amount=common._fmt(payout), addr=addr))
+
+
+_SETTLE_CHUNK = 5
+
+
+async def _settle_targets(tg_id: int, addr: str, limit: int = 20) -> tuple[list[int], list[int]]:
+    """(redeemable, refundable) market ids for one wallet.
+
+    Only positions the contract would actually pay are listed: redeemMany and
+    claimCancelledMany revert on the FIRST empty/undeductable id, so one stale
+    entry must not cost the whole batch.
+    """
+    redeem_ids: list[int] = []
+    claim_ids: list[int] = []
+    for m in await common.ledger.list_onchain_markets(limit):
+        mid = int(m['id'])
+        n = len(json.loads(m['options']))
+        try:
+            info = await om.get_market_info(mid)
+            if info.get('cancelled'):
+                if await om.holder_shares(mid, n, addr) <= 0:
+                    continue
+                rate, reserved = await om.cancel_claim_state(mid)
+                if rate and reserved:
+                    claim_ids.append(mid)
+            elif info.get('resolved'):
+                winner = int(info['winning_outcome'])
+                if await om.outcome_shares(mid, winner, addr) > 0:
+                    redeem_ids.append(mid)
+        except Exception as e:
+            log.warning('settle scan skipped #%s: %s', mid, e)
+    return redeem_ids, claim_ids
+
+
+async def _settle_all(message: types.Message, lang: str) -> None:
+    """Bulk settlement: winnings via redeemMany, refunds via claimCancelledMany."""
+    wait = await common._throttle(message.from_user.id, 'oc')
+    if wait:
+        await message.answer(wait)
+        return
+    status = await message.answer(i18n.t(lang, 'oc_settle_scanning'))
+    addr, key = await _wallet_key(message.from_user.id)
+    try:
+        redeem_ids, claim_ids = await _settle_targets(message.from_user.id, addr)
+    except Exception as e:
+        await status.edit_text(i18n.t(lang, 'oc_tx_failed', err=esc(str(e)[:200])))
+        return
+    if not redeem_ids and not claim_ids:
+        await status.edit_text(i18n.t(lang, 'oc_settle_empty'))
+        return
+    total = 0
+    lines: list[str] = []
+    batches = (
+        (redeem_ids, om.redeem_many, i18n.t(lang, 'oc_settle_winnings')),
+        (claim_ids, om.claim_cancelled_many, i18n.t(lang, 'oc_settle_refunds')),
+    )
+    for ids, send, label in batches:
+        for i in range(0, len(ids), _SETTLE_CHUNK):
+            chunk = ids[i:i + _SETTLE_CHUNK]
+            try:
+                got = await send(chunk, key)
+            except Exception as e:
+                lines.append(f"❌ {label} #{', #'.join(str(x) for x in chunk)}: {esc(str(e)[:120])}")
+                continue
+            total += got
+            lines.append(f"✅ {label} ×{len(chunk)}: {common._fmt(got)} USDC")
+    await status.edit_text(i18n.t(
+        lang, 'oc_settle_result', amount=common._fmt(total), addr=addr,
+        lines='\n'.join(lines) if lines else '—'))
 
 
 @common.router.message(Command('oc_pos'))
@@ -447,7 +552,8 @@ async def _do_resolve(mid: int, winner_idx: int, lang: str, bot=None) -> tuple[b
         await common.ledger.set_onchain_resolved(mid, int(info["winning_outcome"]))
         return False, i18n.t(lang, "oc_resolve_state", state="resolved")
     if info["cancelled"]:
-        await common.ledger.mark_onchain_cancelled(mid)
+        if await common.ledger.mark_onchain_cancelled(mid):
+            await _notify_holders(mid, bot)
         return False, i18n.t(lang, "oc_resolve_state", state="cancelled")
     # Mirror the off-chain rule (ledger.resolve_market): if the creator still
     # holds the outcome they are about to declare, refuse to sign — declaring
@@ -491,6 +597,26 @@ async def _notify_winners(mid: int, winner_idx: int, bot=None) -> None:
                 pass  # recipient blocked the bot — never block the resolve path
     except Exception as e:
         log.warning('winner notify failed for #%s: %s', mid, e)
+
+
+async def _notify_holders(mid: int, bot=None) -> None:
+    """DM every net holder that a cancelled market is now refundable.
+
+    The watcher cancels abandoned markets in the background, so without this
+    the pull-side refund exists but nobody knows to call it.
+    """
+    if bot is None:
+        return
+    try:
+        for r in await common.ledger.onchain_holders(mid):
+            try:
+                wl = await common.user_lang(int(r["tg_id"]))
+                await bot.send_message(int(r["tg_id"]), i18n.t(
+                    wl, 'oc_cancelled_dm', id=mid, shares=common._fmt(int(r["shares"]))))
+            except Exception:
+                pass  # recipient blocked the bot
+    except Exception as e:
+        log.warning('cancel notify failed for #%s: %s', mid, e)
 
 
 @common.router.message(Command('oc_resolve'))
@@ -589,15 +715,20 @@ async def onchain_watcher(bot) -> None:
                     log.warning('onchain overdue state read failed for #%s: %s', m['id'], e)
                     continue
                 if info['resolved']:
-                    await common.ledger.set_onchain_resolved(int(m['id']), int(info['winning_outcome']))
+                    if await common.ledger.set_onchain_resolved(int(m['id']), int(info['winning_outcome'])):
+                        await _notify_winners(
+                            int(m['id']), int(info['winning_outcome']), bot)
                     continue
                 if info['cancelled']:
-                    await common.ledger.mark_onchain_cancelled(int(m['id']))
+                    if await common.ledger.mark_onchain_cancelled(int(m['id'])):
+                        await _notify_holders(int(m['id']), bot)
                     continue
                 try:
                     await om.cancel_expired(int(m['id']), common.config.HOT_WALLET_KEY)
-                    await common.ledger.mark_onchain_cancelled(int(m['id']))
+                    cancelled_now = await common.ledger.mark_onchain_cancelled(int(m['id']))
                     log.info('onchain market #%s auto-cancelled after expiry', m['id'])
+                    if cancelled_now:
+                        await _notify_holders(int(m['id']), bot)
                 except Exception as e:
                     log.warning('onchain auto-cancel failed for #%s: %s', m['id'], e)
         except Exception as e:
@@ -656,8 +787,6 @@ async def cb_oc_buy_do(cb: types.CallbackQuery) -> None:
     if spend <= 0 or spend > common._to_micro(common.config.MARKET_MAX_TRADE_USDC):
         await cb.answer(i18n.t(lang, 'market_trade_max', n=f'{common.config.MARKET_MAX_TRADE_USDC:.0f}'), show_alert=True)
         return
-    # Feedback lands in the MESSAGE, not a second cb.answer: Telegram
-    # ignores answer() after the first one, so errors would be invisible.
     await cb.answer()
     try:
         await cb.message.edit_text(i18n.t(lang, 'oc_pending'))
@@ -665,7 +794,20 @@ async def cb_oc_buy_do(cb: types.CallbackQuery) -> None:
         pass
     ok, text = await _buy_core(cb.from_user.id, mid, outcome, spend, lang)
     try:
-        await cb.message.edit_text(('✅ ' if ok else '') + text)
+        if ok:
+            m = await common.ledger.get_onchain_market(mid)
+            if m:
+                options = json.loads(m['options'])
+                prices = await _prices(mid, len(options))
+                kb = await _trade_keyboard(mid, options, cb.from_user.id)
+                await cb.message.edit_text(
+                    ('✅ ' + text + '\n\n' + _card(m, prices, lang)),
+                    reply_markup=kb,
+                )
+            else:
+                await cb.message.edit_text('✅ ' + text)
+        else:
+            await cb.message.edit_text(text)
     except Exception:
         pass
 
@@ -719,6 +861,19 @@ async def cb_oc_sell_do(cb: types.CallbackQuery) -> None:
         pass
     ok, text = await _sell_core(cb.from_user.id, mid, outcome, pct, lang)
     try:
-        await cb.message.edit_text(('✅ ' if ok else '') + text)
+        if ok:
+            m = await common.ledger.get_onchain_market(mid)
+            if m:
+                options = json.loads(m['options'])
+                prices = await _prices(mid, len(options))
+                kb = await _trade_keyboard(mid, options, cb.from_user.id)
+                await cb.message.edit_text(
+                    ('✅ ' + text + '\n\n' + _card(m, prices, lang)),
+                    reply_markup=kb,
+                )
+            else:
+                await cb.message.edit_text('✅ ' + text)
+        else:
+            await cb.message.edit_text(text)
     except Exception:
         pass

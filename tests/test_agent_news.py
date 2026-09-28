@@ -31,7 +31,9 @@ RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 @pytest.fixture(autouse=True)
 def _isolated_state(monkeypatch, tmp_path):
-    monkeypatch.setattr(agent_news, "SEEN_FILE", str(tmp_path / ".agent_seen_news.json"))
+    """Point the whole agent state dir at tmp: news resolves its seen-file path
+    through agent.config.state_file() on every call, so nothing touches the repo."""
+    monkeypatch.setattr(agent_news.config, "STATE_DIR", str(tmp_path))
 
 
 def _feed(monkeypatch, feeds):

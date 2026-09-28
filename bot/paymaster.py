@@ -4,8 +4,8 @@ New users get FREE_TRANSACTIONS_COUNT gasless transactions.
 Uses Base Paymaster API for ERC-4337 UserOperations.
 """
 
+import asyncio
 import os
-import time
 from dataclasses import dataclass
 
 import httpx
@@ -31,22 +31,22 @@ class PaymasterState:
         return self.remaining > 0
 
 
-_states: dict[str, PaymasterState] = {}
-
-
 def get_state(user_address: str) -> PaymasterState:
-    """Get or create paymaster state for user."""
+    """Get paymaster state for user from persisted store."""
+    from bot import ledger as ledger_mod
     addr = user_address.lower()
-    if addr not in _states:
-        _states[addr] = PaymasterState(user_address=addr)
-    return _states[addr]
+    row = ledger_mod.ledger.paymaster_get_usage(addr)
+    return PaymasterState(
+        user_address=addr,
+        used_count=row["used_count"],
+        last_used=float(row["last_used"]),
+    )
 
 
-def increment_usage(user_address: str) -> None:
-    """Record gasless transaction usage."""
-    state = get_state(user_address)
-    state.used_count += 1
-    state.last_used = time.time()
+def increment_usage(user_address: str) -> int:
+    """Record gasless transaction usage. Returns new total."""
+    from bot import ledger as ledger_mod
+    return ledger_mod.ledger.paymaster_increment(user_address)
 
 
 async def sponsor_user_operation(
@@ -58,7 +58,7 @@ async def sponsor_user_operation(
 
     Returns paymasterData if user is eligible, None otherwise.
     """
-    state = get_state(user_address)
+    state = await asyncio.to_thread(get_state, user_address)
     if not state.eligible:
         return None
 
@@ -98,7 +98,7 @@ async def sponsor_user_operation(
 
 async def check_eligibility(user_address: str) -> dict:
     """Check if user is eligible for gasless transactions."""
-    state = get_state(user_address)
+    state = await asyncio.to_thread(get_state, user_address)
     return {
         "eligible": state.eligible,
         "remaining": state.remaining,

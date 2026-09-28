@@ -48,8 +48,12 @@ async def cmd_rain(message: types.Message) -> None:
         await message.answer(text)
         return
     names = []
-    for tid in chosen[:8]:
-        uname = await common.ledger.username_of(tid) or f'id{tid}'
+    # One read for the whole line-up: username_of() per recipient put up to eight
+    # queries behind the ledger lock on a single /rain.
+    shown = chosen[:8]
+    display = await common.ledger.usernames_bulk(shown)
+    for tid in shown:
+        uname = display.get(tid) or f'id{tid}'
         names.append(f'@{common._h(uname)}')
     tail = i18n.t(lang, 'rain_and_more', n=len(chosen) - 8) if len(chosen) > 8 else ''
     names_str = ', '.join(names)

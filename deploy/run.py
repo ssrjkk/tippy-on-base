@@ -19,7 +19,9 @@ import logging
 import os
 import signal
 import sys
+from collections.abc import Callable, Coroutine
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -73,25 +75,40 @@ async def _start_web_server(stop: asyncio.Event | None = None) -> None:
     await uvi.serve()
 
 
-# The bot-side watchers, keyed by name. Each factory is called as
-# factory(bot, ledger) and returns the watcher coroutine. Kept module-level
-# so a regression test can assert this set stays in sync with bot.main
-# (the x402_sweep watcher previously existed only in main.py and silently
-# never ran in combined mode).
-WATCHERS = (
-    ("deposit", lambda bot, ledger: _deposit_watcher(bot, ledger)),
-    ("withdraw", lambda bot, ledger: _withdraw_watcher()),
-    ("batch_withdraw", lambda bot, ledger: _batch_withdraw_watcher()),
-    ("market", lambda bot, ledger: _market_watcher(bot, ledger)),
-    ("channel", lambda bot, ledger: _channel_watcher(bot)),
-    ("create2_sweep", lambda bot, ledger: _create2_sweep_watcher()),
-    ("x402_sweep", lambda bot, ledger: _x402_sweep_watcher()),
-    ("housekeeping", lambda bot, ledger: _housekeeping_watcher(ledger)),
-    ("solvency", lambda bot, ledger: _solvency_watcher(bot)),
-    ("onchain", lambda bot, ledger: _onchain_watcher(bot)),
-    ("x402_reconcile", lambda bot, ledger: _x402_reconcile_watcher()),
-    ("notification_outbox", lambda bot, ledger: _notification_outbox_worker(bot, ledger)),
-)
+# The bot-side watchers come from bot.main.WATCHER_TASKS — see _watcher_tasks().
+
+
+def _watcher_tasks() -> tuple[tuple[str, Callable[[], Coroutine[Any, Any, None]]], ...]:
+    """The watcher set to run, taken straight from bot.main.
+
+    This runner used to carry its own copy of every watcher body, and the copy
+    drifted: deposit/market notifications bypassed the notification outbox (no
+    retry when Telegram is busy) and read a user's settings twice per deposit,
+    the deposit poll lost main.py's escalating backoff, and
+    recurring_payment_executor — added to main.py later — never ran here at all,
+    so subscriptions silently never paid out in the combined (Docker) entrypoint.
+    Importing main.py's Bot too is not incidental: that is where the
+    TELEGRAM_API_PROXY session is built (bot/telegram_transport.py), and a
+    second Bot() constructed here meant the documented proxy option was ignored
+    and every Telegram call went direct.
+
+    Imported lazily so `--web-only` does not construct it.
+    """
+    from bot import main as bot_main
+
+    return bot_main.WATCHER_TASKS
+
+
+def _spawn_watchers(stop: asyncio.Event | None = None) -> list[asyncio.Task]:
+    """Start every bot.main watcher with the death-→-shutdown callback.
+
+    The wiring lives in bot.main.spawn_watchers: both entrypoints share one
+    implementation, so neither can quietly drop the callback the way this
+    runner's forked watcher bodies used to.
+    """
+    from bot import main as bot_main
+
+    return bot_main.spawn_watchers(_watcher_tasks(), stop)
 
 
 def _agent_enabled() -> bool:
@@ -121,29 +138,6 @@ async def _agent_watcher(bot, ledger, stop: asyncio.Event | None = None) -> None
     await run_loop(stop)
 
 
-def _watcher_done(name: str, task: asyncio.Task, stop: asyncio.Event | None) -> None:
-    """Done-callback: surface a silent watcher death and request shutdown.
-
-    A cancelled task is the normal shutdown path (not an error). A task that
-    finished with an exception outside its own try/except, or returned early,
-    means a background loop stopped running — log it loudly and set the stop
-    event so the supervisor/health-check can restart the process instead of
-    the system limping on with a dead money-path.
-    """
-    if task.cancelled():
-        return
-    exc = task.exception()
-    if exc is None:
-        log.warning("watcher '%s' returned unexpectedly — stopping process", name)
-    else:
-        log.error(
-            "watcher '%s' died unexpectedly (exception=%r) — stopping process",
-            name, exc,
-        )
-    if stop is not None and not stop.is_set():
-        stop.set()
-
-
 async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
     """Start aiogram polling + watchers.
 
@@ -152,43 +146,37 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
     unexpectedly) is logged instead of being invisible, and cancels the whole
     process via the stop event so the supervisor/health check can restart it.
     """
-    from aiogram import Bot, Dispatcher
-    from aiogram.client.default import DefaultBotProperties
-    from aiogram.enums import ParseMode
+    from aiogram import Dispatcher
     from aiogram.exceptions import TelegramNetworkError
 
+    from bot import main as bot_main
     from bot.handlers import router
     from bot.ledger import async_ledger as ledger
 
-    tg_bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    # main.py's Bot instance rather than a new one: it carries the
+    # TELEGRAM_API_PROXY / pinned-IP session, and the handlers, web hooks and
+    # watchers all reach Telegram through that same object.
+    tg_bot = bot_main.bot
     dp = Dispatcher()
     dp.include_router(router)
 
     try:
         from bot.handlers import AI_BOT_COMMAND
-        from bot.main import BOT_COMMANDS
         # Single source of truth for the command menu: bot.main.BOT_COMMANDS.
-        await tg_bot.set_my_commands([AI_BOT_COMMAND, *BOT_COMMANDS])
+        await tg_bot.set_my_commands([AI_BOT_COMMAND, *bot_main.BOT_COMMANDS])
     except Exception as e:
         log.warning("set_my_commands failed: %s", e)
 
-    tasks: list[asyncio.Task] = []
-    for name, factory in WATCHERS:
-        task = asyncio.create_task(factory(tg_bot, ledger))
-        task.add_done_callback(
-            lambda task=task, name=name: _watcher_done(name, task, stop)
-        )
-        tasks.append(task)
+    tasks: list[asyncio.Task] = _spawn_watchers(stop)
 
     # Autonomous agent — optional, gated on AGENT_TG_ID > 0 + valid caps.
-    # Not part of WATCHERS (that set must mirror bot.main exactly); its task
-    # gets the same done-callback so a silent agent death stops the process.
+    # Not part of bot.main.WATCHER_TASKS (the agent runs nowhere else); it goes
+    # through the same spawn helper, so a silent agent death stops the process
+    # exactly like a dead watcher does.
     if _agent_enabled():
-        agent_task = asyncio.create_task(_agent_watcher(tg_bot, ledger, stop))
-        agent_task.add_done_callback(
-            lambda task=agent_task: _watcher_done("agent", task, stop)
+        tasks += bot_main.spawn_watchers(
+            [("agent", lambda: _agent_watcher(tg_bot, ledger, stop))], stop
         )
-        tasks.append(agent_task)
 
     log.info("bot polling starting")
     try:
@@ -196,15 +184,21 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
             waiter = asyncio.create_task(stop.wait())
             try:
                 while not stop.is_set():
-                    poll = asyncio.create_task(dp.start_polling(tg_bot, skip_updates=True))
+                    # handle_signals=False: aiogram would replace the SIGTERM/SIGINT
+                    # handlers _run_combined registered, so the stop event — the one
+                    # thing that also shuts the web server down — never got set.
+                    poll = asyncio.create_task(
+                        dp.start_polling(tg_bot, skip_updates=True, handle_signals=False)
+                    )
                     try:
                         done, _ = await asyncio.wait([poll, waiter], return_when=asyncio.FIRST_COMPLETED)
                         if poll in done:
                             exc = poll.exception()
                             if exc is not None:
                                 if isinstance(exc, TelegramNetworkError):
-                                    log.warning("telegram unreachable, retrying in 15s: %s", exc)
-                                    await asyncio.sleep(15)
+                                    log.warning("telegram unreachable, retrying in %ds: %s",
+                                                bot_main.RETRY_SECONDS, exc)
+                                    await asyncio.sleep(bot_main.RETRY_SECONDS)
                                     continue
                                 raise exc
                             # Polling ended normally (e.g. stop set elsewhere).
@@ -218,11 +212,12 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
         else:
             while True:
                 try:
-                    await dp.start_polling(tg_bot, skip_updates=True)
+                    await dp.start_polling(tg_bot, skip_updates=True, handle_signals=False)
                     break
                 except TelegramNetworkError as e:
-                    log.warning("telegram unreachable, retrying in 15s: %s", e)
-                    await asyncio.sleep(15)
+                    log.warning("telegram unreachable, retrying in %ds: %s",
+                                bot_main.RETRY_SECONDS, e)
+                    await asyncio.sleep(bot_main.RETRY_SECONDS)
     finally:
         for t in tasks:
             t.cancel()
@@ -231,209 +226,6 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
             await ledger.close()
         except Exception:
             log.warning("ledger close failed", exc_info=True)
-
-
-async def _deposit_watcher(bot, ledger):
-    from bot import base, i18n
-    while True:
-        try:
-            credited = await base.poll_deposits()
-        except Exception as e:
-            log.warning("deposit poll failed: %s", e)
-            await asyncio.sleep(config.POLL_SECONDS)
-            continue
-        for d in credited:
-            try:
-                if not (await ledger.get_settings(int(d['tg_id'])))['notify_deposits']:
-                    continue
-                await bot.send_message(d['tg_id'], i18n.t(
-                    i18n.norm((await ledger.get_settings(int(d['tg_id']))).get('lang')),
-                    'deposit_notified',
-                    amount=f"{d['amount_micro'] / 10 ** config.USDC_DECIMALS:g}",
-                    tx_url=f"{config.BASESCAN_URL}/tx/{d['tx_hash']}",
-                    tx=d['tx_hash'][:18],
-                ))
-            except Exception as e:
-                log.warning("deposit notify failed for %s: %s", d['tg_id'], e)
-        await asyncio.sleep(config.POLL_SECONDS)
-
-
-async def _withdraw_watcher():
-    from bot import base
-    while True:
-        try:
-            await base.check_pending_withdraws()
-        except Exception as e:
-            log.warning("withdraw check failed: %s", e)
-        await asyncio.sleep(config.POLL_SECONDS)
-
-
-async def _batch_withdraw_watcher():
-    from bot import base
-    while True:
-        try:
-            await base.flush_withdraw_batch()
-        except Exception as e:
-            log.warning("batch withdraw flush failed: %s", e)
-        await asyncio.sleep(config.WITHDRAW_BATCH_FLUSH_SECONDS)
-
-
-async def _create2_sweep_watcher():
-    """Move USDC from per-user CREATE2 proxies to the hot wallet.
-
-    The proxy only holds funds; until ``forward()`` runs, the deposit scanner
-    (which watches the hot wallet) never sees them. Idle when CREATE2 is
-    disabled or no proxy holds USDC.
-    """
-    from bot import config, create2
-    while True:
-        try:
-            if create2.is_create2_enabled():
-                swept = await create2.sweep_all_proxies()
-                if swept:
-                    log.info("create2 sweep: forwarded for %s", swept)
-        except Exception as e:
-            log.warning("create2 sweep failed: %s", e)
-        await asyncio.sleep(config.POLL_SECONDS)
-
-
-async def _housekeeping_watcher(ledger):
-    """Daily DB housekeeping: prune the reaction-tip message index and the
-    x402/pending side-tables so the DB stays bounded in active groups
-    (balances live in `users`, so no money-critical data is touched — paid
-    x402 txs are kept for a full year as the anti-replay guard)."""
-    from bot import config
-    while True:
-        try:
-            removed = await ledger.prune_message_index(config.MESSAGE_INDEX_RETENTION_SECONDS)
-            if removed:
-                log.info("pruned %s stale message-index rows", removed)
-            counts = await ledger.prune_housekeeping(
-                getattr(config, "X402_RETENTION_SECONDS", 90 * 86400),
-                getattr(config, "X402_PAYMENT_RETENTION_SECONDS", 365 * 86400),
-            )
-            if any(counts.values()):
-                log.info("pruned x402/pending rows: %s", counts)
-        except Exception as e:
-            log.warning("housekeeping failed: %s", e)
-        await asyncio.sleep(getattr(config, "HOUSEKEEPING_INTERVAL_SECONDS", 86400))
-
-
-async def _x402_sweep_watcher():
-    """Consolidate USDC from per-invoice pay addresses to the x402 receive pool.
-
-    Mirrors bot.main.x402_sweep_watcher: each x402 invoice derives a unique
-    EOA that holds USDC after payment; this moves those funds to the shared
-    X402_RECEIVE_ADDRESS so reconciliation sees them. Idle when x402 is
-    disabled or no invoice address holds USDC.
-    """
-    from bot import config
-    from bot.x402_sweep import sweep_all_invoices
-    while True:
-        try:
-            if config.X402_ENABLED and config.X402_RECEIVE_ADDRESS:
-                swept = await sweep_all_invoices()
-                if swept:
-                    log.info("x402 sweep: consolidated %d invoice(s)", swept)
-        except Exception as e:
-            log.warning("x402 sweep failed: %s", e)
-        await asyncio.sleep(config.POLL_SECONDS)
-
-
-async def _x402_reconcile_watcher():
-    from bot import config
-    from web.x402 import reconcile_stale_x402
-    while True:
-        try:
-            n = await reconcile_stale_x402()
-            if n:
-                log.warning("x402 reconcile finalized %d stale payment(s)", n)
-        except Exception as e:
-            log.warning("x402 reconcile failed: %s", e)
-        await asyncio.sleep(config.POLL_SECONDS * 8)
-
-
-async def _notification_outbox_worker(bot, ledger):
-    while True:
-        try:
-            items = await ledger.dequeue_notifications()
-            for n in items:
-                try:
-                    await bot.send_message(n["chat_id"], n["text"])
-                    await ledger.ack_notification(n["id"])
-                except Exception:
-                    await ledger.retry_notification(n["id"], 30)
-        except Exception as e:
-            log.warning("notification outbox worker failed: %s", e)
-        await asyncio.sleep(5)
-
-
-async def _solvency_watcher(bot):
-    """P0 solvency/vault monitor: alert if liabilities exceed on-chain USDC."""
-    from bot.solvency import solvency_watcher
-
-    await solvency_watcher(bot)
-
-
-async def _onchain_watcher(bot):
-    """DM creators of closed on-chain markets; auto-cancel overdue ones."""
-    from bot.handlers.onchain import onchain_watcher
-
-    await onchain_watcher(bot)
-
-
-async def _market_watcher(bot, ledger):
-    """Once per cycle: remind creators to resolve markets whose deadline passed
-    (both parimutuel bets and LMSR AMM markets), plus a second, final nudge
-    shortly before the grace period ends (after that anyone can refund)."""
-    import time as _time
-
-    from bot import config, i18n
-    while True:
-        try:
-            for bet in await ledger.open_bets_past_deadline():
-                await ledger.mark_deadline_notified(int(bet['id']))
-                try:
-                    creator_lang = i18n.norm((await ledger.get_settings(bet['creator'])).get('lang'))
-                    await bot.send_message(bet['creator'], i18n.t(creator_lang, 'deadline_notify', id=bet['id'], question=bet['question']))
-                except Exception as e:
-                    log.warning("deadline notify failed for #%s: %s", bet['id'], e)
-            for bet in await ledger.bets_need_grace_warning(config.GRACE_WARN_BEFORE_HOURS * 3600):
-                hours_left = max(1, round((bet['close_at'] + config.MARKET_GRACE_HOURS * 3600 - _time.time()) / 3600))
-                await ledger.mark_grace_warned(int(bet['id']))
-                try:
-                    creator_lang = i18n.norm((await ledger.get_settings(bet['creator'])).get('lang'))
-                    await bot.send_message(bet['creator'], i18n.t(creator_lang, 'grace_warn', id=bet['id'], question=bet['question'], hours=hours_left))
-                except Exception as e:
-                    log.warning("grace warn failed for #%s: %s", bet['id'], e)
-            for m in await ledger.open_markets_past_deadline():
-                await ledger.mark_market_deadline_notified(int(m['id']))
-                try:
-                    creator_lang = i18n.norm((await ledger.get_settings(m['creator'])).get('lang'))
-                    await bot.send_message(m['creator'], i18n.t(creator_lang, 'deadline_notify', id=m['id'], question=m['question']))
-                except Exception as e:
-                    log.warning("market deadline notify failed for #%s: %s", m['id'], e)
-            for m in await ledger.markets_need_grace_warning(config.GRACE_WARN_BEFORE_HOURS * 3600):
-                hours_left = max(1, round((m['close_at'] + config.MARKET_GRACE_HOURS * 3600 - _time.time()) / 3600))
-                await ledger.mark_market_grace_warned(int(m['id']))
-                try:
-                    creator_lang = i18n.norm((await ledger.get_settings(m['creator'])).get('lang'))
-                    await bot.send_message(m['creator'], i18n.t(creator_lang, 'grace_warn', id=m['id'], question=m['question'], hours=hours_left))
-                except Exception as e:
-                    log.warning("market grace warn failed for #%s: %s", m['id'], e)
-        except Exception as e:
-            log.warning("market deadline check failed: %s", e)
-        await asyncio.sleep(config.POLL_SECONDS * 4)
-
-
-async def _channel_watcher(bot):
-    from bot import base
-    while True:
-        try:
-            await base.kick_expired_channel_subscriptions(bot)
-        except Exception as e:
-            log.warning("channel kick check failed: %s", e)
-        await asyncio.sleep(config.POLL_SECONDS * 4)
 
 
 async def _run_combined() -> None:

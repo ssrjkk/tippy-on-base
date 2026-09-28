@@ -1,20 +1,23 @@
 """Agent tools — direct function calls into Tippy's internal ledger.
 
 These wrap ledger.* methods for the agent loop. Each tool:
-  1. Reserves budget + rate slot (caps.check_action — atomic reserve)
-  2. Calls ledger
-  3. Returns the reservation on failure (caps.release_action) or logs error
+  1. Refuses if the PnL stop-loss is tripped (pnl.check_action_with_drawdown)
+  2. Reserves budget + rate slot (caps.check_action — atomic reserve)
+  3. Calls ledger
+  4. Returns the reservation on failure (caps.release_action) or logs error
 
 Security:
   - Agent CANNOT resolve its own markets (oracle protection)
   - Agent CANNOT bet more than 10% of pool on own markets (sybil cap)
   - All amounts enforced against caps before execution
+  - Spending halts entirely while the drawdown stop-loss is latched
 
 For the demo, the agent uses ledger directly (same-process). Production
 would call the HTTP API with an agent-specific auth token.
 """
 
 import json
+import logging
 import os
 import tempfile
 import time
@@ -23,9 +26,15 @@ from pathlib import Path
 
 from bot.ledger import async_ledger as ledger
 
-from . import caps, config
+from . import caps, config, pnl
 
-_MARKETS_FILE = Path(config.STATE_DIR) / ".agent_markets.json"
+log = logging.getLogger(__name__)
+
+_MARKETS_FILE = ".agent_markets.json"
+
+
+def _markets_file() -> Path:
+    return config.state_file(_MARKETS_FILE)
 
 
 def _usdc_to_micro(usdc: float) -> int:
@@ -44,20 +53,25 @@ _AGENT_MARKET_PCT_CAP = 0.10  # max 10% of pool on own markets
 
 def _load_markets() -> None:
     try:
-        data = json.loads(_MARKETS_FILE.read_text())
+        data = json.loads(_markets_file().read_text())
         _agent_markets.update(int(x) for x in data)
-    except (FileNotFoundError, json.JSONDecodeError, TypeError):
+    except (OSError, ValueError, TypeError):
         pass
 
 
 def _save_markets() -> None:
+    path = _markets_file()
     tmp = None
     try:
-        fd, tmp = tempfile.mkstemp(dir=str(_MARKETS_FILE.parent), suffix=".tmp")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
         with os.fdopen(fd, "w") as f:
             json.dump(sorted(_agent_markets), f)
-        os.replace(tmp, _MARKETS_FILE)
-    except OSError:
+        os.replace(tmp, path)
+    except OSError as e:
+        # An empty list after a restart is what lets the agent resolve its own
+        # markets, so a failed persist has to be audible, not swallowed.
+        log.warning("Failed to persist agent markets to %s: %s", path, e)
         if tmp:
             try:
                 os.unlink(tmp)
@@ -80,7 +94,7 @@ async def create_market(
     """
     if subsidy_usdc <= 0:
         return {"error": f"subsidy must be positive (got {subsidy_usdc})"}
-    err = caps.check_action(subsidy_usdc)
+    err = await pnl.check_action_with_drawdown(config.AGENT_TG_ID, subsidy_usdc)
     if err:
         return {"error": err}
 
@@ -125,7 +139,7 @@ async def place_bet(
     if market_id in _agent_markets:
         return {"error": "Oracle protection: agent cannot bet on its own markets"}
 
-    err = caps.check_action(amount_usdc)
+    err = await pnl.check_action_with_drawdown(config.AGENT_TG_ID, amount_usdc)
     if err:
         return {"error": err}
 
@@ -142,6 +156,7 @@ async def place_bet(
             caps.release_action(amount_usdc)
             caps.record_error()
             return {"error": f"buy_shares failed: {status}"}
+        await pnl.record_trade(market_id, outcome_idx, info["shares"], info["cost"])
         bal = float(await ledger.balance(tg_id))
         return {"status": "ok", "info": info, "new_balance_usdc": bal}
     except Exception as e:
@@ -160,8 +175,8 @@ async def resolve_market(market_id: int, winning_outcome: int) -> dict:
 
     try:
         tg_id = config.AGENT_TG_ID
-        # resolve_market(market_id, winning_idx, resolver_id) -> (ok, message)
-        ok, msg = await ledger.resolve_market(market_id, winning_outcome, tg_id)
+        # resolve_market(market_id, winning_idx, resolver_id) -> (ok, message, payouts)
+        ok, msg, _payouts = await ledger.resolve_market(market_id, winning_outcome, tg_id)
         if not ok:
             return {"error": f"resolve failed: {msg}"}
         return {"status": "ok"}

@@ -10,10 +10,9 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import time
 
-from . import caps, config
+from . import caps, config, pnl
 from .decision import decide
 from .eas import AttestationData, attest_action
 from .news import fetch_news
@@ -21,8 +20,6 @@ from .signals import sell_signal
 from .tools import create_market, get_balance, place_bet
 
 log = logging.getLogger("agent")
-
-_AUDIT_FILE = os.path.join(config.STATE_DIR, "agent_audit.jsonl")
 
 
 async def single_cycle() -> bool:
@@ -33,6 +30,12 @@ async def single_cycle() -> bool:
     status = caps.get_status()
     if status["cooldown_active"]:
         log.info("Circuit breaker active, skipping cycle")
+        return False
+
+    # 1b. Check the drawdown stop-loss before spending anything
+    halted = await pnl.check_drawdown(config.AGENT_TG_ID)
+    if halted:
+        log.warning("%s — skipping cycle", halted)
         return False
 
     # 2. Perceive — fetch news
@@ -75,6 +78,7 @@ async def single_cycle() -> bool:
     await _attest_action("create_market", market_id, 10_000_000, decision.confidence, decision.reasoning)
 
     # 6. Act — place bet
+    bet_placed = False
     if decision.bet_amount_usdc > 0:
         bet_result = await place_bet(
             market_id=market_id,
@@ -84,6 +88,7 @@ async def single_cycle() -> bool:
         if "error" in bet_result:
             log.error("ERROR placing bet: %s", bet_result["error"])
         else:
+            bet_placed = True
             log.info("Bet placed! New balance: $%.2f", bet_result.get("new_balance_usdc", 0))
             await _attest_action(
                 "place_bet",
@@ -106,7 +111,7 @@ async def single_cycle() -> bool:
         log.info("Signal creation failed: %s", signal_result["error"])
 
     # 8. Log local audit trail
-    _log_audit(market_id, decision)
+    _log_audit(market_id, decision, bet_placed)
 
     log.info("Cycle complete. Market #%s live.", market_id)
     return True
@@ -128,11 +133,15 @@ async def _attest_action(action_type: str, market_id: int, amount_micro: int, co
     tx_hash = await asyncio.to_thread(attest_action, data)
     if tx_hash:
         log.info("EAS attestation: %s", tx_hash)
-    # Local audit trail always written by eas.py
 
 
-def _log_audit(market_id: int, decision) -> None:
-    """Log full cycle to local audit trail."""
+def _log_audit(market_id: int, decision, bet_placed: bool) -> None:
+    """Log full cycle to local audit trail.
+
+    bet_placed records the outcome of the bet, not the intent: readers count
+    this file as "bets placed", and an entry for a bet the ledger rejected would
+    report money the agent never spent.
+    """
     entry = {
         "ts": time.time(),
         "market_id": market_id,
@@ -140,12 +149,14 @@ def _log_audit(market_id: int, decision) -> None:
         "options": decision.options,
         "bet_outcome": decision.bet_outcome,
         "bet_amount_usdc": decision.bet_amount_usdc,
+        "bet_placed": bet_placed,
         "confidence": decision.confidence,
         "reasoning": decision.reasoning,
     }
     try:
-        os.makedirs(os.path.dirname(_AUDIT_FILE), exist_ok=True)
-        with open(_AUDIT_FILE, "a") as f:
+        path = config.audit_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
     except OSError:
         log.warning("audit trail write failed (read-only filesystem?)")
@@ -193,6 +204,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--loop", action="store_true", help="Run continuous loop")
     ap.add_argument("--status", action="store_true", help="Show agent status")
+    ap.add_argument("--pnl", action="store_true", help="Show PnL report and stop-loss state")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -200,6 +212,11 @@ def main() -> None:
     if args.status:
         s = caps.get_status()
         print(json.dumps(s, indent=2))
+        return
+
+    if args.pnl:
+        report = asyncio.run(pnl.get_pnl_report(config.AGENT_TG_ID))
+        print(json.dumps(report, indent=2))
         return
 
     if args.loop:

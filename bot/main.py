@@ -4,6 +4,8 @@ import logging
 import os
 import signal
 import time
+from collections.abc import Callable, Coroutine, Iterable
+from typing import Any
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
@@ -44,11 +46,13 @@ async def deposit_watcher() -> None:
             continue
         for d in credited:
             try:
-                if not (await ledger.get_settings(int(d['tg_id'])))['notify_deposits']:
+                settings = await ledger.get_settings(int(d['tg_id']))
+                if not settings['notify_deposits']:
                     continue
-                await bot.send_message(d['tg_id'], i18n.t(i18n.norm((await ledger.get_settings(int(d['tg_id']))).get('lang')), 'deposit_notified', amount=f"{d['amount_micro'] / 10 ** config.USDC_DECIMALS:g}", tx_url=f"{config.BASESCAN_URL}/tx/{d['tx_hash']}", tx=d['tx_hash'][:18]))
+                text = i18n.t(i18n.norm(settings.get('lang')), 'deposit_notified', amount=f"{d['amount_micro'] / 10 ** config.USDC_DECIMALS:g}", tx_url=f"{config.BASESCAN_URL}/tx/{d['tx_hash']}", tx=d['tx_hash'][:18])
+                await ledger.enqueue_notification(int(d['tg_id']), text)
             except Exception as e:
-                log.warning('deposit notify failed for %s: %s', d['tg_id'], e)
+                log.warning('deposit notify enqueue failed for %s: %s', d['tg_id'], e)
         await asyncio.sleep(config.POLL_SECONDS)
 
 async def withdraw_watcher() -> None:
@@ -85,32 +89,36 @@ async def market_watcher() -> None:
                 await ledger.mark_deadline_notified(int(bet['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(bet['creator'])).get('lang'))
-                    await bot.send_message(bet['creator'], i18n.t(creator_lang, 'deadline_notify', id=bet['id'], question=bet['question']))
+                    text = i18n.t(creator_lang, 'deadline_notify', id=bet['id'], question=bet['question'])
+                    await ledger.enqueue_notification(bet['creator'], text)
                 except Exception as e:
-                    log.warning('deadline notify failed for #%s: %s', bet['id'], e)
+                    log.warning('deadline notify enqueue failed for #%s: %s', bet['id'], e)
             for bet in await ledger.bets_need_grace_warning(config.GRACE_WARN_BEFORE_HOURS * 3600):
                 hours_left = max(1, round((bet['close_at'] + config.MARKET_GRACE_HOURS * 3600 - time.time()) / 3600))
                 await ledger.mark_grace_warned(int(bet['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(bet['creator'])).get('lang'))
-                    await bot.send_message(bet['creator'], i18n.t(creator_lang, 'grace_warn', id=bet['id'], question=bet['question'], hours=hours_left))
+                    text = i18n.t(creator_lang, 'grace_warn', id=bet['id'], question=bet['question'], hours=hours_left)
+                    await ledger.enqueue_notification(bet['creator'], text)
                 except Exception as e:
-                    log.warning('grace warn failed for #%s: %s', bet['id'], e)
+                    log.warning('grace warn enqueue failed for #%s: %s', bet['id'], e)
             for m in await ledger.open_markets_past_deadline():
                 await ledger.mark_market_deadline_notified(int(m['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(m['creator'])).get('lang'))
-                    await bot.send_message(m['creator'], i18n.t(creator_lang, 'deadline_notify', id=m['id'], question=m['question']))
+                    text = i18n.t(creator_lang, 'deadline_notify', id=m['id'], question=m['question'])
+                    await ledger.enqueue_notification(m['creator'], text)
                 except Exception as e:
-                    log.warning('market deadline notify failed for #%s: %s', m['id'], e)
+                    log.warning('market deadline notify enqueue failed for #%s: %s', m['id'], e)
             for m in await ledger.markets_need_grace_warning(config.GRACE_WARN_BEFORE_HOURS * 3600):
                 hours_left = max(1, round((m['close_at'] + config.MARKET_GRACE_HOURS * 3600 - time.time()) / 3600))
                 await ledger.mark_market_grace_warned(int(m['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(m['creator'])).get('lang'))
-                    await bot.send_message(m['creator'], i18n.t(creator_lang, 'grace_warn', id=m['id'], question=m['question'], hours=hours_left))
+                    text = i18n.t(creator_lang, 'grace_warn', id=m['id'], question=m['question'], hours=hours_left)
+                    await ledger.enqueue_notification(m['creator'], text)
                 except Exception as e:
-                    log.warning('market grace warn failed for #%s: %s', m['id'], e)
+                    log.warning('market grace warn enqueue failed for #%s: %s', m['id'], e)
         except Exception as e:
             log.warning('market deadline check failed: %s', e)
         await asyncio.sleep(config.POLL_SECONDS * 4)
@@ -203,6 +211,102 @@ async def recurring_payment_executor() -> None:
             log.warning('recurring executor failed: %s', e)
         await asyncio.sleep(3600)  # Check every hour
 
+
+async def x402_reconcile_watcher() -> None:
+    # Imported here, not at module scope: bot.main must not pull the web layer
+    # (and its ledger-bound modules) in just to start the bot.
+    from web.x402 import reconcile_stale_x402
+
+    while True:
+        try:
+            n = await reconcile_stale_x402()
+            if n:
+                log.warning('x402 reconcile finalized %d stale payment(s)', n)
+        except Exception as e:
+            log.warning('x402 reconcile failed: %s', e)
+        await asyncio.sleep(config.POLL_SECONDS * 8)
+
+
+async def notification_outbox_worker() -> None:
+    """Drain queued Telegram notifications with retry logic."""
+    while True:
+        try:
+            items = await ledger.dequeue_notifications()
+            for n in items:
+                try:
+                    await bot.send_message(n['chat_id'], n['text'])
+                    await ledger.ack_notification(n['id'])
+                except Exception:
+                    await ledger.retry_notification(n['id'], 30)
+        except Exception as e:
+            log.warning('notification outbox worker failed: %s', e)
+        await asyncio.sleep(5)
+
+
+# The watcher set this process runs, as (name, zero-arg coroutine factory).
+# Single source of truth for BOTH entrypoints: deploy/run.py (the combined
+# Docker runner) imports this list rather than keeping its own copies. It used
+# to hold a full fork of every watcher body, and forks drift — x402_sweep ran
+# only in main.py and never in production, then the recurring-payment executor
+# was added to main.py and never reached the combined runner, so subscriptions
+# silently never paid out there.
+WATCHER_TASKS: tuple[tuple[str, Callable[[], Coroutine[Any, Any, None]]], ...] = (
+    ('deposit', deposit_watcher),
+    ('withdraw', withdraw_watcher),
+    ('batch_withdraw', batch_withdraw_watcher),
+    ('market', market_watcher),
+    ('channel', channel_watcher),
+    ('create2_sweep', create2_sweep_watcher),
+    ('x402_sweep', x402_sweep_watcher),
+    ('housekeeping', housekeeping_watcher),
+    ('recurring', recurring_payment_executor),
+    ('solvency', lambda: solvency_watcher(bot)),
+    ('onchain', lambda: onchain_watcher(bot)),
+    ('x402_reconcile', x402_reconcile_watcher),
+    ('notification_outbox', notification_outbox_worker),
+)
+
+
+def watcher_done(name: str, task: asyncio.Task, stop: asyncio.Event | None) -> None:
+    """Done-callback: surface a silent watcher death and request shutdown.
+
+    A cancelled task is the normal shutdown path (not an error). A task that
+    finished with an exception outside its own try/except, or returned early,
+    means a background loop stopped running — log it loudly and set the stop
+    event so the process exits and the supervisor/health check restarts it,
+    instead of limping on with a dead money-path watcher.
+    """
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is None:
+        log.warning("watcher '%s' returned unexpectedly — stopping process", name)
+    else:
+        log.error(
+            "watcher '%s' died unexpectedly (exception=%r) — stopping process",
+            name, exc,
+        )
+    if stop is not None and not stop.is_set():
+        stop.set()
+
+
+def spawn_watchers(
+    watchers: Iterable[tuple[str, Callable[[], Coroutine[Any, Any, None]]]],
+    stop: asyncio.Event | None = None,
+) -> list[asyncio.Task]:
+    """Start each (name, factory) pair with the death→shutdown callback wired in.
+
+    Both entrypoints go through here — main() passes WATCHER_TASKS, deploy/run.py
+    passes the same list plus its gated agent — so neither can forget the callback
+    the way deploy's forked copy of the watcher bodies did.
+    """
+    tasks: list[asyncio.Task] = []
+    for name, watcher in watchers:
+        task = asyncio.create_task(watcher())
+        task.add_done_callback(lambda task=task, name=name: watcher_done(name, task, stop))
+        tasks.append(task)
+    return tasks
+
 async def _run_webhook(stop: asyncio.Event | None=None) -> None:
     """Register the webhook with Telegram, serve the API, keep watchers alive.
 
@@ -231,6 +335,10 @@ async def _run_webhook(stop: asyncio.Event | None=None) -> None:
         server.cancel()
         await asyncio.gather(server, stop_task, return_exceptions=True)
 
+# How long to wait before restarting polling after Telegram is unreachable.
+# Shared with deploy/run.py so the two entrypoints back off identically.
+RETRY_SECONDS = 15
+
 # Canonical Telegram command menu — single source of truth. deploy/run.py
 # reuses this list so the menu cannot diverge between entrypoints.
 BOT_COMMANDS = [types.BotCommand(command='menu', description='Главное меню'), types.BotCommand(command='balance', description='Баланс кошелька'), types.BotCommand(command='deposit', description='Пополнить USDC'), types.BotCommand(command='withdraw', description='Вывести USDC'), types.BotCommand(command='tip', description='Чаевые USDC'), types.BotCommand(command='rain', description='Дождь: раздать USDC в чате'), types.BotCommand(command='markets', description='Рынки предсказаний'), types.BotCommand(command='market', description='Открыть рынок по id'), types.BotCommand(command='trade', description='Купить доли на рынке'), types.BotCommand(command='sell', description='Продать доли'), types.BotCommand(command='positions', description='Мои позиции и PnL'), types.BotCommand(command='bet', description='Ставка-пул: создать/поставить'), types.BotCommand(command='bets', description='Открытые ставки-пулы'), types.BotCommand(command='oc', description='Cally — ончейн-рынки (ERC-1155)'), types.BotCommand(command='oc_pos', description='Мои ончейн-доли'), types.BotCommand(command='mybets', description='Мои ставки'), types.BotCommand(command='resolve', description='Закрыть ставку (создатель)'), types.BotCommand(command='cancel', description='Отменить свою ставку'), types.BotCommand(command='stats', description='Статистика бота'), types.BotCommand(command='top', description='Топ пользователей'), types.BotCommand(command='history', description='История операций'), types.BotCommand(command='donate', description='Твоя страница донатов'), types.BotCommand(command='link', description='Привязать внешний кошелёк'), types.BotCommand(command='confirm', description='Подтвердить привязку'), types.BotCommand(command='claim', description='Забрать дивиденды'), types.BotCommand(command='wallet', description='Кошелёк: адрес и ключи'), types.BotCommand(command='import', description='Импорт по сид-фразе'), types.BotCommand(command='export', description='Выгрузить ключ и сид'), types.BotCommand(command='tx', description='Проверить транзакцию в Base'), types.BotCommand(command='paywall', description='Платные посты'), types.BotCommand(command='basename', description='Basename: ончейн-имя на Base'), types.BotCommand(command='settings', description='Настройки'), types.BotCommand(command='language', description='Сменить язык / Language'), types.BotCommand(command='about', description='О боте — что это такое'), types.BotCommand(command='app', description='Мини-приложение'), types.BotCommand(command='gasless', description='Бесплатные транзакции'), types.BotCommand(command='subscribe', description='Подписка на платежи'), types.BotCommand(command='subscriptions', description='Мои подписки'), types.BotCommand(command='cancelsub', description='Отменить подписку'), types.BotCommand(command='credit', description='Кредитный рейтинг'), types.BotCommand(command='createtoken', description='Создать токен создателя'), types.BotCommand(command='buytoken', description='Купить токен создателя')]
@@ -247,53 +355,51 @@ async def main() -> None:
         await bot.set_my_commands([AI_BOT_COMMAND, *BOT_COMMANDS])
     except Exception as e:
         log.warning('set_my_commands failed: %s', e)
-    from web.x402 import reconcile_stale_x402
 
-    async def x402_reconcile_watcher() -> None:
-        while True:
-            try:
-                n = await reconcile_stale_x402()
-                if n:
-                    log.warning('x402 reconcile finalized %d stale payment(s)', n)
-            except Exception as e:
-                log.warning('x402 reconcile failed: %s', e)
-            await asyncio.sleep(config.POLL_SECONDS * 8)
-
-    async def notification_outbox_worker() -> None:
-        """Drain queued Telegram notifications with retry logic."""
-        while True:
-            try:
-                items = await ledger.dequeue_notifications()
-                for n in items:
-                    try:
-                        await bot.send_message(n['chat_id'], n['text'])
-                        await ledger.ack_notification(n['id'])
-                    except Exception:
-                        await ledger.retry_notification(n['id'], 30)
-            except Exception as e:
-                log.warning('notification outbox worker failed: %s', e)
-            await asyncio.sleep(5)
-
-    tasks = [asyncio.create_task(deposit_watcher()), asyncio.create_task(withdraw_watcher()), asyncio.create_task(batch_withdraw_watcher()), asyncio.create_task(market_watcher()), asyncio.create_task(channel_watcher()), asyncio.create_task(create2_sweep_watcher()), asyncio.create_task(x402_sweep_watcher()), asyncio.create_task(housekeeping_watcher()), asyncio.create_task(recurring_payment_executor()), asyncio.create_task(solvency_watcher(bot)), asyncio.create_task(onchain_watcher(bot)), asyncio.create_task(x402_reconcile_watcher()), asyncio.create_task(notification_outbox_worker())]
+    # One stop event drives every exit path: a signal, a watcher death
+    # (watcher_done) or polling/webhook ending on its own. It used to be only
+    # signals, and a watcher that died left this process polling with a broken
+    # money path — deposits and payouts silently stopped while the bot answered.
+    stop = asyncio.Event()
+    tasks = spawn_watchers(WATCHER_TASKS, stop)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(_shutdown(loop, tasks)))
+            loop.add_signal_handler(sig, stop.set)
         except NotImplementedError:
             pass  # Windows doesn't support add_signal_handler
 
     try:
-        while True:
+        while not stop.is_set():
+            # handle_signals=False keeps our handlers authoritative: aiogram's
+            # start_polling would otherwise replace them and the stop event would
+            # never see a container SIGTERM.
+            if config.WEBHOOK_URL:
+                worker = asyncio.create_task(_run_webhook(stop))
+            else:
+                worker = asyncio.create_task(
+                    dp.start_polling(bot, skip_updates=True, handle_signals=False)
+                )
+            waiter = asyncio.create_task(stop.wait())
             try:
-                if config.WEBHOOK_URL:
-                    await _run_webhook()
-                else:
-                    await dp.start_polling(bot, skip_updates=True)
-                break
-            except TelegramNetworkError as e:
-                log.warning('telegram unreachable, retrying in 15s: %s', e)
-                await asyncio.sleep(15)
+                done, _ = await asyncio.wait(
+                    {worker, waiter}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if worker in done and not worker.cancelled():
+                    exc = worker.exception()
+                    if exc is None:
+                        break  # polling or the webhook ended on its own
+                    if isinstance(exc, TelegramNetworkError):
+                        log.warning('telegram unreachable, retrying in %ds: %s', RETRY_SECONDS, exc)
+                        await asyncio.sleep(RETRY_SECONDS)
+                        continue
+                    raise exc
+            finally:
+                for t in (worker, waiter):
+                    if not t.done():
+                        t.cancel()
+                await asyncio.gather(worker, waiter, return_exceptions=True)
     finally:
         for task in tasks:
             task.cancel()
@@ -305,10 +411,5 @@ async def main() -> None:
         log.info('bot shut down gracefully')
 
 
-async def _shutdown(loop, tasks):
-    """Signal handler: cancel all tasks and stop the loop."""
-    log.info('shutdown signal received, cancelling tasks...')
-    for task in tasks:
-        task.cancel()
 if __name__ == '__main__':
     asyncio.run(main())

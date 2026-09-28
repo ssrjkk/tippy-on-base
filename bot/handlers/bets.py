@@ -175,13 +175,13 @@ async def _market_detail_text(view: dict, tg_id: int | None=None) -> str:
 async def _bets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMarkup]:
     lang = await _lang(tg_id)
     bets = await common.ledger.open_bets(8)
-    if not bets:
+    # One batched read instead of a market_view() per row: market_view costs four
+    # queries (bet, totals, backers, creator name), so eight markets meant 32.
+    views = await common.ledger.bulk_market_views([b['id'] for b in bets])
+    if not views:
         return (i18n.t(lang, 'bet_empty'), InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')]]))
     lines = [i18n.t(lang, 'bet_list_header'), '']
-    for b in bets:
-        view = await common.ledger.market_view(b['id'])
-        if not view:
-            continue
+    for view in views:
         if view['expired']:
             meta = i18n.t(lang, 'bet_list_expired', id=view['id'])
         elif view['close_at']:
@@ -190,7 +190,9 @@ async def _bets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMarkup]
             meta = ''
         lines.append(f"#{view['id']} {common._h(view['question'])} — {common._fmt(view['pot'])} USDC · {view['total_backers']}👤{meta}")
     lines.append(i18n.t(lang, 'bet_list_hint'))
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🎯 #{b['id']}: {b['question'][:38]}", callback_data=f"market:{b['id']}")] for b in bets] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')]])
+    # Buttons follow `views`, not `bets`: a market that has no view has no line
+    # above it either, and a button that opens nothing is a dead end.
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🎯 #{v['id']}: {v['question'][:38]}", callback_data=f"market:{v['id']}")] for v in views] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')]])
     return ('\n'.join(lines), kb)
 
 @common.router.message(Command('bets'))
@@ -404,7 +406,18 @@ async def cmd_mybets(message: types.Message) -> None:
     if not positions:
         await message.answer(i18n.t(lang, 'bet_my_empty'))
         return
+    from bot import config
     lines = [i18n.t(lang, 'bet_my_header')]
     for p in positions:
-        lines.append(f"🎯 #{p['bet_id']} <b>{common._h(p['question'])}</b>\n   • {common._h(p['option'])} — {common._fmt(p['stake_micro'])} USDC\n   • {i18n.t(lang, 'potential_win', amt=common._fmt(p['potential_micro']))}")
+        stake = p['stake_micro']
+        gross = p['potential_micro']
+        profit = max(0, gross - stake)
+        fee = int(profit * config.WIN_FEE_PCT)
+        net = gross - fee
+        lines.append(
+            f"🎯 #{p['bet_id']} <b>{common._h(p['question'])}</b>\n"
+            f"   • {common._h(p['option'])} — {common._fmt(stake)} USDC\n"
+            f"   • {i18n.t(lang, 'potential_win', amt=common._fmt(gross))}"
+            f" (net {common._fmt(net)} after {int(config.WIN_FEE_PCT * 100)}% fee)"
+        )
     await message.answer('\n\n'.join(lines))

@@ -118,6 +118,10 @@ WIN_FEE_PCT: Decimal = Decimal(os.environ.get("WIN_FEE_PCT", "0.02"))
 # Abuse protection / gas griefing
 MIN_WITHDRAW_USDC: Decimal = Decimal(os.environ.get("MIN_WITHDRAW_USDC", "1"))
 MAX_WITHDRAWS_PER_DAY: int = int(os.environ.get("MAX_WITHDRAWS_PER_DAY", "5"))
+# /withdraw only queues money after a second, explicit confirmation tap. This
+# is how long that staged request stays valid — long enough to read the
+# summary, short enough that an old prompt cannot be confirmed by accident.
+WITHDRAW_CONFIRM_TTL_SECONDS: int = int(os.environ.get("WITHDRAW_CONFIRM_TTL_SECONDS", "600"))
 MAX_TIP_USDC: Decimal = Decimal(os.environ.get("MAX_TIP_USDC", "1000"))
 MAX_BET_USDC: Decimal = Decimal(os.environ.get("MAX_BET_USDC", "500"))
 LINK_NONCE_TTL_SECONDS: int = int(os.environ.get("LINK_NONCE_TTL_SECONDS", "3600"))
@@ -226,6 +230,11 @@ PAYWALL_MAX_ITEMS_PER_USER: int = int(os.environ.get("PAYWALL_MAX_ITEMS_PER_USER
 PAYWALL_MAX_CHANNELS_PER_USER: int = int(os.environ.get("PAYWALL_MAX_CHANNELS_PER_USER", "5"))
 PAYWALL_MAX_TITLE_LEN: int = int(os.environ.get("PAYWALL_MAX_TITLE_LEN", "120"))
 PAYWALL_MAX_CONTENT_LEN: int = int(os.environ.get("PAYWALL_MAX_CONTENT_LEN", "4000"))
+# Rows one /paywall list page renders. A Telegram message is capped at 4096
+# characters and an over-long send fails outright, so the list is bounded; the
+# renderer also drops lines if the titles it got are long enough to overflow even
+# this page.
+PAYWALL_LIST_MAX: int = int(os.environ.get("PAYWALL_LIST_MAX", "20"))
 
 # Reaction-tip message index retention: rows older than this are pruned by
 # the daily housekeeping watcher so the DB stays bounded in active groups.

@@ -81,6 +81,8 @@ scripts/*
 .agent_seen_news.json
 .agent_state.json
 .agent_state.jsonl
+.agent_pnl.json
+.agent_markets.json
 .relayer_usage.json
 agent_attestations.jsonl
 agent_audit.jsonl

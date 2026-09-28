@@ -9,7 +9,6 @@ Fail-safe by design: when the agent is disabled or its state files are
 absent, the command says so instead of crashing.
 """
 import json
-import os
 
 from aiogram import types
 from aiogram.filters import Command
@@ -20,10 +19,15 @@ from . import _common as common
 
 
 def _audit_tail(limit: int = 3) -> list[dict]:
-    """Last N audit entries without reading the entire file."""
-    from agent.config import STATE_DIR
+    """Last N audit entries without reading the entire file.
 
-    path = os.path.join(STATE_DIR, "agent_audit.jsonl")
+    Resolved through agent.config.audit_file() — the same path agent.main writes
+    to. Reading a CWD-relative copy is what made /agent report "no audit" while
+    the trail sat full in STATE_DIR.
+    """
+    from agent.config import audit_file
+
+    path = audit_file()
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
@@ -85,7 +89,11 @@ async def cmd_agent(message: types.Message) -> None:
     if entries:
         lines.append(i18n.t(lang, 'agent_recent'))
         for e in reversed(entries):  # newest first
-            lines.append(f"• #{e['market_id']}: {common._esc(e['question'][:60])} — ${e['bet_amount_usdc']:.2f} ({int(e['confidence'] * 100)}%)")
+            # What actually happened, not what was decided: a rejected bet is
+            # still an audit line, and printing its amount would report a spend
+            # the ledger never took.
+            action = f"${e['bet_amount_usdc']:.2f} bet" if e.get('bet_placed') else "market only"
+            lines.append(f"• #{e['market_id']}: {common._esc(e['question'][:60])} — {action} ({int(e['confidence'] * 100)}%)")
     else:
         lines.append(i18n.t(lang, 'agent_no_audit'))
 

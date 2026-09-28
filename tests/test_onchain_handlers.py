@@ -6,7 +6,7 @@ real chain: all RPC/contract helper calls are mocked.
 """
 
 import time
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -106,13 +106,14 @@ async def test_buy_core_closed_deadline(onchain_env, market_getter, market_row):
     assert ok is False
 
 
+_LIVE = {"resolved": False, "cancelled": False, "winning_outcome": 0}
+
+
 @pytest.mark.asyncio
 async def test_sell_core_success(onchain_env, market_getter, market_row, monkeypatch):
     market_getter["row"] = market_row
-    contract_mock = Mock()
-    contract_mock.functions.balanceOf.return_value.call.return_value = 100
-    monkeypatch.setattr(onchain.om, "_market_contract", lambda w3: contract_mock)
-    monkeypatch.setattr(onchain.om, "_w3", lambda: object())
+    monkeypatch.setattr(onchain.om, "get_market_info", AsyncMock(return_value=_LIVE))
+    monkeypatch.setattr(onchain.om, "outcome_shares", AsyncMock(return_value=100))
     ok, _ = await onchain._sell_core(1, 7, 0, 50, "ru")
     assert ok is True
     assert onchain_env["sells"] == 1
@@ -121,9 +122,7 @@ async def test_sell_core_success(onchain_env, market_getter, market_row, monkeyp
 @pytest.mark.asyncio
 async def test_sell_core_no_shares(onchain_env, market_getter, market_row, monkeypatch):
     market_getter["row"] = market_row
-    contract_mock = Mock()
-    contract_mock.functions.balanceOf.return_value.call.return_value = 0
-    monkeypatch.setattr(onchain.om, "_market_contract", lambda w3: contract_mock)
-    monkeypatch.setattr(onchain.om, "_w3", lambda: object())
+    monkeypatch.setattr(onchain.om, "get_market_info", AsyncMock(return_value=_LIVE))
+    monkeypatch.setattr(onchain.om, "outcome_shares", AsyncMock(return_value=0))
     ok, _ = await onchain._sell_core(1, 7, 0, 50, "ru")
     assert ok is False

@@ -1,5 +1,8 @@
 """Ledger invariants: conservation of funds, fees, refunds, deadlines."""
 
+import csv
+import io
+import json
 import os
 import time
 from decimal import Decimal
@@ -138,6 +141,65 @@ def test_set_username(ledger):
     assert ledger.username_of(424242) is None
 
 
+def test_usernames_bulk_answers_exactly_like_username_of(ledger):
+    """The leaderboard and both history renderers read names through this now, so
+    every id asked for has to be a key — with None for a user whose row has no
+    username and for one that has no row at all. A missing key would raise
+    KeyError deep inside a handler instead of showing `id123`."""
+    ledger.ensure_user(ALICE, "alice")
+    ledger.ensure_user(BOB, None)  # a row, but no username
+    no_row = 9321887
+    names = ledger.usernames_bulk([ALICE, BOB, no_row])
+    assert names == {ALICE: "alice", BOB: None, no_row: None}
+    for tg_id in (ALICE, BOB, no_row):
+        assert names[tg_id] == ledger.username_of(tg_id)
+    assert ledger.usernames_bulk([]) == {}
+    assert ledger.usernames_bulk([ALICE, ALICE, ALICE]) == {ALICE: "alice"}
+
+
+def test_leaderboard_reads_names_once_whatever_the_limit(ledger):
+    """leaderboard() used to run a username query per row, so the web dashboard
+    paid 11 round-trips on the lock for a top-10. The rendered rows are identical
+    either way — only a statement count can pin this down."""
+
+    def statements(limit):
+        seen = []
+        real = ledger._conn.execute
+        ledger._conn.execute = lambda q, *a, **kw: (seen.append(q), real(q, *a, **kw))[1]
+        try:
+            rows = ledger.leaderboard(limit)
+        finally:
+            del ledger._conn.execute
+        return rows, len(seen)
+
+    for tg in (ALICE, BOB, CAROL):
+        fund(ledger, tg, 100_000_000)
+    ledger.ensure_user(ALICE, "alice")
+    ledger.ensure_user(BOB, None)  # tipped a lot, has no username
+    ledger.ensure_user(CAROL, "carol")
+    ledger.transfer(ALICE, CAROL, 3_000_000)
+    ledger.transfer(BOB, CAROL, 2_000_000)
+    ledger.transfer(CAROL, ALICE, 1_000_000)
+
+    small, n_small = statements(2)
+    big, n_big = statements(10)
+    assert [len(small), len(big)] == [2, 3]
+    assert n_big == n_small, f"top-10 cost {n_big - n_small} more statements than top-2"
+    # Parity with the row-by-row answer, idN fallback included.
+    assert big == [
+        {
+            "username": ledger.username_of(r["tg_id"]) or f"id{r['tg_id']}",
+            "total_micro": int(r["total"]),
+        }
+        for r in ledger.top_tippers(10)
+    ]
+    assert big == [
+        {"username": "alice", "total_micro": 3_000_000},
+        {"username": f"id{BOB}", "total_micro": 2_000_000},
+        {"username": "carol", "total_micro": 1_000_000},
+    ]
+
+
 def test_link_nonce_and_confirm(ledger):
     nonce = ledger.new_link_nonce(ALICE, "0x" + "a" * 40)
     assert nonce and len(nonce) == 16
@@ -177,8 +239,8 @@ def test_confirm_link_ttl_expired(ledger, monkeypatch):
 
 def test_reserve_withdraw_atomic(ledger):
     fund(ledger, ALICE, 10_000_000)
-    wd_id = ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 50_000)
-    assert wd_id is not None
+    wd_id, reason = ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 50_000)
+    assert wd_id is not None and reason == ""
     assert ledger.balance(ALICE) == Decimal("4.950000")  # amount + fee debited
     # Rows start queued (pending batch broadcast), not in the pending sweep.
     assert ledger.pending_withdraws() == []
@@ -188,13 +250,13 @@ def test_reserve_withdraw_atomic(ledger):
     assert rows[0]["status"] == "queued"
     assert rows[0]["amount"] == 5_000_000
     # Short balance -> nothing reserved, balance untouched.
-    assert ledger.reserve_withdraw(ALICE, "0x" + "c" * 40, 100_000_000, 1) is None
+    assert ledger.reserve_withdraw(ALICE, "0x" + "c" * 40, 100_000_000, 1) == (None, "balance")
     assert ledger.balance(ALICE) == Decimal("4.950000")
 
 
 def test_record_withdraw_fee_logs(ledger):
     fund(ledger, ALICE, 10_000_000)
-    wd_id = ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 50_000)
+    wd_id, _ = ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 50_000)
     ledger.mark_withdraw_done(wd_id, "0x" + "f" * 64)
     rows = ledger.history(ALICE, 10)
     kinds = [r["kind"] for r in rows]
@@ -224,7 +286,7 @@ def test_reserve_withdraw_blocked_destinations(ledger, monkeypatch):
         "0x" + "a" * 40,                    # vault contract
         "0x" + "c" * 40,                    # x402 receive pool
     ):
-        assert ledger.reserve_withdraw(ALICE, dest, 1_000_000, 0) is None
+        assert ledger.reserve_withdraw(ALICE, dest, 1_000_000, 0) == (None, "blocked")
         assert ledger.balance(ALICE) == Decimal("10.000000")
     # Refusal is flagged for AML review, then a legit withdrawal still works.
     flag = ledger._conn.execute(
@@ -232,22 +294,32 @@ def test_reserve_withdraw_blocked_destinations(ledger, monkeypatch):
         (ALICE,),
     ).fetchone()
     assert int(flag["c"]) == 4
-    assert ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0) is not None
+    # The flag names WHY, so an operator reading the audit trail sees the same
+    # reason the user was shown rather than a generic "blocked".
+    reasons = [
+        json.loads(r["details"])["reason"]
+        for r in ledger._conn.execute(
+            "SELECT details FROM suspicious_activity "
+            "WHERE tg_id = %s AND kind = 'withdraw_blocked' ORDER BY id", (ALICE,)
+        ).fetchall()
+    ]
+    assert reasons == ["zero", "hot_wallet", "vault", "x402"]
+    assert ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0)[1] == ""
 
 
 def test_reserve_withdraw_daily_limit_atomic(ledger):
     fund(ledger, ALICE, 100_000_000)
     for _ in range(config.MAX_WITHDRAWS_PER_DAY):
-        assert ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0) is not None
+        assert ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0)[0] is not None
     # The check lives INSIDE the reserved lock, so the reserve call itself is
     # the gate (a second concurrent /withdraw cannot double-cross it).
-    assert ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0) is None
+    assert ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0) == (None, "cap")
     assert ledger.balance(ALICE) == Decimal("95.000000")
 
 
 def test_mark_withdraw_done_preserves_existing_hash(ledger):
     fund(ledger, ALICE, 10_000_000)
-    wd_id = ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 50_000)
+    wd_id, _ = ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 50_000)
     ledger.mark_withdraw_done(wd_id, "0x" + "f" * 64)
     # An empty placeholder must never wipe the real on-chain hash.
     ledger.mark_withdraw_done(wd_id, "")
@@ -255,6 +327,58 @@ def test_mark_withdraw_done_preserves_existing_hash(ledger):
         "SELECT tx_hash FROM tx_log WHERE id = %s", (wd_id,),
     ).fetchone()
     assert row["tx_hash"] == "0x" + "f" * 64
+
+
+# ---------- staged (two-step) withdrawals ----------
+
+
+def test_stage_withdraw_moves_nothing(ledger):
+    fund(ledger, ALICE, 10_000_000)
+    token = ledger.stage_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 50_000)
+    # Staging is a promise, not a payment.
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+    assert ledger.withdraw_queue() == []
+    staged = ledger.take_withdraw(ALICE, token)
+    assert staged["to_address"] == "0x" + "b" * 40
+    assert int(staged["amount_micro"]) == 5_000_000
+    assert int(staged["fee_micro"]) == 50_000  # fee frozen at staging time
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+
+
+def test_take_withdraw_is_single_use(ledger):
+    """The DELETE ... RETURNING is the only gate: a replayed callback must lose."""
+    token = ledger.stage_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0)
+    assert ledger.take_withdraw(ALICE, token) is not None
+    assert ledger.take_withdraw(ALICE, token) is None
+
+
+def test_stage_withdraw_replaces_previous(ledger):
+    first = ledger.stage_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0)
+    second = ledger.stage_withdraw(ALICE, "0x" + "c" * 40, 2_000_000, 0)
+    assert ledger.take_withdraw(ALICE, first) is None  # superseded, not confirmable
+    row = ledger.take_withdraw(ALICE, second)
+    assert row["to_address"] == "0x" + "c" * 40
+    assert int(row["amount_micro"]) == 2_000_000
+    assert ledger.take_withdraw(ALICE, first) is None
+
+
+def test_take_withdraw_rejects_other_users_token(ledger):
+    token = ledger.stage_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0)
+    # Bob guessing Alice's token must neither read nor consume her stage.
+    assert ledger.take_withdraw(BOB, token) is None
+    assert ledger.take_withdraw(ALICE, token) is not None
+
+
+def test_take_withdraw_expires(ledger, monkeypatch):
+    token = ledger.stage_withdraw(ALICE, "0x" + "b" * 40, 1_000_000, 0)
+    ledger._conn.execute(
+        "UPDATE withdraw_confirmations SET created_at = %s WHERE token = %s",
+        (int(time.time()) - 3600, token),
+    )
+    ledger._conn.commit()
+    monkeypatch.setattr(config, "WITHDRAW_CONFIRM_TTL_SECONDS", 60)
+    assert ledger.take_withdraw(ALICE, token) is None
+    assert ledger.take_withdraw(ALICE, token) is None  # expired row stays gone
 
 
 def test_subsidy_release_restores_daily_cap(ledger):
@@ -366,6 +490,99 @@ def test_history_records_kinds(ledger):
     kinds = [r["kind"] for r in rows]
     assert kinds == ["tip", "deposit"]
     assert rows[0]["amount"] == 1_000_000
+
+
+# ---------- /history export: CSV ----------
+
+
+def _records(csv_text):
+    """Parse the export the way a spreadsheet would: quote-aware, one record per
+    row however many newlines a field contains."""
+    return list(csv.reader(io.StringIO(csv_text)))
+
+
+def test_history_csv_header_only_when_no_rows(ledger):
+    # stats.py detects an empty export with len(csv.split('\n')) <= 1, so the
+    # header must be a single line with no trailing record terminator.
+    text = ledger.history_csv(ALICE)
+    assert text.split("\n") == ["id,kind,counterparty,amount,tx_hash,note,created_at"]
+    assert len(text.split("\n")) == 1
+
+
+def test_history_csv_rows_newest_first(ledger):
+    fund(ledger, ALICE, 10_000_000)
+    ledger.credit(ALICE, 3_000_000, "withdraw", tx_hash="0xabc", note="cash out")
+    rows = _records(ledger.history_csv(ALICE))
+    assert rows[0][0] == "id"
+    assert [r[1] for r in rows[1:]] == ["withdraw", "deposit"]
+    assert rows[1][3] == "3000000"
+    assert rows[1][4] == "0xabc"
+    assert rows[1][5] == "cash out"
+
+
+def test_history_csv_neutralises_formula_fields(ledger):
+    """A note is user-authored (a bet's note is the option label its creator
+    typed), and Excel/Sheets evaluate a cell starting with = + - @ — so the
+    apostrophe is what stops '=HYPERLINK(...)' running in the reader's sheet."""
+    fund(ledger, ALICE, 10_000_000)
+    for first in ("=", "+", "-", "@", "\t", "\r"):
+        ledger.credit(ALICE, 1_000_000, "tip", note=f"{first}HYPERLINK(\"http://evil\")")
+    rows = _records(ledger.history_csv(ALICE))
+    notes = [r[5] for r in rows[1:] if r[5]]
+    assert len(notes) == 6
+    for note in notes:
+        assert note.startswith("'"), note
+        assert note[1:2] in ("=", "+", "-", "@", "\t", "\r")
+
+
+def test_history_csv_leaves_safe_and_numeric_fields_alone(ledger):
+    # A leading apostrophe on id/amount/created_at would make the numbers
+    # unparseable, and a harmless label must not be mangled.
+    fund(ledger, ALICE, 10_000_000)
+    ledger.credit(ALICE, 2_000_000, "tip", counterparty="1002", note="1+1 apples")
+    rows = _records(ledger.history_csv(ALICE))
+    row = rows[1]
+    assert row[0].isdigit()
+    assert row[2] == "1002"
+    assert row[3] == "2000000"
+    assert row[5] == "1+1 apples"
+    assert row[6].isdigit()
+
+
+def test_history_csv_keeps_columns_through_hostile_note(ledger):
+    """Quotes, commas and newlines in a note must not shift later columns."""
+    fund(ledger, ALICE, 10_000_000)
+    nasty = 'He said "hi",\nbye\tand, more'
+    ledger.credit(ALICE, 4_000_000, "x402", tx_hash="0xdead", note=nasty)
+    rows = _records(ledger.history_csv(ALICE))
+    assert len(rows) == 3  # header + two records, even though a note spans lines
+    hostile, deposit = rows[1], rows[2]  # newest first
+    assert len(hostile) == 7 and len(deposit) == 7
+    assert hostile[5] == nasty
+    assert hostile[4] == "0xdead"
+    assert hostile[3] == "4000000"
+
+
+def test_history_filters_by_kind_and_limit(ledger):
+    fund(ledger, ALICE, 10_000_000)
+    ledger.transfer(ALICE, BOB, 1_000_000)
+    ledger.credit(ALICE, 2_000_000, "fee")
+    ledger.credit(ALICE, 2_000_000, "fee")
+
+    all_rows = ledger.history_filtered(ALICE)
+    assert [r["kind"] for r in all_rows] == ["fee", "fee", "tip", "deposit"]
+    assert {r["kind"] for r in ledger.history_filtered(ALICE, kind="fee")} == {"fee"}
+    assert ledger.history_filtered(ALICE, kind="withdraw") == []
+    assert len(ledger.history_filtered(ALICE, limit=2)) == 2
+    # The unfiltered path matches history() exactly.
+    assert [r["id"] for r in ledger.history_filtered(ALICE)] == [r["id"] for r in ledger.history(ALICE)]
+
+
+def test_history_filter_is_scoped_to_the_user(ledger):
+    fund(ledger, ALICE, 10_000_000)
+    fund(ledger, BOB, 5_000_000)
+    assert [r["kind"] for r in ledger.history_filtered(BOB)] == ["deposit"]
+    assert ledger.history_filtered(BOB, kind="deposit")[0]["amount"] == 5_000_000
 
 
 def test_top_tippers_with_and_without_window(ledger):
@@ -529,6 +746,132 @@ def test_user_positions(ledger):
     # Resolved market drops out of open positions.
     ledger.resolve_bet(bid, 0, ALICE)
     assert ledger.user_positions(BOB) == []
+
+
+# ---------- batched reads: /api/markets and /mybets ----------
+
+
+def test_bulk_market_views_matches_market_view_exactly(ledger):
+    """The batch path replaced a market_view-per-row loop, so it owes the API
+    the same dict — a key it forgets (expired) or a probability it rounds
+    differently silently changes what the dashboard shows."""
+    fund(ledger, ALICE, 100_000_000)
+    fund(ledger, BOB, 100_000_000)
+    ledger.ensure_user(ALICE, "alice")
+    bids = [ledger.create_bet(ALICE, f"Вопрос {i}?", ["А", "Б", "В"]) for i in range(3)]
+    for i, bid in enumerate(bids):
+        ledger.place_bet(bid, BOB, i, (i + 1) * 5_000_000)
+        ledger.place_bet(bid, ALICE, (i + 1) % 3, (3 - i) * 2_000_000)
+    bulk = {v["id"]: v for v in ledger.bulk_market_views(bids)}
+    assert set(bulk) == set(bids)
+    for bid in bids:
+        assert bulk[bid] == ledger.market_view(bid)
+
+
+def test_bulk_market_views_keeps_the_order_it_was_given(ledger):
+    """/api/markets feeds this from bets_by_status (ORDER BY id DESC). A plain
+    `WHERE id IN (...)` answers in whatever order the planner likes, so without
+    an explicit re-order the newest-first list the bot promises would shuffle."""
+    fund(ledger, ALICE, 100_000_000)
+    bids = [ledger.create_bet(ALICE, f"#{i}", ["А", "Б"]) for i in range(4)]
+    assert [v["id"] for v in ledger.bulk_market_views(bids)] == bids
+    assert [v["id"] for v in ledger.bulk_market_views(list(reversed(bids)))] == list(
+        reversed(bids)
+    )
+    ordered = [int(b["id"]) for b in ledger.bets_by_status("open", 20)]
+    assert ordered == sorted(ordered, reverse=True)  # sanity: bets_by_status is DESC
+    assert [v["id"] for v in ledger.bulk_market_views(ordered)] == ordered
+
+
+def test_bulk_market_views_edge_cases(ledger):
+    assert ledger.bulk_market_views([]) == []
+    assert ledger.bulk_market_views([999_999]) == []  # unknown id: dropped, no KeyError
+    fund(ledger, ALICE, 10_000_000)
+    bid = ledger.create_bet(ALICE, "Дубли?", ["А", "Б"])
+    once = ledger.bulk_market_views([bid, bid, bid])
+    assert [v["id"] for v in once] == [bid]  # one view per market, not per request
+
+
+def test_bulk_market_views_expired_flag_tracks_status(ledger):
+    """`expired` means "open but past grace" — refundable. A resolved bet whose
+    deadline has since blown is settled money, not a refund, so it stays False."""
+    fund(ledger, ALICE, 100_000_000)
+    fund(ledger, BOB, 100_000_000)
+    now = int(time.time())
+    stale = ledger.create_bet(ALICE, "Просрочен", ["А", "Б"], close_at=now + 3600)
+    ledger.place_bet(stale, BOB, 0, 5_000_000)
+    fresh = ledger.create_bet(ALICE, "Живой", ["А", "Б"], close_at=now + 3600)
+    ledger.place_bet(fresh, BOB, 0, 5_000_000)
+    # Clock forward: only `stale` gets its deadline pushed past the grace.
+    ledger._conn.execute(
+        "UPDATE bets SET close_at = %s WHERE id = %s",
+        (now - (config.MARKET_GRACE_HOURS + 1) * 3600, stale),
+    )
+    ledger._conn.commit()
+    views = {v["id"]: v for v in ledger.bulk_market_views([stale, fresh])}
+    assert views[stale]["expired"] is True
+    assert views[fresh]["expired"] is False
+    assert ledger.resolve_bet(stale, 0, ALICE)[0]
+    assert ledger.bulk_market_views([stale])[0]["expired"] is False
+
+
+def test_bulk_market_views_username_survives_a_missing_user_row(ledger):
+    # The join replaces a username_of() call per row; a creator with no users row
+    # (or a NULL username) must still read as None rather than dropping the bet.
+    fund(ledger, ALICE, 10_000_000)
+    anon = ledger.create_bet(ALICE, "Аноним?", ["А", "Б"])
+    named = ledger.create_bet(BOB, "Именной?", ["А", "Б"])
+    ledger.ensure_user(BOB, "bob")
+    views = {v["id"]: v for v in ledger.bulk_market_views([anon, named])}
+    assert views[anon]["creator"] == {"id": ALICE, "username": None}
+    assert views[named]["creator"] == {"id": BOB, "username": "bob"}
+    assert views[anon] == ledger.market_view(anon)
+    assert views[named] == ledger.market_view(named)
+
+
+def test_user_positions_covers_every_open_bet_of_the_user(ledger):
+    """user_positions was rewritten to fetch all its bets in two queries. It
+    must still report each (bet, option) row and the same parimutuel potential
+    as bet_totals, across several bets and with non-open ones dropped."""
+    fund(ledger, ALICE, 300_000_000)
+    fund(ledger, BOB, 300_000_000)
+    fund(ledger, CAROL, 300_000_000)
+    b1 = ledger.create_bet(ALICE, "Первый?", ["А", "Б"])
+    b2 = ledger.create_bet(ALICE, "Второй?", ["А", "Б", "В"])
+    b3 = ledger.create_bet(ALICE, "Третий?", ["А", "Б"])
+    ledger.place_bet(b1, BOB, 0, 20_000_000)
+    ledger.place_bet(b1, BOB, 1, 5_000_000)  # two options in one bet: two rows
+    ledger.place_bet(b1, ALICE, 1, 10_000_000)
+    ledger.place_bet(b2, BOB, 2, 6_000_000)
+    ledger.place_bet(b2, CAROL, 0, 9_000_000)
+    ledger.place_bet(b3, BOB, 1, 7_000_000)
+    ledger.resolve_bet(b3, 1, ALICE)  # settled: not an open position
+
+    rows = ledger.user_positions(BOB)
+    assert {(r["bet_id"], r["option_idx"]) for r in rows} == {(b1, 0), (b1, 1), (b2, 2)}
+    for r in rows:
+        totals = ledger.bet_totals(r["bet_id"])  # the whole pool, all backers
+        mine = ledger.user_bet_stake(r["bet_id"], BOB)  # only BOB's own stakes
+        pot = sum(totals.values())
+        assert r["stake_micro"] == mine[r["option_idx"]]
+        assert r["potential_micro"] == r["stake_micro"] * pot // totals[r["option_idx"]]
+        assert r["question"] == ledger.get_bet(r["bet_id"])["question"]
+        assert r["close_at"] == ledger.get_bet(r["bet_id"])["close_at"]
+    # b1 option 1 is shared (BOB 5 + ALICE 10 of a 35 pot): a stake that leaked
+    # in from the pooled totals would pay BOB for money he never risked.
+    shared = next(r for r in rows if (r["bet_id"], r["option_idx"]) == (b1, 1))
+    assert (shared["stake_micro"], shared["potential_micro"]) == (5_000_000, 11_666_666)
+    # Scoping: pooled totals come from every backer, stakes from just this one.
+    carol = ledger.user_positions(CAROL)
+    assert [(c["bet_id"], c["option_idx"], c["stake_micro"]) for c in carol] == [
+        (b2, 0, 9_000_000)
+    ]
+    assert carol[0]["potential_micro"] == 15_000_000  # whole pot: sole winner side
+    alice = ledger.user_positions(ALICE)
+    assert [(a["bet_id"], a["option_idx"], a["stake_micro"]) for a in alice] == [
+        (b1, 1, 10_000_000)
+    ]
+    assert ledger.user_positions(4242) == []  # a stranger has nothing open
 
 
 def test_block_tracking_and_close(ledger):
@@ -791,6 +1134,20 @@ def test_paywall_create_and_list(ledger):
     assert ledger.paywall_item(999) is None
 
 
+def test_paywall_items_list_is_bounded_and_leaves_the_paid_text_out(ledger):
+    """Every page of the marketplace used to read every post on sale, each one's full
+    paid text included (up to PAYWALL_MAX_CONTENT_LEN bytes), and pushed all of it
+    across the single serialized ledger connection — text the list never shows. Only
+    a buyer reads content, and that goes through paywall_item()."""
+    ids = [ledger.create_paywall(ALICE, f"пост {i}", 100_000 + i, "x" * 3000) for i in range(5)]
+    page = ledger.paywall_items_list(3)
+    assert [int(r["id"]) for r in page] == sorted(ids, reverse=True)[:3]
+    assert all("content" not in r for r in page)
+    assert ledger.paywall_item(ids[-1])["content"] == "x" * 3000
+    # no limit keeps the whole listing for the callers that want it
+    assert len(ledger.paywall_items_list()) == 5
+
+
 def test_paywall_buy_flow(ledger):
     fund(ledger, ALICE, 1_000_000)  # 1 USDC buyer
     fund(ledger, BOB, 1_000_000)  # owner
@@ -805,6 +1162,27 @@ def test_paywall_buy_flow(ledger):
     assert ledger.buy_paywall(ALICE, item_id) == "dup"
     assert ledger.user_view(ALICE)["balance_micro"] == 600_000
     assert ledger.user_view(BOB)["balance_micro"] == 1_400_000
+
+
+def test_paywall_purchased_bulk_marks_exactly_what_a_buyer_owns(ledger):
+    """/paywall list asked paywall_purchased() once per post, so the page cost one
+    query per post anyone ever put up for sale. The batch answer has to agree with
+    the row-by-row one — and must not leak another buyer's purchases in."""
+    fund(ledger, ALICE, 10_000_000)
+    fund(ledger, CAROL, 10_000_000)
+    items = [ledger.create_paywall(BOB, f"пост {i}", 100, "x") for i in range(4)]
+    assert ledger.buy_paywall(ALICE, items[0]) == "ok"
+    assert ledger.buy_paywall(ALICE, items[2]) == "ok"
+    assert ledger.buy_paywall(CAROL, items[1]) == "ok"
+
+    mine = ledger.paywall_purchased_bulk(items, ALICE)
+    assert mine == {items[0], items[2]}
+    assert ledger.paywall_purchased_bulk(items, CAROL) == {items[1]}
+    assert ledger.paywall_purchased_bulk(items, BOB) == set()  # the owner never buys
+    assert ledger.paywall_purchased_bulk([], ALICE) == set()
+    assert ledger.paywall_purchased_bulk([items[0], items[0]], ALICE) == {items[0]}
+    for item_id in items:  # parity, post by post
+        assert (item_id in mine) is ledger.paywall_purchased(item_id, ALICE)
 
 
 def test_paywall_buy_insufficient_and_missing(ledger):
@@ -893,6 +1271,18 @@ def test_paywall_channel_crud(ledger):
     assert ledger.paywall_channel(-100123) is None
 
 
+def test_paywall_channels_list_page_is_a_stable_prefix(ledger):
+    """created_at has second resolution, so channels registered together tie, and a
+    LIMIT over a tie can hand back an arbitrary subset. chat_id has to settle it, or
+    the bounded page shows channels the full listing did not."""
+    for i in range(5):
+        assert ledger.set_paywall_channel(-1001 - i, ALICE, 500_000)
+    full = [int(r["chat_id"]) for r in ledger.paywall_channels_list()]
+    assert len(full) == 5
+    assert [int(r["chat_id"]) for r in ledger.paywall_channels_list(2)] == full[:2]
+    assert [int(r["chat_id"]) for r in ledger.paywall_channels_list(0)] == []
+
+
 def test_paywall_channel_subscribe_flow(ledger):
     fund(ledger, ALICE, 1_000_000)  # buyer
     fund(ledger, BOB, 1_000_000)  # owner
@@ -907,6 +1297,31 @@ def test_paywall_channel_subscribe_flow(ledger):
     ledger.set_paywall_channel(-100124, BOB, 700_000)  # more than ALICE has left
     assert ledger.subscribe_channel(-100124, ALICE) == "insufficient"
     assert ledger.user_view(ALICE)["balance_micro"] == 600_000
+
+
+def test_channel_subscriptions_bulk_matches_channel_subscription(ledger):
+    """/paywall channels asked for one subscription per channel. The batch read
+    must hand back the very same rows keyed by chat, leave out channels the user
+    never bought, and never show another subscriber's expiry."""
+    fund(ledger, ALICE, 5_000_000)
+    fund(ledger, CAROL, 5_000_000)
+    for chat in (-1001, -1002, -1003):
+        assert ledger.set_paywall_channel(chat, BOB, 100)
+    assert ledger.subscribe_channel(-1001, ALICE) == "ok"
+    assert ledger.subscribe_channel(-1003, ALICE) == "ok"
+    assert ledger.subscribe_channel(-1001, CAROL) == "ok"
+
+    asked = [-1001, -1002, -1003, -1004]  # -1004 is not even for sale
+    subs = ledger.channel_subscriptions_bulk(asked, ALICE)
+    assert set(subs) == {-1001, -1003}
+    for chat, row in subs.items():
+        assert row == ledger.channel_subscription(chat, ALICE)
+    assert ledger.channel_subscriptions_bulk(asked, CAROL) == {
+        -1001: ledger.channel_subscription(-1001, CAROL)
+    }
+    assert ledger.channel_subscriptions_bulk([], ALICE) == {}
+    # Duplicates collapse: the placeholder list must match the parameter list.
+    assert ledger.channel_subscriptions_bulk([-1001, -1001, -1003], ALICE) == subs
 
 
 def test_paywall_channel_owner_cannot_self_subscribe(ledger):
@@ -1035,6 +1450,120 @@ def test_reconnect_after_server_side_drop(ledger):
         pass
     fund(ledger, BOB, 5_000_000)
     assert ledger.balance(BOB) == Decimal("5.000000")
+
+
+def test_migration_does_not_disable_app_loggers(ledger):
+    """alembic/env.py must call fileConfig(disable_existing_loggers=False).
+
+    With the template default (True) every logger created *before* the upgrade
+    is marked disabled for the life of the process. The upgrade runs inside the
+    bot/agent process during Ledger.__init__, so all of tipbot's and agent's
+    module-level loggers would go silent in production while money moves.
+    """
+    import logging
+
+    import agent.caps  # noqa: F401  -- creates the real logger before the upgrade
+
+    early = logging.getLogger("tipbot.probe.created.before.migration")
+    early.disabled = False
+    Ledger._run_alembic(TEST_DB_URL)
+    assert early.disabled is False
+    assert logging.getLogger("agent.caps").disabled is False
+
+
+# ---------- schema migration wiring (alembic) ----------
+
+
+def _alembic_stamp(ledger):
+    ledger._conn.rollback()  # the test's own open transaction must not be trusted
+    row = ledger._conn.execute("SELECT version_num FROM alembic_version").fetchone()
+    return row["version_num"] if row else None
+
+
+def test_run_alembic_upgrades_the_database_it_was_given(ledger, monkeypatch, caplog):
+    """Ledger(database) must migrate *that* database, not whatever DATABASE_URL says.
+
+    env.py used to rewrite sqlalchemy.url from the environment unconditionally, so
+    every programmatic caller migrated the environment's database instead: locally
+    the test suite ALTERed the developer's live `tippy` ledger, while tipbot_test —
+    the database the Ledger actually uses — was never stamped and silently relied
+    on ensure_schema(). The decoy below is unreachable on purpose: if alembic
+    consults it, the upgrade fails and the stamp below never appears.
+    """
+    import logging
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody:none@127.0.0.1:1/nope")
+    with caplog.at_level(logging.ERROR, logger="tipbot.alembic"):
+        Ledger._run_alembic(TEST_DB_URL)
+    assert not caplog.records, caplog.text
+    assert _alembic_stamp(ledger)
+
+
+def test_alembic_runs_are_serialised_within_one_process(monkeypatch):
+    """Two overlapping `command.upgrade` calls in one process corrupt each other.
+
+    Alembic installs the names an env.py script reads into process-global dicts on
+    entering an EnvironmentContext and deletes them on exit, so the second of two
+    nested runs raises KeyError('config') out of a call _run_alembic() swallows —
+    the tracked migrations just stop applying. This is reachable today:
+    test_concurrent_buy_shares_no_insolvency builds a Ledger per thread.
+    """
+    import threading
+
+    from alembic import command
+
+    live, peak = [], []
+
+    def fake_upgrade(cfg, target):
+        live.append(1)
+        peak.append(len(live))
+        time.sleep(0.05)
+        live.pop()
+
+    monkeypatch.setattr(command, "upgrade", fake_upgrade)
+    threads = [
+        threading.Thread(target=Ledger._run_alembic, args=(TEST_DB_URL,)) for _ in range(4)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert peak == [1] * 4, f"overlapping alembic runs: {peak}"
+
+
+def test_env_py_still_reads_database_url_for_a_plain_cli_run(ledger, monkeypatch):
+    """`alembic upgrade head` from the docker entrypoint passes no attributes."""
+    import pathlib
+
+    from alembic.config import Config
+
+    from alembic import command
+
+    ini = pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
+    monkeypatch.setenv("DATABASE_URL", TEST_DB_URL)
+    command.upgrade(Config(str(ini)), "head")
+    assert _alembic_stamp(ledger)
+
+
+def test_env_py_refuses_to_migrate_a_guessed_database(monkeypatch):
+    """Without a caller DSN or DATABASE_URL, stop instead of using alembic.ini.
+
+    alembic.ini's sqlalchemy.url is a committed default (another host, another
+    port); migrating it would leave the real database un-migrated while every
+    check still said "head".
+    """
+    import pathlib
+
+    import pytest
+    from alembic.config import Config
+
+    from alembic import command
+
+    ini = pathlib.Path(__file__).resolve().parent.parent / "alembic.ini"
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        command.upgrade(Config(str(ini)), "head")
+    assert "DATABASE_URL" in str(exc.value)
 
 
 # ---------- concurrency safety ----------

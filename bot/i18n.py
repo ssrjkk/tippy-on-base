@@ -538,6 +538,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "🧾 No history yet. Try /deposit or /tip!",
         "zh": "🧾 暂无记录。试试 /deposit 或 /tip！",
     },
+    "history_empty_filter": {
+        "ru": "🧾 Нет транзакций типа {kind}.",
+        "en": "🧾 No {kind} transactions found.",
+        "zh": "🧾 没有找到 {kind} 类型的交易。",
+    },
+    "history_title_filter": {
+        "ru": "🧾 История ({kind}):",
+        "en": "🧾 History ({kind}):",
+        "zh": "🧾 历史 ({kind}):",
+    },
+    "history_export_caption": {
+        "ru": "📎 Ваша полная история транзакций",
+        "en": "📎 Your full transaction history",
+        "zh": "📎 您的完整交易记录",
+    },
     # ----- rain -----
     "rain_only_groups": {
         "ru": "🌧️ /rain работает только в группах!",
@@ -902,6 +917,64 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "❌ Вывод на контракт заблокирован: средства на контрактном адресе могут быть навсегда утеряны. Укажите личный (EOA) адрес.",
         "en": "❌ Withdrawal to a smart contract is blocked: funds sent to a contract address can be lost forever. Use a personal (EOA) address.",
         "zh": "❌ 禁止向合约地址提现：转入合约的资金可能永久丢失。请使用个人（EOA）地址。",
+    },
+    # ---- first-party destinations: contracts the bot owns, where a payout
+    # succeeds on-chain and the user still loses the money ----
+    "withdraw_block_zero": {
+        "ru": "❌ Нулевой адрес: перевод на него сжигает средства. Вывод отклонён.",
+        "en": "❌ Zero address: a payout there burns the funds. Withdrawal refused.",
+        "zh": "❌ 零地址：向该地址转账将销毁资金。已拒绝提现。",
+    },
+    "withdraw_block_hot": {
+        "ru": "❌ Это адрес самого бота. Вывод на него ничего не переведёт: средства останутся у бота, а баланс спишется.",
+        "en": "❌ That is the bot's own wallet. Withdrawing there moves nothing: the funds stay with the bot and your balance is debited.",
+        "zh": "❌ 这是机器人自己的钱包。向该地址提现毫无意义：资金留在机器人处，而你的余额会被扣除。",
+    },
+    "withdraw_block_vault": {
+        "ru": "❌ Это хранилище бота (vault): вывести из него может только бот. Вывод отклонён.",
+        "en": "❌ That is the bot's vault — only the bot can withdraw from it. Withdrawal refused.",
+        "zh": "❌ 这是机器人的金库，只有机器人能从中取出。已拒绝提现。",
+    },
+    "withdraw_block_x402": {
+        "ru": "❌ Это приёмный пул x402: средства из него уходят обратно боту, а не тебе. Вывод отклонён.",
+        "en": "❌ That is the x402 receive pool: funds drain from it back to the bot, not to you. Withdrawal refused.",
+        "zh": "❌ 这是 x402 接收池：其中的资金会回流给机器人而不是你。已拒绝提现。",
+    },
+    "withdraw_block_changed": {
+        "ru": "❌ Адрес отклонён как служебный адрес бота. Деньги не списаны — отправь /withdraw на личный (EOA) адрес.",
+        "en": "❌ The address was refused as a bot-owned destination. Nothing was debited — send /withdraw to a personal (EOA) address.",
+        "zh": "❌ 该地址被作为机器人自有地址拒绝。未扣除任何资金——请向个人（EOA）地址重新发起 /withdraw。",
+    },
+    # ---- two-step confirmation: the prompt, then the tap that debits ----
+    "withdraw_confirm": {
+        "ru": "⚠️ <b>Подтверди вывод</b>\n\n💵 Сумма: <b>{amount} USDC</b>\n🧾 Комиссия: <b>{fee} USDC</b>\n📉 Спишется: <b>{total} USDC</b>\n💰 Баланс после: <b>{after} USDC</b>\n\n📬 Адрес:\n<code>{addr}</code>\n\nПроверь адрес — перевод необратим.\nЗапрос активен {mins} мин.",
+        "en": "⚠️ <b>Confirm the withdrawal</b>\n\n💵 Amount: <b>{amount} USDC</b>\n🧾 Fee: <b>{fee} USDC</b>\n📉 Debited: <b>{total} USDC</b>\n💰 Balance after: <b>{after} USDC</b>\n\n📬 Address:\n<code>{addr}</code>\n\nCheck the address — the transfer is irreversible.\nRequest valid for {mins} min.",
+        "zh": "⚠️ <b>确认提现</b>\n\n💵 金额：<b>{amount} USDC</b>\n🧾 手续费：<b>{fee} USDC</b>\n📉 扣除：<b>{total} USDC</b>\n💰 之后余额：<b>{after} USDC</b>\n\n📬 地址：\n<code>{addr}</code>\n\n请核对地址——转账不可撤销。\n请求有效期 {mins} 分钟。",
+    },
+    "withdraw_confirm_btn": {
+        "ru": "✅ Подтвердить",
+        "en": "✅ Confirm",
+        "zh": "✅ 确认",
+    },
+    "withdraw_cancel_btn": {
+        "ru": "✖️ Отменить",
+        "en": "✖️ Cancel",
+        "zh": "✖️ 取消",
+    },
+    "withdraw_confirm_expired": {
+        "ru": "⌛ Запрос на вывод устарел или уже использован. Отправь /withdraw заново.",
+        "en": "⌛ That withdrawal request expired or was already used. Send /withdraw again.",
+        "zh": "⌛ 该提现请求已过期或已被使用。请重新发送 /withdraw。",
+    },
+    "withdraw_cancelled": {
+        "ru": "✖️ Вывод отменён — деньги остались на балансе.",
+        "en": "✖️ Withdrawal cancelled — the funds stayed on your balance.",
+        "zh": "✖️ 提现已取消——资金仍在你的余额中。",
+    },
+    "withdraw_queued_short": {
+        "ru": "Вывод поставлен в очередь",
+        "en": "Withdrawal queued",
+        "zh": "提现已排队",
     },
     "tx_not_found": {
         "ru": "Транзакция не найдена (ещё не mined или неверный хэш).",
@@ -1568,6 +1641,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Buy: /paywall buy <id>",
         "zh": "购买：/paywall buy <id>",
     },
+    "paywall_list_shown": {
+        "ru": "…показаны последние {n}",
+        "en": "…showing the newest {n}",
+        "zh": "…仅显示最新 {n} 条",
+    },
     "paywall_bought_for": {
         "ru": "✅ Куплено за {amount} USDC.\n\n{content}",
         "en": "✅ Purchased for {amount} USDC.\n\n{content}",
@@ -1694,9 +1772,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "📡 <b>付费频道</b>\n\n{lines}\n\n订阅：/paywall subscribe @频道",
     },
     "paywall_channel_state": {
-        "ru": " — <b>{amount} USDC/30д</b>",
-        "en": " — <b>{amount} USDC/30d</b>",
-        "zh": " — <b>{amount} USDC/30 天</b>",
+        "ru": " — <b>{amount} USDC/{period}д</b>",
+        "en": " — <b>{amount} USDC/{period}d</b>",
+        "zh": " — <b>{amount} USDC/{period} 天</b>",
     },
     "paywall_channel_until": {
         "ru": " — 🔑 до {until}",
@@ -1985,9 +2063,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/oc_sell &lt;id&gt; &lt;选项&gt; [百分比] — 例如 /oc_sell 3 1 50",
     },
     "oc_format_redeem": {
-        "ru": "Формат: /oc_redeem &lt;id&gt;",
-        "en": "Format: /oc_redeem &lt;id&gt;",
-        "zh": "格式：/oc_redeem &lt;id&gt;",
+        "ru": "Формат: /oc_redeem &lt;id&gt; — или просто /oc_redeem, чтобы забрать сразу всё",
+        "en": "Format: /oc_redeem &lt;id&gt; — or just /oc_redeem to claim everything at once",
+        "zh": "格式：/oc_redeem &lt;id&gt; — 或直接发送 /oc_redeem 一次性领取全部",
     },
     "oc_pending": {
         "ru": "⏳ Отправляю транзакцию в Base… (это живая ончейн-операция)",
@@ -2023,6 +2101,41 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "🏆 Выигрыш забран с контракта: <b>{amount} USDC</b> → <code>{addr}</code>",
         "en": "🏆 Winnings claimed from the contract: <b>{amount} USDC</b> → <code>{addr}</code>",
         "zh": "🏆 已从合约领取收益：<b>{amount} USDC</b> → <code>{addr}</code>",
+    },
+    "oc_refunded": {
+        "ru": "↩️ Отменённый рынок: возврат забран с контракта <b>{amount} USDC</b> → <code>{addr}</code>",
+        "en": "↩️ Cancelled market: refund pulled from the contract <b>{amount} USDC</b> → <code>{addr}</code>",
+        "zh": "↩️ 已取消市场：已从合约取回退款 <b>{amount} USDC</b> → <code>{addr}</code>",
+    },
+    "oc_redeem_not_ready": {
+        "ru": "⏳ Рынок #{id} ещё не закрыт — забирать нечего. Исхода ждёт: /oc {id}",
+        "en": "⏳ Market #{id} has not settled yet — there is nothing to claim. Status: /oc {id}",
+        "zh": "⏳ 市场 #{id} 尚未结算，暂无可领取内容。查看：/oc {id}",
+    },
+    "oc_settle_scanning": {
+        "ru": "🔎 Считаю твои позиции на цепочке…",
+        "en": "🔎 Checking your positions on-chain…",
+        "zh": "🔎 正在链上核对你的持仓……",
+    },
+    "oc_settle_empty": {
+        "ru": "🎯 Забирать нечего: позиции ещё не разрешены (или ты уже всё забрал). Позиции: /oc_pos",
+        "en": "🎯 Nothing to claim: your positions have not settled yet (or you already claimed everything). Positions: /oc_pos",
+        "zh": "🎯 暂无可领取内容：持仓尚未结算（或已全部领取）。持仓：/oc_pos",
+    },
+    "oc_settle_result": {
+        "ru": "🎯 Забрано с контракта: <b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
+        "en": "🎯 Claimed from the contract: <b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
+        "zh": "🎯 已从合约领取：<b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
+    },
+    "oc_settle_winnings": {
+        "ru": "выигрыши",
+        "en": "winnings",
+        "zh": "收益",
+    },
+    "oc_settle_refunds": {
+        "ru": "возвраты по отменённым",
+        "en": "cancelled-market refunds",
+        "zh": "取消退款",
     },
     "oc_no_shares": {
         "ru": "У твоего кошелька нет долей этого варианта. Позиции: /oc_pos",
@@ -2073,6 +2186,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "🏆 Рынок <b>#{id}</b> завершён — победил «{label}». У тебя {shares} долей: забери выигрыш командой /oc_redeem {id}",
         "en": "🏆 Market <b>#{id}</b> finished — “{label}” won. You hold {shares} shares: claim with /oc_redeem {id}",
         "zh": "🏆 市场 <b>#{id}</b> 已结束——「{label}」获胜。你持有 {shares} 份额：用 /oc_redeem {id} 领取",
+    },
+    "oc_cancelled_dm": {
+        "ru": "⚠️ Рынок <b>#{id}</b> отменён — исход так и не назван. Твои {shares} долей возвращаются из контракта пропорционально остатку эскроу: забери деньги командой /oc_redeem {id}",
+        "en": "⚠️ Market <b>#{id}</b> was cancelled — no outcome was ever declared. Your {shares} shares are refunded pro-rata from the contract escrow: pull them back with /oc_redeem {id}",
+        "zh": "⚠️ 市场 <b>#{id}</b> 已取消——从未公布结果。你持有的 {shares} 份额将按合约托管余额比例退款：请用 /oc_redeem {id} 取回",
     },
     "oc_resolve_disputed": {
         "ru": "Этот исход оспорен владельцем контракта — финальное слово за ним (ownerResolve).",

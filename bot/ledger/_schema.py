@@ -335,6 +335,48 @@ CREATE TABLE IF NOT EXISTS creator_dividends (
     created_at  BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())::bigint)
 );
 CREATE INDEX IF NOT EXISTS idx_creator_dividends_token ON creator_dividends (token_id);
+-- Two-step withdrawal: /withdraw stages the payout here and nothing moves
+-- until the user confirms the prompt. One live stage per user (staging
+-- replaces the previous one), and the TTL is enforced by the reader.
+CREATE TABLE IF NOT EXISTS withdraw_confirmations (
+    token        TEXT PRIMARY KEY,
+    tg_id        BIGINT NOT NULL,
+    to_address   TEXT NOT NULL,
+    amount_micro BIGINT NOT NULL,
+    fee_micro    BIGINT NOT NULL,
+    created_at   BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())::bigint)
+);
+CREATE INDEX IF NOT EXISTS idx_wd_confirm_tg ON withdraw_confirmations (tg_id);
+-- Recurring payments (subscriptions): migrated from JSON state so the
+-- scheduler and handlers share the same backed-up PostgreSQL as balances.
+-- The atomic claim (mark_executed) uses a compare-and-set on next_execution
+-- so two concurrent executor loops cannot double-debit the same payment.
+CREATE TABLE IF NOT EXISTS recurring_payments (
+    id               TEXT PRIMARY KEY,
+    from_tg_id       BIGINT NOT NULL,
+    to_tg_id         BIGINT NOT NULL,
+    amount_micro     BIGINT NOT NULL,
+    interval         TEXT NOT NULL,
+    memo             TEXT NOT NULL DEFAULT '',
+    active           BOOLEAN NOT NULL DEFAULT true,
+    created_at       BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM now())::bigint),
+    next_execution   BIGINT NOT NULL,
+    last_execution   BIGINT NOT NULL DEFAULT 0,
+    execution_count  BIGINT NOT NULL DEFAULT 0,
+    max_executions   BIGINT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_recurring_payments_from ON recurring_payments (from_tg_id);
+CREATE INDEX IF NOT EXISTS idx_recurring_payments_to ON recurring_payments (to_tg_id);
+CREATE INDEX IF NOT EXISTS idx_recurring_payments_due ON recurring_payments (next_execution) WHERE active = true;
+-- Paymaster gasless-usage tracking: per-address counter so the free-tx
+-- allowance survives restarts (previously in-memory only — users got
+-- unlimited gasless transactions after every reboot).
+CREATE TABLE IF NOT EXISTS paymaster_usage (
+    address     TEXT PRIMARY KEY,
+    used_count  BIGINT NOT NULL DEFAULT 0,
+    last_used   BIGINT NOT NULL DEFAULT 0
+);
+
 -- Defense-in-depth: DB-level guard against negative balances / shares.
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_balance_nn') THEN

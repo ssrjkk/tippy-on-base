@@ -12,6 +12,7 @@ import hmac
 import json as _json
 import logging
 import os
+import re
 import time
 import urllib.parse
 from decimal import Decimal
@@ -22,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from bot import base, config
 from bot.ledger import async_ledger as ledger
+from bot.ledger import blocked_destination
 from web.auth import COOKIE_NAME, SESSION_TTL_SECONDS, make_session, parse_session
 
 router = APIRouter()
@@ -149,12 +151,14 @@ async def mini_state(request: Request) -> dict:
         if view:
             markets.append({'id': view['id'], 'question': view['question'], 'close_at': view['close_at'], 'traders': view['traders'], 'options': [{'index': o['index'], 'label': o['label'], 'price_pct': o['price_pct']} for o in view['options']]})
     bets = []
-    for b in await ledger.bets_by_status('open', 6):
-        totals = await ledger.bet_totals(int(b['id']))
-        import json as _json
-        options = _json.loads(b['options'])
-        pot = sum(totals.values())
-        bets.append({'id': int(b['id']), 'question': b['question'], 'creator': int(b['creator']), 'pot_usdc': _fmt(pot), 'options': [{'index': i, 'label': lbl, 'pool_usdc': _fmt(totals.get(i, 0)), 'chance_pct': round(100 * totals.get(i, 0) / pot, 1) if pot else 0.0} for i, lbl in enumerate(options)]})
+    bet_rows = await ledger.bets_by_status('open', 6)
+    # Same reason as bulk_amm_market_views above: bet_totals() per row was one
+    # query per market on the app's hottest endpoint. chance_pct keeps the
+    # `100 * pool / pot` form rather than the view's `pool / pot * 100` — the two
+    # float orderings can round apart, and this number is shown to the user.
+    for view in await ledger.bulk_market_views([int(b['id']) for b in bet_rows]):
+        pot = view['pot']
+        bets.append({'id': view['id'], 'question': view['question'], 'creator': int(view['creator']['id']), 'pot_usdc': _fmt(pot), 'options': [{'index': o['index'], 'label': o['label'], 'pool_usdc': _fmt(o['pool']), 'chance_pct': round(100 * o['pool'] / pot, 1) if pot else 0.0} for o in view['options']]})
     history = [{'kind': r['kind'], 'amount': _fmt(r['amount']), 'note': r['note'] or '', 'counterparty': r['counterparty'] or '', 'created_at': r['created_at']} for r in await ledger.history(tg_id, 10)]
     from bot import tip_targets
     top_rows = await ledger.leaderboard(5)
@@ -338,6 +342,125 @@ async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
     if res != 'ok':
         raise HTTPException(400, _ERR_MSG.get(res, res))
     return {'ok': True, 'new_balance': float(await ledger.balance(tg_id))}
+
+_ADDR_RE = re.compile(r'^0x[a-fA-F0-9]{40}$')
+
+# Refusal copy keyed by the reason blocked_destination() / reserve_withdraw()
+# actually returned — the same taxonomy the Telegram handler shows.
+_WD_BLOCK_MSG = {
+    'zero': 'the zero address burns funds — pick your own wallet address',
+    'hot_wallet': "that is the bot's own wallet; withdraw to a personal (EOA) address",
+    'vault': "that is the bot's vault; withdraw to a personal (EOA) address",
+    'x402': 'that is the x402 receive pool; withdraw to a personal (EOA) address',
+}
+
+_WD_REFUSAL = {
+    'cap': 'daily withdrawal limit reached',
+    'blocked': 'the destination was refused as a bot-owned address',
+    'balance': 'insufficient balance',
+}
+
+
+def _exact(micro: int) -> str:
+    """Exact USDC string for the summary the user confirms — no rounding,
+    so the numbers on screen are the numbers the ledger debits."""
+    d = Decimal(micro) / Decimal(MICRO)
+    s = f'{d:.6f}'.rstrip('0').rstrip('.')
+    return s if s else '0'
+
+
+class WithdrawStageBody(BaseModel):
+    address: str
+    amount: Decimal = Field(allow_inf_nan=False)
+
+
+class WithdrawConfirmBody(BaseModel):
+    token: str
+    confirm: bool = True
+
+
+@router.post('/api/mini/withdraw', tags=['users'])
+async def mini_withdraw(body: WithdrawStageBody, request: Request) -> dict:
+    """Step 1 of a Mini App payout: stage it, move nothing.
+
+    Mirrors the /withdraw handler exactly (same checks, same order, same
+    ledger calls), so a withdrawal started in the Mini App and one started in
+    chat cannot behave differently. The debit happens only on the confirm
+    call, and the staged row is single-use.
+    """
+    tg_id = await _user(request)
+    addr = body.address.strip()
+    if not _ADDR_RE.match(addr):
+        raise HTTPException(400, 'invalid address')
+    from eth_utils import is_address
+    if not is_address(addr):
+        raise HTTPException(400, 'invalid address')
+    # First-party destinations burn the money; refused before the RPC probe.
+    blocked = blocked_destination(addr)
+    if blocked:
+        raise HTTPException(400, _WD_BLOCK_MSG.get(blocked, 'destination refused'))
+    micro = _to_micro(body.amount)
+    if micro <= 0:
+        raise HTTPException(400, 'amount must be positive')
+    min_micro = _cap_micro(config.MIN_WITHDRAW_USDC)
+    if micro < min_micro:
+        raise HTTPException(400, f'below the {_exact(min_micro)} USDC minimum')
+    if await ledger.withdrawals_today(tg_id) >= config.MAX_WITHDRAWS_PER_DAY:
+        raise HTTPException(400, f'daily limit of {config.MAX_WITHDRAWS_PER_DAY} withdrawals reached')
+    _throttle(tg_id, 'withdraw')
+    from bot.chain.network import is_contract
+    if await is_contract(addr):
+        raise HTTPException(400, 'the destination is a contract, not a wallet — funds would be lost')
+    fee_micro = base.withdraw_fee(micro)
+    total_micro = micro + fee_micro
+    bal = Decimal(await ledger.balance(tg_id))
+    if bal < Decimal(total_micro) / Decimal(MICRO):
+        raise HTTPException(400, f'insufficient balance: need {_exact(total_micro)}, '
+                                 f'have {_exact(int(bal * MICRO))}')
+    token = await ledger.stage_withdraw(tg_id, addr, micro, fee_micro)
+    after_micro = int(bal * MICRO) - total_micro
+    return {
+        'ok': True,
+        'staged': True,
+        'token': token,
+        'address': addr,
+        'amount': _exact(micro),
+        'fee': _exact(fee_micro),
+        'total': _exact(total_micro),
+        'balance_after': _exact(max(0, after_micro)),
+        'expires_in': config.WITHDRAW_CONFIRM_TTL_SECONDS,
+    }
+
+
+@router.post('/api/mini/withdraw/confirm', tags=['users'])
+async def mini_withdraw_confirm(body: WithdrawConfirmBody, request: Request) -> dict:
+    """Step 2: the tap that actually debits. Either verdict consumes the
+    staged token, so a replayed request can never reserve a second payout."""
+    tg_id = await _user(request)
+    staged = await ledger.take_withdraw(tg_id, body.token)
+    if staged is None:
+        raise HTTPException(410, 'that withdrawal request expired or was already used')
+    if not body.confirm:
+        return {'ok': False, 'cancelled': True,
+                'new_balance': float(await ledger.balance(tg_id))}
+    amount_micro = int(staged['amount_micro'])
+    fee_micro = int(staged['fee_micro'])
+    to_address = staged['to_address']
+    # AML persists its own flags; the notify path is the bot's, so log here.
+    warnings = await ledger.check_aml_withdraw(tg_id, amount_micro, to_address)
+    if warnings:
+        log.warning('AML flags on Mini App withdrawal for %s: %s', tg_id, warnings)
+    wd_id, reason = await ledger.reserve_withdraw(tg_id, to_address, amount_micro, fee_micro)
+    if wd_id is None:
+        raise HTTPException(400, _WD_REFUSAL.get(reason, 'withdrawal refused'))
+    return {
+        'ok': True,
+        'queued': True,
+        'withdraw_id': wd_id,
+        'amount': _exact(amount_micro),
+        'fee': _exact(fee_micro),
+        'new_balance': float(await ledger.balance(tg_id)),
+    }
 
 @router.get('/api/mini/onchain/{market_id}', tags=['markets'])
 async def mini_onchain_market(market_id: int, request: Request) -> dict:

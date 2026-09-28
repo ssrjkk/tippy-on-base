@@ -82,12 +82,19 @@ def test_trades_aggregate_per_outcome(ledger):
     assert ledger.onchain_trades_for_outcome(999, 0) == []
 
 
-def test_lifecycle_flags_independent(ledger):
+def test_first_terminal_state_wins(ledger):
+    """A market ends exactly one way: cancelling locks the outcome out and
+    resolving locks the cancel out, so no path can rewrite a settled pool."""
     ledger.save_onchain_market(9, CREATOR, "market", ["A", "B"], int(time.time()))
-    ledger.mark_onchain_cancelled(9)
+    assert ledger.mark_onchain_cancelled(9) is True
     assert ledger.get_onchain_market(9)["cancelled_flag"] == 1
     assert ledger.get_onchain_market(9)["resolved_outcome"] is None
-    ledger.set_onchain_resolved(9, 1)
-    assert ledger.get_onchain_market(9)["resolved_outcome"] == 1
+    assert ledger.set_onchain_resolved(9, 1) is False
+    assert ledger.get_onchain_market(9)["resolved_outcome"] is None
     # Cancelled market must never appear in the deadline ping list again.
     assert ledger.onchain_markets_past_deadline() == []
+
+    ledger.save_onchain_market(10, CREATOR, "other", ["A", "B"], int(time.time()))
+    assert ledger.set_onchain_resolved(10, 0) is True
+    assert ledger.mark_onchain_cancelled(10) is False
+    assert ledger.get_onchain_market(10)["cancelled_flag"] == 0

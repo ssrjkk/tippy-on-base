@@ -4,7 +4,6 @@ score, batch transactions.
 Made by @ssrjkk — github.com/ssrjkk.
 """
 
-import tempfile
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,29 +28,71 @@ async def test_paymaster_gasless_eligibility():
 
 
 @pytest.mark.asyncio
-async def test_recurring_payment_lifecycle():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        store = RecurringPaymentStore(tmpdir)
-        payment = await store.create(
-            payment_id="test_sub_1",
-            from_tg_id=123456,
-            to_tg_id=789012,
-            amount_micro=10_000_000,  # $10
-            interval=RecurrenceInterval.WEEKLY,
-            memo="Test subscription",
-        )
-        assert payment.amount_micro == 10_000_000
-        assert payment.interval == RecurrenceInterval.WEEKLY
+async def test_recurring_payment_lifecycle(ledger):
+    store = RecurringPaymentStore(".")
+    payment = await store.create(
+        payment_id="test_sub_1",
+        from_tg_id=123456,
+        to_tg_id=789012,
+        amount_micro=10_000_000,  # $10
+        interval=RecurrenceInterval.WEEKLY,
+        memo="Test subscription",
+    )
+    assert payment.amount_micro == 10_000_000
+    assert payment.interval == RecurrenceInterval.WEEKLY
 
-        assert len(await store.list_for_user(123456)) == 1
+    assert len(await store.list_for_user(123456)) == 1
 
-        # Not due yet, due after a week, then cancels.
-        assert len(await store.get_due(time.time())) == 0
-        future = time.time() + 7 * 86400 + 100
-        due = await store.get_due(future)
-        assert len(due) == 1
+    # Not due yet, due after a week, then cancels.
+    assert len(await store.get_due(time.time())) == 0
+    future = time.time() + 7 * 86400 + 100
+    due = await store.get_due(future)
+    assert len(due) == 1
 
-        assert await store.cancel("test_sub_1", 123456) is True
+    assert await store.cancel("test_sub_1", 123456) is True
+
+
+@pytest.mark.asyncio
+async def test_recurring_atomic_claim_prevents_double_execution(ledger):
+    """The atomic claim (mark_executed) must be idempotent: calling it twice
+    for the same payment must only advance the schedule once, so two concurrent
+    executor loops cannot double-debit the same payment."""
+    from bot import ledger as ledger_mod
+
+    store = RecurringPaymentStore(".")
+    # Insert directly with a past next_execution so the payment is due.
+    past = int(time.time()) - 100
+    await ledger_mod.async_ledger.recurring_insert({
+        "id": "test_sub_atomic",
+        "from_tg_id": 111,
+        "to_tg_id": 222,
+        "amount_micro": 5_000_000,
+        "interval": "daily",
+        "memo": "",
+        "active": True,
+        "created_at": int(time.time()),
+        "next_execution": past,
+        "last_execution": 0,
+        "execution_count": 0,
+        "max_executions": 0,
+    })
+
+    due = await store.get_due(time.time())
+    assert len(due) == 1
+
+    # First claim succeeds (advances schedule).
+    await store.mark_executed("test_sub_atomic")
+    row = await ledger_mod.async_ledger.recurring_get("test_sub_atomic")
+    assert int(row["execution_count"]) == 1
+    first_next = int(row["next_execution"])
+
+    # Second claim for the same payment_id must NOT advance again (the
+    # WHERE clause checks next_execution <= now, and we just pushed it
+    # into the future).
+    await store.mark_executed("test_sub_atomic")
+    row2 = await ledger_mod.async_ledger.recurring_get("test_sub_atomic")
+    assert int(row2["execution_count"]) == 1
+    assert int(row2["next_execution"]) == first_next
 
 
 @pytest.mark.asyncio

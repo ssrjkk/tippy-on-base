@@ -56,23 +56,36 @@ class LedgerOnchainMixin:
 
 
 
-    def set_onchain_resolved(self, market_id: int, winner_idx: int) -> None:
+    def set_onchain_resolved(self, market_id: int, winner_idx: int) -> bool:
+        """Record the winning outcome — only while the market is still open.
+
+        Guarded because the watcher and /oc_resolve race: overwriting a
+        cancelled flag with a winner would DM holders a redemption that the
+        contract refuses with AlreadyCancelled. Returns False if the row had
+        already settled.
+        """
         with self._lock:
-            self._conn.execute(
-                "UPDATE onchain_markets SET resolved_outcome = %s WHERE id = %s",
+            cur = self._conn.execute(
+                "UPDATE onchain_markets SET resolved_outcome = %s "
+                "WHERE id = %s AND resolved_outcome IS NULL AND cancelled_flag = 0",
                 (winner_idx, market_id),
             )
             self._conn.commit()
+            return cur.rowcount > 0
 
 
 
-    def mark_onchain_cancelled(self, market_id: int) -> None:
+    def mark_onchain_cancelled(self, market_id: int) -> bool:
+        """Flag a market as cancelled — only while it is still open (see
+        :meth:`set_onchain_resolved` for why the flip must be one-way)."""
         with self._lock:
-            self._conn.execute(
-                "UPDATE onchain_markets SET cancelled_flag = 1 WHERE id = %s",
+            cur = self._conn.execute(
+                "UPDATE onchain_markets SET cancelled_flag = 1 "
+                "WHERE id = %s AND resolved_outcome IS NULL AND cancelled_flag = 0",
                 (market_id,),
             )
             self._conn.commit()
+            return cur.rowcount > 0
 
 
 
@@ -93,8 +106,10 @@ class LedgerOnchainMixin:
     def record_onchain_trade(
         self, market_id: int, tg_id: int, outcome: int, shares: int, tx_hash: str = ""
     ) -> None:
-        """Log a successful on-chain buy (shares > 0). Registry-only: real
-        holdings always live in ERC-1155, this just powers winner DMs."""
+        """Log a fill against the registry: buys positive, sells negative, so
+        SUM(shares) tracks what a user still holds. Registry-only: the ERC-1155
+        balance remains the source of truth, this powers the winner/refund DMs.
+        """
         with self._lock:
             self.ensure_user(tg_id, None)
             self._conn.execute(
@@ -107,12 +122,25 @@ class LedgerOnchainMixin:
 
 
     def onchain_trades_for_outcome(self, market_id: int, outcome: int) -> list[dict]:
-        """Per-user shares bought of one outcome (at buy time; holders may
-        have sold since — redemption always reads the real ERC-1155 balance)."""
+        """Per-user net shares still held of one outcome. A holder who sold out
+        nets to zero or less and drops out; the contract balance is what
+        actually decides a payout."""
         with self._lock:
             return self._conn.execute(
                 "SELECT tg_id, SUM(shares) AS shares FROM onchain_trades "
                 "WHERE market_id = %s AND outcome = %s "
                 "GROUP BY tg_id HAVING SUM(shares) > 0",
                 (market_id, outcome),
+            ).fetchall()
+
+
+
+    def onchain_holders(self, market_id: int) -> list[dict]:
+        """Everyone holding any outcome of a market (net of sells). Used to DM
+        refund instructions when a market is cancelled."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT tg_id, SUM(shares) AS shares FROM onchain_trades "
+                "WHERE market_id = %s GROUP BY tg_id HAVING SUM(shares) > 0",
+                (market_id,),
             ).fetchall()

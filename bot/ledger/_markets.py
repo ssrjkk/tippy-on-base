@@ -151,12 +151,71 @@ class LedgerMarketsMixin:
 
 
 
+    def market_quantities_batch(self, market_ids: list[int]) -> dict[int, list[int]]:
+        """Batch version of market_quantities — fetches quantities for multiple markets in one query."""
+        if not market_ids:
+            return {}
+        placeholders = ",".join(["%s"] * len(market_ids))
+        with self._lock:
+            markets = self._conn.execute(
+                f"SELECT id, options FROM markets WHERE id IN ({placeholders})",
+                market_ids,
+            ).fetchall()
+            rows = self._conn.execute(
+                f"SELECT market_id, option_idx, SUM(shares) AS s FROM market_shares "
+                f"WHERE market_id IN ({placeholders}) GROUP BY market_id, option_idx",
+                market_ids,
+            ).fetchall()
+        result = {}
+        totals_map: dict[int, dict[int, int]] = {}
+        for r in rows:
+            mid = int(r["market_id"])
+            totals_map.setdefault(mid, {})[int(r["option_idx"])] = int(r["s"])
+        for m in markets:
+            mid = int(m["id"])
+            n = len(json.loads(m["options"]))
+            totals = totals_map.get(mid, {})
+            result[mid] = [totals.get(i, 0) for i in range(n)]
+        return result
+
+
+
     def market_prices(self, market_id: int) -> list[Decimal] | None:
         """Live probability per option (0..1), or None if the market is gone."""
         m = self.get_market(market_id)
         if not m:
             return None
         return lmsr_prices(self.market_quantities(market_id), int(m["b_micro"]))
+
+
+
+    def market_prices_batch(self, market_ids: list[int]) -> dict[int, list[Decimal] | None]:
+        """Batch version of market_prices — returns dict of market_id -> prices."""
+        if not market_ids:
+            return {}
+        placeholders = ",".join(["%s"] * len(market_ids))
+        with self._lock:
+            markets = self._conn.execute(
+                f"SELECT id, options, b_micro FROM markets WHERE id IN ({placeholders})",
+                market_ids,
+            ).fetchall()
+            rows = self._conn.execute(
+                f"SELECT market_id, option_idx, SUM(shares) AS s FROM market_shares "
+                f"WHERE market_id IN ({placeholders}) GROUP BY market_id, option_idx",
+                market_ids,
+            ).fetchall()
+        totals_map: dict[int, dict[int, int]] = {}
+        for r in rows:
+            mid = int(r["market_id"])
+            totals_map.setdefault(mid, {})[int(r["option_idx"])] = int(r["s"])
+        result = {}
+        for m in markets:
+            mid = int(m["id"])
+            n = len(json.loads(m["options"]))
+            totals = totals_map.get(mid, {})
+            quantities = [totals.get(i, 0) for i in range(n)]
+            result[mid] = lmsr_prices(quantities, int(m["b_micro"]))
+        return result
 
 
 
@@ -304,13 +363,19 @@ class LedgerMarketsMixin:
                 "ORDER BY ms.market_id DESC",
                 (tg_id,),
             ).fetchall()
+        if not rows:
+            return []
+        market_ids = list({int(r["market_id"]) for r in rows})
+        quantities_map = self.market_quantities_batch(market_ids)
         out = []
         for r in rows:
+            mid = int(r["market_id"])
             options = json.loads(r["options"])
-            prices = lmsr_prices(self.market_quantities(int(r["market_id"])), int(r["b_micro"]))
+            quantities = quantities_map.get(mid, [0] * len(options))
+            prices = lmsr_prices(quantities, int(r["b_micro"]))
             out.append(
                 {
-                    "market_id": int(r["market_id"]),
+                    "market_id": mid,
                     "question": r["question"],
                     "option": options[int(r["option_idx"])],
                     "shares": int(r["shares"]),
@@ -441,32 +506,39 @@ class LedgerMarketsMixin:
                 self._conn.rollback()
                 return "toosmall", {}
             new_cost = pos[option_idx]["cost"] - value  # realized profit lowers basis
-            cur = self._conn.execute(
-                "UPDATE market_shares SET shares = shares - %s, cost_micro = %s "
-                "WHERE market_id = %s AND tg_id = %s AND option_idx = %s AND shares >= %s",
-                (shares, new_cost, market_id, tg_id, option_idx, shares),
-            )
-            if cur.rowcount == 0:
-                # Another transaction sold/closed the position between read and write.
+            try:
+                cur = self._conn.execute(
+                    "UPDATE market_shares SET shares = shares - %s, cost_micro = %s "
+                    "WHERE market_id = %s AND tg_id = %s AND option_idx = %s AND shares >= %s",
+                    (shares, new_cost, market_id, tg_id, option_idx, shares),
+                )
+                if cur.rowcount == 0:
+                    # Another transaction sold/closed the position between read and write.
+                    self._conn.rollback()
+                    return "noshare", {}
+                self._conn.execute(
+                    "UPDATE markets SET escrow_micro = escrow_micro - %s WHERE id = %s",
+                    (value, market_id),
+                )
+                # Direct credit (no intermediate commit) so the whole trade —
+                # shares, escrow and payout — lands in one atomic transaction.
+                self._conn.execute(
+                    "UPDATE users SET balance = balance + %s WHERE tg_id = %s",
+                    (value, tg_id),
+                )
+                self._conn.execute(
+                    "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
+                    "VALUES ('market_sell', %s, %s, %s, %s)",
+                    (tg_id, str(market_id), value, options[option_idx]),
+                )
+                prices = lmsr_prices(q, int(m["b_micro"]))
+                self._conn.commit()
+            except Exception:
+                # Rollback guard: if any UPDATE in the atomic sequence fails,
+                # roll back the entire transaction so we don't leave partial
+                # state (e.g., shares decremented but balance not credited).
                 self._conn.rollback()
-                return "noshare", {}
-            self._conn.execute(
-                "UPDATE markets SET escrow_micro = escrow_micro - %s WHERE id = %s",
-                (value, market_id),
-            )
-            # Direct credit (no intermediate commit) so the whole trade —
-            # shares, escrow and payout — lands in one atomic transaction.
-            self._conn.execute(
-                "UPDATE users SET balance = balance + %s WHERE tg_id = %s",
-                (value, tg_id),
-            )
-            self._conn.execute(
-                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                "VALUES ('market_sell', %s, %s, %s, %s)",
-                (tg_id, str(market_id), value, options[option_idx]),
-            )
-            prices = lmsr_prices(q, int(m["b_micro"]))
-            self._conn.commit()
+                raise
             return "ok", {
                 "shares": shares,
                 "value": value,

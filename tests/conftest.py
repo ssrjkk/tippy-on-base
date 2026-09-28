@@ -41,6 +41,9 @@ TABLES = [
     "notification_outbox", "create2_proxies", "x402_invoices",
     "market_subsidies", "login_nonces",
     "creator_tokens", "creator_token_holders", "creator_dividends",
+    "withdraw_confirmations",
+    "recurring_payments",
+    "paymaster_usage",
 ]
 
 
@@ -158,6 +161,12 @@ def ledger(monkeypatch):
     # rebind it too, or basename resolution would hit the DEV database.
     import bot.tip_targets
     monkeypatch.setattr(bot.tip_targets, "ledger", async_fresh)
+    # Same story for the agent, which binds the proxy at import time.
+    import agent.pnl
+    import agent.tools
+
+    monkeypatch.setattr(agent.tools, "ledger", async_fresh)
+    monkeypatch.setattr(agent.pnl, "ledger", async_fresh)
     handlers._common._money_cmd_last.clear()
     web.server._rl_state.clear()
     if hasattr(web.mini, "_money_last"):

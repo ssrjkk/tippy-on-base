@@ -30,7 +30,7 @@ Everything in Tippy is denominated in **USDC** (1 USDC ≈ $1) on Base.
 | `/claim <tx>` | Credit a deposit after it's confirmed on Base |
 | `/link` | Link an external wallet to your account |
 | `/confirm` | Confirm a wallet link from the other side |
-| `/withdraw <addr> <amt>` | Withdraw USDC to any Base address |
+| `/withdraw <addr> <amt>` | Withdraw USDC to any Base address (needs a Confirm tap) |
 | `/tx <hash>` | Decode any Base transaction in plain language |
 
 **How to deposit:** send `/deposit` in a private chat with the bot, transfer
@@ -40,6 +40,18 @@ Deposits are credited after a short confirmation window on Base.
 **Withdrawals** go straight on-chain from the bot's vault. There is a 1% fee,
 a 1 USDC minimum, and a limit of 5 withdrawals per day — the bot will tell you
 exactly where you stand.
+
+`/withdraw` never moves money on its own. It shows a summary (address, amount,
+fee, what you'll receive) and waits for you to tap **✅ Confirm** — nothing is
+debited until then. The offer lasts 10 minutes and can be used once; tapping
+twice, reusing an old message or hitting **✖️ Cancel** costs you nothing.
+Withdrawals to the bot's own addresses (hot wallet, vault, x402 receive pool)
+and to the zero address are refused, and each refusal tells you why.
+
+Withdrawing from the **Mini App** (`/app` → Withdraw) is the same flow, not a
+second one: the same summary (amount, fee, total, balance after), the same
+single-use 10-minute confirmation, the same refusals. Nothing leaves your
+balance until you tap ✅.
 
 `/wallet` shows your linked addresses; `/import` and `/export` move a wallet
 into and out of the bot in private chat.
@@ -157,6 +169,9 @@ revenue.
   or a "verification" payment. Anyone doing that is a scammer.
 - On-chain actions (withdrawals, on-chain markets) are visible on Base and
   verifiable by anyone — `/tx <hash>` decodes any of them.
+- Only **you** can confirm your withdrawal. The ✅ button is tied to your own
+  chat and to that one summary; a forwarded or screenshotted prompt is useless
+  to anyone else.
 
 ## Questions
 

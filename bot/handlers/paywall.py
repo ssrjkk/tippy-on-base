@@ -11,28 +11,52 @@ from aiogram.filters import Command, CommandObject
 
 from . import _common as common
 
-__all__ = ['PAYWALL_DRAFT_TTL', 'PAYWALL_HELP', '_index_message', '_paywall_channel_cmd', '_paywall_channels_cmd', '_paywall_draft', '_paywall_list_text', '_paywall_subscribe_cmd', 'cmd_paywall', 'on_reaction']
+__all__ = ['PAYWALL_DRAFT_TTL', 'PAYWALL_HELP', 'TG_MESSAGE_MAX', '_index_message', '_paywall_channel_cmd', '_paywall_channels_cmd', '_paywall_draft', '_paywall_list_text', '_paywall_subscribe_cmd', 'cmd_paywall', 'on_reaction']
 PAYWALL_DRAFT_TTL = 300
+# Hard limit Telegram imposes on one text message; a longer send is rejected and
+# the user receives nothing at all.
+TG_MESSAGE_MAX = 4096
 _paywall_draft: dict[int, tuple[int, str, float]] = {}
 PAYWALL_HELP = '🔐 <b>Платный контент</b>\n• /paywall create 5 Мой отчёт — создать пост за 5 USDC\n  (после этого пришли контент одним сообщением)\n• /paywall list — все платные посты\n• /paywall buy &lt;id&gt; — купить и открыть контент\n• /paywall cancel — отменить создание\n\n📡 <b>Платные каналы</b>\n• /paywall channel 5 — в канале: доступ за 5 USDC / 30 дней\n• /paywall channel off — выключить продажу доступа\n• /paywall subscribe @канал — купить/продлить доступ\n• /paywall channels — платные каналы и мои подписки\n\nПродавец получает USDC на баланс сразу после покупки.\nПокупка идёт с баланса (/deposit). AI-агенты платят через API:\nPOST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt; (x402-протокол).'
 
 async def _paywall_list_text(lang: str, uid: int) -> str | None:
     """Formatted paid-post list for a user, or None when there are none."""
-    rows = await common.ledger.paywall_items_list()
+    page_max = common.config.PAYWALL_LIST_MAX
+    # One row more than the page: that answers "is there more?" without a
+    # COUNT(*) on every open.
+    rows = await common.ledger.paywall_items_list(page_max + 1)
     if not rows:
         return None
+    shown = rows[:page_max]
+    # One ownership read for the whole page: paywall_purchased() per row put a
+    # query behind the ledger lock for every post anyone ever put up for sale.
+    owned = await common.ledger.paywall_purchased_bulk([int(r["id"]) for r in shown], uid)
     lines = [
         f"#{r['id']} — {html.escape(r['title'])} — <b>{common._fmt(int(r['price_micro']))} USDC</b>"
-        f"{' ✅' if await common.ledger.paywall_purchased(int(r['id']), uid) else ''}"
-        for r in rows
+        f"{' ✅' if int(r['id']) in owned else ''}"
+        for r in shown
     ]
-    return (
-        i18n.t(lang, 'paywall_list_header')
-        + "\n\n"
-        + "\n".join(lines)
-        + "\n\n"
-        + i18n.t(lang, 'paywall_list_buy_hint')
-    )
+    cut = len(rows) > len(shown)
+
+    def page() -> str:
+        body = "\n".join(lines)
+        if cut:
+            body += "\n" + i18n.t(lang, 'paywall_list_shown', n=len(lines))
+        return (
+            i18n.t(lang, 'paywall_list_header')
+            + "\n\n"
+            + body
+            + "\n\n"
+            + i18n.t(lang, 'paywall_list_buy_hint')
+        )
+
+    # Titles are user-written and html.escape can multiply them, so even a page of
+    # capped size can overflow 4096 and be rejected outright. Drop the oldest
+    # posts until the send fits.
+    while len(page()) > TG_MESSAGE_MAX and len(lines) > 1:
+        lines.pop()
+        cut = True
+    return page()
 
 @common.router.message(Command('paywall'))
 async def cmd_paywall(message: types.Message, command: CommandObject) -> None:
@@ -100,7 +124,7 @@ async def cmd_paywall(message: types.Message, command: CommandObject) -> None:
         await _paywall_subscribe_cmd(message, parts[1] if len(parts) == 2 else '')
         return
     if sub == 'channels':
-        await _paywall_channels_cmd(message)
+        await _paywall_channels_cmd(message, lang)
         return
     await message.answer(PAYWALL_HELP)
 
@@ -198,31 +222,54 @@ async def _paywall_subscribe_cmd(message: types.Message, target: str) -> None:
     except Exception:
         title = str(chat_id)
     try:
-        await message.bot.send_message(int(ch['owner_tg']), i18n.t('ru', 'paywall_owner_notified', amount=common._fmt(int(ch['price_micro'])), title=html.escape(title)))
+        owner = int(ch['owner_tg'])
+        # The seller's own language, not the buyer's — the notification is for them.
+        await message.bot.send_message(owner, i18n.t(await common.user_lang(owner), 'paywall_owner_notified', amount=common._fmt(int(ch['price_micro'])), title=html.escape(title)))
     except Exception:
         pass
 
-async def _paywall_channels_cmd(message: types.Message) -> None:
-    """/paywall channels — paid channels and my subscriptions."""
+async def _paywall_channels_cmd(message: types.Message, lang: str) -> None:
+    """/paywall channels — paid channels and my subscriptions. `lang` comes from
+    the dispatcher, which already read it."""
     uid = message.from_user.id
-    rows = await common.ledger.paywall_channels_list()
+    page_max = common.config.PAYWALL_LIST_MAX
+    # One row more than the page answers "is there more?" without a COUNT(*).
+    rows = await common.ledger.paywall_channels_list(page_max + 1)
     if not rows:
-        await message.answer(i18n.t(await common.user_lang(uid), 'paywall_channels_empty'))
+        await message.answer(i18n.t(lang, 'paywall_channels_empty'))
         return
+    shown = rows[:page_max]
+    cut = len(rows) > len(shown)
+    # A subscription lookup used to run per channel, each one behind the ledger
+    # lock; one read covers the page.
+    subs = await common.ledger.channel_subscriptions_bulk([int(ch["chat_id"]) for ch in shown], uid)
     lines = []
-    for ch in rows:
+    for ch in shown:
         title = str(ch['chat_id'])
         try:
+            # Not a ledger statement but still a round trip per channel, so the
+            # page cap bounds these calls too.
             title = (await message.bot.get_chat(int(ch['chat_id']))).title
         except Exception:
             pass
-        sub = await common.ledger.channel_subscription(int(ch['chat_id']), uid)
-        state = i18n.t(await common.user_lang(uid), 'paywall_channel_state', amount=common._fmt(int(ch['price_micro'])))
+        sub = subs.get(int(ch['chat_id']))
+        state = i18n.t(lang, 'paywall_channel_state', amount=common._fmt(int(ch['price_micro'])),
+                       period=int(ch['period_days']))
         if sub and int(sub['expires_at']) > time.time():
             until = time.strftime('%d.%m', time.localtime(int(sub['expires_at'])))
-            state += i18n.t(await common.user_lang(uid), 'paywall_channel_until', until=until)
+            state += i18n.t(lang, 'paywall_channel_until', until=until)
         lines.append(f'• {html.escape(title)}{state}')
-    await message.answer(i18n.t(await common.user_lang(uid), 'paywall_channels_header', lines='\n'.join(lines)))
+
+    def page() -> str:
+        body = '\n'.join(lines)
+        if cut:
+            body += '\n' + i18n.t(lang, 'paywall_list_shown', n=len(lines))
+        return i18n.t(lang, 'paywall_channels_header', lines=body)
+
+    while len(page()) > TG_MESSAGE_MAX and len(lines) > 1:
+        lines.pop()
+        cut = True
+    await message.answer(page())
 
 async def _index_message(message: types.Message) -> None:
     """Index message -> author so reactions can tip. Privacy mode must be off."""
