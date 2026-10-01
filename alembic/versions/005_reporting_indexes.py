@@ -8,7 +8,7 @@ Revision ID: 005
 Revises: 004
 Create Date: 2026-09-12
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 from alembic import op
 
