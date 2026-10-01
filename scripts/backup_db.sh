@@ -8,6 +8,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Ensure pg_dump is on PATH (Windows/PostgreSQL installs)
+if ! command -v pg_dump &>/dev/null; then
+    for d in "/c/Program Files/PostgreSQL"/*/bin; do
+        [ -x "$d/pg_dump" ] && export PATH="$d:$PATH" && break
+    done
+fi
+
 # Load .env if present
 if [ -f "$PROJECT_ROOT/.env" ]; then
     set -a
@@ -31,7 +38,7 @@ mkdir -p "$BACKUP_DIR"
 echo "Backing up database to $BACKUP_FILE..."
 
 # Dump database (exclude large binary tables if any)
-pg_dump "$DATABASE_URL" \
+pg_dump -d "$DATABASE_URL" \
     --clean \
     --if-exists \
     --no-owner \
