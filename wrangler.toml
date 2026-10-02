@@ -1,0 +1,7 @@
+name = "tippy"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "web/static"
+
+[env.production]
+# Set BACKEND_URL in Cloudflare dashboard: Settings → Variables
+# Example: https://your-backend.render.com or your VPS URL
