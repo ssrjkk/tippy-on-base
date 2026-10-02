@@ -1,11 +1,50 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tippy — Community economy on Base</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tippy — Экономика сообщества в USDC на Base</title>
+  <meta name="description" content="Чаевые, рынки предсказаний и монетизация сообщества прямо в Telegram. Мгновенные транзакции в USDC на Base L2.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .hero-split { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; min-height: 70vh; padding: 60px 0; }
+    @media (max-width: 968px) { .hero-split { grid-template-columns: 1fr; gap: 40px; } }
+    .hero-text h1 { font-size: 56px; font-weight: 800; line-height: 1.1; margin-bottom: 24px; letter-spacing: -0.02em; }
+    .hero-text h1 .accent { background: linear-gradient(120deg, var(--accent-soft), var(--accent) 55%, #4d7dff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero-text p { font-size: 20px; color: var(--text-secondary); margin-bottom: 32px; line-height: 1.6; }
+    .auth-box { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 40px; box-shadow: var(--shadow-lg); }
+    .auth-box h3 { font-size: 24px; margin-bottom: 8px; }
+    .auth-box .subtitle { color: var(--text-secondary); margin-bottom: 24px; font-size: 15px; }
+    .auth-btn { width: 100%; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 12px; transition: all 0.2s; cursor: pointer; border: none; text-decoration: none; }
+    .auth-btn.telegram { background: #229ED9; color: #fff; }
+    .auth-btn.telegram:hover { background: #1a8bc0; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(34, 158, 217, 0.3); }
+    .auth-btn.wallet { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .auth-btn.wallet:hover { border-color: var(--accent); background: var(--accent-bg); }
+    .auth-divider { text-align: center; color: var(--text-secondary); font-size: 14px; margin: 20px 0; position: relative; }
+    .auth-divider::before, .auth-divider::after { content: ''; position: absolute; top: 50%; width: 45%; height: 1px; background: var(--border); }
+    .auth-divider::before { left: 0; }
+    .auth-divider::after { right: 0; }
+    .features-compact { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin: 80px 0; }
+    .feature-item { display: flex; gap: 16px; align-items: flex-start; }
+    .feature-icon { width: 48px; height: 48px; background: var(--accent-bg); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 24px; }
+    .feature-item h3 { font-size: 18px; margin-bottom: 6px; }
+    .feature-item p { color: var(--text-secondary); font-size: 15px; line-height: 1.5; }
+    .stats-row { display: flex; gap: 40px; flex-wrap: wrap; margin: 40px 0; }
+    .stat { flex: 1; min-width: 120px; }
+    .stat-value { font-size: 36px; font-weight: 800; color: var(--accent); line-height: 1; }
+    .stat-label { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+    .demo-section { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 40px; margin: 60px 0; }
+    .demo-section h2 { font-size: 32px; margin-bottom: 16px; }
+    .demo-section > p { color: var(--text-secondary); margin-bottom: 32px; font-size: 17px; }
+    .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+    .demo-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .demo-card h4 { font-size: 16px; margin-bottom: 8px; }
+    .demo-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+    .cta-final { text-align: center; padding: 80px 20px; background: linear-gradient(135deg, var(--accent-bg), transparent); border-radius: 24px; margin: 80px 0; }
+    .cta-final h2 { font-size: 40px; margin-bottom: 16px; }
+    .cta-final p { font-size: 18px; color: var(--text-secondary); margin-bottom: 32px; }
+  </style>
 </head>
 <body>
   <div class="orb orb-a" aria-hidden="true"></div>
@@ -18,130 +57,128 @@
         <span class="brand-name"><b>Tippy</b></span>
       </a>
       <div class="nav-actions">
-        <button class="theme-toggle" data-act="toggleTheme" aria-label="Toggle theme">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
           <span class="icon-moon">🌙</span>
           <span class="icon-sun">☀️</span>
         </button>
-        <a class="btn btn-ghost" href="/login">Sign in</a>
-        <a class="btn btn-ghost" href="https://t.me/TIPBOT_USERNAME" data-tg-link>Открыть в Telegram →</a>
+        <a class="btn btn-ghost" href="/app">Открыть приложение</a>
       </div>
     </div>
   </header>
 
   <main>
-    <section class="hero">
-      <a class="hero-badge" href="https://buildonbase.com" target="_blank" rel="noopener">
-        <span class="base-mark pulse-ring"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
-        Built on Base · Mainnet
-      </a>
-      <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
-      <p class="hero-sub">
-        Чаевые, донат-страницы и рынки предсказаний прямо в Telegram.
-        Мгновенные транзакции, парамутюэль-выплаты, прозрачный кошелёк.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="https://t.me/TIPBOT_USERNAME" data-tg-link>Начать в Telegram</a>
-        <a class="btn btn-ghost" href="#markets">Смотреть рынки ↓</a>
-      </div>
-    </section>
-
-    <section class="stats" id="stats">
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-volume">–</div><div class="stat-label">Объём, USDC</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-vol30">–</div><div class="stat-label">Объём за 30 дней, USDC</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-users">–</div><div class="stat-label">Пользователей</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-markets">–</div><div class="stat-label">Открытых рынков</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-tx">–</div><div class="stat-label">Транзакций</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-fees">–</div><div class="stat-label">Собрано комиссий, USDC</div></div>
-    </section>
-
-    <section class="section reveal" id="volume-chart-section">
-      <h2>📈 Активность за 14 дней</h2>
-      <div class="chart" id="volume-chart">
-        <div class="skeleton-bar" style="height:38%"></div>
-        <div class="skeleton-bar" style="height:62%"></div>
-        <div class="skeleton-bar" style="height:45%"></div>
-        <div class="skeleton-bar" style="height:78%"></div>
-        <div class="skeleton-bar" style="height:55%"></div>
-        <div class="skeleton-bar" style="height:90%"></div>
-        <div class="skeleton-bar" style="height:70%"></div>
-      </div>
-    </section>
-
-    <section class="section reveal" id="markets">
-      <h2>🎯 Открытые рынки</h2>
-      <div class="markets" id="markets-list">
-        <div class="skeleton-card"></div>
-        <div class="skeleton-card"></div>
-        <div class="skeleton-card"></div>
-      </div>
-    </section>
-
-    <section class="section reveal" id="closed-markets">
-      <h2>🏁 Закрытые рынки</h2>
-      <div class="markets" id="closed-markets-list">
-        <div class="skeleton-card"></div>
-      </div>
-    </section>
-
-    <section class="section reveal" id="onchain-markets" style="display:none">
-      <h2>🎯 Cally — ончейн-рынки на Base</h2>
-      <p class="hint">
-        Доли — настоящие ERC-1155 токены в контракте OutcomeMarket; расчёты в USDC
-        прямо на-цепи. Создавай и торгуй в боте: /oc_create · /oc_buy · /oc_redeem.
-      </p>
-      <div class="markets" id="onchain-markets-list">
-        <div class="skeleton-card"></div>
-      </div>
-    </section>
-
-    <section class="section reveal how">
-      <h2>Как это работает</h2>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">1</div>
-          <h3>Открой бота</h3>
-          <p>Нажми «Начать в Telegram» и получи свой баланс, страницу донатов и доступ к рынкам.</p>
-        </div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <h3>Пополни в USDC</h3>
-          <p>Отправь USDC на адрес бота в сети Base — средства зачисляются мгновенно.</p>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <h3>Кидай чаевые и ставь</h3>
-          <p>Чаевые, реакции и ставки — мгновенно, без газа. Вывод в любой момент с комиссией 1%.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="section grid-2">
-      <div class="reveal">
-        <h2>🏆 Топ чаевых</h2>
-        <div class="leaderboard" id="leaderboard">
-          <div class="skeleton-card" style="height:56px"></div>
-          <div class="skeleton-card" style="height:56px"></div>
-          <div class="skeleton-card" style="height:56px"></div>
-        </div>
-      </div>
-      <div class="reveal">
-        <h2>💼 Прозрачный кошелёк</h2>
-        <div class="wallet" id="wallet">
-          <div class="wallet-row"><span>USDC на горячем кошельке</span><b id="wallet-balance">–</b></div>
-          <div class="wallet-row" id="wallet-vault-row" style="display:none">
-            <span>Резервы в TipBotVault (on-chain)</span><b id="wallet-vault">–</b>
+    <section class="hero-split">
+      <div class="hero-text">
+        <h1>Экономика сообщества в <span class="accent">USDC</span></h1>
+        <p>Чаевые, рынки предсказаний и монетизация для создателей. Всё в Telegram, мгновенные расчёты на Base L2. Без газа для пользователей.</p>
+        <div class="stats-row">
+          <div class="stat">
+            <div class="stat-value skeleton" id="stat-users">–</div>
+            <div class="stat-label">Пользователей</div>
           </div>
-          <div class="wallet-row"><span>Обязательства бота</span><b id="wallet-liabilities">–</b></div>
-          <div class="wallet-row"><span>Платёжеспособность</span><b id="wallet-solvent">–</b></div>
-          <div class="wallet-addr" id="wallet-address">загрузка…</div>
-          <div class="wallet-addr" id="wallet-vault-addr" style="display:none">загрузка…</div>
-          <p class="hint">
-            Все депозиты, чаевые и пулы рынков хранятся в USDC (сеть Base) —
-            в смарт-контракте TipBotVault или на горячем кошельке до его
-            деплоя. Резервы читаются напрямую из блокчейна и автоматически
-            сверяются с обязательствами бота.
-          </p>
+          <div class="stat">
+            <div class="stat-value skeleton" id="stat-volume">–</div>
+            <div class="stat-label">Объём, USDC</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value skeleton" id="stat-markets">–</div>
+            <div class="stat-label">Открытых рынков</div>
+          </div>
         </div>
+      </div>
+
+      <div class="auth-box">
+        <h3>Начать использовать</h3>
+        <p class="subtitle">Войдите через Telegram или кошелек для доступа к полному функционалу</p>
+        
+        <a href="/login" class="auth-btn telegram">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.941z"/></svg>
+          Войти через Telegram
+        </a>
+        
+        <div class="auth-divider">или</div>
+        
+        <button class="auth-btn wallet" id="walletLogin">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 10h18M7 3v4M17 3v4"/></svg>
+          Подключить кошелек
+        </button>
+        
+        <p style="text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-secondary);">
+          10 бесплатных транзакций для новых пользователей
+        </p>
+      </div>
+    </section>
+
+    <section class="section reveal">
+      <div class="features-compact">
+        <div class="feature-item">
+          <div class="feature-icon">💸</div>
+          <div>
+            <h3>Мгновенные чаевые</h3>
+            <p>Отправляйте и получайте чаевые в USDC прямо в Telegram. Нулевые комиссии, мгновенное зачисление.</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">📊</div>
+          <div>
+            <h3>Рынки предсказаний</h3>
+            <p>Создавайте и торгуйте на рынках с AMM-ценообразованием. Покупайте и продавайте доли исходов.</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">🎨</div>
+          <div>
+            <h3>Монетизация для создателей</h3>
+            <p>Платный контент, подписки, токены создателей с автоматическим распределением дохода.</p>
+          </div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">🔒</div>
+          <div>
+            <h3>Доказательство резервов</h3>
+            <p>Каждый баланс обеспечен 1:1 USDC в смарт-контракте. Проверяйте резервы ончейн в любое время.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal demo-section">
+      <h2>Что доступно в приложении</h2>
+      <p>После входа вам доступен полный функционал:</p>
+      <div class="demo-grid">
+        <div class="demo-card">
+          <h4>Кошелек и баланс</h4>
+          <p>Просмотр баланса, история транзакций, выводы и депозиты USDC на Base L2.</p>
+        </div>
+        <div class="demo-card">
+          <h4>Рынки и торговля</h4>
+          <p>Открытые и закрытые рынки, ваши позиции, создание новых рынков.</p>
+        </div>
+        <div class="demo-card">
+          <h4>Чаевые и донаты</h4>
+          <p>Отправка чаевых через /tip, массовые раздачи через /rain, реакции.</p>
+        </div>
+        <div class="demo-card">
+          <h4>AI-ассистент</h4>
+          <p>Задавайте вопросы через /ask — крипто, стратегии, помощь с ботом.</p>
+        </div>
+        <div class="demo-card">
+          <h4>Подписки и контент</h4>
+          <p>Платные посты, подписки на создателей, эксклюзивный контент.</p>
+        </div>
+        <div class="demo-card">
+          <h4>Proof of Reserves</h4>
+          <p>Публичный дашборд платежеспособности — резервы всегда видны ончейн.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal cta-final">
+      <h2>Готовы начать?</h2>
+      <p>Присоединяйтесь к сообществу Tippy на Base</p>
+      <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+        <a href="https://t.me/TIPBOT_USERNAME" data-tg-link class="btn btn-primary">Открыть в Telegram</a>
+        <a href="/app" class="btn btn-ghost">Веб-приложение</a>
       </div>
     </section>
   </main>
@@ -193,6 +230,46 @@
       if (el && el.dataset.act === 'toggleTheme') toggleTheme();
     });
   </script>
-  <script src="/app.js"></script>
+  <script>
+    fetch('/api/stats')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('stat-users').textContent = data.users.toLocaleString('ru-RU');
+        document.getElementById('stat-users').classList.remove('skeleton');
+        document.getElementById('stat-volume').textContent = Math.round(data.total_volume_usdc).toLocaleString('ru-RU');
+        document.getElementById('stat-volume').classList.remove('skeleton');
+        document.getElementById('stat-markets').textContent = data.open_markets;
+        document.getElementById('stat-markets').classList.remove('skeleton');
+      })
+      .catch(() => {});
+
+    document.getElementById('walletLogin').onclick = async () => {
+      if (!window.ethereum) {
+        alert('Кошелек не найден. Установите MetaMask или Rainbow.');
+        return;
+      }
+      try {
+        const [addr] = await ethereum.request({method: 'eth_requestAccounts'});
+        const nonce = crypto.getRandomValues(new Uint8Array(16))
+          .reduce((s, b) => s + b.toString(16).padStart(2, '0'), '');
+        const msg = 'Tippy login\nAddress: ' + addr +
+          '\nNonce: ' + nonce +
+          '\nExpires: ' + Math.floor(Date.now() / 1000 + 600);
+        const sig = await ethereum.request({method: 'personal_sign', params: [msg, addr]});
+        const r = await fetch('/api/auth/wallet', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({address: addr, message: msg, signature: sig})
+        });
+        if (r.ok) location.href = '/me';
+        else {
+          const err = await r.json();
+          alert(err.detail || 'Ошибка входа');
+        }
+      } catch (e) {
+        if (e.code !== 4001) alert(e.message);
+      }
+    };
+  </script>
 </body>
 </html>
