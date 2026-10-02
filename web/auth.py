@@ -127,7 +127,8 @@ async def verify_wallet(body: WalletLogin) -> int:
 
 
 def _issue_login_state() -> str:
-    """One-time signed state issued with /login; the auth callback must echo it.
+    """One-time signed state issued on every page that renders the widget; the
+    auth callback must echo it back.
 
     A cross-site attacker cannot forge it (HMAC over SECRET_KEY) and cannot
     read it (HttpOnly), so a forged /api/auth/telegram from another site dies
@@ -152,19 +153,32 @@ def _check_login_state(request: Request) -> bool:
     ttl = int(time.time()) - ts
     return 0 <= ttl <= LOGIN_STATE_TTL
 
-def _login_page() -> str:
-    bot = config.BOT_USERNAME or 'tippy_on_base_bot'
-    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8"/>\n<meta name="viewport" content="width=device-width, initial-scale=1.0"/>\n<title>Tippy — Login</title>\n<link rel="stylesheet" href="/style.css"/>\n<style>\n  .login-card {{ max-width: 420px; margin: 8vh auto; padding: 32px;\n    border-radius: 16px; background: #0a0b0d; border: 1px solid #1f2125; }}\n  .login-card h1 {{ font-size: 22px; margin: 0 0 6px; }}\n  .login-card p {{ color: #9aa0a6; margin: 0 0 24px; font-size: 14px; }}\n  .or {{ text-align: center; color: #555; margin: 18px 0; font-size: 13px; }}\n  .btn-wallet {{ width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #0052ff;\n    background: transparent; color: #fff; font-size: 15px; cursor: pointer; }}\n  .btn-wallet:hover {{ background: #0052ff22; }}\n  #tg-widget {{ display: flex; justify-content: center; min-height: 40px; }}\n  .err {{ color: #ff6b6b; font-size: 13px; margin-top: 14px; min-height: 16px; }}\n</style>\n</head>\n<body>\n<div class="orb orb-a" aria-hidden="true"></div>\n<div class="login-card">\n  <h1>Sign in to Tippy</h1>\n  <p>Access your personal dashboard — balance, positions and deposits.</p>\n\n  <div id="tg-widget">\n    <script async src="https://telegram.org/js/telegram-widget.js?22"\n      data-telegram-login="{bot}"\n      data-size="large"\n      data-auth-url="/api/auth/telegram"\n      data-request-access="write"></script>\n  </div>\n\n  <div class="or">— or —</div>\n\n  <button class="btn-wallet" id="connect">🦊 Connect Wallet</button>\n  <div class="err" id="err"></div>\n</div>\n<script>\nconst err = (m) => document.getElementById('err').textContent = m;\ndocument.getElementById('connect').onclick = async () => {{\n  if (!window.ethereum) return err('No EVM wallet found (install MetaMask)');\n  try {{\n    const [addr] = await ethereum.request({{method: 'eth_requestAccounts'}});\n    const msg = 'Tippy login\\nAddress: ' + addr +\n      '\\nNonce: ' + crypto.getRandomValues(new Uint8Array(16)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),'') +\n      '\\nExpires: ' + Math.floor(Date.now()/1000 + 600);\n    const sig = await ethereum.request({{method: 'personal_sign',\n      params: [msg, addr]}});\n    const r = await fetch('/api/auth/wallet', {{method: 'POST',\n      headers: {{'Content-Type': 'application/json'}},\n      body: JSON.stringify({{address: addr, message: msg, signature: sig}})}});\n    if (r.ok) location.href = '/me';\n    else err((await r.json()).detail || 'Login failed');\n  }} catch (e) {{ err(e.message); }}\n}};\n</script>\n</body>\n</html>'''
+def _secure_request(request: Request) -> bool:
+    """True when the browser reached us over HTTPS, including behind a proxy
+    (Cloudflare Pages sets ``X-Forwarded-Proto`` and terminates TLS itself)."""
+    return (request.url.scheme == 'https'
+            or request.headers.get('x-forwarded-proto', '').lower() == 'https')
 
-@router.get('/login', response_class=HTMLResponse, tags=['auth'])
-async def login_page() -> HTMLResponse:
-    resp = HTMLResponse(_login_page())
-    resp.set_cookie(
+def attach_login_state(request: Request, response):
+    """Issue the signed one-time state the Telegram callback must echo back.
+
+    Both ``/`` and ``/login`` call this: the landing page renders the widget
+    inline, so signing in there must not require a prior trip to /login.
+    """
+    response.set_cookie(
         LOGIN_STATE_COOKIE, _issue_login_state(),
         max_age=LOGIN_STATE_TTL, httponly=True, samesite='lax',
-        secure=config.WEBHOOK_URL.startswith('https://') if config.WEBHOOK_URL else False,
+        secure=_secure_request(request),
     )
-    return resp
+    return response
+
+def _login_page() -> str:
+    bot = config.BOT_USERNAME or 'tippy_on_base_bot'
+    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8"/>\n<meta name="viewport" content="width=device-width, initial-scale=1.0"/>\n<title>Tippy — Login</title>\n<link rel="stylesheet" href="/style.css"/>\n<style>\n  .login-card {{ max-width: 420px; margin: 8vh auto; padding: 32px;\n    border-radius: 16px; background: #0a0b0d; border: 1px solid #1f2125; }}\n  .login-card h1 {{ font-size: 22px; margin: 0 0 6px; }}\n  .login-card p {{ color: #9aa0a6; margin: 0 0 24px; font-size: 14px; }}\n  .or {{ text-align: center; color: #555; margin: 18px 0; font-size: 13px; }}\n  .btn-wallet {{ width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #0052ff;\n    background: transparent; color: #fff; font-size: 15px; cursor: pointer; }}\n  .btn-wallet:hover {{ background: #0052ff22; }}\n  #tg-widget {{ display: flex; justify-content: center; min-height: 40px; }}\n  .err {{ color: #ff6b6b; font-size: 13px; margin-top: 14px; min-height: 16px; }}\n</style>\n</head>\n<body>\n<div class="orb orb-a" aria-hidden="true"></div>\n<div class="login-card">\n  <h1>Sign in to Tippy</h1>\n  <p>Access your personal dashboard — balance, positions and deposits.</p>\n\n  <div id="tg-widget">\n    <script async src="https://telegram.org/js/telegram-widget.js?22"\n      data-telegram-login="{bot}"\n      data-size="large"\n      data-auth-url="/api/auth/telegram"\n      data-request-access="write"></script>\n  </div>\n\n  <div class="or">— or —</div>\n\n  <button class="btn-wallet" id="connect">🦊 Connect Wallet</button>\n  <div class="err" id="err"></div>\n</div>\n<script>\nconst err = (m) => document.getElementById('err').textContent = m;\ndocument.getElementById('connect').onclick = async () => {{\n  if (!window.ethereum) return err('No EVM wallet found (install MetaMask)');\n  try {{\n    const [addr] = await ethereum.request({{method: 'eth_requestAccounts'}});\n    const msg = 'Tippy login\\nAddress: ' + addr +\n      '\\nNonce: ' + crypto.getRandomValues(new Uint8Array(16)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),'') +\n      '\\nExpires: ' + Math.floor(Date.now()/1000 + 600);\n    const sig = await ethereum.request({{method: 'personal_sign',\n      params: [msg, addr]}});\n    const r = await fetch('/api/auth/wallet', {{method: 'POST',\n      headers: {{'Content-Type': 'application/json'}},\n      body: JSON.stringify({{address: addr, message: msg, signature: sig}})}});\n    if (r.ok) location.href = '/';\n    else err((await r.json()).detail || 'Login failed');\n  }} catch (e) {{ err(e.message); }}\n}};\n</script>\n</body>\n</html>'''
+
+@router.get('/login', response_class=HTMLResponse, tags=['auth'])
+async def login_page(request: Request) -> HTMLResponse:
+    return attach_login_state(request, HTMLResponse(_login_page()))
 
 # Stateless session: signed HMAC cookie, no server-side store.  The only
 # revocation mechanism is rotating SECRET_KEY, which logs out every user.
@@ -178,23 +192,23 @@ def _session_response(request: Request, tg_id: int, redirect: str | None=None) -
     resp.set_cookie(
         COOKIE_NAME, make_session(tg_id), max_age=SESSION_TTL_SECONDS,
         httponly=True, samesite='lax',
-        secure=request.url.scheme == 'https'
-        or request.headers.get('x-forwarded-proto', '').lower() == 'https',
+        secure=_secure_request(request),
     )
     return resp
 
 @router.get('/api/auth/telegram', include_in_schema=False)
 async def auth_telegram(request: Request):
     # Login CSRF guard: only proceed when the request carries a fresh, signed
-    # login-state cookie issued by our own /login page (HttpOnly, so a
-    # cross-site page cannot forge or read it).
+    # login-state cookie issued by our own pages (HttpOnly, so a cross-site
+    # page cannot forge or read it, and a forged callback dies here before a
+    # session cookie is minted).
     if not _check_login_state(request):
-        raise HTTPException(403, 'missing or expired login state — open /login and try again')
+        raise HTTPException(403, 'missing or expired login state — reload the page and try again')
     params = dict(request.query_params)
     tg_id = verify_telegram(params)
     username = params.get('username', '')
     await ledger.ensure_user(tg_id, username or None)
-    return _session_response(request, tg_id, redirect='/me')
+    return _session_response(request, tg_id, redirect='/')
 
 @router.post('/api/auth/wallet', tags=['auth'])
 async def auth_wallet(request: Request, body: WalletLogin):

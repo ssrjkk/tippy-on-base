@@ -22,7 +22,10 @@ document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
 
 /* ---------- count-up for numbers ---------- */
 function animateCount(el, target) {
-  if (REDUCED_MOTION) {
+  // requestAnimationFrame is suspended while the tab is hidden, so a page
+  // loaded in the background would keep showing the "–" placeholder. Write the
+  // real value straight away instead of waiting for a frame that will not come.
+  if (REDUCED_MOTION || document.hidden) {
     el.textContent = fmtUSDC(target);
     return;
   }
@@ -56,7 +59,92 @@ async function loadInfo() {
         a.rel = "noopener";
       });
     }
+    renderTelegramWidget(username);
+    renderTerms(info);
+    renderCommands(info);
   } catch (e) { /* keep original links */ }
+}
+
+/* The Telegram Login Widget renders inline so signing in never leaves the
+ * workspace: the widget sends its signed fields to /api/auth/telegram, which
+ * verifies the HMAC and sets the session cookie. The CSRF state that callback
+ * demands is issued by GET / — see web/server.py. */
+function renderTelegramWidget(username) {
+  const box = $("tg-widget");
+  if (!box || box.dataset.ready) return;
+  box.dataset.ready = "1";
+  if (!username) {
+    box.innerHTML = '<div class="hint">Имя бота не настроено — вход через Telegram недоступен.</div>';
+    return;
+  }
+  const s = document.createElement("script");
+  s.async = true;
+  s.src = "https://telegram.org/js/telegram-widget.js?22";
+  s.setAttribute("data-telegram-login", username);
+  s.setAttribute("data-size", "large");
+  s.setAttribute("data-auth-url", "/api/auth/telegram");
+  s.setAttribute("data-request-access", "write");
+  box.appendChild(s);
+}
+
+/* Command menu comes from bot/commands_catalog.py through /api/info, so it is
+ * the list the bot actually installs with set_my_commands — not a written-out
+ * copy that can drift away from the handlers. */
+function renderCommands(info) {
+  const el = $("commands-grid");
+  if (!el) return;
+  const cmds = info.commands || [];
+  if (!cmds.length) {
+    el.innerHTML = '<div class="empty">Список команд сейчас недоступен</div>';
+    return;
+  }
+  el.innerHTML = cmds
+    .map((c) => {
+      const cmd = escapeHtml(c.command);
+      return `<button class="cmd" type="button" data-cmd="${cmd}" title="Скопировать /${cmd}">`
+        + `<b>/${cmd}</b><span>${escapeHtml(c.description)}</span></button>`;
+    })
+    .join("");
+}
+
+function setMsg(id, text, ok) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+/* Terms are read from the same endpoint the write handlers enforce against,
+ * so the page cannot drift away from the configured limits. */
+function renderTerms(info) {
+  const el = $("terms-body");
+  if (!el || !info.limits || !info.fees) return;
+  const L = info.limits, F = info.fees;
+  const rows = [
+    ["Комиссия на вывод", F.withdraw_pct + "%"],
+    ["Комиссия с выигрыша", F.win_pct + "%"],
+    ["Максимум чаевых за раз", fmtUSDC(L.max_tip_usdc) + " USDC"],
+    ["Максимум ставки за раз", fmtUSDC(L.max_bet_usdc) + " USDC"],
+    ["Максимум сделки на рынке", fmtUSDC(L.max_trade_usdc) + " USDC"],
+    ["Минимальный вывод", fmtUSDC(L.min_withdraw_usdc) + " USDC"],
+    ["Выводов в сутки", L.max_withdraws_per_day],
+    [
+      "Субсидия ликвидности рынка",
+      fmtUSDC(L.min_subsidy_usdc) + "–" + fmtUSDC(L.max_subsidy_usdc) + " USDC",
+    ],
+    ["Сеть", "Base · chain id " + info.chain_id],
+    ["Контракт USDC", info.usdc_address],
+    ["Ончейн-рынки (Cally)", info.onchain_markets_enabled ? "включены" : "контракт не подключён"],
+    ["Gasless-покупка долей", info.smart_wallet_enabled ? "включена" : "не настроена"],
+  ];
+  el.innerHTML = rows
+    .map((row) => {
+      const value = /^0x[0-9a-fA-F]{40}$/.test(String(row[1]))
+        ? '<span class="mono">' + escapeHtml(row[1]) + "</span>"
+        : escapeHtml(String(row[1]));
+      return "<tr><td>" + escapeHtml(row[0]) + "</td><td>" + value + "</td></tr>";
+    })
+    .join("");
 }
 
 async function loadStats() {
@@ -111,6 +199,13 @@ async function loadWallet() {
     const r = await fetch("/api/solvency");
     const s = await r.json();
     $("wallet-liabilities").textContent = fmtUSDC(s.liabilities_usdc) + " USDC";
+    $("wallet-pending").textContent = fmtUSDC(s.pending_deposits_usdc) + " USDC";
+    $("wallet-reserve").textContent =
+      s.reserve_usdc === null || s.reserve_usdc === undefined
+        ? "RPC недоступен"
+        : fmtUSDC(s.reserve_usdc) + " USDC";
+    $("reserve-source").textContent =
+      s.reserves_source === "vault" ? "TipBotVault (on-chain)" : "горячий кошелёк";
     $("wallet-solvent").textContent =
       s.solvent === true ? "✅ покрыто"
       : s.solvent === false ? "⚠️ недостаточно"
@@ -209,6 +304,52 @@ async function loadClosedMarkets() {
   }
 }
 
+function predictionCard(m, i) {
+  const winner = m.status === "resolved" && m.winner != null ? m.winner : null;
+  const deadline = m.close_at
+    ? "⏰ <span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
+    : "";
+  const options = m.options.map((o, j) => {
+    const isWinner = winner !== null && o.index === winner;
+    return `
+    <div class="option${isWinner ? " option-winner" : ""}">
+      <div class="option-top">
+        <span class="option-label">${isWinner ? "🏆 " : ""}${escapeHtml(o.label)}</span>
+        <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
+      </div>
+      <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
+      <div class="market-head">
+        <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
+        <span class="market-meta">${deadline} · ${statusBadge(m.status)}</span>
+      </div>
+      ${options}
+      <div class="market-footer">
+        <span class="pot">Ликвидность: <b>${fmtUSDC(m.liquidity_usdc)} USDC</b></span>
+        <span class="pot">Оборот долей: ${fmtUSDC(m.volume_usdc)} USDC · ${escapeHtml(String(m.traders))}👤</span>
+      </div>
+    </div>`;
+}
+
+async function loadPredictions() {
+  try {
+    const r = await fetch("/api/predictions");
+    const markets = await r.json();
+    const el = $("predictions-list");
+    if (!markets.length) {
+      el.innerHTML = '<div class="empty">Рынков с открытым торгом пока нет</div>';
+      return;
+    }
+    el.innerHTML = markets.map(predictionCard).join("");
+  } catch (e) {
+    $("predictions-list").innerHTML = '<div class="empty">Не удалось загрузить рынки</div>';
+  }
+}
+
 async function loadLeaderboard() {
   try {
     const r = await fetch("/api/leaderboard");
@@ -292,16 +433,50 @@ async function loadOnchainMarkets() {
   }
 }
 
+/* Copy-on-click for the command menu — delegated because the CSP blocks inline
+ * event-handler attributes. */
+const commandsGrid = $("commands-grid");
+if (commandsGrid) {
+  commandsGrid.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".cmd");
+    if (!btn) return;
+    const cmd = "/" + btn.dataset.cmd;
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setMsg("commands-msg", "Скопировано: " + cmd, true);
+    } catch (err) {
+      setMsg(
+        "commands-msg",
+        "Браузер не дал доступ к буферу обмена — выделите команду и скопируйте вручную.",
+        false
+      );
+    }
+  });
+}
+
+/* The workspace above creates markets and bets; the public lists have to pick
+ * the new entry up without a page reload. */
+window.addEventListener("tippy:created", () => {
+  loadMarkets();
+  loadPredictions();
+  loadClosedMarkets();
+  loadOnchainMarkets();
+  loadStats();
+});
+
 loadInfo();
 loadStats();
 loadWallet();
 loadMarkets();
+loadPredictions();
 loadClosedMarkets();
 loadOnchainMarkets();
 loadLeaderboard();
 loadVolumeChart();
 setInterval(loadStats, 15000);
 setInterval(loadWallet, 30000);
+setInterval(loadMarkets, 60000);
+setInterval(loadPredictions, 60000);
 setInterval(loadOnchainMarkets, 60000);
 setInterval(tickCountdowns, 10000);
 

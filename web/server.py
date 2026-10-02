@@ -31,8 +31,9 @@ if str(ROOT) not in sys.path:
 from bot import base, config
 from bot import qr as qrlib
 from bot.base import hot_balance, hot_wallet, vault_balance
+from bot.commands_catalog import BOT_COMMAND_SPECS
 from bot.ledger import async_ledger as ledger
-from web.auth import COOKIE_NAME, parse_session
+from web.auth import COOKIE_NAME, attach_login_state, parse_session
 from web.auth import router as auth_router
 from web.frame import router as frame_router
 from web.hook import router as tg_webhook
@@ -126,6 +127,10 @@ def _client_ip(request: Request) -> str:
 
 
 _CSP_SCRIPT_WHITELIST = "https://esm.sh https://cdn.jsdelivr.net https://telegram.org"
+# The Telegram Login Widget draws its button inside an iframe from
+# oauth.telegram.org. frame-src is not set, so such a request falls back to
+# default-src 'self' and is blocked — the login button would stay empty.
+_CSP_FRAME_WHITELIST = "'self' https://oauth.telegram.org"
 
 
 def _nonce_inject(html: str, nonce: str) -> str:
@@ -197,7 +202,8 @@ async def rate_limit(request: Request, call_next):
     response.headers.setdefault('Content-Security-Policy',
         f"default-src 'self'; script-src 'self' 'nonce-{nonce}' {_CSP_SCRIPT_WHITELIST}; "
         f"style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
-        "connect-src 'self'; frame-ancestors 'self' https://web.telegram.org")
+        f"connect-src 'self'; frame-src {_CSP_FRAME_WHITELIST}; "
+        "frame-ancestors 'self' https://web.telegram.org")
     try:
         await ledger.rollback()
     except Exception:
@@ -308,6 +314,7 @@ async def api_predictions(status: str='open') -> list[dict]:
         view = views.get(int(m['id']))
         if view:
             view['liquidity_usdc'] = _usdc(view['liquidity_micro'])
+            view['volume_usdc'] = _usdc(view['volume_micro'])
             for o in view['options']:
                 o.pop('shares', None)
             out.append(view)
@@ -319,6 +326,7 @@ async def api_prediction(market_id: int) -> dict:
     if not view:
         raise HTTPException(status_code=404, detail='Prediction market not found')
     view['liquidity_usdc'] = _usdc(view['liquidity_micro'])
+    view['volume_usdc'] = _usdc(view['volume_micro'])
     return view
 
 @app.get('/api/leaderboard', tags=['users'])
@@ -516,7 +524,37 @@ async def api_onchain_market(market_id: int) -> dict:
 
 @app.get('/api/info', tags=['stats'])
 def api_info() -> dict:
-    return {'bot_username': config.BOT_USERNAME}
+    """Bot identity plus the limits, fees and command menu the bot registers.
+
+    The web app renders its input constraints and its command table from here
+    rather than hardcoding them, so what a user reads on the site is what
+    `web/mini.py` rejects against and what `set_my_commands` installs.
+    """
+    return {
+        'bot_username': config.BOT_USERNAME,
+        'chain_id': config.EXPECTED_CHAIN_ID,
+        'usdc_address': config.USDC_ADDRESS,
+        'commands': [{'command': c, 'description': d} for c, d in BOT_COMMAND_SPECS],
+        'fees': {
+            'withdraw_pct': float(config.WITHDRAW_FEE_PCT * 100),
+            'win_pct': float(config.WIN_FEE_PCT * 100),
+        },
+        'limits': {
+            'max_tip_usdc': float(config.MAX_TIP_USDC),
+            'max_bet_usdc': float(config.MAX_BET_USDC),
+            'max_trade_usdc': float(config.MARKET_MAX_TRADE_USDC),
+            'min_withdraw_usdc': float(config.MIN_WITHDRAW_USDC),
+            'max_withdraws_per_day': config.MAX_WITHDRAWS_PER_DAY,
+            'min_subsidy_usdc': float(config.MARKET_MIN_SUBSIDY_USDC),
+            'max_subsidy_usdc': float(config.MARKET_MAX_SUBSIDY_USDC),
+        },
+        'smart_wallet_enabled': bool(
+            config.SMART_WALLET_ENABLED
+            and config.SMART_WALLET_FACTORY_ADDRESS
+            and config.SMART_WALLET_PAYMASTER_ADDRESS
+        ),
+        'onchain_markets_enabled': bool(config.OUTCOME_MARKET_ADDRESS),
+    }
 
 @app.get('/api/health', tags=['stats'])
 async def api_health() -> dict:
@@ -666,15 +704,23 @@ async def me_page() -> FileResponse:
     return FileResponse(STATIC / 'me.html')
 
 @app.get('/', include_in_schema=False)
-async def root():
-    """Landing dashboard (stats, markets, leaderboard, wallet solvency).
+async def root(request: Request):
+    """The landing page, which is also the full workspace.
 
-    Serves the public marketing page directly (200 for platform health checks);
-    the Base App Mini App lives at /app.
+    Public data (stats, markets, leaderboard, proof of reserves) renders
+    whether or not you are signed in; the cabinet below it unlocks with the
+    same session cookie the Mini App gets. The Base App Mini App lives at /app.
+
+    The login-state cookie is issued here, not only on /login: the Telegram
+    Login Widget renders inline on this page, and its callback is rejected
+    without that state.
     """
-    return Response(
-        content=(STATIC / 'index.html').read_bytes(),
-        media_type='text/html',
+    return attach_login_state(
+        request,
+        Response(
+            content=(STATIC / 'index.html').read_bytes(),
+            media_type='text/html',
+        ),
     )
 
 @app.get('/app', include_in_schema=False)

@@ -44,6 +44,6 @@ Tippy is a Telegram bot + autonomous AI agent that creates and trades prediction
 - Contract: TipBotVault.sol (two-step ownership, daily rolling limit)
 
 ## What we need
-- **Render deployment** credits for persistent hosting
+- **Cloudflare Pages + VPS** credits for persistent hosting
 - **Base Sepolia** testnet USDC for agent demo
 - **Feedback** on agent architecture for production scaling

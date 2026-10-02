@@ -1,47 +1,488 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tippy</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css">
-  <style>
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .auth-card { max-width: 400px; width: 100%; margin: 20px; padding: 40px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-lg); }
-    .auth-card h1 { font-size: 28px; margin-bottom: 8px; text-align: center; }
-    .auth-card .subtitle { color: var(--text-secondary); text-align: center; margin-bottom: 32px; font-size: 15px; }
-    .auth-btn { width: 100%; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 12px; transition: all 0.2s; cursor: pointer; border: none; text-decoration: none; }
-    .auth-btn.telegram { background: #229ED9; color: #fff; }
-    .auth-btn.telegram:hover { background: #1a8bc0; }
-    .auth-btn.wallet { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-    .auth-btn.wallet:hover { border-color: var(--accent); }
-    .divider { text-align: center; color: var(--muted); font-size: 14px; margin: 20px 0; position: relative; }
-    .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 45%; height: 1px; background: var(--border); }
-    .divider::before { left: 0; }
-    .divider::after { right: 0; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tippy — чаевые и рынки в USDC на Base</title>
+  <meta name="description" content="Кошелёк USDC на Base в Telegram: чаевые, парамутюэль-ставки, LMSR-рынки предсказаний, ончейн-доли ERC-1155 и публичный proof-of-reserves." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div class="orb orb-a" aria-hidden="true"></div>
   <div class="orb orb-b" aria-hidden="true"></div>
 
-  <div class="auth-card">
-    <h1>Tippy</h1>
-    <p class="subtitle">Войдите для доступа к приложению</p>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+        <span class="brand-name"><b>Tippy</b></span>
+      </a>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon">🌙</span>
+          <span class="icon-sun">☀️</span>
+        </button>
+        <span id="authArea"><a class="btn btn-ghost btn-sm" href="#workspace-section">Войти</a></span>
+        <a class="btn btn-ghost btn-sm" href="https://t.me/TIPBOT_USERNAME" data-tg-link>Открыть в Telegram →</a>
+      </div>
+    </div>
+  </header>
 
-    <a href="/login" class="auth-btn telegram">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.941z"/></svg>
-      Войти через Telegram
+  <main>
+    <section class="hero">
+      <a class="hero-badge" href="https://basescan.org" target="_blank" rel="noopener">
+        <span class="base-mark pulse-ring"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+        Base Mainnet · USDC
+      </a>
+      <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
+      <p class="hero-sub">
+        Чаевые в один тап, ставки-пулы по парамутюэльной схеме, рынки предсказаний
+        на LMSR-маркмейкере и ончейн-доли ERC-1155. Без газа на переводы между
+        пользователями, с публичной сверкой резервов.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#workspace-section">Открыть кабинет</a>
+        <a class="btn btn-ghost" href="https://t.me/TIPBOT_USERNAME" data-tg-link>Начать в Telegram</a>
+      </div>
+    </section>
+
+    <section class="section reveal" id="workspace-section">
+      <h2>🧰 Кабинет</h2>
+
+      <div id="connect" class="connect">
+        <div class="connect-grid">
+          <div class="wallet">
+            <div class="wallet-row"><span>Telegram</span><b>вход по виджету</b></div>
+            <p class="hint">
+              Telegram подписывает свой набор полей HMAC-SHA256 с ключом
+              SHA256(bot token). Сайт проверяет подпись и выдаёт сессионную
+              cookie — ничего не хранится на сервере.
+            </p>
+            <div class="tg-widget" id="tg-widget"></div>
+
+            <div class="wallet-row" style="margin-top:18px"><span>Кошелёк</span><b>EIP-191 подпись</b></div>
+            <p class="hint">
+              Подписываете одноразовое сообщение — адрес сверяется с таблицей
+              <span class="mono">wallet_links</span>, которую заполняет бот командой
+              <span class="mono">/link</span>. Кошелёк, не привязанный в боте, войти не сможет.
+            </p>
+            <button class="btn btn-ghost btn-full" data-act="walletLogin">Подключить кошелёк</button>
+            <div class="msg" id="connectMsg"></div>
+          </div>
+
+          <div>
+            <h3>Что доступно после входа</h3>
+            <ul class="connect-list">
+              <li><b>Баланс и депозит</b> — адрес приёма USDC с QR-кодом, привязанный внешний кошелёк.</li>
+              <li><b>Чаевые</b> — перевод по @username, <span class="mono">name.base.eth</span> или числовому id.</li>
+              <li><b>Вывод</b> — в два шага: расчёт комиссии и итога, затем подтверждение одноразовым токеном.</li>
+              <li><b>LMSR-рынки</b> — покупка долей по живой цене, позиция и PnL.</li>
+              <li><b>Ставки-пулы</b> — парамутюэль: пул, шанс и доля выплат после закрытия.</li>
+              <li><b>Создание</b> — рынок с субсидией ликвидности или пул-ставка, дедлайн до 30 дней.</li>
+              <li><b>Ончейн (Cally)</b> — доли как ERC-1155 и gasless-покупка через smart-кошелёк.</li>
+              <li><b>История</b> — последние операции с контрагентом и назначением.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="workspace" class="ws" hidden>
+        <div class="ws-bar">
+          <div>
+            <div class="ws-user"><span id="wsName">–</span> <span class="hint mono" id="wsId"></span></div>
+            <div class="ws-bal"><span id="wsBalance">–</span> <span class="ws-cur">USDC</span></div>
+          </div>
+          <div class="ws-actions">
+            <button class="btn btn-ghost btn-sm" data-act="refreshState">↻ Обновить</button>
+            <button class="btn btn-ghost btn-sm" data-act="logout">Выйти</button>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-act="tab" data-tab="balance">Баланс</button>
+          <button class="tab" data-act="tab" data-tab="tip">Чаевые</button>
+          <button class="tab" data-act="tab" data-tab="withdraw">Вывод</button>
+          <button class="tab" data-act="tab" data-tab="markets">Рынки</button>
+          <button class="tab" data-act="tab" data-tab="bets">Ставки</button>
+          <button class="tab" data-act="tab" data-tab="create">Создать</button>
+          <button class="tab" data-act="tab" data-tab="onchain">Ончейн</button>
+          <button class="tab" data-act="tab" data-tab="history">История</button>
+        </div>
+
+        <div class="panel" id="panel-balance">
+          <div class="grid-2">
+            <div>
+              <div class="wallet">
+                <div class="wallet-row"><span>Доступно</span><b id="balAvailable">–</b></div>
+                <div class="wallet-row"><span>Депозитный адрес (Base · USDC)</span></div>
+                <div class="wallet-addr" id="depositAddress">загрузка…</div>
+                <div class="qr-wrap">
+                  <div class="qr"><img id="depositQr" alt="QR-код депозитного адреса" width="220" height="220" /></div>
+                  <button class="btn btn-ghost btn-sm" data-act="copy" data-target="depositAddress">Скопировать адрес</button>
+                </div>
+                <p class="hint">
+                  Пополнение — перевод USDC в сети Base на этот адрес. Бот видит
+                  транзакцию и зачисляет баланс автоматически.
+                </p>
+              </div>
+              <div class="wallet" style="margin-top:14px">
+                <div class="wallet-row"><span>Привязанный кошелёк</span><b class="mono" id="linkedAddress">—</b></div>
+                <div class="wallet-row"><span>Язык сообщений бота</span></div>
+                <div class="amount-chips">
+                  <button class="amount-chip" data-act="setLang" data-lang="ru">Русский</button>
+                  <button class="amount-chip" data-act="setLang" data-lang="en">English</button>
+                  <button class="amount-chip" data-act="setLang" data-lang="zh">中文</button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3>Мои позиции</h3>
+              <div class="rows" id="positionsList"><div class="empty">загрузка…</div></div>
+              <div class="msg" id="balanceMsg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-tip" hidden>
+          <div class="field">
+            <label class="label" for="tipTo">Кому</label>
+            <input class="input" id="tipTo" placeholder="@username, name.base.eth или id" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label class="label" for="tipAmount">Сумма, USDC</label>
+            <input class="input" id="tipAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="amount-chips" id="tipChips"></div>
+            <div class="hint" id="tipLimit"></div>
+          </div>
+          <button class="btn btn-primary" data-act="sendTip">Отправить чаевые</button>
+          <div class="msg" id="tipMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-withdraw" hidden>
+          <div class="field">
+            <label class="label" for="wdAddress">Адрес получателя (Base)</label>
+            <input class="input mono" id="wdAddress" placeholder="0x…" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="label" for="wdAmount">Сумма, USDC</label>
+            <input class="input" id="wdAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="amount-chips" id="wdChips"></div>
+            <div class="hint" id="wdLimits"></div>
+          </div>
+          <button class="btn btn-primary" data-act="stageWithdraw">Рассчитать и зафиксировать</button>
+
+          <div id="wdReview" class="review" hidden>
+            <h3>Подтверждение вывода</h3>
+            <div class="rows">
+              <div class="row"><span class="row-k">Сумма</span><b class="row-v mono" id="wdRvAmount">–</b></div>
+              <div class="row"><span class="row-k">Комиссия</span><b class="row-v mono" id="wdRvFee">–</b></div>
+              <div class="row"><span class="row-k">Спишется всего</span><b class="row-v mono" id="wdRvTotal">–</b></div>
+              <div class="row"><span class="row-k">Остаток</span><b class="row-v mono" id="wdRvAfter">–</b></div>
+              <div class="row"><span class="row-k">Адрес</span><b class="row-v mono" id="wdRvAddr">–</b></div>
+              <div class="row"><span class="row-k">Предложение действует</span><b class="row-v" id="wdRvTtl">–</b></div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" data-act="confirmWithdraw">Подтвердить вывод</button>
+              <button class="btn btn-ghost" data-act="cancelWithdraw">Отменить</button>
+            </div>
+          </div>
+          <div class="msg" id="wdMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-markets" hidden>
+          <div class="field">
+            <label class="label" for="tradeMarket">Рынок (LMSR)</label>
+            <select class="input select" id="tradeMarket"></select>
+          </div>
+          <div class="field">
+            <span class="label">Исход</span>
+            <div class="opt-list" id="tradeOptions"></div>
+          </div>
+          <div class="field">
+            <label class="label" for="tradeAmount">Сумма, USDC</label>
+            <input class="input" id="tradeAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="hint" id="tradeLimit"></div>
+          </div>
+          <button class="btn btn-primary" data-act="buyShares">Купить доли</button>
+          <div class="msg" id="tradeMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-bets" hidden>
+          <div class="field">
+            <label class="label" for="betPick">Ставка-пул</label>
+            <select class="input select" id="betPick"></select>
+          </div>
+          <div class="field">
+            <span class="label">Вариант</span>
+            <div class="opt-list" id="betOptions"></div>
+          </div>
+          <div class="field">
+            <label class="label" for="betAmount">Сумма, USDC</label>
+            <input class="input" id="betAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="hint" id="betLimit"></div>
+          </div>
+          <button class="btn btn-primary" data-act="placeBet">Поставить</button>
+          <div class="msg" id="betMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-create" hidden>
+          <div class="amount-chips" style="margin-bottom:14px">
+            <button class="amount-chip active" data-act="createKind" data-kind="market">Рынок LMSR</button>
+            <button class="amount-chip" data-act="createKind" data-kind="bet">Ставка-пул</button>
+          </div>
+          <div class="field">
+            <label class="label" for="newQuestion">Вопрос</label>
+            <input class="input" id="newQuestion" maxlength="200" placeholder="Например: будет ли BTC выше 120k USDC до конца месяца?" />
+            <div class="hint">5–200 символов.</div>
+          </div>
+          <div class="field">
+            <span class="label">Варианты (2–4)</span>
+            <div id="newOptions"></div>
+            <button class="btn btn-ghost btn-sm" data-act="addOption" style="margin-top:8px">+ Добавить вариант</button>
+          </div>
+          <div class="field">
+            <label class="label" for="newHours">Дедлайн, часов</label>
+            <input class="input" id="newHours" type="number" min="1" max="720" step="1" inputmode="numeric" placeholder="24" />
+            <div class="hint">До 30 дней. Пусто — без дедлайна.</div>
+          </div>
+          <div class="field" id="subsidyField">
+            <label class="label" for="newSubsidy">Субсидия ликвидности, USDC</label>
+            <input class="input" id="newSubsidy" type="number" min="0" step="1" inputmode="decimal" placeholder="10" />
+            <div class="hint" id="subsidyLimits"></div>
+          </div>
+          <button class="btn btn-primary" data-act="createMarket">Создать</button>
+          <div class="msg" id="createMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-onchain" hidden>
+          <div id="smartWalletBox">
+            <div class="wallet">
+              <div class="wallet-row"><span>Smart-кошелёк (ERC-4337)</span><b id="swStatus">–</b></div>
+              <div class="wallet-addr" id="swAddress">—</div>
+              <div class="wallet-row"><span>USDC в кошельке</span><b id="swBalance">–</b></div>
+              <p class="hint" id="swHint">
+                Покупка долей идёт спонсируемым UserOperation: газ платит
+                paymaster, а не вы.
+              </p>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:16px">
+            <label class="label" for="ocMarket">Ончейн-рынок</label>
+            <select class="input select" id="ocMarket"></select>
+          </div>
+          <div class="field">
+            <span class="label">Исход</span>
+            <div class="opt-list" id="ocOptions"></div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="label" for="ocShares">Долей</label>
+              <input class="input" id="ocShares" type="number" min="1" step="1" inputmode="numeric" placeholder="1" />
+            </div>
+            <div class="field">
+              <label class="label" for="ocMaxCost">Макс. цена, USDC</label>
+              <input class="input" id="ocMaxCost" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="1.00" />
+            </div>
+          </div>
+          <button class="btn btn-primary" data-act="smartBuy">Купить gasless</button>
+          <div class="msg" id="ocMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-history" hidden>
+          <div class="rows" id="historyList"><div class="empty">загрузка…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats" id="stats">
+      <div class="stat-card"><div class="stat-value skeleton" id="stat-volume">–</div><div class="stat-label">Объём, USDC</div></div>
+      <div class="stat-card"><div class="stat-value skeleton" id="stat-vol30">–</div><div class="stat-label">Объём за 30 дней, USDC</div></div>
+      <div class="stat-card"><div class="stat-value skeleton" id="stat-users">–</div><div class="stat-label">Пользователей</div></div>
+      <div class="stat-card"><div class="stat-value skeleton" id="stat-markets">–</div><div class="stat-label">Открытых ставок-пулов</div></div>
+      <div class="stat-card"><div class="stat-value skeleton" id="stat-tx">–</div><div class="stat-label">Транзакций</div></div>
+      <div class="stat-card"><div class="stat-value skeleton" id="stat-fees">–</div><div class="stat-label">Собрано комиссий, USDC</div></div>
+    </section>
+
+    <section class="section reveal" id="volume-chart-section">
+      <h2>📈 Объём за 14 дней</h2>
+      <div class="chart" id="volume-chart">
+        <div class="skeleton-bar" style="height:38%"></div>
+        <div class="skeleton-bar" style="height:62%"></div>
+        <div class="skeleton-bar" style="height:45%"></div>
+        <div class="skeleton-bar" style="height:78%"></div>
+        <div class="skeleton-bar" style="height:55%"></div>
+        <div class="skeleton-bar" style="height:90%"></div>
+        <div class="skeleton-bar" style="height:70%"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="predictions">
+      <h2>📊 Рынки предсказаний (LMSR)</h2>
+      <p class="hint">
+        Цены долей задаёт LMSR — логарифмический маркет-мейкер: каждая покупка
+        сдвигает котировку, поэтому цена и есть вероятность, а не ручная оценка.
+        Торгуете внутренним балансом в USDC, без газа.
+      </p>
+      <div class="markets" id="predictions-list">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="markets">
+      <h2>🎯 Ставки-пулы (парамутюэль)</h2>
+      <p class="hint">
+        Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
+        выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
+        всего пула; не выбранный исход обнуляется.
+      </p>
+      <div class="markets" id="markets-list">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="closed-markets">
+      <h2>🏁 Закрытые ставки</h2>
+      <div class="markets" id="closed-markets-list">
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="onchain-markets" style="display:none">
+      <h2>⛓️ Cally — ончейн-рынки на Base</h2>
+      <p class="hint">
+        Доли — настоящие ERC-1155 токены в контракте OutcomeMarket, расчёты в
+        USDC на-цепи. В боте: /oc_create · /oc_buy · /oc_redeem.
+      </p>
+      <div class="markets" id="onchain-markets-list">
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="terms">
+      <h2>💸 Комиссии и лимиты</h2>
+      <p class="hint">
+        Значения читаются из конфигурации бота тем же API, который их
+        проверяет, — то, что написано здесь, и есть то, что отклонит запрос.
+      </p>
+      <table class="terms-table">
+        <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
+        <tbody id="terms-body">
+          <tr><td>загрузка…</td><td>–</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section reveal" id="commands">
+      <h2>⌨️ Команды бота</h2>
+      <p class="hint">
+        Тот же список, который бот регистрирует в меню Telegram через
+        <code>set_my_commands</code>, — сайт отдаёт его из того же источника,
+        поэтому команды здесь не могут разойтись с ботом. Нажмите на команду,
+        чтобы скопировать её.
+      </p>
+      <div class="cmd-grid" id="commands-grid">
+        <div class="skeleton-card"></div>
+      </div>
+      <p class="msg" id="commands-msg"></p>
+    </section>
+
+    <section class="section reveal" id="treasury">
+      <h2>💼 Прозрачный кошелёк</h2>
+      <div class="grid-2">
+        <div>
+          <div class="wallet" id="wallet">
+            <div class="wallet-row"><span>USDC на горячем кошельке</span><b id="wallet-balance">–</b></div>
+            <div class="wallet-row" id="wallet-vault-row" style="display:none">
+              <span>Резервы в TipBotVault (on-chain)</span><b id="wallet-vault">–</b>
+            </div>
+            <div class="wallet-row"><span>Обязательства перед пользователями</span><b id="wallet-liabilities">–</b></div>
+            <div class="wallet-row"><span>Незачтённые депозиты</span><b id="wallet-pending">–</b></div>
+            <div class="wallet-row"><span>Свободный резерв</span><b id="wallet-reserve">–</b></div>
+            <div class="wallet-row"><span>Платёжеспособность</span><b id="wallet-solvent">–</b></div>
+            <div class="wallet-addr mono" id="wallet-address">загрузка…</div>
+            <div class="wallet-addr mono" id="wallet-vault-addr" style="display:none">загрузка…</div>
+          </div>
+        </div>
+        <div>
+          <p class="hint">
+            Все депозиты, чаевые и пулы хранятся в USDC в сети Base — в
+            смарт-контракте TipBotVault либо на горячем кошельке до его деплоя.
+            Резервы читаются напрямую из блокчейна и сверяются с суммой всех
+            внутренних балансов: обязательство не может превысить то, что
+            реально лежит на адресе.
+          </p>
+          <p class="hint" style="margin-top:10px">
+            Источник резервов сейчас: <b id="reserve-source">–</b>.
+            Баланс и reserves обновляются на этой странице автоматически.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section grid-2">
+      <div class="reveal">
+        <h2>🏆 Топ чаевых</h2>
+        <div class="leaderboard" id="leaderboard">
+          <div class="skeleton-card" style="height:56px"></div>
+          <div class="skeleton-card" style="height:56px"></div>
+          <div class="skeleton-card" style="height:56px"></div>
+        </div>
+      </div>
+      <div class="reveal">
+        <h2>🧾 Как это устроено</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <h3>Пополнение</h3>
+            <p>USDC в сети Base на ваш адрес бота. Бот находит транзакцию в блоке и зачисляет баланс — без ручной приёмки.</p>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <h3>Действия</h3>
+            <p>Чаевые, покупка долей и ставки — внутренние проводки по той же ledger, что и в Telegram. Остаток пересчитывается сразу.</p>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <h3>Вывод</h3>
+            <p>Двухшаговый: сначала фиксируются комиссия и итог, затем подтверждение одноразовым токеном с ограниченным сроком действия.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+        <div>
+          <b>Tippy</b>
+          <span class="footer-tag">USDC-экономика в Telegram и вебе</span>
+        </div>
+      </div>
+      <div class="footer-meta">
+        <span class="chain-chip">🟦 Base Mainnet</span>
+        <span class="chain-chip">🪙 USDC</span>
+        <span class="chain-chip">🔒 Vault-резервы on-chain</span>
+      </div>
+    </div>
+    <div class="author-links">
+      <span>Автор:</span>
+      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">Telegram</a>
+      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">Telegram 2</a>
+      <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
+      <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
+      <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+      Built on Base · открытая кодовая база
     </a>
-
-    <div class="divider">или</div>
-
-    <button class="auth-btn wallet" id="walletLogin">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 10h18M7 3v4M17 3v4"/></svg>
-      Подключить кошелек
-    </button>
-  </div>
+  </footer>
 
   <script>
     (function() {
@@ -52,38 +493,17 @@
         document.documentElement.setAttribute('data-theme', 'dark');
       }
     })();
-
-    fetch('/api/me').then(r => {
-      if (r.ok) location.href = '/app';
-    }).catch(() => {});
-
-    document.getElementById('walletLogin').onclick = async () => {
-      if (!window.ethereum) {
-        alert('Кошелек не найден. Установите MetaMask.');
-        return;
-      }
-      try {
-        const [addr] = await ethereum.request({method: 'eth_requestAccounts'});
-        const nonce = crypto.getRandomValues(new Uint8Array(16))
-          .reduce((s, b) => s + b.toString(16).padStart(2, '0'), '');
-        const msg = 'Tippy login\nAddress: ' + addr +
-          '\nNonce: ' + nonce +
-          '\nExpires: ' + Math.floor(Date.now() / 1000 + 600);
-        const sig = await ethereum.request({method: 'personal_sign', params: [msg, addr]});
-        const r = await fetch('/api/auth/wallet', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({address: addr, message: msg, signature: sig})
-        });
-        if (r.ok) location.href = '/app';
-        else {
-          const err = await r.json();
-          alert(err.detail || 'Ошибка входа');
-        }
-      } catch (e) {
-        if (e.code !== 4001) alert(e.message);
-      }
-    };
+    function toggleTheme() {
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (isDark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('theme', 'light'); }
+      else { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('theme', 'dark'); }
+    }
+    document.addEventListener('click', function (e) {
+      var el = e.target.closest('[data-act="toggleTheme"]');
+      if (el) toggleTheme();
+    });
   </script>
+  <script src="/app.js"></script>
+  <script src="/site.js"></script>
 </body>
 </html>
