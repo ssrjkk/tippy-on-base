@@ -8,6 +8,7 @@ import base64
 import ipaddress
 import json
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -816,6 +817,12 @@ async def metrics(request: Request) -> Response:
         return PlainTextResponse("unauthorized", status_code=401)
     return PlainTextResponse(await collect_metrics())
 
+# The mime table Starlette consults answers .js as application/javascript on
+# Windows and text/javascript on Linux, so which one a browser is served
+# depends on the machine that happens to run the process. Pinning it keeps a
+# developer's box and CI sending the same bytes, and keeps the script tag
+# executing the same way on both.
+mimetypes.add_type('text/javascript', '.js')
 app.mount('/', StaticFiles(directory=str(STATIC), html=True), name='static')
 if __name__ == '__main__':
     import uvicorn

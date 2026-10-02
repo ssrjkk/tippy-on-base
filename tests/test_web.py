@@ -829,12 +829,13 @@ def test_share_pages_take_the_network_from_config(
     assert ("https://t.me/base_tipbot" in html) is static_tg_link
 
 
-def test_chain_js_is_loadable_as_a_module_script(client):
-    """/chain.js is fetched with the same CSP budget as the other page
-    scripts, and it is the only place the network labels are mapped."""
+def test_chain_js_is_served_as_javascript(client):
+    """/chain.js is fetched with the same CSP budget as the other page scripts,
+    and it is the only place the network labels are mapped. The type is pinned in
+    server.py — the OS mime table answers differently on Windows and Linux."""
     r = client.get("/chain.js")
     assert r.status_code == 200
-    assert r.headers["content-type"].startswith("application/javascript")
+    assert r.headers["content-type"].split(";")[0] == "text/javascript"
     assert "function applyNetInfo" in r.text
 
 
