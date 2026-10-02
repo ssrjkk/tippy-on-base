@@ -273,6 +273,27 @@ async def test_exit_paths_drip_gas_before_signing(ledger, chain, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_first_drip_not_blocked_by_a_young_clock(ledger, chain, monkeypatch):
+    """A wallet that never received a drip is not in cooldown.
+
+    `time.monotonic()` counts from boot, so reading a missing entry as
+    "dripped at clock zero" made every top-up fail with "gas top-up cooldown"
+    on a machine younger than the cooldown — the first hour of a fresh VPS or of
+    any container restart. A cooldown longer than any plausible uptime
+    reproduces that without waiting for a boot.
+    """
+    drips = AsyncMock(return_value=DRIP_HASH)
+    monkeypatch.setattr("bot.chain.transfers.send_eth", drips)
+    monkeypatch.setattr(om, "_DRIP_COOLDOWN_SECONDS", 2 ** 62)
+    chain.state["balance"] = 0
+
+    await om._ensure_gas(om._w3(), ACC.address, om._NEEDED_GAS_WEI)
+
+    assert drips.await_args.args == (ACC.address, DRIP_WEI)
+    assert _drips_booked(ledger) == 1
+
+
+@pytest.mark.asyncio
 async def test_failed_drip_returns_the_budget_slot(ledger, chain, monkeypatch):
     monkeypatch.setattr("bot.chain.transfers.send_eth",
                         AsyncMock(side_effect=RuntimeError("RPC down")))

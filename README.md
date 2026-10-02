@@ -1,11 +1,5 @@
 # Tippy - Community Economy in USDC on Base
 
-[![CI](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-793%20passed-brightgreen)
-![Python](https://img.shields.io/badge/python-3.12+-blue)
-![Network](https://img.shields.io/badge/network-Base-0052FF)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 A Telegram bot that turns any chat or community into a financial ecosystem:
 **instant USDC tips, Polymarket-style prediction markets with live AMM odds,
 an AI assistant, paywalled content, and per-user wallets** — all on Base.
@@ -310,14 +304,14 @@ contracts/OutcomeMarket.sol on-chain markets (ERC-1155 shares, LMSR on-chain)
 contracts/SmartAccount.sol   ERC-4337 account (CREATE2)
 contracts/SmartAccountFactory.sol  deterministic account factory
 contracts/VerifyingPaymaster.sol   gas-sponsoring paymaster
-tests/           793 tests: real Postgres, real dispatcher, real crypto, local EVM
+tests/           974 tests: real Postgres, real dispatcher, real crypto, local EVM
 ```
 
 ## Testing
 
 ```bash
 docker compose up -d db       # PostgreSQL for tests (port 5433)
-python -m pytest tests -q     # 793 passed
+python -m pytest tests -q     # 974 passed
 ```
 
 What is tested *for real* (not mocked): money conservation across every flow
@@ -327,7 +321,11 @@ someone else's tx is rejected), fee math, real signature recovery, the full
 aiogram dispatcher with real Update objects, USDC ABI decoding, the FastAPI
 dashboard against a real ledger, background watchers, 14 end-to-end scenarios,
 and 12 TipBotVault tests on a local EVM (eth-tester + py-evm). Only external
-networks are mocked (Telegram transport, RPC).
+networks are mocked (Telegram transport, RPC) — `tests/conftest.py` pins the
+chain endpoint to a refused port, because a test that reads a live node answers
+whatever that node holds: on Base mainnet one of the suite's test addresses
+carries EIP-7702 delegation code, so `/withdraw` there refuses it as a smart
+contract while the same test passes against a Sepolia endpoint.
 
 The LMSR engine additionally has a property test proving the funding theorem:
 along randomized aggressive trading paths the escrow never drops below the

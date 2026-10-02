@@ -23,6 +23,14 @@ os.environ.setdefault("X402_RECEIVE_ADDRESS", "0x0000000000000000000000000000000
 os.environ.setdefault("ADMIN_TG_ID", "111")
 # Tests fake Base MAINNET (chain 8453); the repo .env points to Sepolia.
 os.environ.setdefault("EXPECTED_CHAIN_ID", "8453")
+# No test may reach a live node. CI ships no .env, so BASE_RPC_URL would fall
+# back to Base mainnet — where this suite's ACC address carries EIP-7702
+# delegation code, which made /withdraw refuse it as "smart contract" upstream
+# while the very same test passed against a dev Sepolia .env. One refused port
+# puts every unmocked chain call on the same offline path in both environments;
+# tests that need chain answers stub bot.chain.core.w3 themselves.
+os.environ["BASE_RPC_URL"] = "http://127.0.0.1:1"
+os.environ.pop("BASE_RPC_FALLBACK_URLS", None)
 TEST_DB_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://tipbot:tipbot@localhost:5432/tipbot_test"
 )
@@ -103,8 +111,8 @@ def _clean_shared_ledger():
 def _reset_rpc_breaker():
     """Close the bot.chain.core circuit breaker before every test.
 
-    The breaker is module-level state; a test that touches the real RPC
-    layer (CI has no .env, so providers fail) opens it, and every later
+    The breaker is module-level state; a test that touches the chain layer
+    (whose endpoint this file pins to a refused port) opens it, and every later
     mocked test inherits the RuntimeError. Reset both knobs so tests are
     isolated from each other's RPC failures.
     """
