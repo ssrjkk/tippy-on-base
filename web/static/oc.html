@@ -20,7 +20,7 @@
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
         <b>Tippy</b>
       </a>
-      <span class="chain-chip">🟦 Base Mainnet · on-chain</span>
+      <span class="chain-chip">🟦 <span data-net="chain">Base</span> · on-chain</span>
     </div>
   </header>
 
@@ -30,8 +30,8 @@
       <p class="hint" id="oc-meta"></p>
       <div id="oc-options"></div>
       <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
-        <a class="btn btn-primary" id="oc-tg" href="/" style="text-decoration:none">Открыть в Telegram</a>
-        <a class="btn" id="oc-scan" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none">🔗 Контракт на Basescan</a>
+        <a class="btn btn-primary" id="oc-tg" href="https://t.me/__BOT_USERNAME__" target="_blank" rel="noopener">Открыть в Telegram</a>
+        <a class="btn" id="oc-scan" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none">🔗 Контракт в обозревателе</a>
       </div>
       <p class="hint" style="margin-top:14px">
         Доли — настоящие ERC-1155 токены в контракте OutcomeMarket; расчёты в USDC
@@ -40,6 +40,7 @@
     </section>
   </main>
 
+  <script src="/chain.js"></script>
   <script>
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const $ = (id) => document.getElementById(id);
@@ -48,10 +49,11 @@
       const id = location.pathname.split('/').filter(Boolean).pop();
       try {
         const [infoR, mR] = await Promise.all([fetch('/api/info'), fetch('/api/onchain/market/' + id)]);
+        let info = {};
+        try { info = await infoR.json(); } catch (e) { /* labels keep their fallback */ }
+        applyNetInfo(info);
         if (!mR.ok) throw new Error();
         const m = await mR.json();
-        let botUsername = '';
-        try { botUsername = (await infoR.json()).bot_username || ''; } catch (e) { /* optional */ }
 
         const badge = m.cancelled ? '⛔ отменён' : (m.resolved ? '🏁 завершён' : '⛓️ открыт');
         $('oc-title').textContent = '#' + m.id + ' ' + m.question;
@@ -75,9 +77,10 @@
           </div>`;
         }).join('');
 
-        if (botUsername) $('oc-tg').href = 'https://t.me/' + encodeURIComponent(botUsername);
-        if (m.market_address) {
-          $('oc-scan').href = 'https://basescan.org/address/' + encodeURIComponent(m.market_address);
+        /* No explorer, no link: pointing at basescan.org from a testnet deploy
+         * would send users to a page that does not know this contract. */
+        if (m.market_address && info.explorer) {
+          $('oc-scan').href = info.explorer + '/address/' + encodeURIComponent(m.market_address);
           $('oc-scan').style.display = '';
         }
       } catch (e) {

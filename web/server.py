@@ -65,6 +65,9 @@ app.include_router(auth_router)
 app.include_router(mini_router)
 STATIC = Path(__file__).resolve().parent / 'static'
 MICRO = 10 ** config.USDC_DECIMALS
+# Only labels we can state as fact for a chain id we recognise; anything else
+# falls back to the raw id rather than guessing "Base".
+CHAIN_NAMES = {8453: 'Base', 84532: 'Base Sepolia'}
 WEB_RATE_LIMIT: int = int(os.environ.get('WEB_RATE_LIMIT', '60'))
 WEB_RATE_WINDOW: int = int(os.environ.get('WEB_RATE_WINDOW', '60'))
 WEB_RATE_MAX_CLIENTS: int = int(os.environ.get('WEB_RATE_MAX_CLIENTS', '10000'))
@@ -528,11 +531,15 @@ def api_info() -> dict:
 
     The web app renders its input constraints and its command table from here
     rather than hardcoding them, so what a user reads on the site is what
-    `web/mini.py` rejects against and what `set_my_commands` installs.
+    `web/mini.py` rejects against and what `set_my_commands` installs. The
+    network label and explorer come from the same config the bot signs with, so
+    a Sepolia deployment cannot advertise itself as mainnet.
     """
     return {
         'bot_username': config.BOT_USERNAME,
         'chain_id': config.EXPECTED_CHAIN_ID,
+        'chain_name': chain_label(),
+        'explorer': config.BASESCAN_URL,
         'usdc_address': config.USDC_ADDRESS,
         'commands': [{'command': c, 'description': d} for c, d in BOT_COMMAND_SPECS],
         'fees': {
@@ -686,18 +693,34 @@ async def api_ask(body: AskRequest, request: Request) -> dict:
 async def api_wallet() -> dict:
     return {'address': str(hot_wallet()), 'balance_usdc': await _safe_hot_balance()}
 
+def chain_label() -> str:
+    """Name of the chain the bot signs on, for anything user-facing."""
+    return CHAIN_NAMES.get(config.EXPECTED_CHAIN_ID, f'chain {config.EXPECTED_CHAIN_ID}')
+
+def _static_page(page: str) -> Response:
+    """Serve a static page with the bot username already rendered into it.
+
+    ``t.me/TIPBOT_USERNAME`` shipped in the HTML is a link that 404s for anyone
+    whose scripts have not replaced it yet, so the real name is substituted
+    here. Network and USDC labels stay on /api/info — only the running config
+    knows those.
+    """
+    html = (STATIC / page).read_text(encoding='utf-8')
+    html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
+    return Response(content=html.encode('utf-8'), media_type='text/html')
+
 @app.get('/u/{tg_id}')
-async def user_page(tg_id: int) -> FileResponse:
-    return FileResponse(STATIC / 'user.html')
+async def user_page(tg_id: int) -> Response:
+    return _static_page('user.html')
 
 @app.get('/m/{bet_id}')
-async def market_page(bet_id: int) -> FileResponse:
-    return FileResponse(STATIC / 'market.html')
+async def market_page(bet_id: int) -> Response:
+    return _static_page('market.html')
 
 @app.get('/m/oc/{market_id}')
-async def onchain_market_page(market_id: int) -> FileResponse:
+async def onchain_market_page(market_id: int) -> Response:
     """Shareable page for an ON-CHAIN market (OutcomeMarket ERC-1155)."""
-    return FileResponse(STATIC / 'oc.html')
+    return _static_page('oc.html')
 
 @app.get('/me')
 async def me_page() -> FileResponse:
@@ -715,13 +738,7 @@ async def root(request: Request):
     Login Widget renders inline on this page, and its callback is rejected
     without that state.
     """
-    return attach_login_state(
-        request,
-        Response(
-            content=(STATIC / 'index.html').read_bytes(),
-            media_type='text/html',
-        ),
-    )
+    return attach_login_state(request, _static_page('index.html'))
 
 @app.get('/app', include_in_schema=False)
 async def mini_app():
@@ -732,6 +749,7 @@ async def mini_app():
     base_url = public_base_url()
     html = html.replace('__PUBLIC_URL__', base_url)
     html = html.replace('__PUBLIC_HOST__', base_url.split('//')[-1])
+    html = html.replace('__CHAIN_NAME__', chain_label())
     return Response(content=html.encode('utf-8'), media_type='text/html')
 
 @app.post('/api/webhook-miniaction', include_in_schema=False)

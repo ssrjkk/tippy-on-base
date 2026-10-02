@@ -24,16 +24,16 @@
           <span class="icon-sun">☀️</span>
         </button>
         <span id="authArea"><a class="btn btn-ghost btn-sm" href="#workspace-section">Войти</a></span>
-        <a class="btn btn-ghost btn-sm" href="https://t.me/TIPBOT_USERNAME" data-tg-link>Открыть в Telegram →</a>
+        <a class="btn btn-ghost btn-sm" href="https://t.me/__BOT_USERNAME__" data-tg-link>Открыть в Telegram →</a>
       </div>
     </div>
   </header>
 
   <main>
     <section class="hero">
-      <a class="hero-badge" href="https://basescan.org" target="_blank" rel="noopener">
+      <a class="hero-badge" data-net-explorer>
         <span class="base-mark pulse-ring"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
-        Base Mainnet · USDC
+        <span data-net="chain">Base</span> · USDC
       </a>
       <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
       <p class="hero-sub">
@@ -43,12 +43,12 @@
       </p>
       <div class="hero-cta">
         <a class="btn btn-primary" href="#workspace-section">Открыть кабинет</a>
-        <a class="btn btn-ghost" href="https://t.me/TIPBOT_USERNAME" data-tg-link>Начать в Telegram</a>
+        <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__" data-tg-link>Начать в Telegram</a>
       </div>
     </section>
 
     <section class="section reveal" id="workspace-section">
-      <h2>🧰 Кабинет</h2>
+      <h2>Кабинет</h2>
 
       <div id="connect" class="connect">
         <div class="connect-grid">
@@ -306,7 +306,7 @@
     </section>
 
     <section class="section reveal" id="volume-chart-section">
-      <h2>📈 Объём за 14 дней</h2>
+      <h2>Объём за 14 дней</h2>
       <div class="chart" id="volume-chart">
         <div class="skeleton-bar" style="height:38%"></div>
         <div class="skeleton-bar" style="height:62%"></div>
@@ -319,7 +319,7 @@
     </section>
 
     <section class="section reveal" id="predictions">
-      <h2>📊 Рынки предсказаний (LMSR)</h2>
+      <h2>Рынки предсказаний (LMSR)</h2>
       <p class="hint">
         Цены долей задаёт LMSR — логарифмический маркет-мейкер: каждая покупка
         сдвигает котировку, поэтому цена и есть вероятность, а не ручная оценка.
@@ -332,7 +332,7 @@
     </section>
 
     <section class="section reveal" id="markets">
-      <h2>🎯 Ставки-пулы (парамутюэль)</h2>
+      <h2>Ставки-пулы (парамутюэль)</h2>
       <p class="hint">
         Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
         выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
@@ -346,14 +346,14 @@
     </section>
 
     <section class="section reveal" id="closed-markets">
-      <h2>🏁 Закрытые ставки</h2>
+      <h2>Закрытые ставки</h2>
       <div class="markets" id="closed-markets-list">
         <div class="skeleton-card"></div>
       </div>
     </section>
 
     <section class="section reveal" id="onchain-markets" style="display:none">
-      <h2>⛓️ Cally — ончейн-рынки на Base</h2>
+      <h2>Cally — ончейн-рынки на Base</h2>
       <p class="hint">
         Доли — настоящие ERC-1155 токены в контракте OutcomeMarket, расчёты в
         USDC на-цепи. В боте: /oc_create · /oc_buy · /oc_redeem.
@@ -364,7 +364,7 @@
     </section>
 
     <section class="section reveal" id="terms">
-      <h2>💸 Комиссии и лимиты</h2>
+      <h2>Комиссии и лимиты</h2>
       <p class="hint">
         Значения читаются из конфигурации бота тем же API, который их
         проверяет, — то, что написано здесь, и есть то, что отклонит запрос.
@@ -378,7 +378,7 @@
     </section>
 
     <section class="section reveal" id="commands">
-      <h2>⌨️ Команды бота</h2>
+      <h2>Команды бота</h2>
       <p class="hint">
         Тот же список, который бот регистрирует в меню Telegram через
         <code>set_my_commands</code>, — сайт отдаёт его из того же источника,
@@ -392,7 +392,7 @@
     </section>
 
     <section class="section reveal" id="treasury">
-      <h2>💼 Прозрачный кошелёк</h2>
+      <h2>Прозрачный кошелёк</h2>
       <div class="grid-2">
         <div>
           <div class="wallet" id="wallet">
@@ -426,7 +426,7 @@
 
     <section class="section grid-2">
       <div class="reveal">
-        <h2>🏆 Топ чаевых</h2>
+        <h2>Топ чаевых</h2>
         <div class="leaderboard" id="leaderboard">
           <div class="skeleton-card" style="height:56px"></div>
           <div class="skeleton-card" style="height:56px"></div>
@@ -434,7 +434,7 @@
         </div>
       </div>
       <div class="reveal">
-        <h2>🧾 Как это устроено</h2>
+        <h2>Как это устроено</h2>
         <div class="steps">
           <div class="step">
             <div class="step-num">1</div>
@@ -466,15 +466,15 @@
         </div>
       </div>
       <div class="footer-meta">
-        <span class="chain-chip">🟦 Base Mainnet</span>
-        <span class="chain-chip">🪙 USDC</span>
-        <span class="chain-chip">🔒 Vault-резервы on-chain</span>
+        <span class="chain-chip">🟦 <span data-net="chain">Base</span></span>
+        <span class="chain-chip">🪙 <span data-net="usdc">USDC</span></span>
+        <span class="chain-chip" id="reserve-chip" style="display:none">🔒 <span id="reserve-chip-text"></span></span>
       </div>
     </div>
     <div class="author-links">
       <span>Автор:</span>
-      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">Telegram</a>
-      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">Telegram 2</a>
+      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">@b2wmain</a>
+      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a>
       <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
       <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
     </div>
@@ -503,6 +503,7 @@
       if (el) toggleTheme();
     });
   </script>
+  <script src="/chain.js"></script>
   <script src="/app.js"></script>
   <script src="/site.js"></script>
 </body>

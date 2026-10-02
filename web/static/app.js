@@ -62,6 +62,7 @@ async function loadInfo() {
     renderTelegramWidget(username);
     renderTerms(info);
     renderCommands(info);
+    applyNetInfo(info);
   } catch (e) { /* keep original links */ }
 }
 
@@ -132,7 +133,7 @@ function renderTerms(info) {
       "Субсидия ликвидности рынка",
       fmtUSDC(L.min_subsidy_usdc) + "–" + fmtUSDC(L.max_subsidy_usdc) + " USDC",
     ],
-    ["Сеть", "Base · chain id " + info.chain_id],
+    ["Сеть", info.chain_name + " · chain id " + info.chain_id],
     ["Контракт USDC", info.usdc_address],
     ["Ончейн-рынки (Cally)", info.onchain_markets_enabled ? "включены" : "контракт не подключён"],
     ["Gasless-покупка долей", info.smart_wallet_enabled ? "включена" : "не настроена"],
@@ -204,8 +205,14 @@ async function loadWallet() {
       s.reserve_usdc === null || s.reserve_usdc === undefined
         ? "RPC недоступен"
         : fmtUSDC(s.reserve_usdc) + " USDC";
-    $("reserve-source").textContent =
+    const source =
       s.reserves_source === "vault" ? "TipBotVault (on-chain)" : "горячий кошелёк";
+    $("reserve-source").textContent = source;
+    const chip = $("reserve-chip");
+    if (chip) {
+      $("reserve-chip-text").textContent = "Резервы: " + source;
+      chip.style.display = "";
+    }
     $("wallet-solvent").textContent =
       s.solvent === true ? "✅ покрыто"
       : s.solvent === false ? "⚠️ недостаточно"
@@ -379,6 +386,7 @@ function escapeHtml(s) {
 
 async function loadOnchainMarkets() {
   try {
+    const net = await netInfo();
     const r = await fetch("/api/onchain/markets");
     if (!r.ok) throw new Error();
     const markets = await r.json();
@@ -417,13 +425,13 @@ async function loadOnchainMarkets() {
       return `
         <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
           <div class="market-head">
-            <span class="market-question">⛓️ #${m.id} ${escapeHtml(m.question)}</span>
+            <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
             <span class="market-meta">${deadline} · ${badge}</span>
           </div>
           ${options}
           <div class="market-footer">
-            <span class="pot">On-chain · ERC-1155 · USDC на Base</span>
-            <span class="pot">${m.market_address ? `<a class="m-link" href="https://basescan.org/address/${encodeURIComponent(m.market_address)}" target="_blank" rel="noopener">🔗 Basescan</a>` : ""}</span>
+            <span class="pot">On-chain · ERC-1155 · USDC на ${escapeHtml(net.chain_name || "—")}</span>
+            <span class="pot">${m.market_address && net.explorer ? `<a class="m-link" href="${escapeHtml(net.explorer)}/address/${encodeURIComponent(m.market_address)}" target="_blank" rel="noopener">Открыть в обозревателе</a>` : ""}</span>
           </div>
         </div>`;
     }).join("");
