@@ -184,6 +184,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "⚡ by <b>@ssrjkk</b>"
         ),
     },
+    "about_website": {
+        "ru": "Сайт",
+        "en": "Website",
+        "zh": "网站",
+    },
     # ----- start -----
     "start_hi": {
         "ru": "👋 Привет, <b>@{name}</b>!",

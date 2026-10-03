@@ -25,7 +25,10 @@ async def _fmt_balance(tg_id: int) -> str:
 async def cmd_about(message: types.Message) -> None:
     await common.ledger.ensure_user(message.from_user.id, message.from_user.username)
     lang = await _lang(message.from_user.id)
-    await message.answer(f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}", reply_markup=common._menu_kb(lang))
+    from web.mini import public_base_url
+    site_url = public_base_url()
+    about_text = f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}\n\n🌐 <b>{i18n.t(lang, 'about_website')}</b>: <a href=\"{site_url}\">{site_url.replace('https://', '').replace('http://', '')}</a>"
+    await message.answer(about_text, reply_markup=common._menu_kb(lang), disable_web_page_preview=False)
 
 @common.router.message(Command('app'))
 async def cmd_app(message: types.Message) -> None:
@@ -40,7 +43,10 @@ async def cb_about(cb: types.CallbackQuery) -> None:
     if not user:
         return
     lang = await _lang(user.id)
-    await common._edit_menu(cb, f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}", common._menu_kb(lang))
+    from web.mini import public_base_url
+    site_url = public_base_url()
+    about_text = f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}\n\n🌐 <b>{i18n.t(lang, 'about_website')}</b>: <a href=\"{site_url}\">{site_url.replace('https://', '').replace('http://', '')}</a>"
+    await common._edit_menu(cb, about_text, common._menu_kb(lang))
     await cb.answer()
 
 @common.router.message(Command('language'))
