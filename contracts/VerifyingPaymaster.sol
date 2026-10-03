@@ -34,7 +34,8 @@ struct UserOperation {
 }
 
 contract VerifyingPaymaster {
-    address public owner;   // bot hot wallet / relayer
+    address public owner;
+    address public pendingOwner;
     address public usdc;
 
     // Anti-abuse limits
@@ -144,7 +145,34 @@ contract VerifyingPaymaster {
             v := byte(0, calldataload(add(sig.offset, 0x40)))
         }
         if (v < 27) v += 27;
-        return ecrecover(hash, v, r, s);
+        address signer = ecrecover(hash, v, r, s);
+        require(signer != address(0), "Paymaster: invalid signature");
+        return signer;
+    }
+
+    // --- Ownership transfer (2-step) ---
+
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /// @notice Propose a new owner. The candidate must call acceptOwnership().
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Paymaster: zero address");
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    /// @notice Accept ownership (must be called by pendingOwner).
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Paymaster: not pending owner");
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner = pendingOwner;
+        pendingOwner = address(0);
+    }
+
+    /// @notice Cancel a pending ownership transfer.
+    function cancelOwnershipTransfer() external onlyOwner {
+        pendingOwner = address(0);
     }
 
 }

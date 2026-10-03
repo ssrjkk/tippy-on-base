@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {ERC1155Supply} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -31,7 +32,7 @@ import {LMSR} from "./LMSR.sol";
 ///      NOTE: USDC sent DIRECTLY to this contract (not via createMarket/buy/
 ///      mintCompleteSet) credits no market escrow and is stranded dust — keep
 ///      this address for contract interactions only.
-contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
+contract OutcomeMarket is ERC1155Supply, Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdc;
@@ -113,6 +114,11 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     error MarketDisputed();
     error ZeroAddress();
     error EthTransferFailed();
+    error NotPendingOwner();
+
+    address public pendingOwner;
+
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
 
     modifier onlyOracleOrOwner() {
         if (msg.sender != oracle && msg.sender != owner()) revert NotOwnerOrOracle();
@@ -134,14 +140,48 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
         oracle = newOracle;
     }
 
+    /// @notice Pause all trading (buy/sell/redeem/create). Owner-only emergency brake.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Resume trading after a pause.
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    /// @notice Begin ownership transfer to a new address. The new owner must
+    ///         call acceptOwnership() to complete the transfer.
+    function transferOwnership(address newOwner) public override onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner(), newOwner);
+    }
+
+    /// @notice Complete the ownership transfer. Only callable by the pending owner.
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotPendingOwner();
+        _transferOwnership(pendingOwner);
+        pendingOwner = address(0);
+    }
+
+    /// @notice Cancel a pending ownership transfer.
+    function cancelOwnershipTransfer() external onlyOwner {
+        pendingOwner = address(0);
+    }
+
     event EthRescued(address indexed to, uint256 amount);
 
     /// @notice Recover ETH stranded in this contract (selfdestruct-forced or
     ///         accidental). User funds are ALWAYS in USDC escrow — this never
     ///         touches them. There is no receive() fallback, so ETH cannot
     ///         arrive through normal transfers.
-    function rescueETH(address payable to, uint256 amount) external onlyOwner {
+    ///         SECURITY: capped at 50% of balance to limit blast radius if
+    ///         owner key is compromised. Transfer to multisig/timelock before
+    ///         mainnet deploy.
+    function rescueETH(address payable to, uint256 amount) external onlyOwner nonReentrant {
         if (to == address(0)) revert ZeroAddress();
+        if (amount > address(this).balance / 2) revert InvalidShares();
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert EthTransferFailed();
         emit EthRescued(to, amount);
@@ -151,7 +191,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     // Market creation
     // ---------------------------------------------------------------------
 
-    function createMarket(uint8 numOutcomes, uint256 subsidyMicro, uint64 closesAt) external returns (uint256 marketId) {
+    function createMarket(uint8 numOutcomes, uint256 subsidyMicro, uint64 closesAt) external nonReentrant whenNotPaused returns (uint256 marketId) {
         if (numOutcomes < 2 || numOutcomes > MAX_OUTCOMES) revert BadOutcomeCount();
         if (subsidyMicro < MIN_SUBSIDY_MICRO) revert SubsidyTooSmall();
         if (closesAt <= block.timestamp) revert ClosesInPast();
@@ -182,7 +222,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     // Complete sets
     // ---------------------------------------------------------------------
 
-    function mintCompleteSet(uint256 marketId, uint256 amountMicro) external nonReentrant {
+    function mintCompleteSet(uint256 marketId, uint256 amountMicro) external nonReentrant whenNotPaused {
         Market storage m = _existingMarket(marketId);
         if (m.cancelled) revert AlreadyCancelled();
         if (block.timestamp >= m.closesAt) revert MarketNotClosed();
@@ -202,7 +242,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
         emit SetMinted(marketId, msg.sender, amountMicro);
     }
 
-    function burnCompleteSet(uint256 marketId, uint256 amountMicro) external nonReentrant {
+    function burnCompleteSet(uint256 marketId, uint256 amountMicro) external nonReentrant whenNotPaused {
         Market storage m = _existingMarket(marketId);
         if (m.cancelled) revert AlreadyCancelled();
         for (uint8 i = 0; i < m.numOutcomes; i++) {
@@ -218,7 +258,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     // ---------------------------------------------------------------------
 
     function buy(uint256 marketId, uint8 outcomeIdx, uint256 shares, uint256 maxCostMicro)
-        external nonReentrant returns (uint256 costMicro)
+        external nonReentrant whenNotPaused returns (uint256 costMicro)
     {
         Market storage m = _tradeableMarket(marketId, outcomeIdx);
         if (shares == 0 || shares > MAX_SUPPLY_PER_OUTCOME) revert InvalidShares();
@@ -240,7 +280,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     }
 
     function sell(uint256 marketId, uint8 outcomeIdx, uint256 shares, uint256 minProceedsMicro)
-        external nonReentrant returns (uint256 proceedsMicro)
+        external nonReentrant whenNotPaused returns (uint256 proceedsMicro)
     {
         Market storage m = _tradeableMarket(marketId, outcomeIdx);
         if (shares == 0) revert InvalidShares();
@@ -323,13 +363,17 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     }
 
     /// @notice Owner resolves directly (fallback if oracle doesn't act, or the
-    /// final say after a dispute).
+    ///         final say after a dispute).
+    ///         SECURITY: only callable after oracle grace period (close + 24h)
+    ///         to prevent owner from front-running honest oracle resolutions.
     function ownerResolve(uint256 marketId, uint8 winningOutcome) external onlyOwner {
         Market storage m = _existingMarket(marketId);
         if (m.resolved) revert AlreadyResolved();
         if (m.cancelled) revert AlreadyCancelled();
         if (block.timestamp < m.closesAt) revert MarketNotClosed();
         if (winningOutcome >= m.numOutcomes) revert BadOutcomeIndex();
+        // Owner can only resolve after oracle had 24h grace period post-close
+        if (block.timestamp < m.closesAt + EXPIRY_WINDOW) revert MarketNotExpired();
 
         m.resolved = true;
         m.winningOutcome = winningOutcome;
@@ -482,7 +526,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     // Redemption
     // ---------------------------------------------------------------------
 
-    function redeem(uint256 marketId) external nonReentrant returns (uint256 payoutMicro) {
+    function redeem(uint256 marketId) external nonReentrant whenNotPaused returns (uint256 payoutMicro) {
         Market storage m = _existingMarket(marketId);
         if (!m.resolved) revert NotResolved();
         if (m.cancelled) revert AlreadyCancelled();
@@ -498,7 +542,7 @@ contract OutcomeMarket is ERC1155Supply, Ownable, ReentrancyGuard {
     }
 
     /// @notice Batch redeem winnings from multiple resolved markets in one tx.
-    function redeemMany(uint256[] calldata marketIds) external nonReentrant returns (uint256 totalPayout) {
+    function redeemMany(uint256[] calldata marketIds) external nonReentrant whenNotPaused returns (uint256 totalPayout) {
         for (uint256 i = 0; i < marketIds.length; i++) {
             Market storage m = _existingMarket(marketIds[i]);
             if (!m.resolved) revert NotResolved();

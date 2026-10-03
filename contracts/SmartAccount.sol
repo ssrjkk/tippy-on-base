@@ -21,6 +21,7 @@ interface IERC20 {
 
 contract SmartAccount {
     address public owner;
+    address public pendingOwner;
     uint256 public nonce;
     bool public initialized;
     address public factory;
@@ -112,12 +113,25 @@ contract SmartAccount {
         emit Executed(dest2, 0, data2);
     }
 
-    /// @notice Transfer ownership.
+    /// @notice Initiate ownership transfer (2-step: caller proposes, new owner accepts).
     function transferOwnership(address newOwner) external {
         require(msg.sender == owner, "SmartAccount: not owner");
         require(newOwner != address(0), "SmartAccount: zero address");
+        pendingOwner = newOwner;
         emit OwnerTransferred(owner, newOwner);
-        owner = newOwner;
+    }
+
+    /// @notice Accept ownership (must be called by pendingOwner).
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "SmartAccount: not pending owner");
+        owner = pendingOwner;
+        pendingOwner = address(0);
+    }
+
+    /// @notice Cancel pending ownership transfer.
+    function cancelOwnershipTransfer() external {
+        require(msg.sender == owner, "SmartAccount: not owner");
+        pendingOwner = address(0);
     }
 
     /// @notice Fund the account with ETH (for gas reserve).
@@ -137,7 +151,9 @@ contract SmartAccount {
         // Normalize v
         if (v < 27) v += 27;
         require(v == 27 || v == 28, "SmartAccount: invalid v");
-        return ecrecover(hash, v, r, s);
+        address signer = ecrecover(hash, v, r, s);
+        require(signer != address(0), "SmartAccount: invalid signature");
+        return signer;
     }
 
     /// @dev Returns the EntryPoint address (deployed on Base).

@@ -109,3 +109,36 @@ class LedgerCoreMixin:
                     pass
                 time.sleep(delay)
         raise RuntimeError(f"schema migration failed after {retries} attempts: {last}")
+
+    def reserve_idempotency(self, key_hash: str, user_id: int, action: str) -> bool:
+        """Reserve an idempotency key. Returns True if reserved (first time),
+        False if the key already exists (duplicate request)."""
+        with self._lock:
+            try:
+                self._conn.execute(
+                    "INSERT INTO idempotency_keys (key_hash, user_id, action, status) "
+                    "VALUES (%s, %s, %s, 'pending')",
+                    (key_hash, user_id, action),
+                )
+                self._conn.commit()
+                return True
+            except psycopg.errors.UniqueViolation:
+                self._conn.rollback()
+                return False
+
+    def complete_idempotency(self, key_hash: str, result_id: str | None = None) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE idempotency_keys SET status = 'completed', result_id = %s "
+                "WHERE key_hash = %s",
+                (result_id, key_hash),
+            )
+            self._conn.commit()
+
+    def rollback_idempotency(self, key_hash: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM idempotency_keys WHERE key_hash = %s",
+                (key_hash,),
+            )
+            self._conn.commit()

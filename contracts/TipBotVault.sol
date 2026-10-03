@@ -23,12 +23,15 @@ contract TipBotVault {
     error TransferFailed();
     error NotPendingOwner();
     error InsufficientReserves(uint256 requested, uint256 available);
+    error Paused();
+    error NotPaused();
 
     IERC20 public immutable usdc;
 
     address public owner;
     address public pendingOwner;
     address public relayer;
+    bool public paused;
 
     uint256 public dailyLimit;
     uint256 public windowStart;
@@ -43,6 +46,7 @@ contract TipBotVault {
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event ReserveWithdrawn(address indexed to, uint256 amount);
+    event PausedToggle(bool paused);
 
     constructor(address usdc_, address owner_, address relayer_, uint256 dailyLimit_) {
         usdc = IERC20(usdc_);
@@ -69,6 +73,11 @@ contract TipBotVault {
         _locked = 1;
     }
 
+    modifier whenNotPaused() {
+        if (paused) revert Paused();
+        _;
+    }
+
     /// @notice Total USDC backing every balance inside the bot.
     function totalReserves() external view returns (uint256) {
         return usdc.balanceOf(address(this));
@@ -84,7 +93,7 @@ contract TipBotVault {
     function batchDistribute(
         address[] calldata recipients,
         uint256[] calldata amounts
-    ) external onlyOwnerOrRelayer nonReentrant returns (uint256 total) {
+    ) external onlyOwnerOrRelayer nonReentrant whenNotPaused returns (uint256 total) {
         if (recipients.length == 0) revert EmptyDistribution();
         if (recipients.length != amounts.length) revert MismatchedArrays();
 
@@ -130,9 +139,19 @@ contract TipBotVault {
     }
 
     /// @notice Withdraw excess reserves (owner only, e.g. when winding down).
-    function withdrawReserve(address to, uint256 amount) external onlyOwner nonReentrant {
+    ///         SECURITY: subject to the same daily cap as relayer distributions
+    ///         to limit blast radius if owner key is compromised. Transfer to
+    ///         multisig/timelock before mainnet deploy.
+    function withdrawReserve(address to, uint256 amount) external onlyOwner nonReentrant whenNotPaused {
+        if (to == address(0)) revert OnlyOwner();
+        _rollWindow();
+        uint256 next = spentInWindow + amount;
+        if (next > dailyLimit) {
+            revert DailyLimitExceeded(spentInWindow, dailyLimit, amount);
+        }
         bool ok = usdc.transfer(to, amount);
         if (!ok) revert TransferFailed();
+        spentInWindow += amount;
         emit ReserveWithdrawn(to, amount);
     }
 
@@ -144,6 +163,18 @@ contract TipBotVault {
     function setDailyLimit(uint256 limit_) external onlyOwner {
         dailyLimit = limit_;
         emit LimitChanged(limit_);
+    }
+
+    /// @notice Emergency pause: halt distributions and withdrawals. Owner-only.
+    function pause() external onlyOwner {
+        paused = true;
+        emit PausedToggle(true);
+    }
+
+    /// @notice Resume after a pause.
+    function unpause() external onlyOwner {
+        paused = false;
+        emit PausedToggle(false);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {

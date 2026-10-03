@@ -121,6 +121,23 @@ def _throttle(tg_id: int, action: str) -> None:
             _money_last.pop(k, None)
     _money_last[key] = now
 
+
+def _idempotency_hash(tg_id: int, action: str, raw_key: str) -> str:
+    """Hash user_id:action:key into a fixed-length DB key."""
+    return hashlib.sha256(f'{tg_id}:{action}:{raw_key}'.encode()).hexdigest()
+
+
+async def _reserve_idempotency(request: Request, action: str, tg_id: int) -> str:
+    """Require an Idempotency-Key header and reserve it. Returns the key hash.
+    Raises 400 if missing, 409 if duplicate."""
+    raw_key = request.headers.get('Idempotency-Key', '').strip()
+    if not raw_key:
+        raise HTTPException(400, 'missing Idempotency-Key header')
+    key_hash = _idempotency_hash(tg_id, action, raw_key)
+    if not await ledger.reserve_idempotency(key_hash, tg_id, action):
+        raise HTTPException(409, 'duplicate request — reuse the original Idempotency-Key to check status')
+    return key_hash
+
 @router.post('/api/mini/auth', tags=['auth'])
 async def mini_auth(body: InitAuth, request: Request):
     tg_id = verify_init_data(body.initData)
@@ -259,9 +276,15 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
     if balance_micro < max_cost_micro:
         raise HTTPException(400, 'insufficient smart-wallet USDC balance')
 
-    tx_hash = await sw.smart_buy(
-        tg_id, body.market_id, body.outcome, body.shares, max_cost_micro
-    )
+    key_hash = await _reserve_idempotency(request, 'smartbuy', tg_id)
+    try:
+        tx_hash = await sw.smart_buy(
+            tg_id, body.market_id, body.outcome, body.shares, max_cost_micro
+        )
+    except Exception:
+        await ledger.rollback_idempotency(key_hash)
+        raise
+    await ledger.complete_idempotency(key_hash, result_id=tx_hash)
     return {'ok': True, 'tx_hash': tx_hash}
 
 class TipBody(BaseModel):
@@ -297,8 +320,16 @@ async def mini_tip(body: TipBody, request: Request) -> dict:
         raise HTTPException(404, f'user @{to} not found — they must open the bot first')
     if target == tg_id:
         raise HTTPException(400, 'cannot tip yourself')
-    if not await ledger.transfer(tg_id, target, micro):
+    key_hash = await _reserve_idempotency(request, 'tip', tg_id)
+    try:
+        ok = await ledger.transfer(tg_id, target, micro)
+    except Exception:
+        await ledger.rollback_idempotency(key_hash)
+        raise
+    if not ok:
+        await ledger.rollback_idempotency(key_hash)
         raise HTTPException(400, 'insufficient balance')
+    await ledger.complete_idempotency(key_hash)
     return {'ok': True, 'new_balance': float(await ledger.balance(tg_id))}
 
 class TradeBody(BaseModel):
@@ -316,9 +347,16 @@ async def mini_trade(body: TradeBody, request: Request) -> dict:
     max_micro = _cap_micro(config.MARKET_MAX_TRADE_USDC)
     if micro > max_micro:
         raise HTTPException(400, f'trade exceeds the {_fmt(max_micro)} USDC cap')
-    status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro)
+    key_hash = await _reserve_idempotency(request, 'trade', tg_id)
+    try:
+        status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro)
+    except Exception:
+        await ledger.rollback_idempotency(key_hash)
+        raise
     if status != 'ok':
+        await ledger.rollback_idempotency(key_hash)
         raise HTTPException(400, _ERR_MSG.get(status, status))
+    await ledger.complete_idempotency(key_hash)
     bal = float(await ledger.balance(tg_id))
     pos = await ledger.user_market_position(body.market_id, tg_id) or {}
     return {'ok': True, 'info': info, 'new_balance': bal, 'position': pos}
@@ -338,9 +376,16 @@ async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
     max_micro = _cap_micro(config.MAX_BET_USDC)
     if micro > max_micro:
         raise HTTPException(400, f'bet exceeds the {_fmt(max_micro)} USDC cap')
-    res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro)
+    key_hash = await _reserve_idempotency(request, 'betplace', tg_id)
+    try:
+        res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro)
+    except Exception:
+        await ledger.rollback_idempotency(key_hash)
+        raise
     if res != 'ok':
+        await ledger.rollback_idempotency(key_hash)
         raise HTTPException(400, _ERR_MSG.get(res, res))
+    await ledger.complete_idempotency(key_hash)
     return {'ok': True, 'new_balance': float(await ledger.balance(tg_id))}
 
 _ADDR_RE = re.compile(r'^0x[a-fA-F0-9]{40}$')
@@ -539,7 +584,13 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
             raise HTTPException(400, f'subsidy below the {_fmt(min_micro)} USDC minimum')
         if subsidy_micro > max_micro:
             raise HTTPException(400, f'subsidy above the {_fmt(max_micro)} USDC maximum')
-        mid = await ledger.create_market(tg_id, question, options, subsidy_micro, close_at=close_at)
+        key_hash = await _reserve_idempotency(request, 'create_market', tg_id)
+        try:
+            mid = await ledger.create_market(tg_id, question, options, subsidy_micro, close_at=close_at)
+        except Exception:
+            await ledger.rollback_idempotency(key_hash)
+            raise
+        await ledger.complete_idempotency(key_hash, str(mid))
         return {'ok': True, 'id': mid}
     if body.kind == 'bet':
         bid = await ledger.create_bet(tg_id, question, options, close_at=close_at)

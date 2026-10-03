@@ -61,6 +61,6 @@ def test_prod_health_endpoint():
         with urllib.request.urlopen(req) as response:
             assert response.status == 200
             data = json.loads(response.read().decode())
-            assert data.get("status") == "ok" or "database" in data, "Некорректный ответ health endpoint"
+            assert data.get("status") == "ok" or "db" in data, "Некорректный ответ health endpoint"
     except urllib.error.HTTPError as e:
         pytest.fail(f"Health endpoint вернул ошибку: {e.code} {e.reason}")
