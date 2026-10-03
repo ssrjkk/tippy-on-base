@@ -1,0 +1,53 @@
+name: Prod Health Check & Validation
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # Запуск каждые 6 часов для мониторинга прода
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Возможность ручного запуска
+
+jobs:
+  validate-prod:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify latest commit on remote (optional sanity check)
+        run: |
+          REMOTE_COMMIT=$(git ls-remote https://github.com/${{ github.repository }}.git main | awk '{print $1}')
+          LOCAL_COMMIT=${{ github.sha }}
+          echo "Remote main: $REMOTE_COMMIT"
+          echo "Current workflow sha: $LOCAL_COMMIT"
+          # Если нужно строго проверить, раскомментируй:
+          # if [ "$REMOTE_COMMIT" != "$LOCAL_COMMIT" ]; then exit 1; fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest playwright
+          playwright install chromium
+
+      - name: Run Production Validation Tests
+        env:
+          PYTEST_ADDOPTS: "-v --tb=short"
+        run: |
+          pytest tests/test_production_health.py -m production
+
+      - name: Notify on Failure (optional)
+        if: failure()
+        run: |
+          echo "⚠️ Прод-валидация не пройдена! Проверьте https://tippy-on-base.pages.dev"
+          # Здесь можно добавить шаг с отправкой уведомления в Telegram через curl, 
+          # используя твой же бот или webhook.
