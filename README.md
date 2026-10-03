@@ -11,6 +11,8 @@ accounting backed by public proof-of-reserves.
 
 **Author:** [@ssrjkk](https://t.me/ssrjkk) · [@b2wmain](https://t.me/b2wmain) · [X / Twitter](https://x.com/ludych1) · [GitHub](https://github.com/ssrjkk)
 
+**Links:** [Telegram Bot](https://t.me/TippyOnBaseBot) · [Website](https://tippy-on-base.pages.dev)
+
 ---
 
 ## Features
