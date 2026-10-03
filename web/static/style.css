@@ -2,6 +2,7 @@
    Tippy Design System — Light (default) + Dark theme
    Base.org palette: Primary Blue #0052FF, Warm Amber #FF8A00
    Typography: Space Grotesk (display), Inter (body)
+   Enhanced with Base-inspired gradients and patterns
    ================================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
@@ -88,8 +89,8 @@
 /* ---------- Scroll Progress ---------- */
 .scroll-progress {
   position: fixed; top: 0; left: 0; width: 0%; height: 3px; z-index: 1000;
-  background: linear-gradient(90deg, var(--accent), var(--warm));
-  box-shadow: 0 0 10px var(--accent);
+  background: linear-gradient(90deg, #0052ff, #3b7aff);
+  box-shadow: 0 0 12px rgba(0, 82, 255, 0.6);
   transition: width 0.1s ease-out;
 }
 
@@ -138,13 +139,19 @@ body::before {
 [data-theme="dark"] .orb { opacity: 1; }
 .orb-a {
   width: 500px; height: 500px; top: -180px; right: -160px;
-  background: radial-gradient(circle, var(--accent-bg), transparent 70%);
+  background: radial-gradient(circle, rgba(0, 82, 255, 0.15), transparent 70%);
   animation: floaty 12s ease-in-out infinite, orbShift 20s ease-in-out infinite;
 }
 .orb-b {
   width: 400px; height: 400px; bottom: -200px; left: -180px;
-  background: radial-gradient(circle, var(--accent-bg2), transparent 70%);
+  background: radial-gradient(circle, rgba(0, 82, 255, 0.1), transparent 70%);
   animation: floaty 15s ease-in-out infinite reverse, orbShift 25s ease-in-out infinite reverse;
+}
+.orb-c {
+  width: 600px; height: 600px; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(0, 82, 255, 0.05), transparent 60%);
+  animation: floaty 18s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /* ---------- Keyframes ---------- */
@@ -262,12 +269,31 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 
 /* ---------- Hero ---------- */
 .hero { text-align: center; padding: 100px 24px 60px; animation: fadeUp 0.8s var(--ease) both; position: relative; }
+.hero::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 82, 255, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 50%, rgba(0, 82, 255, 0.06), transparent);
+  pointer-events: none;
+  z-index: -1;
+}
 .hero h1 { animation: fadeUp 0.8s var(--ease) 0.08s both; }
 .hero h1 .accent {
-  background: linear-gradient(135deg, var(--accent), var(--warm));
+  background: linear-gradient(135deg, #0052ff 0%, #1859ff 50%, #3b7aff 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
+  position: relative;
+}
+.hero h1 .accent::after {
+  content: "";
+  position: absolute;
+  bottom: -4px; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #0052ff, transparent);
+  opacity: 0.4;
 }
 .hero-badge {
   display: inline-flex; align-items: center; gap: 8px;
@@ -285,11 +311,6 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   line-height: 1.05; margin-bottom: 24px; color: var(--text);
   font-family: "Space Grotesk", "Inter", sans-serif;
 }
-.hero h1 .accent {
-  background: linear-gradient(120deg, var(--warm) 0%, var(--accent) 50%, var(--accent-soft) 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  position: relative;
-}
 .hero-sub { max-width: 640px; margin: 0 auto 36px; color: var(--muted); font-size: 19px; line-height: 1.6; animation: fadeUp 0.8s var(--ease) 0.12s both; }
 .hero-cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; animation: fadeUp 0.8s var(--ease) 0.2s both; }
 
@@ -303,10 +324,10 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 }
 .btn:active { transform: scale(0.97); }
 .btn-primary {
-  background: linear-gradient(135deg, var(--warm), var(--warm-2));
-  color: #fff; box-shadow: var(--shadow-warm);
+  background: linear-gradient(135deg, #0052ff, #1859ff);
+  color: #fff; box-shadow: 0 4px 16px rgba(0, 82, 255, 0.3);
 }
-.btn-primary:hover { transform: translateY(-3px); filter: brightness(1.12); box-shadow: 0 10px 32px rgba(255, 138, 0, 0.5); }
+.btn-primary:hover { transform: translateY(-3px); filter: brightness(1.15); box-shadow: 0 8px 28px rgba(0, 82, 255, 0.45); }
 .btn-primary::after {
   content: ""; position: absolute; top: 0; left: 0; width: 42%; height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
@@ -358,8 +379,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 .stat-card:nth-child(6) { animation-delay: 0.3s; }
 .stat-card:hover {
   transform: translateY(-6px);
-  border-color: var(--accent);
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border-color: #0052ff;
+  box-shadow: var(--shadow-lg), 0 0 24px rgba(0, 82, 255, 0.25);
 }
 .stat-value {
   font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
@@ -403,8 +424,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 }
 .market-card:hover {
   transform: translateY(-5px);
-  border-color: var(--accent);
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border-color: #0052ff;
+  box-shadow: var(--shadow-lg), 0 0 24px rgba(0, 82, 255, 0.2);
 }
 .market-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .market-question { font-size: 17px; font-weight: 700; color: var(--text); }
