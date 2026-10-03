@@ -29,9 +29,9 @@
       <h2 id="oc-title">Загрузка…</h2>
       <p class="hint" id="oc-meta"></p>
       <div id="oc-options"></div>
-      <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+      <div class="oc-actions">
         <a class="btn btn-primary" id="oc-tg" href="https://t.me/__BOT_USERNAME__" target="_blank" rel="noopener">Открыть в Telegram</a>
-        <a class="btn" id="oc-scan" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none">🔗 Контракт в обозревателе</a>
+        <a class="btn btn-ghost" id="oc-scan" href="#" target="_blank" rel="noopener" style="display:none">🔗 Контракт в обозревателе</a>
       </div>
       <p class="hint" style="margin-top:14px">
         Доли — настоящие ERC-1155 токены в контракте OutcomeMarket; расчёты в USDC
@@ -66,13 +66,13 @@
         $('oc-options').innerHTML = (m.options || []).map((o, j) => {
           const pct = o.price_pct || 0;
           const isWinner = m.resolved && m.winner === o.index;
-          return `<div style="margin:10px 0">
-            <div style="display:flex;justify-content:space-between;font-size:14px">
+          return `<div class="oc-option">
+            <div class="oc-option-head">
               <span>${isWinner ? '🏆 ' : ''}${esc(o.label)}</span>
               <b>${pct.toFixed(1)}%</b>
             </div>
-            <div style="height:10px;border-radius:6px;background:var(--border,#22242a);overflow:hidden;margin-top:4px">
-              <div style="width:${Math.max(pct, 2)}%;height:100%;background:var(--accent,#0052ff)"></div>
+            <div class="oc-option-bar">
+              <div class="oc-option-fill" style="width:${Math.max(pct, 2)}%"></div>
             </div>
           </div>`;
         }).join('');
