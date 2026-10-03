@@ -205,7 +205,9 @@ async def rate_limit(request: Request, call_next):
     response.headers.setdefault('Cache-Control', 'no-store, no-cache, must-revalidate')
     response.headers.setdefault('Content-Security-Policy',
         f"default-src 'self'; script-src 'self' 'nonce-{nonce}' {_CSP_SCRIPT_WHITELIST}; "
-        f"style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
+        f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        f"font-src 'self' https://fonts.gstatic.com; "
+        f"img-src 'self' data: https:; "
         f"connect-src 'self'; frame-src {_CSP_FRAME_WHITELIST}; "
         "frame-ancestors 'self' https://web.telegram.org")
     try:

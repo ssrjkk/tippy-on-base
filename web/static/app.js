@@ -3,6 +3,15 @@ document.body.classList.add("js");
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/* ---------- scroll progress ---------- */
+const scrollProgress = $("scrollProgress");
+if (scrollProgress) {
+  window.addEventListener("scroll", () => {
+    const scrolled = (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100;
+    scrollProgress.style.width = scrolled + "%";
+  }, { passive: true });
+}
+
 const fmtUSDC = (x) =>
   (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
 

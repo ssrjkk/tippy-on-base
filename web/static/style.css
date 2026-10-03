@@ -85,6 +85,14 @@
   --chart-bar: linear-gradient(180deg, var(--accent-soft), var(--accent));
 }
 
+/* ---------- Scroll Progress ---------- */
+.scroll-progress {
+  position: fixed; top: 0; left: 0; width: 0%; height: 3px; z-index: 1000;
+  background: linear-gradient(90deg, var(--accent), var(--warm));
+  box-shadow: 0 0 10px var(--accent);
+  transition: width 0.1s ease-out;
+}
+
 /* ---------- Selection ---------- */
 ::selection { background: rgba(0, 82, 255, 0.3); color: var(--text); }
 
@@ -131,12 +139,12 @@ body::before {
 .orb-a {
   width: 500px; height: 500px; top: -180px; right: -160px;
   background: radial-gradient(circle, var(--accent-bg), transparent 70%);
-  animation: floaty 12s ease-in-out infinite;
+  animation: floaty 12s ease-in-out infinite, orbShift 20s ease-in-out infinite;
 }
 .orb-b {
   width: 400px; height: 400px; bottom: -200px; left: -180px;
   background: radial-gradient(circle, var(--accent-bg2), transparent 70%);
-  animation: floaty 15s ease-in-out infinite reverse;
+  animation: floaty 15s ease-in-out infinite reverse, orbShift 25s ease-in-out infinite reverse;
 }
 
 /* ---------- Keyframes ---------- */
@@ -184,6 +192,10 @@ body::before {
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: none; }
+}
+@keyframes orbShift {
+  0%, 100% { filter: blur(100px) hue-rotate(0deg); }
+  50% { filter: blur(100px) hue-rotate(30deg); }
 }
 
 /* ---------- Base Mark (logo) ---------- */
@@ -250,6 +262,13 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 
 /* ---------- Hero ---------- */
 .hero { text-align: center; padding: 100px 24px 60px; animation: fadeUp 0.8s var(--ease) both; position: relative; }
+.hero h1 { animation: fadeUp 0.8s var(--ease) 0.08s both; }
+.hero h1 .accent {
+  background: linear-gradient(135deg, var(--accent), var(--warm));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
 .hero-badge {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 20px; border-radius: 999px;
@@ -287,7 +306,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   background: linear-gradient(135deg, var(--warm), var(--warm-2));
   color: #fff; box-shadow: var(--shadow-warm);
 }
-.btn-primary:hover { transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 8px 28px rgba(255, 138, 0, 0.4); }
+.btn-primary:hover { transform: translateY(-3px); filter: brightness(1.12); box-shadow: 0 10px 32px rgba(255, 138, 0, 0.5); }
 .btn-primary::after {
   content: ""; position: absolute; top: 0; left: 0; width: 42%; height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
@@ -296,6 +315,13 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 .btn-primary:hover::after { animation: shine 0.9s var(--ease); }
 .btn-ghost {
   border: 1px solid var(--border); color: var(--text); background: var(--surface);
+  transition: all 0.25s var(--ease);
+}
+.btn-ghost:hover {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
 }
 .btn-ghost:hover { transform: translateY(-2px); border-color: var(--accent); color: var(--accent); box-shadow: var(--shadow-glow); }
 
@@ -331,9 +357,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 .stat-card:nth-child(5) { animation-delay: 0.24s; }
 .stat-card:nth-child(6) { animation-delay: 0.3s; }
 .stat-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-6px);
   border-color: var(--accent);
-  box-shadow: var(--shadow), var(--shadow-glow);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 .stat-value {
   font-size: 36px; font-weight: 700; letter-spacing: -0.02em;
@@ -376,9 +402,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   animation: fadeUp 0.55s var(--ease) backwards;
 }
 .market-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-5px);
   border-color: var(--accent);
-  box-shadow: var(--shadow), var(--shadow-glow);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 .market-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .market-question { font-size: 17px; font-weight: 700; color: var(--text); }
