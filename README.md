@@ -1,11 +1,5 @@
 # Tippy - Community Economy in USDC on Base
 
-[![CI](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/Tippy-on-base/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-793%20passed-brightgreen)
-![Python](https://img.shields.io/badge/python-3.12+-blue)
-![Network](https://img.shields.io/badge/network-Base-0052FF)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 A Telegram bot that turns any chat or community into a financial ecosystem:
 **instant USDC tips, Polymarket-style prediction markets with live AMM odds,
 an AI assistant, paywalled content, and per-user wallets** — all on Base.
@@ -16,6 +10,26 @@ accounting backed by public proof-of-reserves.
 **Made by [@ssrjkk](https://github.com/ssrjkk) — by ssrjkk.**
 
 **Author:** [@ssrjkk](https://t.me/ssrjkk) · [@b2wmain](https://t.me/b2wmain) · [X / Twitter](https://x.com/ludych1) · [GitHub](https://github.com/ssrjkk)
+
+**Links:** [Telegram Bot](https://t.me/TippyOnBaseBot) · [Website](https://tippy-egi.pages.dev)
+
+---
+
+## Screenshots
+
+### Website
+
+| Desktop | Mobile |
+| --- | --- |
+| ![Tippy website](docs/screenshots/website.png) | ![Tippy website on mobile](docs/screenshots/website-mobile.png) |
+
+### Telegram Mini App
+
+![Tippy Mini App](docs/screenshots/dashboard.png)
+
+### Telegram Bot
+
+![Tippy bot menu](docs/screenshots/bot.png)
 
 ---
 
@@ -277,47 +291,95 @@ A plain-language walkthrough for Telegram users lives in
 
 ```
 bot/
-├─ main.py        entrypoint, background watchers (deposits, withdrawals, deadlines)
-├─ handlers/      aiogram handlers by domain (_common, menu, wallet, tips, bets, markets, stats, paywall, onchain, ai, breakthrough)
-├─ ledger/        PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
-│  ├─ __init__.py    Ledger facade + singletons + lmsr_* re-exports
-│  ├─ _core.py       connect/schema/ping                   _schema.py  DDL
-│  ├─ _users.py      accounts, wallet links, create2       _conn.py    ReconnectingConn
-│  ├─ _pay/_paywall/_transfer  x402, paywalls, transfers
-│  ├─ _withdraw.py   AMl, batches, refunds
-│  ├─ _bets/_markets       parimutuel + LMSR AMM (buy/sell/resolve)
-│  ├─ _onchain.py    on-chain outcome markets registry
-│  ├─ _messages/_notify/_admin/_views   messaging, outbox, settings, views
-│  └─ _base.py      audit_log, MICRO, LMSR math
-├─ base.py        web3 layer: USDC transfers, deposit scanning, tx decoding
-├─ chain/         relayer pool (persisted daily caps) + tx status helpers
-├─ ai.py          OpenAI-compatible client (stdlib urllib, no new deps)
-├─ qr.py          local QR generation
-├─ smart_wallet.py  ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
-├─ paymaster.py    Base Paymaster integration: gasless onboarding (10 free txs)
-├─ recurring.py    Recurring payments: subscriptions executor (hourly watcher)
-├─ batch.py        Batch transactions: multiple actions in one UserOperation
-├─ credit.py       Credit scoring: 300-850 P2P lending score
-├─ creator_tokens.py  Revenue sharing: creator tokens + dividend distribution
-└─ config.py      env-driven configuration
-agent/            autonomous market-maker: news → LLM → markets, EAS attestations
+├─ main.py              entrypoint, background watchers (deposits, withdrawals, deadlines)
+├─ handlers/            aiogram handlers by domain
+│  ├─ _common.py        shared helpers, router, menu KB
+│  ├─ menu.py           /start, /menu, settings, language, broadcast
+│  ├─ wallet.py         /deposit, /withdraw, /balance, /link, /claim
+│  ├─ tips.py           /tip, /rain, reaction tips
+│  ├─ bets.py           parimutuel /bet, /bets, /resolve, /cancel
+│  ├─ markets.py        LMSR AMM /market, /trade, /sell, /positions
+│  ├─ onchain.py        /oc_* on-chain OutcomeMarket commands
+│  ├─ paywall.py        /paywall, paid posts/channels
+│  ├─ stats.py          /stats, /top, /history
+│  ├─ ai.py             /ask AI assistant
+│  ├─ basename.py       /basename on-chain identity
+│  ├─ agent.py          /agent admin dashboard
+│  └─ breakthrough.py   /gasless, /subscribe, /credit, /createtoken
+├─ ledger/              PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
+│  ├─ __init__.py       Ledger facade + singletons + lmsr_* re-exports
+│  ├─ _core.py          connect/schema/ping
+│  ├─ _schema.py        DDL
+│  ├─ _conn.py          ReconnectingConn
+│  ├─ _users.py         accounts, wallet links, create2
+│  ├─ _pay.py / _paywall.py / _transfer.py   x402, paywalls, transfers
+│  ├─ _withdraw.py      AML, batches, refunds
+│  ├─ _bets.py / _markets.py   parimutuel + LMSR AMM (buy/sell/resolve)
+│  ├─ _onchain.py       on-chain outcome markets registry
+│  ├─ _recurring.py     subscription executor
+│  ├─ _paymaster.py     gasless onboarding
+│  ├─ _creator.py       creator tokens + dividends
+│  ├─ _messages.py / _notify.py / _admin.py / _views.py
+│  └─ _base.py          audit_log, MICRO, LMSR math
+├─ base.py              web3 layer: USDC transfers, deposit scanning, tx decoding
+├─ chain/               relayer pool + on-chain helpers
+│  ├─ core.py           RPC, chain head, block polling
+│  ├─ relayers.py       persisted daily caps, multi-relayer pool
+│  ├─ transactions.py   tx status, receipts
+│  ├─ transfers.py      USDC transfer helpers
+│  ├─ tokens.py         token metadata, decimals
+│  ├─ dex.py            price feeds
+│  ├─ prices.py         quote helpers
+│  ├─ basenames.py      ENSIP-19 reverse resolution
+│  └─ network.py        chain labels, explorer URLs
+├─ ai.py                OpenAI-compatible client (stdlib urllib, no new deps)
+├─ qr.py                local QR generation
+├─ smart_wallet.py      ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
+├─ paymaster.py         Base Paymaster integration: gasless onboarding (10 free txs)
+├─ recurring.py         Recurring payments: subscriptions executor (hourly watcher)
+─ batch.py             Batch transactions: multiple actions in one UserOperation
+├─ credit.py            Credit scoring: 300-850 P2P lending score
+├─ creator_tokens.py    Revenue sharing: creator tokens + dividend distribution
+├─ create2.py           CREATE2 deterministic address computation
+├─ solvency.py          Proof-of-reserves: liabilities vs on-chain USDC
+├─ wallets.py           Custodial wallet: seed export/import, balance
+├─ tip_targets.py       Username/name resolution for tip recipients
+├─ channel_subs.py      Telegram channel subscription tracking
+├─ commands_catalog.py  Command registry for /help
+├─ telegram_transport.py  Telegram API wrapper (send/edit/delete)
+├─ x402_sweep.py        x402 invoice settlement sweeper
+├─ audit.py             Audit log helpers
+├─ onchain_market.py    OutcomeMarket contract ABI + helpers
+─ i18n.py              RU/EN/ZH message tables
+└─ config.py            env-driven configuration
+agent/                  autonomous market-maker: news → LLM → markets, EAS attestations
 web/
-├─ server.py      FastAPI: public API, proof-of-reserves, x402 endpoints
-├─ x402.py        x402 handshake: invoice → verify → replay-proof credit
-└─ static/        Base-design dashboard + Mini App (CSP nonce, no inline JS)
-contracts/TipBotVault.sol    on-chain treasury (proof of reserves)
-contracts/OutcomeMarket.sol on-chain markets (ERC-1155 shares, LMSR on-chain)
-contracts/SmartAccount.sol   ERC-4337 account (CREATE2)
-contracts/SmartAccountFactory.sol  deterministic account factory
-contracts/VerifyingPaymaster.sol   gas-sponsoring paymaster
-tests/           793 tests: real Postgres, real dispatcher, real crypto, local EVM
+├─ server.py            FastAPI: public API, proof-of-reserves, x402 endpoints
+├─ auth.py              Telegram OAuth, session cookies, rate limiting
+├─ mini.py              Mini App: balance, tip, deposit, withdraw, markets
+─ x402.py              x402 handshake: invoice → verify → replay-proof credit
+├─ x402_spec.py         x402 protocol spec + types
+├─ metrics.py           Prometheus metrics endpoint
+├─ frame.py             Farcaster Frame endpoints
+├─ hook.py              Telegram webhook handler
+└─ static/              Base-design dashboard + Mini App (CSP nonce, no inline JS)
+contracts/
+├─ TipBotVault.sol      on-chain treasury (proof of reserves)
+├─ OutcomeMarket.sol    on-chain markets (ERC-1155 shares, LMSR on-chain)
+├─ SmartAccount.sol     ERC-4337 account (CREATE2)
+├─ SmartAccountFactory.sol  deterministic account factory
+├─ VerifyingPaymaster.sol   gas-sponsoring paymaster
+├─ Create2Factory.sol   generic CREATE2 factory
+├─ LMSR.sol             on-chain LMSR market maker
+├─ MiniUSDC.sol         minimal USDC mock for testing
+└─ USDCForwarder.sol    USDC transfer helper
+tests/                  974 tests: real Postgres, real dispatcher, real crypto, local EVM
 ```
-
 ## Testing
 
 ```bash
 docker compose up -d db       # PostgreSQL for tests (port 5433)
-python -m pytest tests -q     # 793 passed
+python -m pytest tests -q     # 974 passed
 ```
 
 What is tested *for real* (not mocked): money conservation across every flow
@@ -327,7 +389,11 @@ someone else's tx is rejected), fee math, real signature recovery, the full
 aiogram dispatcher with real Update objects, USDC ABI decoding, the FastAPI
 dashboard against a real ledger, background watchers, 14 end-to-end scenarios,
 and 12 TipBotVault tests on a local EVM (eth-tester + py-evm). Only external
-networks are mocked (Telegram transport, RPC).
+networks are mocked (Telegram transport, RPC) — `tests/conftest.py` pins the
+chain endpoint to a refused port, because a test that reads a live node answers
+whatever that node holds: on Base mainnet one of the suite's test addresses
+carries EIP-7702 delegation code, so `/withdraw` there refuses it as a smart
+contract while the same test passes against a Sepolia endpoint.
 
 The LMSR engine additionally has a property test proving the funding theorem:
 along randomized aggressive trading paths the escrow never drops below the

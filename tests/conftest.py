@@ -21,8 +21,22 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-for-ci-only-32ch!")
 os.environ.setdefault("X402_ENABLED", "1")
 os.environ.setdefault("X402_RECEIVE_ADDRESS", "0x0000000000000000000000000000000000000001")
 os.environ.setdefault("ADMIN_TG_ID", "111")
+os.environ.setdefault("WEBHOOK_SECRET", "test-webhook-secret-for-ci")
 # Tests fake Base MAINNET (chain 8453); the repo .env points to Sepolia.
 os.environ.setdefault("EXPECTED_CHAIN_ID", "8453")
+# No test may reach a live node. CI ships no .env, so BASE_RPC_URL would fall
+# back to Base mainnet — where this suite's ACC address carries EIP-7702
+# delegation code, which made /withdraw refuse it as "smart contract" upstream
+# while the very same test passed against a dev Sepolia .env. One refused port
+# puts every unmocked chain call on the same offline path in both environments;
+# tests that need chain answers stub bot.chain.core.w3 themselves.
+os.environ["BASE_RPC_URL"] = "http://127.0.0.1:1"
+# Empty string, NOT pop(): bot/config.py load_dotenv()s the dev .env at import
+# time and would restore the popped variable, silently wiring live Sepolia
+# fallback RPCs into core._w3_providers (they were reached through the system
+# proxy and hung the suite when the proxy stalled). An empty env var wins over
+# .env, so no test can reach a live node even with a .env present.
+os.environ["BASE_RPC_FALLBACK_URLS"] = ""
 TEST_DB_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://tipbot:tipbot@localhost:5432/tipbot_test"
 )
@@ -48,12 +62,20 @@ TABLES = [
 
 
 def _reset_db(ledger) -> None:
+    # TRUNCATE can be blocked by open transactions, so roll back any
+    # in-progress transaction first, then truncate and commit.
+    ledger._conn.rollback()
     ledger._conn.execute(f"TRUNCATE {', '.join(TABLES)} RESTART IDENTITY")
     ledger._conn.commit()
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _pg_test_db():
+def _pg_test_db(request):
+    # Skip database setup for production tests — they hit the live site
+    if request.session.config.getoption("-m") == "production":
+        yield
+        return
+
     import time
 
     import psycopg
@@ -103,8 +125,8 @@ def _clean_shared_ledger():
 def _reset_rpc_breaker():
     """Close the bot.chain.core circuit breaker before every test.
 
-    The breaker is module-level state; a test that touches the real RPC
-    layer (CI has no .env, so providers fail) opens it, and every later
+    The breaker is module-level state; a test that touches the chain layer
+    (whose endpoint this file pins to a refused port) opens it, and every later
     mocked test inherits the RuntimeError. Reset both knobs so tests are
     isolated from each other's RPC failures.
     """
@@ -113,6 +135,29 @@ def _reset_rpc_breaker():
     core._cb_fail_times.clear()
     core._cb_open_until = 0.0
     yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_playwright_event_loop(request):
+    """Playwright's sync API spins up its own event loop in a thread. When a
+    test uses the `page` fixture, that loop can leak into pytest-asyncio's
+    management, causing "cannot be called from a running event loop" for every
+    subsequent async test. Force-close any stray loops after Playwright tests.
+    """
+    yield
+    if "page" in request.fixturenames:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        except RuntimeError:
+            pass
 
 
 @pytest.fixture(autouse=True)
@@ -169,6 +214,9 @@ def ledger(monkeypatch):
     monkeypatch.setattr(agent.pnl, "ledger", async_fresh)
     handlers._common._money_cmd_last.clear()
     web.server._rl_state.clear()
+    web.server._auth_rl_state.clear()
+    if hasattr(web.auth, "_consumed_login_states"):
+        web.auth._consumed_login_states.clear()
     if hasattr(web.mini, "_money_last"):
         web.mini._money_last.clear()
     yield fresh

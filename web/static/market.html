@@ -54,14 +54,14 @@
         </div>
       </div>
       <div class="footer-meta">
-        <span class="chain-chip">🟦 Base Mainnet</span>
-        <span class="chain-chip">🪙 USDC 0x8335…2913</span>
+        <span class="chain-chip">🟦 <span data-net="chain">Base</span></span>
+        <span class="chain-chip">🪙 <span data-net="usdc">USDC</span></span>
       </div>
     </div>
     <div class="author-links">
       <span>Автор:</span>
-      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">Telegram</a>
-      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">Telegram 2</a>
+      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">@b2wmain</a>
+      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a>
       <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
       <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
     </div>
@@ -71,6 +71,7 @@
     </a>
   </footer>
 
+  <script src="/chain.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     document.body.classList.add("js");
@@ -97,6 +98,16 @@
       if (h) return "осталось " + h + "ч " + m + "м";
       return "осталось " + m + "м";
     };
+
+    /* One /api/info read feeds both: the network labels land as soon as it
+     * resolves, the deep link only after the market itself has rendered —
+     * the error branch rewrites #market, so a button added earlier would
+     * either survive on a page for a market that does not exist or be wiped,
+     * depending on which response arrived first. */
+    const infoPromise = fetch("/api/info")
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch(() => ({}));
+    infoPromise.then(applyNetInfo);
 
     (async () => {
       try {
@@ -131,10 +142,7 @@
           $("m-meta").innerHTML += " · 🏆 " + escapeHtml(m.options[winnerIdx].label);
         }
 
-        let info = { bot_username: "" };
-        try {
-          info = await (await fetch("/api/info")).json();
-        } catch (e) { /* ignore */ }
+        const info = await infoPromise;
         if (info.bot_username) {
           const deep = "https://t.me/" + encodeURIComponent(info.bot_username) +
             "?start=bet_" + encodeURIComponent(betId);

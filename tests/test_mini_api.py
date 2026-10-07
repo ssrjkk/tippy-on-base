@@ -15,6 +15,9 @@ def _auth(client, tg_id):
     return client
 
 
+_IDEM = {"Idempotency-Key": "test-key"}
+
+
 @pytest.fixture()
 def client(ledger, monkeypatch):
     from bot.ledger import AsyncLedger
@@ -135,7 +138,7 @@ def test_mini_tip_success(client, ledger):
     ledger.credit(TG_USER, 10_000_000, "deposit")
     _auth(client, TG_USER)
 
-    r = client.post("/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5})
+    r = client.post("/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5}, headers=_IDEM)
     assert r.status_code == 200
     data = r.json()
     assert data["ok"] is True
@@ -149,7 +152,7 @@ def test_mini_trade_invalid_market(client, ledger):
 
     r = client.post("/api/mini/trade", json={
         "market_id": 99999, "option": 0, "amount": 1.0
-    })
+    }, headers=_IDEM)
     assert r.status_code == 400
 
 
@@ -181,8 +184,7 @@ def test_mini_lang_invalid(client, ledger):
     _auth(client, TG_USER)
 
     r = client.post("/api/mini/lang", json={"lang": "xx"})
-    assert r.status_code == 400
-    assert "unsupported language" in r.json()["detail"]
+    assert r.status_code == 422  # Pydantic Literal validation
 
 
 def test_mini_tip_enforces_max_cap(client, ledger, monkeypatch):
@@ -548,8 +550,7 @@ def test_mini_withdraw_rejects_non_positive_amount(client, ledger):
     _wallet(client, ledger, 10_000_000)
     for amount in ["0", "-5"]:
         r = _stage(client, EOA, amount)
-        assert r.status_code == 400, amount
-        assert r.json()["detail"] == "amount must be positive"
+        assert r.status_code == 422, amount  # Pydantic Field(gt=0) validation
 
 
 def test_mini_withdraw_rejects_below_minimum(client, ledger):

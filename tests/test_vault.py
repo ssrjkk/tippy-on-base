@@ -170,12 +170,17 @@ def test_relayer_limit_resets_next_day(deploy):
     assert vault.functions.spentTodayView().call() == 50 * USDC
 
 
-def test_owner_distributes_without_limit(deploy):
-    w3, usdc, vault, owner, relayer, alice, bob = deploy(daily_limit=1 * USDC)
+def test_owner_also_subject_to_daily_limit(deploy):
+    """Security fix: owner is now subject to the same daily limit as relayer
+    to limit blast radius if owner key is compromised."""
+    w3, usdc, vault, owner, relayer, alice, bob = deploy(daily_limit=100 * USDC)
     mint(w3, usdc, alice, 500 * USDC)
     deposit(w3, usdc, vault, alice, 500 * USDC)
-    mine(w3, vault.functions.batchDistribute([bob], [500 * USDC]).transact({"from": owner}))
-    assert usdc.functions.balanceOf(bob).call() == 500 * USDC
+    # Owner can distribute up to the limit
+    mine(w3, vault.functions.batchDistribute([bob], [100 * USDC]).transact({"from": owner}))
+    assert usdc.functions.balanceOf(bob).call() == 100 * USDC
+    # Owner cannot exceed the limit, same as relayer
+    expect_revert(lambda: vault.functions.batchDistribute([bob], [1 * USDC]).transact({"from": owner}), "DailyLimitExceeded(uint256,uint256,uint256)")
 
 
 def test_stranger_cannot_distribute(deploy):

@@ -58,6 +58,28 @@ def test_info(client):
     assert "bot_username" in r.json()
 
 
+def test_info_network_labels_follow_the_signing_config(client, monkeypatch):
+    """The site reads its chain name and explorer from here, so both have to come
+    from the config the bot signs with rather than constants baked into the pages.
+    Patched rather than asserted against defaults: a developer's `.env` may point
+    at Sepolia while CI runs mainnet values."""
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "EXPECTED_CHAIN_ID", 8453)
+    monkeypatch.setattr(cfg, "BASESCAN_URL", "https://basescan.org")
+    body = client.get("/api/info").json()
+    assert body["chain_name"] == "Base"
+    assert body["explorer"] == "https://basescan.org"
+
+    monkeypatch.setattr(cfg, "EXPECTED_CHAIN_ID", 84532)
+    body = client.get("/api/info").json()
+    assert body["chain_name"] == "Base Sepolia"
+
+    # An id we do not name gets the raw number, never a guessed "Base".
+    monkeypatch.setattr(cfg, "EXPECTED_CHAIN_ID", 31337)
+    assert client.get("/api/info").json()["chain_name"] == "chain 31337"
+
+
 def test_peer_trusted_matches_ip_cidr_and_hostname(monkeypatch):
     from web import server
 
@@ -777,6 +799,46 @@ def test_user_page_has_js_wiring(client):
         assert needle in html
 
 
+@pytest.mark.parametrize(
+    "path,static_tg_link",
+    [("/", True), ("/u/777", True), ("/m/oc/1", True), ("/m/1", False)],
+)
+def test_share_pages_take_the_network_from_config(
+    client, monkeypatch, path, static_tg_link
+):
+    """Chain name, USDC address and explorer are filled in from /api/info by
+    chain.js, and the bot username is rendered server-side, so a Sepolia
+    deploy cannot advertise a mainnet it is not connected to and no page can
+    ship a t.me link that 404s before the scripts run."""
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "BOT_USERNAME", "base_tipbot")
+    html = client.get(path).text
+
+    assert "__BOT_USERNAME__" not in html
+    assert 'data-net="chain"' in html
+    assert "/chain.js" in html
+    # No explorer URL and no USDC address baked in, for either network: a page
+    # that ships one of these can tell a testnet story on a mainnet deploy or
+    # the other way round. chain.js fills both from /api/info.
+    assert "https://basescan.org" not in html
+    assert "https://sepolia.basescan.org" not in html
+    assert "0x8335c4" not in html
+    assert "0x036CbD" not in html
+    # /m/ builds its deep link from the API instead of a static href.
+    assert ("https://t.me/base_tipbot" in html) is static_tg_link
+
+
+def test_chain_js_is_served_as_javascript(client):
+    """/chain.js is fetched with the same CSP budget as the other page scripts,
+    and it is the only place the network labels are mapped. The type is pinned in
+    server.py — the OS mime table answers differently on Windows and Linux."""
+    r = client.get("/chain.js")
+    assert r.status_code == 200
+    assert r.headers["content-type"].split(";")[0] == "text/javascript"
+    assert "function applyNetInfo" in r.text
+
+
 def test_css_has_new_ui_styles(client):
     css = client.get("/style.css").text
     for needle in (
@@ -800,6 +862,19 @@ def test_miniapp_meta_tags_render_public_url(client, monkeypatch):
     assert 'fc:miniapp' in r.text
     assert 'https://tippy.example.com/app' in r.text
     assert '__PUBLIC_URL__' not in r.text, "placeholder must never leak to users"
+
+
+@pytest.mark.parametrize("chain_id,label", [(8453, "Base"), (84532, "Base Sepolia")])
+def test_miniapp_deposit_hint_names_the_chain_being_used(client, monkeypatch, chain_id, label):
+    """/app tells the user which network to send USDC on; that line has to come
+    from EXPECTED_CHAIN_ID, or a testnet build would point deposits at mainnet."""
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "EXPECTED_CHAIN_ID", chain_id)
+    html = client.get('/app').text
+    assert '__CHAIN_NAME__' not in html, "placeholder must never leak to users"
+    assert f"сеть {label}" in html
+    assert f"({label} network)" in html
 
 
 def test_farcaster_manifest_404_when_not_configured(client, monkeypatch):

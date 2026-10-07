@@ -8,10 +8,12 @@ import base64
 import ipaddress
 import json
 import logging
+import mimetypes
 import os
 import re
 import secrets
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -23,7 +25,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -31,8 +33,9 @@ if str(ROOT) not in sys.path:
 from bot import base, config
 from bot import qr as qrlib
 from bot.base import hot_balance, hot_wallet, vault_balance
+from bot.commands_catalog import BOT_COMMAND_SPECS
 from bot.ledger import async_ledger as ledger
-from web.auth import COOKIE_NAME, parse_session
+from web.auth import COOKIE_NAME, attach_login_state, parse_session
 from web.auth import router as auth_router
 from web.frame import router as frame_router
 from web.hook import router as tg_webhook
@@ -64,12 +67,19 @@ app.include_router(auth_router)
 app.include_router(mini_router)
 STATIC = Path(__file__).resolve().parent / 'static'
 MICRO = 10 ** config.USDC_DECIMALS
+# Only labels we can state as fact for a chain id we recognise; anything else
+# falls back to the raw id rather than guessing "Base".
+CHAIN_NAMES = {8453: 'Base', 84532: 'Base Sepolia'}
 WEB_RATE_LIMIT: int = int(os.environ.get('WEB_RATE_LIMIT', '60'))
 WEB_RATE_WINDOW: int = int(os.environ.get('WEB_RATE_WINDOW', '60'))
 WEB_RATE_MAX_CLIENTS: int = int(os.environ.get('WEB_RATE_MAX_CLIENTS', '10000'))
+AUTH_RATE_LIMIT: int = int(os.environ.get('AUTH_RATE_LIMIT', '10'))
+AUTH_RATE_WINDOW: int = int(os.environ.get('AUTH_RATE_WINDOW', '300'))
 _rl_state: dict[str, list[float]] = {}
+_auth_rl_state: dict[str, list[float]] = {}
 _RL_DISABLED: bool = os.environ.get('TESTING', '') == '1'
 _rl_last_sweep: float = 0.0
+_auth_rl_last_sweep: float = 0.0
 _ask_cooldown: dict[str, float] = {}
 _ask_day: str = ''
 _ask_served_today: int = 0
@@ -78,7 +88,7 @@ _ask_served_today: int = 0
 _stats_cache: dict | None = None
 _stats_ts: float = 0.0
 _STATS_TTL = 10  # seconds
-_ask_lock = __import__('threading').Lock()
+_ask_lock = threading.Lock()
 
 
 def _peer_trusted(peers: frozenset, peer: str) -> bool:
@@ -126,6 +136,10 @@ def _client_ip(request: Request) -> str:
 
 
 _CSP_SCRIPT_WHITELIST = "https://esm.sh https://cdn.jsdelivr.net https://telegram.org"
+# The Telegram Login Widget draws its button inside an iframe from
+# oauth.telegram.org. frame-src is not set, so such a request falls back to
+# default-src 'self' and is blocked — the login button would stay empty.
+_CSP_FRAME_WHITELIST = "'self' https://oauth.telegram.org"
 
 
 def _nonce_inject(html: str, nonce: str) -> str:
@@ -148,11 +162,33 @@ def _nonce_inject(html: str, nonce: str) -> str:
 
 @app.middleware('http')
 async def rate_limit(request: Request, call_next):
-    global _rl_last_sweep
+    global _rl_last_sweep, _auth_rl_last_sweep
     path = request.url.path
     if not _RL_DISABLED and (path.startswith('/api/') or path in ('/qr', '/metrics', '/tos', config.WEBHOOK_PATH)):
         client = _client_ip(request)
         now = time.time()
+        # Stricter limit on auth endpoints to slow brute-force login attempts.
+        if path.startswith('/api/auth/') or path == '/api/mini/auth':
+            cutoff = now - AUTH_RATE_WINDOW
+            window = _auth_rl_state.setdefault(client, [])
+            _auth_rl_state[client] = [t for t in window if t > cutoff]
+            if len(_auth_rl_state[client]) >= AUTH_RATE_LIMIT:
+                return JSONResponse(
+                    status_code=429,
+                    content={'detail': 'too many login attempts, try again later'},
+                    headers={
+                        'Retry-After': str(AUTH_RATE_WINDOW),
+                        'X-Content-Type-Options': 'nosniff',
+                        'Referrer-Policy': 'no-referrer',
+                    },
+                )
+            _auth_rl_state[client].append(now)
+            if len(_auth_rl_state) > WEB_RATE_MAX_CLIENTS and now - _auth_rl_last_sweep > AUTH_RATE_WINDOW:
+                for ip, hits in list(_auth_rl_state.items()):
+                    if not any(t > cutoff for t in hits):
+                        del _auth_rl_state[ip]
+                _auth_rl_last_sweep = now
+        # General rate limit for all /api/* and other protected paths.
         cutoff = now - WEB_RATE_WINDOW
         window = _rl_state.setdefault(client, [])
         _rl_state[client] = [t for t in window if t > cutoff]
@@ -196,8 +232,11 @@ async def rate_limit(request: Request, call_next):
     response.headers.setdefault('Cache-Control', 'no-store, no-cache, must-revalidate')
     response.headers.setdefault('Content-Security-Policy',
         f"default-src 'self'; script-src 'self' 'nonce-{nonce}' {_CSP_SCRIPT_WHITELIST}; "
-        f"style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
-        "connect-src 'self'; frame-ancestors 'self' https://web.telegram.org")
+        f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        f"font-src 'self' https://fonts.gstatic.com; "
+        f"img-src 'self' data: https:; "
+        f"connect-src 'self'; frame-src {_CSP_FRAME_WHITELIST}; "
+        "frame-ancestors 'self' https://web.telegram.org")
     try:
         await ledger.rollback()
     except Exception:
@@ -214,7 +253,8 @@ async def rate_limit(request: Request, call_next):
     return response
 
 def _usdc(micro: int) -> float:
-    return round(micro / MICRO, 2)
+    from decimal import Decimal
+    return float(Decimal(micro) / Decimal(MICRO))
 
 def _require_admin(request: Request) -> None:
     """403 unless the request carries a session cookie for the owner."""
@@ -225,15 +265,20 @@ def _require_admin(request: Request) -> None:
 
 async def _safe_hot_balance() -> float | None:
     try:
-        return round(await hot_balance(), 2)
+        from decimal import ROUND_HALF_UP, Decimal
+        raw = await hot_balance()
+        return float(Decimal(str(raw)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
     except Exception:
         log.warning("hot_balance() RPC failed", exc_info=True)
         return None
 
 async def _safe_vault_balance() -> float | None:
     try:
+        from decimal import ROUND_HALF_UP, Decimal
         bal = await vault_balance()
-        return round(bal, 2) if bal is not None else None
+        if bal is None:
+            return None
+        return float(Decimal(str(bal)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
     except Exception:
         log.warning("vault_balance() RPC failed", exc_info=True)
         return None
@@ -308,6 +353,7 @@ async def api_predictions(status: str='open') -> list[dict]:
         view = views.get(int(m['id']))
         if view:
             view['liquidity_usdc'] = _usdc(view['liquidity_micro'])
+            view['volume_usdc'] = _usdc(view['volume_micro'])
             for o in view['options']:
                 o.pop('shares', None)
             out.append(view)
@@ -319,6 +365,7 @@ async def api_prediction(market_id: int) -> dict:
     if not view:
         raise HTTPException(status_code=404, detail='Prediction market not found')
     view['liquidity_usdc'] = _usdc(view['liquidity_micro'])
+    view['volume_usdc'] = _usdc(view['volume_micro'])
     return view
 
 @app.get('/api/leaderboard', tags=['users'])
@@ -404,7 +451,6 @@ async def api_agent_status(request: Request) -> dict:
     """Agent PnL dashboard — owner-only. Exposes agent reasoning/markets, so it
     must not be public (could be front-run via its public markets)."""
     _require_admin(request)
-    import json
 
     from agent.caps import get_status
     from agent.config import audit_file
@@ -443,7 +489,6 @@ async def api_agent_status(request: Request) -> dict:
 async def api_agent_audit(request: Request) -> list[dict]:
     """Agent audit trail — last 50 actions from local JSONL log (owner-only)."""
     _require_admin(request)
-    import json
 
     from agent.config import audit_file
 
@@ -491,6 +536,8 @@ async def api_onchain_markets() -> list[dict]:
 @app.get('/api/onchain/market/{market_id}', tags=['markets'])
 async def api_onchain_market(market_id: int) -> dict:
     """One on-chain market: registry labels + live on-chain state/prices."""
+    from decimal import ROUND_HALF_UP, Decimal
+
     from bot import onchain_market as om
     m = await ledger.get_onchain_market(market_id)
     if not m:
@@ -509,14 +556,48 @@ async def api_onchain_market(market_id: int) -> dict:
         'cancelled': info.get('cancelled'),
         'winner': info.get('winning_outcome'),
         'options': [
-            {'index': i, 'label': o, 'price_pct': float(round(prices[i] * 100, 2))}
+            {'index': i, 'label': o, 'price_pct': float((Decimal(str(prices[i])) * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))}
             for i, o in enumerate(options)
         ],
     }
 
 @app.get('/api/info', tags=['stats'])
 def api_info() -> dict:
-    return {'bot_username': config.BOT_USERNAME}
+    """Bot identity plus the limits, fees and command menu the bot registers.
+
+    The web app renders its input constraints and its command table from here
+    rather than hardcoding them, so what a user reads on the site is what
+    `web/mini.py` rejects against and what `set_my_commands` installs. The
+    network label and explorer come from the same config the bot signs with, so
+    a Sepolia deployment cannot advertise itself as mainnet.
+    """
+    return {
+        'bot_username': config.BOT_USERNAME,
+        'chain_id': config.EXPECTED_CHAIN_ID,
+        'chain_name': chain_label(),
+        'explorer': config.BASESCAN_URL,
+        'usdc_address': config.USDC_ADDRESS,
+        'commands': [{'command': c, 'description': d} for c, d in BOT_COMMAND_SPECS],
+        'fees': {
+            'withdraw_pct': float(config.WITHDRAW_FEE_PCT * 100),
+            'win_pct': float(config.WIN_FEE_PCT * 100),
+        },
+        'limits': {
+            'max_tip_usdc': float(config.MAX_TIP_USDC),
+            'max_bet_usdc': float(config.MAX_BET_USDC),
+            'max_trade_usdc': float(config.MARKET_MAX_TRADE_USDC),
+            'min_withdraw_usdc': float(config.MIN_WITHDRAW_USDC),
+            'max_withdraws_per_day': config.MAX_WITHDRAWS_PER_DAY,
+            'min_subsidy_usdc': float(config.MARKET_MIN_SUBSIDY_USDC),
+            'max_subsidy_usdc': float(config.MARKET_MAX_SUBSIDY_USDC),
+        },
+        'smart_wallet_enabled': bool(
+            config.SMART_WALLET_ENABLED
+            and config.SMART_WALLET_FACTORY_ADDRESS
+            and config.SMART_WALLET_PAYMASTER_ADDRESS
+        ),
+        'onchain_markets_enabled': bool(config.OUTCOME_MARKET_ADDRESS),
+    }
 
 @app.get('/api/health', tags=['stats'])
 async def api_health() -> dict:
@@ -571,6 +652,8 @@ async def api_solvency() -> dict:
     come from the TipBotVault contract when it is deployed (on-chain proof of
     reserves, readable by anyone); otherwise the hot wallet is the reserve.
     """
+    from decimal import ROUND_HALF_UP, Decimal
+
     liabilities = await ledger.total_liabilities()
     pending = await ledger.pending_deposit_total()
     owed_usdc = _usdc(liabilities)
@@ -578,7 +661,13 @@ async def api_solvency() -> dict:
     vault_bal = await _safe_vault_balance()
     vault_addr = config.VAULT_ADDRESS
     reserves = vault_bal if vault_addr else bal
-    return {'hot_wallet': str(hot_wallet()), 'vault_address': vault_addr, 'vault_balance_usdc': vault_bal, 'reserves_source': 'vault' if vault_addr else 'hot_wallet', 'hot_wallet_balance_usdc': bal, 'liabilities_usdc': _usdc(liabilities), 'pending_deposits_usdc': _usdc(pending), 'owed_usdc': owed_usdc, 'reserve_usdc': round(reserves - owed_usdc, 2) if reserves is not None else None, 'solvent': None if reserves is None else reserves >= owed_usdc}
+    if reserves is not None:
+        reserve_diff = float((Decimal(str(reserves)) - Decimal(str(owed_usdc))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        solvent = Decimal(str(reserves)) >= Decimal(str(owed_usdc))
+    else:
+        reserve_diff = None
+        solvent = None
+    return {'hot_wallet': str(hot_wallet()), 'vault_address': vault_addr, 'vault_balance_usdc': vault_bal, 'reserves_source': 'vault' if vault_addr else 'hot_wallet', 'hot_wallet_balance_usdc': bal, 'liabilities_usdc': _usdc(liabilities), 'pending_deposits_usdc': _usdc(pending), 'owed_usdc': owed_usdc, 'reserve_usdc': reserve_diff, 'solvent': solvent}
 
 @app.get('/qr', tags=['treasury'])
 async def api_qr(data: str, size: int=220) -> Response:
@@ -589,12 +678,13 @@ async def api_qr(data: str, size: int=220) -> Response:
         raise HTTPException(status_code=400, detail='size must be 64..1024')
     try:
         return Response(content=await qrlib.qr_bytes(data, size=size), media_type='image/png', headers={'Cache-Control': 'public, max-age=86400'})
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except Exception:
+        log.warning("qr_bytes failed for data=%r size=%s", data[:64], size, exc_info=True)
+        raise HTTPException(status_code=400, detail='QR generation failed') from None
 
 
 class AskRequest(BaseModel):
-    question: str
+    question: str = Field(max_length=2000)
 
 
 @app.post('/api/ask', tags=['markets'])
@@ -636,8 +726,9 @@ async def api_ask(body: AskRequest, request: Request) -> dict:
             raise HTTPException(status_code=429, detail='daily answer budget exhausted')
     try:
         answer = await ai.ask_about_markets(question)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from None
+    except RuntimeError:
+        log.warning("ask_about_markets failed", exc_info=True)
+        raise HTTPException(status_code=502, detail='AI service unavailable') from None
     if len(answer) > config.AI_MAX_ANSWER_CHARS:
         answer = answer[:config.AI_MAX_ANSWER_CHARS - 1] + '…'
     with _ask_lock:
@@ -648,34 +739,52 @@ async def api_ask(body: AskRequest, request: Request) -> dict:
 async def api_wallet() -> dict:
     return {'address': str(hot_wallet()), 'balance_usdc': await _safe_hot_balance()}
 
+def chain_label() -> str:
+    """Name of the chain the bot signs on, for anything user-facing."""
+    return CHAIN_NAMES.get(config.EXPECTED_CHAIN_ID, f'chain {config.EXPECTED_CHAIN_ID}')
+
+def _static_page(page: str) -> Response:
+    """Serve a static page with the bot username already rendered into it.
+
+    ``t.me/TIPBOT_USERNAME`` shipped in the HTML is a link that 404s for anyone
+    whose scripts have not replaced it yet, so the real name is substituted
+    here. Network and USDC labels stay on /api/info — only the running config
+    knows those.
+    """
+    html = (STATIC / page).read_text(encoding='utf-8')
+    html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
+    return Response(content=html.encode('utf-8'), media_type='text/html')
+
 @app.get('/u/{tg_id}')
-async def user_page(tg_id: int) -> FileResponse:
-    return FileResponse(STATIC / 'user.html')
+async def user_page(tg_id: int) -> Response:
+    return _static_page('user.html')
 
 @app.get('/m/{bet_id}')
-async def market_page(bet_id: int) -> FileResponse:
-    return FileResponse(STATIC / 'market.html')
+async def market_page(bet_id: int) -> Response:
+    return _static_page('market.html')
 
 @app.get('/m/oc/{market_id}')
-async def onchain_market_page(market_id: int) -> FileResponse:
+async def onchain_market_page(market_id: int) -> Response:
     """Shareable page for an ON-CHAIN market (OutcomeMarket ERC-1155)."""
-    return FileResponse(STATIC / 'oc.html')
+    return _static_page('oc.html')
 
 @app.get('/me')
 async def me_page() -> FileResponse:
     return FileResponse(STATIC / 'me.html')
 
 @app.get('/', include_in_schema=False)
-async def root():
-    """Landing dashboard (stats, markets, leaderboard, wallet solvency).
+async def root(request: Request):
+    """The landing page, which is also the full workspace.
 
-    Serves the public marketing page directly (200 for platform health checks);
-    the Base App Mini App lives at /app.
+    Public data (stats, markets, leaderboard, proof of reserves) renders
+    whether or not you are signed in; the cabinet below it unlocks with the
+    same session cookie the Mini App gets. The Base App Mini App lives at /app.
+
+    The login-state cookie is issued here, not only on /login: the Telegram
+    Login Widget renders inline on this page, and its callback is rejected
+    without that state.
     """
-    return Response(
-        content=(STATIC / 'index.html').read_bytes(),
-        media_type='text/html',
-    )
+    return attach_login_state(request, _static_page('index.html'))
 
 @app.get('/app', include_in_schema=False)
 async def mini_app():
@@ -686,6 +795,7 @@ async def mini_app():
     base_url = public_base_url()
     html = html.replace('__PUBLIC_URL__', base_url)
     html = html.replace('__PUBLIC_HOST__', base_url.split('//')[-1])
+    html = html.replace('__CHAIN_NAME__', chain_label())
     return Response(content=html.encode('utf-8'), media_type='text/html')
 
 @app.post('/api/webhook-miniaction', include_in_schema=False)
@@ -752,6 +862,12 @@ async def metrics(request: Request) -> Response:
         return PlainTextResponse("unauthorized", status_code=401)
     return PlainTextResponse(await collect_metrics())
 
+# The mime table Starlette consults answers .js as application/javascript on
+# Windows and text/javascript on Linux, so which one a browser is served
+# depends on the machine that happens to run the process. Pinning it keeps a
+# developer's box and CI sending the same bytes, and keeps the script tag
+# executing the same way on both.
+mimetypes.add_type('text/javascript', '.js')
 app.mount('/', StaticFiles(directory=str(STATIC), html=True), name='static')
 if __name__ == '__main__':
     import uvicorn

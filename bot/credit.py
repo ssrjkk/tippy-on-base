@@ -11,6 +11,7 @@ trustless P2P lending without collateral. Uses multiple factors:
 
 import time
 from dataclasses import dataclass
+from decimal import Decimal
 
 
 @dataclass
@@ -101,7 +102,7 @@ class CreditScorer:
         """Score based on transaction volume (0-100)."""
         stats = await self._ledger.user_stats(user_tg_id)
         total_volume_micro = stats.get("total_volume_micro", 0)
-        total_volume_usd = total_volume_micro / 1e6
+        total_volume_usd = float(Decimal(total_volume_micro) / Decimal(10**6))
 
         if total_volume_usd >= 10000:
             return 100.0

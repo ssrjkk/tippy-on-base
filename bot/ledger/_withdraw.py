@@ -1,6 +1,7 @@
 """Ledger domain mixin: LedgerWithdrawMixin (split from bot/ledger.py)."""
 import csv
 import io
+import json
 import secrets
 import time
 
@@ -82,6 +83,7 @@ class LedgerWithdrawMixin:
             since = int(time.time()) - 86400
             total = amount_micro + fee_micro
             committed = False
+            result_wd_id = None
             try:
                 cur = self._conn.execute(
                     "UPDATE users SET balance = balance - %s WHERE tg_id = %s AND balance >= %s",
@@ -114,7 +116,7 @@ class LedgerWithdrawMixin:
                     )
                 self._conn.commit()
                 committed = True
-                return wd_id, ""
+                result_wd_id = wd_id
             finally:
                 if not committed:
                     # Safety net: an unexpected exception mid-operation must not
@@ -125,6 +127,18 @@ class LedgerWithdrawMixin:
                         self._conn.rollback()
                     except Exception:
                         pass
+        if result_wd_id is not None:
+            try:
+                self.log_audit_entry(
+                    user_id=tg_id,
+                    action="withdraw",
+                    resource="usdc",
+                    metadata={"amount_micro": amount_micro, "fee_micro": fee_micro, "to_address": to_address},
+                )
+            except Exception:
+                pass
+            return result_wd_id, ""
+        return None, "cap"
 
     # ---------------- two-step confirmation (nothing moves on the first tap) ----------------
 
@@ -289,6 +303,9 @@ class LedgerWithdrawMixin:
         still-reorgable deposit, withdraw, and let the reorg delete the backing
         tx). block NULL rows are legacy pre-gate deposits, credited unconditionally.
         """
+        result_ok = False
+        result_amount = 0
+        result_sender = ""
         with self._lock:
             if maturity_block is not None:
                 row = self._conn.execute(
@@ -330,7 +347,20 @@ class LedgerWithdrawMixin:
                 (tg_id, row["sender"], row["amount_micro"], tx_hash),
             )
             self._conn.commit()
-            return True, row["amount_micro"], row["sender"], ""
+            result_ok = True
+            result_amount = row["amount_micro"]
+            result_sender = row["sender"]
+        if result_ok:
+            try:
+                self.log_audit_entry(
+                    user_id=tg_id,
+                    action="deposit",
+                    resource="usdc",
+                    metadata={"amount_micro": result_amount, "tx_hash": tx_hash, "sender": result_sender},
+                )
+            except Exception:
+                pass
+        return result_ok, result_amount, result_sender, ""
 
 
 
@@ -342,6 +372,7 @@ class LedgerWithdrawMixin:
         legacy deposits recorded before the confirm gate — claimed unconditionally
         (they were pre-confirmed when the newer system took over).
         """
+        claimed_results = []
         with self._lock:
             if maturity_block is not None:
                 where = (
@@ -372,10 +403,21 @@ class LedgerWithdrawMixin:
                     "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash) VALUES ('deposit', %s, %s, %s, %s)",
                     (tg_id, sender, row["amount_micro"], row["tx_hash"]),
                 )
+                claimed_results.append(
+                    {"tx_hash": row["tx_hash"], "amount_micro": row["amount_micro"]}
+                )
             self._conn.commit()
-            return [
-                {"tx_hash": r["tx_hash"], "amount_micro": r["amount_micro"]} for r in rows
-            ]
+        for cr in claimed_results:
+            try:
+                self.log_audit_entry(
+                    user_id=tg_id,
+                    action="deposit",
+                    resource="usdc",
+                    metadata={"amount_micro": cr["amount_micro"], "tx_hash": cr["tx_hash"], "sender": sender},
+                )
+            except Exception:
+                pass
+        return claimed_results
 
 
 
@@ -463,7 +505,6 @@ class LedgerWithdrawMixin:
 
     def _flag_suspicious(self, tg_id: int, kind: str, details: dict, severity: str = "warn") -> None:
         """Record a suspicious-activity flag for a user."""
-        import json
         with self._lock:
             self._conn.execute(
                 "INSERT INTO suspicious_activity (tg_id, kind, details, severity) "

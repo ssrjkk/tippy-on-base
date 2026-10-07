@@ -5,14 +5,17 @@ import os
 import signal
 import time
 from collections.abc import Callable, Coroutine, Iterable
+from decimal import Decimal
 from typing import Any
 
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramNetworkError
+from aiogram.types import BotCommand
 
 from . import base, config, i18n
+from .commands_catalog import BOT_COMMAND_SPECS
 from .handlers import router
 from .handlers.onchain import onchain_watcher
 from .ledger import async_ledger as ledger
@@ -204,7 +207,7 @@ async def recurring_payment_executor() -> None:
                     await store.mark_executed(payment.id)
                     log.info('executed recurring payment %s: %s → %s $%s',
                              payment.id, payment.from_tg_id, payment.to_tg_id,
-                             payment.amount_micro / 1e6)
+                             float(Decimal(payment.amount_micro) / Decimal(10**6)))
                 except Exception as e:
                     log.warning('recurring payment %s failed: %s', payment.id, e)
         except Exception as e:
@@ -339,9 +342,10 @@ async def _run_webhook(stop: asyncio.Event | None=None) -> None:
 # Shared with deploy/run.py so the two entrypoints back off identically.
 RETRY_SECONDS = 15
 
-# Canonical Telegram command menu — single source of truth. deploy/run.py
-# reuses this list so the menu cannot diverge between entrypoints.
-BOT_COMMANDS = [types.BotCommand(command='menu', description='Главное меню'), types.BotCommand(command='balance', description='Баланс кошелька'), types.BotCommand(command='deposit', description='Пополнить USDC'), types.BotCommand(command='withdraw', description='Вывести USDC'), types.BotCommand(command='tip', description='Чаевые USDC'), types.BotCommand(command='rain', description='Дождь: раздать USDC в чате'), types.BotCommand(command='markets', description='Рынки предсказаний'), types.BotCommand(command='market', description='Открыть рынок по id'), types.BotCommand(command='trade', description='Купить доли на рынке'), types.BotCommand(command='sell', description='Продать доли'), types.BotCommand(command='positions', description='Мои позиции и PnL'), types.BotCommand(command='bet', description='Ставка-пул: создать/поставить'), types.BotCommand(command='bets', description='Открытые ставки-пулы'), types.BotCommand(command='oc', description='Cally — ончейн-рынки (ERC-1155)'), types.BotCommand(command='oc_pos', description='Мои ончейн-доли'), types.BotCommand(command='mybets', description='Мои ставки'), types.BotCommand(command='resolve', description='Закрыть ставку (создатель)'), types.BotCommand(command='cancel', description='Отменить свою ставку'), types.BotCommand(command='stats', description='Статистика бота'), types.BotCommand(command='top', description='Топ пользователей'), types.BotCommand(command='history', description='История операций'), types.BotCommand(command='donate', description='Твоя страница донатов'), types.BotCommand(command='link', description='Привязать внешний кошелёк'), types.BotCommand(command='confirm', description='Подтвердить привязку'), types.BotCommand(command='claim', description='Забрать дивиденды'), types.BotCommand(command='wallet', description='Кошелёк: адрес и ключи'), types.BotCommand(command='import', description='Импорт по сид-фразе'), types.BotCommand(command='export', description='Выгрузить ключ и сид'), types.BotCommand(command='tx', description='Проверить транзакцию в Base'), types.BotCommand(command='paywall', description='Платные посты'), types.BotCommand(command='basename', description='Basename: ончейн-имя на Base'), types.BotCommand(command='settings', description='Настройки'), types.BotCommand(command='language', description='Сменить язык / Language'), types.BotCommand(command='about', description='О боте — что это такое'), types.BotCommand(command='app', description='Мини-приложение'), types.BotCommand(command='gasless', description='Бесплатные транзакции'), types.BotCommand(command='subscribe', description='Подписка на платежи'), types.BotCommand(command='subscriptions', description='Мои подписки'), types.BotCommand(command='cancelsub', description='Отменить подписку'), types.BotCommand(command='credit', description='Кредитный рейтинг'), types.BotCommand(command='createtoken', description='Создать токен создателя'), types.BotCommand(command='buytoken', description='Купить токен создателя')]
+# Canonical Telegram command menu. deploy/run.py reuses this list so the menu
+# cannot diverge between entrypoints, and web/server.py publishes the same
+# descriptions through /api/info — bot/commands_catalog.py holds the data.
+BOT_COMMANDS = [BotCommand(command=c, description=d) for c, d in BOT_COMMAND_SPECS]
 
 async def main() -> None:
     config.validate()

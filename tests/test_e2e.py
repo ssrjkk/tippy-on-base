@@ -82,12 +82,10 @@ class Chat:
 class Bot:
     def __init__(self):
         self.sent = []
-        self.evt = asyncio.Event()
         self.username = "base_tipbot"
 
     async def send_message(self, chat_id, text=None, **kw):
         self.sent.append((chat_id, text))
-        self.evt.set()
 
     async def get_me(self):
         return types.SimpleNamespace(username=self.username)
@@ -140,6 +138,50 @@ class Callback:
 
 def run(coro):
     return asyncio.run(coro)
+
+
+def deliver_queued(bot, watchers, settle=0.2, timeout=20.0):
+    """Run production watchers and then deliver what they queued.
+
+    Watchers never call Telegram any more: they insert into notification_outbox
+    and notification_outbox_worker sends. So waiting for the fake bot to see a
+    send hangs forever — the queue is the signal, and delivering it here is the
+    second half of the production path.
+    """
+    async def _pump():
+        tasks = [asyncio.create_task(w()) for w in watchers]
+        try:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                if await botmain.ledger.dequeue_notifications():
+                    break
+                await asyncio.sleep(0.005)
+            else:
+                raise AssertionError('watchers queued no notification')
+            await asyncio.sleep(settle)  # let the other watchers cycle too
+            for n in await botmain.ledger.dequeue_notifications():
+                await bot.send_message(n['chat_id'], n['text'])
+                await botmain.ledger.ack_notification(n['id'])
+        finally:
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+    run(_pump())
+
+
+def queue_after_run(watcher, settle=0.1):
+    """Run one watcher for a few cycles and return what it queued.
+
+    Used by the negative cases: 'sent nothing' is only meaningful once you also
+    know the outbox stayed empty, since a watcher no longer sends by itself.
+    """
+    async def _pump():
+        task = asyncio.create_task(watcher())
+        await asyncio.sleep(settle)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        return await botmain.ledger.dequeue_notifications()
+    return run(_pump())
 
 
 def confirm_withdraw(m):
@@ -322,12 +364,7 @@ def test_e2e_user_journey_deposit_tip_withdraw(e2e, monkeypatch):
     monkeypatch.setattr(botmain, "bot", bot)
     monkeypatch.setattr(config, "POLL_SECONDS", 0.01)
 
-    async def _run_deposit_watcher():
-        t = asyncio.create_task(botmain.deposit_watcher())
-        await bot.evt.wait()
-        t.cancel()
-        await asyncio.gather(t, return_exceptions=True)
-    asyncio.run(_run_deposit_watcher())
+    deliver_queued(bot, [botmain.deposit_watcher])
     assert any("Депозит зачислен" in text and "10 USDC" in text for _, text in bot.sent)
     assert e2e.balance(ALICE) == Decimal("110.000000")
 
@@ -338,12 +375,7 @@ def test_e2e_user_journey_deposit_tip_withdraw(e2e, monkeypatch):
     asyncio.run(botmain.ledger.set_setting(ALICE, "notify_deposits", False))
     bot.sent.clear()
 
-    async def _run_deposit_watcher_muted():
-        t = asyncio.create_task(botmain.deposit_watcher())
-        await asyncio.sleep(0.1)
-        t.cancel()
-        await asyncio.gather(t, return_exceptions=True)
-    asyncio.run(_run_deposit_watcher_muted())
+    assert queue_after_run(botmain.deposit_watcher) == []  # muted: nothing queued
     assert not any("Депозит зачислен" in text for _, text in bot.sent)
     assert e2e.balance(ALICE) == Decimal("115.000000")
     asyncio.run(botmain.ledger.set_setting(ALICE, "notify_deposits", True))
@@ -505,13 +537,7 @@ def test_e2e_market_deadline_watcher_and_grace(e2e, monkeypatch):
     monkeypatch.setattr(botmain, "bot", bot)
     monkeypatch.setattr(config, "POLL_SECONDS", 0.01)
 
-    async def _run_market_watcher():
-        t = asyncio.create_task(botmain.market_watcher())
-        await bot.evt.wait()
-        t.cancel()
-        await asyncio.gather(t, return_exceptions=True)
-
-    asyncio.run(_run_market_watcher())
+    deliver_queued(bot, [botmain.market_watcher], settle=0.0)
     msgs = [text for cid, text in bot.sent if cid == ALICE]
     assert any("достиг дедлайна" in t and f"#{bid}" in t for t in msgs)
     notified = e2e._conn.execute(
@@ -522,12 +548,7 @@ def test_e2e_market_deadline_watcher_and_grace(e2e, monkeypatch):
     # second run sends nothing new
     bot2 = Bot()
     monkeypatch.setattr(botmain, "bot", bot2)
-    async def _run_again():
-        t = asyncio.create_task(botmain.market_watcher())
-        await asyncio.sleep(0.1)
-        t.cancel()
-        await asyncio.gather(t, return_exceptions=True)
-    asyncio.run(_run_again())
+    assert queue_after_run(botmain.market_watcher) == []  # nothing queued again
     assert bot2.sent == []
 
     # grace nearly over (11h left): the watcher sends the final warning once
@@ -537,12 +558,7 @@ def test_e2e_market_deadline_watcher_and_grace(e2e, monkeypatch):
     e2e._conn.commit()
     bot3 = Bot()
     monkeypatch.setattr(botmain, "bot", bot3)
-    async def _run_grace():
-        t = asyncio.create_task(botmain.market_watcher())
-        await bot3.evt.wait()
-        t.cancel()
-        await asyncio.gather(t, return_exceptions=True)
-    asyncio.run(_run_grace())
+    deliver_queued(bot3, [botmain.market_watcher], settle=0.0)
     msgs = [text for cid, text in bot3.sent if cid == ALICE]
     assert any(f"#{bid}" in t and "/cancel" in t for t in msgs)
     assert "/cancel" in msgs[0]
@@ -552,7 +568,7 @@ def test_e2e_market_deadline_watcher_and_grace(e2e, monkeypatch):
     assert warned == 1
     bot4 = Bot()
     monkeypatch.setattr(botmain, "bot", bot4)
-    asyncio.run(_run_grace())
+    assert queue_after_run(botmain.market_watcher) == []  # the warning is not repeated
     assert bot4.sent == []
 
     # before grace, only the creator can cancel
@@ -940,12 +956,7 @@ def test_e2e_rpc_outage_watchers_survive(e2e, monkeypatch):
     log = _transfer_log(ACC.address, str(base.hot_wallet()), 10 * USDC, tx)
     install_rpc(monkeypatch, logs=[log], block=1200, fail_first=1)
 
-    async def _run():
-        t = asyncio.create_task(botmain.deposit_watcher())
-        await bot.evt.wait()
-        t.cancel()
-        await asyncio.gather(t, return_exceptions=True)
-    asyncio.run(_run())
+    deliver_queued(bot, [botmain.deposit_watcher], settle=0.0)
     assert any("Депозит зачислен" in text for _, text in bot.sent)
 
 
@@ -1228,19 +1239,8 @@ def test_e2e_all_watchers_run_together(e2e, monkeypatch):
     monkeypatch.setattr(botmain, "bot", bot)
     monkeypatch.setattr(config, "POLL_SECONDS", 0.01)
 
-    async def _run_all():
-        tasks = [
-            asyncio.create_task(botmain.deposit_watcher()),
-            asyncio.create_task(botmain.withdraw_watcher()),
-            asyncio.create_task(botmain.market_watcher()),
-        ]
-        await bot.evt.wait()  # first DM (deposit)
-        await asyncio.sleep(0.2)  # let the others do their cycles
-        for t in tasks:
-            t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    asyncio.run(_run_all())
+    deliver_queued(bot, [botmain.deposit_watcher, botmain.withdraw_watcher,
+                         botmain.market_watcher])
 
     texts = [text for _, text in bot.sent]
     assert any("Депозит зачислен" in t for t in texts)          # deposit watcher survived the RPC outage

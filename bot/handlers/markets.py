@@ -21,7 +21,7 @@ def _pct(p: Decimal) -> str:
     return f'{int((p * 100).to_integral_value(rounding=ROUND_HALF_UP))}%'
 
 def _bar(p: Decimal, width: int=10) -> str:
-    filled = int((p * width).to_integral_value(rounding='ROUND_HALF_UP'))
+    filled = int((p * width).to_integral_value(rounding=ROUND_HALF_UP))
     return '▰' * filled + '▱' * (width - filled)
 
 @common.router.message(Command('market'))

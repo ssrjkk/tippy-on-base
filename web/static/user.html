@@ -20,7 +20,7 @@
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
         <span class="brand-name"><b>Tippy</b></span>
       </a>
-      <a class="btn btn-ghost" href="https://t.me/TIPBOT_USERNAME" data-tg-link>Открыть в Telegram →</a>
+      <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__" data-tg-link>Открыть в Telegram →</a>
     </div>
   </header>
 
@@ -33,7 +33,7 @@
 
     <section class="section grid-2">
       <div class="reveal">
-        <h2>💰 Статистика</h2>
+        <h2>Статистика</h2>
         <div class="leaderboard">
           <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Баланс</span><span class="lb-amt" id="u-balance">–</span></div>
           <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Получено чаевых</span><span class="lb-amt" id="u-received">–</span></div>
@@ -44,14 +44,15 @@
         </div>
       </div>
       <div class="reveal">
-        <h2>💳 Поддержать</h2>
+        <h2>Поддержать</h2>
         <div class="wallet deposit-box">
-          <div class="wallet-row"><span>Адрес бота (Base / USDC)</span><b id="u-deposit">–</b></div>
+          <div class="wallet-row"><span>Адрес бота (<span data-net="chain">Base</span> / USDC)</span><b id="u-deposit">–</b></div>
           <div class="wallet-addr" id="u-address">загрузка…</div>
           <button class="btn btn-ghost" id="u-copy" style="margin-top: 10px; width: 100%;">📋 Скопировать адрес</button>
           <div class="qr"><img id="u-qr" alt="QR-код депозита" /></div>
           <p class="hint">
-            Отправь USDC на этот адрес в сети Base, затем нажми <b>/claim</b> в боте,
+            Отправь USDC на этот адрес в сети <span data-net="chain">Base</span>, затем
+            нажми <b>/claim</b> в боте,
             чтобы средства зачислились на баланс этого пользователя. Или просто напишите
             ему в Telegram: <span id="u-tip-link">–</span>
           </p>
@@ -60,12 +61,12 @@
     </section>
 
     <section class="section reveal" id="positions" hidden>
-      <h2>🎯 Открытые позиции</h2>
+      <h2>Открытые позиции</h2>
       <div class="markets" id="positions-list"></div>
     </section>
 
     <section class="section reveal" id="history" hidden>
-      <h2>🧾 Последние операции</h2>
+      <h2>Последние операции</h2>
       <div class="leaderboard" id="history-list"></div>
     </section>
   </main>
@@ -80,14 +81,14 @@
         </div>
       </div>
       <div class="footer-meta">
-        <span class="chain-chip">🟦 Base Mainnet</span>
-        <span class="chain-chip">🪙 USDC 0x8335…2913</span>
+        <span class="chain-chip">🟦 <span data-net="chain">Base</span></span>
+        <span class="chain-chip">🪙 <span data-net="usdc">USDC</span></span>
       </div>
     </div>
     <div class="author-links">
       <span>Автор:</span>
-      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">Telegram</a>
-      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">Telegram 2</a>
+      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">@b2wmain</a>
+      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a>
       <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
       <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
     </div>
@@ -97,6 +98,7 @@
     </a>
   </footer>
 
+  <script src="/chain.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     document.body.classList.add("js");
@@ -122,6 +124,7 @@
       const username = info.bot_username;
       const tgLink = username ? "https://t.me/" + encodeURIComponent(username) : "";
       document.querySelectorAll("[data-tg-link]").forEach((a) => { a.href = tgLink || a.href; });
+      applyNetInfo(info);
 
       try {
         const u = await (await fetch("/api/user/" + tgId)).json();
@@ -137,7 +140,10 @@
         $("u-fees").textContent = fmtUSDC(u.creator_fees_usdc) + " USDC";
         $("u-deposit").textContent = "USDC";
         $("u-address").textContent = u.deposit_address;
-        $("u-qr").src = "/qr?size=220&data=" + encodeURIComponent("base:" + u.deposit_address);
+        /* The QR carries the bare address, like the cabinet does: an EIP-681
+         * "base:…" URI would tell a wallet to send the native coin, and deposits
+         * here are USDC. */
+        $("u-qr").src = "/qr?size=220&data=" + encodeURIComponent(u.deposit_address);
         $("u-copy").addEventListener("click", () => {
           navigator.clipboard.writeText(u.deposit_address).then(() => {
             $("u-copy").textContent = "✅ Скопировано";

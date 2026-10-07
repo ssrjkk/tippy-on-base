@@ -27,7 +27,6 @@ __all__ = [
     "BET_LINK_RE",
     "DEADLINE_RE",
     "DONATE_LINK_RE",
-    "HELP",
     "KIND_EMOJI",
     "PAYWALL_LINK_RE",
     "QUICK_AMOUNTS",
@@ -155,8 +154,6 @@ PAYWALL_LINK_RE = re.compile(r"^paywall_(\d{1,20})$")
 DEADLINE_RE = re.compile(r"^(\d{1,3})([hd])$")
 
 QUICK_AMOUNTS = ("5", "10", "25", "50")
-
-HELP = i18n.t("ru", "help_full")
 
 
 async def user_lang(tg_id: int) -> str:

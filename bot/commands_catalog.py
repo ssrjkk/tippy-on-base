@@ -1,0 +1,51 @@
+"""Canonical Telegram command menu as plain data.
+
+Kept free of aiogram imports so both the bot (which wraps these into
+``BotCommand``) and the web process (which publishes them through
+``/api/info``) can read the same list without pulling the handler stack.
+"""
+
+BOT_COMMAND_SPECS = [
+    ('menu', 'Главное меню'),
+    ('balance', 'Баланс кошелька'),
+    ('deposit', 'Пополнить USDC'),
+    ('withdraw', 'Вывести USDC'),
+    ('tip', 'Чаевые USDC'),
+    ('rain', 'Дождь: раздать USDC в чате'),
+    ('markets', 'Рынки предсказаний'),
+    ('market', 'Открыть рынок по id'),
+    ('trade', 'Купить доли на рынке'),
+    ('sell', 'Продать доли'),
+    ('positions', 'Мои позиции и PnL'),
+    ('bet', 'Ставка-пул: создать/поставить'),
+    ('bets', 'Открытые ставки-пулы'),
+    ('oc', 'Cally — ончейн-рынки (ERC-1155)'),
+    ('oc_pos', 'Мои ончейн-доли'),
+    ('mybets', 'Мои ставки'),
+    ('resolve', 'Закрыть ставку (создатель)'),
+    ('cancel', 'Отменить свою ставку'),
+    ('stats', 'Статистика бота'),
+    ('top', 'Топ пользователей'),
+    ('history', 'История операций'),
+    ('donate', 'Твоя страница донатов'),
+    ('link', 'Привязать внешний кошелёк'),
+    ('confirm', 'Подтвердить привязку'),
+    ('claim', 'Забрать дивиденды'),
+    ('wallet', 'Кошелёк: адрес и ключи'),
+    ('import', 'Импорт по сид-фразе'),
+    ('export', 'Выгрузить ключ и сид'),
+    ('tx', 'Проверить транзакцию в Base'),
+    ('paywall', 'Платные посты'),
+    ('basename', 'Basename: ончейн-имя на Base'),
+    ('settings', 'Настройки'),
+    ('language', 'Сменить язык / Language'),
+    ('about', 'О боте — что это такое'),
+    ('app', 'Мини-приложение'),
+    ('gasless', 'Бесплатные транзакции'),
+    ('subscribe', 'Подписка на платежи'),
+    ('subscriptions', 'Мои подписки'),
+    ('cancelsub', 'Отменить подписку'),
+    ('credit', 'Кредитный рейтинг'),
+    ('createtoken', 'Создать токен создателя'),
+    ('buytoken', 'Купить токен создателя'),
+]

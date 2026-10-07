@@ -21,9 +21,29 @@ interface IERC20 {
 
 contract SmartAccount {
     address public owner;
+    address public pendingOwner;
     uint256 public nonce;
     bool public initialized;
     address public factory;
+    bool public paused;
+
+    error Reentrant();
+    error Paused();
+    error NotFactory();
+
+    uint256 private _locked = 1;
+
+    modifier nonReentrant() {
+        if (_locked != 1) revert Reentrant();
+        _locked = 2;
+        _;
+        _locked = 1;
+    }
+
+    modifier whenNotPaused() {
+        if (paused) revert Paused();
+        _;
+    }
 
     struct UserOperation {
         address sender;
@@ -91,7 +111,7 @@ contract SmartAccount {
     }
 
     /// @notice Execute a single call from the account.
-    function execute(address dest, uint256 value, bytes calldata data) external {
+    function execute(address dest, uint256 value, bytes calldata data) external nonReentrant whenNotPaused {
         require(msg.sender == entryPoint() || msg.sender == owner, "SmartAccount: not authorized");
         (bool ok, ) = dest.call{value: value}(data);
         require(ok, "SmartAccount: call failed");
@@ -102,7 +122,7 @@ contract SmartAccount {
     function executeBatch(
         address dest1, bytes calldata data1,
         address dest2, bytes calldata data2
-    ) external {
+    ) external nonReentrant whenNotPaused {
         require(msg.sender == entryPoint() || msg.sender == owner, "SmartAccount: not authorized");
         (bool ok1, ) = dest1.call(data1);
         require(ok1, "SmartAccount: first call failed");
@@ -112,12 +132,25 @@ contract SmartAccount {
         emit Executed(dest2, 0, data2);
     }
 
-    /// @notice Transfer ownership.
+    /// @notice Initiate ownership transfer (2-step: caller proposes, new owner accepts).
     function transferOwnership(address newOwner) external {
         require(msg.sender == owner, "SmartAccount: not owner");
         require(newOwner != address(0), "SmartAccount: zero address");
+        pendingOwner = newOwner;
         emit OwnerTransferred(owner, newOwner);
-        owner = newOwner;
+    }
+
+    /// @notice Accept ownership (must be called by pendingOwner).
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "SmartAccount: not pending owner");
+        owner = pendingOwner;
+        pendingOwner = address(0);
+    }
+
+    /// @notice Cancel pending ownership transfer.
+    function cancelOwnershipTransfer() external {
+        require(msg.sender == owner, "SmartAccount: not owner");
+        pendingOwner = address(0);
     }
 
     /// @notice Fund the account with ETH (for gas reserve).
@@ -137,7 +170,9 @@ contract SmartAccount {
         // Normalize v
         if (v < 27) v += 27;
         require(v == 27 || v == 28, "SmartAccount: invalid v");
-        return ecrecover(hash, v, r, s);
+        address signer = ecrecover(hash, v, r, s);
+        require(signer != address(0), "SmartAccount: invalid signature");
+        return signer;
     }
 
     /// @dev Returns the EntryPoint address (deployed on Base).
@@ -147,13 +182,31 @@ contract SmartAccount {
     }
 
     /// @notice Initialize the account (called once by factory).
+    /// @dev Only the factory that deployed this contract can initialize it,
+    ///      preventing an attacker from calling initialize() with their own
+    ///      address as owner on a counterfactual account.
     function initialize(address _owner) external {
         require(!initialized, "SmartAccount: already initialized");
+        require(factory == address(0) || msg.sender == factory, "SmartAccount: not factory");
         require(_owner != address(0), "SmartAccount: zero owner");
         initialized = true;
-        factory = msg.sender;
+        if (factory == address(0)) {
+            factory = msg.sender;
+        }
         owner = _owner;
         emit AccountInitialized(_owner);
+    }
+
+    /// @notice Emergency pause: halt execute/executeBatch. Owner-only.
+    function pause() external {
+        require(msg.sender == owner, "SmartAccount: not owner");
+        paused = true;
+    }
+
+    /// @notice Resume after a pause.
+    function unpause() external {
+        require(msg.sender == owner, "SmartAccount: not owner");
+        paused = false;
     }
 
     /// @notice Get USDC balance of this account.

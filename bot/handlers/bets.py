@@ -372,7 +372,7 @@ async def _notify_bet_cancelled(message: types.Message, bet_id: int) -> None:
     bet = await common.ledger.get_bet(bet_id)
     if not bet:
         return
-    positions = await common.ledger._bet_positions(bet_id)
+    positions = await common.ledger.bet_positions(bet_id)
     seen = set()
     for p in positions:
         tg_id = int(p['tg_id'])

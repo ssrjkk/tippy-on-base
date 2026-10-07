@@ -7,7 +7,7 @@ Revision ID: 006
 Revises: 005
 Create Date: 2026-09-21
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 from alembic import op
 

@@ -72,7 +72,7 @@ def test_telegram_login_creates_user_and_cookie(client, ledger):
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"] == "/me"
+    assert r.headers["location"] == "/"
     cookie = r.cookies.get(auth.COOKIE_NAME)
     assert cookie and auth.parse_session(cookie) == 3001
     assert ledger.user_exists(3001)
@@ -124,6 +124,40 @@ def test_login_page_renders_widget(client):
     assert r.status_code == 200
     assert "data-telegram-login" in r.text
     assert "Connect Wallet" in r.text
+
+
+def test_landing_page_hosts_the_widget_and_its_state(client):
+    """Login must work on ``/`` itself, not only after a hop to /login.
+
+    The callback rejects requests without the login-state cookie, so the page
+    that renders the widget has to issue that cookie. / does both.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'id="tg-widget"' in r.text
+    assert r.cookies.get(auth.LOGIN_STATE_COOKIE)
+
+
+def test_csp_frames_the_telegram_login_widget(client):
+    """The widget draws its button inside an oauth.telegram.org iframe.
+
+    ``frame-src`` unset means the frame falls back to ``default-src 'self'`` and
+    the browser blocks it — the login button would stay an empty box, so the
+    origin has to be framed explicitly.
+    """
+    csp = client.get("/").headers["content-security-policy"]
+    assert "frame-src 'self' https://oauth.telegram.org;" in csp
+
+
+def test_telegram_login_with_state_from_landing_page(ledger):
+    state = TestClient(app).get("/").cookies[auth.LOGIN_STATE_COOKIE]
+    c = TestClient(app)
+    c.cookies.set(auth.LOGIN_STATE_COOKIE, state)
+    r = c.get("/api/auth/telegram", params=tg_signed(3005), follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/"
+    assert auth.parse_session(r.cookies.get(auth.COOKIE_NAME)) == 3005
+    assert ledger.user_exists(3005)
 
 
 # ---------- wallet login ----------

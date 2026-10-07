@@ -1,2 +1,2 @@
 #!/bin/sh
-exec python /app/deploy/entrypoint.py #
+exec python /app/deploy/entrypoint.py

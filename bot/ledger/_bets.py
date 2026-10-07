@@ -135,6 +135,10 @@ class LedgerBetsMixin:
                 (bet_id,),
             ).fetchall()
 
+    def bet_positions(self, bet_id: int) -> list[dict]:
+        """Public wrapper for _bet_positions — used by notification handlers."""
+        return self._bet_positions(bet_id)
+
 
 
     def place_bet(self, bet_id: int, tg_id: int, option_idx: int, amount_micro: int) -> str:

@@ -213,8 +213,8 @@ contract OutcomeMarketTest is Test {
         uint256 bobBalanceBefore = usdc.balanceOf(bob);
         vm.stopPrank();
 
-        // Time travel past close
-        _timeTravel(1 days + 1);
+        // Time travel past close + expiry window (24h grace period)
+        _timeTravel(2 days + 1);
 
         // Owner resolves outcome 0 as winner
         vm.prank(owner);
@@ -237,7 +237,7 @@ contract OutcomeMarketTest is Test {
         market.buy(marketId, 1, 20e6, 20e6);
         vm.stopPrank();
 
-        _timeTravel(1 days + 1);
+        _timeTravel(2 days + 1);
 
         // Resolve outcome 0 as winner
         vm.prank(owner);
@@ -259,7 +259,7 @@ contract OutcomeMarketTest is Test {
 
     function test_resolve_twice_reverts() public {
         uint256 marketId = _createMarket(alice, 2, SUBSIDY, uint64(block.timestamp + 1 days));
-        _timeTravel(1 days + 1);
+        _timeTravel(2 days + 1);
 
         vm.prank(owner);
         market.ownerResolve(marketId, 0);
@@ -271,7 +271,7 @@ contract OutcomeMarketTest is Test {
 
     function test_only_owner_can_ownerResolve() public {
         uint256 marketId = _createMarket(alice, 2, SUBSIDY, uint64(block.timestamp + 1 days));
-        _timeTravel(1 days + 1);
+        _timeTravel(2 days + 1);
 
         vm.prank(bob);
         vm.expectRevert();

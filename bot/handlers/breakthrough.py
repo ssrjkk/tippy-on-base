@@ -1,9 +1,9 @@
 """Handler for breakthrough Base features — gasless, recurring, batch, credit, creator tokens."""
 
 import time
+from decimal import Decimal, InvalidOperation
 
 from aiogram import types
-from aiogram.filters import Command
 
 from bot import i18n
 
@@ -44,8 +44,17 @@ async def cmd_subscribe(message: types.Message):
 
     try:
         to_username = parts[1].lstrip('@')
-        amount = float(parts[2])
+        # Use Decimal for money precision — float would lose fractions on amounts
+        # like 0.1 USDC (0.1 is not exactly representable in IEEE 754).
+        amount = Decimal(parts[2])
         interval_str = parts[3].lower()
+
+        if amount <= 0:
+            await message.answer(i18n.t(lang, 'amount_positive'))
+            return
+        if amount > common.config.MAX_TIP_USDC:
+            await message.answer(i18n.t(lang, 'subscribe_amount_too_large', max=common.config.MAX_TIP_USDC))
+            return
 
         from ..recurring import RecurrenceInterval
         interval_map = {
@@ -60,7 +69,7 @@ async def cmd_subscribe(message: types.Message):
             return
 
         interval = interval_map[interval_str]
-        amount_micro = int(amount * 1e6)
+        amount_micro = common._to_micro(amount)
 
         to_user = await common.ledger.get_user_by_username(to_username)
         if not to_user:
@@ -69,6 +78,12 @@ async def cmd_subscribe(message: types.Message):
 
         to_tg_id = to_user['tg_id']
         from_tg_id = message.from_user.id
+
+        # Throttle: recurring payments are financial operations, rate-limit like withdrawals.
+        wait = await common._throttle(from_tg_id, 'subscribe')
+        if wait:
+            await message.answer(wait)
+            return
 
         payment_id = f"sub_{from_tg_id}_{to_tg_id}_{int(time.time())}"
         await common.recurring.create(
@@ -84,11 +99,11 @@ async def cmd_subscribe(message: types.Message):
                 lang,
                 'subscribe_created',
                 to_username=to_username,
-                amount=amount,
+                amount=common._fmt(amount_micro),
                 interval=interval_str,
             )
         )
-    except (ValueError, IndexError):
+    except (InvalidOperation, ValueError, IndexError):
         await message.answer(i18n.t(lang, 'subscribe_format'))
 
 
@@ -110,9 +125,9 @@ async def cmd_subscriptions(message: types.Message):
         other_name = other_user.get('username', f"ID{other_id}") if other_user else f"ID{other_id}"
 
         status = "✅" if p.active else "❌"
-        amount = p.amount_micro / 1e6
+        amount_str = common._fmt(p.amount_micro)
         lines.append(
-            f"{status} {direction} @{other_name}: ${amount:.2f} {p.interval.value}"
+            f"{status} {direction} @{other_name}: ${amount_str} {p.interval.value}"
         )
 
     text = i18n.t(lang, 'subscriptions_list', list="\n".join(lines))
@@ -173,8 +188,12 @@ async def cmd_create_token(message: types.Message):
         name = parts[1]
         symbol = parts[2].upper()
         supply = int(parts[3])
-        price = float(parts[4])
-        price_micro = int(price * 1e6)
+        # Use Decimal for money precision — float loses fractions on values like 0.1
+        price = Decimal(parts[4])
+        if price <= 0:
+            await message.answer(i18n.t(lang, 'amount_positive'))
+            return
+        price_micro = common._to_micro(price)
 
         uid = message.from_user.id
         token = await common.creator_tokens.create_token(
@@ -194,7 +213,7 @@ async def cmd_create_token(message: types.Message):
                 token_id=token.token_id,
             )
         )
-    except (ValueError, IndexError):
+    except (InvalidOperation, ValueError, IndexError):
         await message.answer(i18n.t(lang, 'create_token_format'))
 
 
@@ -210,7 +229,15 @@ async def cmd_buy_token(message: types.Message):
     try:
         token_id = parts[1]
         amount = int(parts[2])
+        if amount <= 0:
+            await message.answer(i18n.t(lang, 'amount_positive'))
+            return
         uid = message.from_user.id
+
+        wait = await common._throttle(uid, 'buytoken')
+        if wait:
+            await message.answer(wait)
+            return
 
         success, cost_micro = await common.creator_tokens.buy_tokens(
             token_id=token_id,
@@ -222,11 +249,10 @@ async def cmd_buy_token(message: types.Message):
             await message.answer(i18n.t(lang, 'token_buy_failed'))
             return
 
-        cost = cost_micro / 1e6
         await common.ledger.debit(uid, cost_micro, f"Buy {amount} tokens {token_id}")
 
         await message.answer(
-            i18n.t(lang, 'token_bought', amount=amount, cost=cost)
+            i18n.t(lang, 'token_bought', amount=amount, cost=common._fmt(cost_micro))
         )
     except (ValueError, IndexError):
         await message.answer(i18n.t(lang, 'buy_token_format'))
@@ -249,19 +275,6 @@ async def cmd_claim_dividends(message: types.Message):
         await message.answer(i18n.t(lang, 'no_dividends'))
         return
 
-    amount = amount_micro / 1e6
     await common.ledger.credit(uid, amount_micro, f"Dividends from {token_id}")
 
-    await message.answer(i18n.t(lang, 'dividends_claimed', amount=amount))
-
-
-def register(dp):
-    """Register breakthrough feature handlers."""
-    dp.message.register(cmd_gasless, Command('gasless'))
-    dp.message.register(cmd_subscribe, Command('subscribe'))
-    dp.message.register(cmd_subscriptions, Command('subscriptions'))
-    dp.message.register(cmd_cancel_sub, Command('cancelsub'))
-    dp.message.register(cmd_credit, Command('credit'))
-    dp.message.register(cmd_create_token, Command('createtoken'))
-    dp.message.register(cmd_buy_token, Command('buytoken'))
-    dp.message.register(cmd_claim_dividends, Command('claim'))
+    await message.answer(i18n.t(lang, 'dividends_claimed', amount=common._fmt(amount_micro)))

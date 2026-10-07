@@ -125,6 +125,13 @@ else:
     if x402_recv:
         WARNINGS.append("X402_RECEIVE_ADDRESS is set but X402_ENABLED != 1 — x402 payments stay disabled")
 
+# --- AI agent ---
+ai_key = os.environ.get("AI_API_KEY", "").strip()
+if not ai_key:
+    WARNINGS.append("AI_API_KEY is not set — AI agent features will be disabled")
+elif len(ai_key) < 8:
+    ERRORS.append("AI_API_KEY looks too short (must be >= 8 chars)")
+
 # --- EAS attestations (agent) ---
 optional("EAS_SCHEMA_UID", r"0x[0-9a-fA-F]{64}", msg="must be 0x + 64 hex (registered EAS schema UID)")
 

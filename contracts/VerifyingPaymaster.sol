@@ -34,8 +34,12 @@ struct UserOperation {
 }
 
 contract VerifyingPaymaster {
-    address public owner;   // bot hot wallet / relayer
-    address public usdc;
+    address public owner;
+    address public pendingOwner;
+    address public immutable usdc;
+    bool public paused;
+
+    error Paused();
 
     // Anti-abuse limits
     uint256 public constant MAX_GAS_PER_USER_PER_DAY = 0.5 ether;  // ~$0.50 in gas
@@ -71,6 +75,7 @@ contract VerifyingPaymaster {
         uint256 /*maxCost*/
     ) external returns (bytes memory context, uint256 validationData) {
         require(msg.sender == entryPoint(), "Paymaster: not EntryPoint");
+        require(!paused, "Paymaster: paused");
 
         // Verify relayer signature over a hash that EXCLUDES paymasterAndData,
         // breaking the chicken-and-egg: the relayer can sign before paymasterAndData is set.
@@ -144,7 +149,50 @@ contract VerifyingPaymaster {
             v := byte(0, calldataload(add(sig.offset, 0x40)))
         }
         if (v < 27) v += 27;
-        return ecrecover(hash, v, r, s);
+        // Signature malleability: reject high-s values (EIP-2). Without this
+        // check, anyone can flip (r, s, v) -> (r, N-s, v^1) and produce a
+        // second valid signature for the same hash, bypassing nonce-based
+        // replay protection.
+        require(uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0, "Paymaster: invalid s");
+        require(v == 27 || v == 28, "Paymaster: invalid v");
+        address signer = ecrecover(hash, v, r, s);
+        require(signer != address(0), "Paymaster: invalid signature");
+        return signer;
+    }
+
+    // --- Ownership transfer (2-step) ---
+
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /// @notice Propose a new owner. The candidate must call acceptOwnership().
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Paymaster: zero address");
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    /// @notice Accept ownership (must be called by pendingOwner).
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Paymaster: not pending owner");
+        emit OwnershipTransferred(owner, pendingOwner);
+        owner = pendingOwner;
+        pendingOwner = address(0);
+    }
+
+    /// @notice Cancel a pending ownership transfer.
+    function cancelOwnershipTransfer() external onlyOwner {
+        pendingOwner = address(0);
+    }
+
+    /// @notice Emergency pause: halt sponsorship. Owner-only.
+    function pause() external onlyOwner {
+        paused = true;
+    }
+
+    /// @notice Resume after a pause.
+    function unpause() external onlyOwner {
+        paused = false;
     }
 
 }

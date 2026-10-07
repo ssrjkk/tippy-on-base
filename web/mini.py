@@ -15,7 +15,8 @@ import os
 import re
 import time
 import urllib.parse
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -74,7 +75,7 @@ async def _user(request: Request) -> int:
     return tg_id
 
 def _fmt(micro: int) -> float:
-    return round(micro / MICRO, 2)
+    return float(Decimal(micro) / Decimal(MICRO))
 
 
 def _to_micro(amount: Decimal) -> int:
@@ -120,6 +121,51 @@ def _throttle(tg_id: int, action: str) -> None:
         for k in [k for k, v in _money_last.items() if v < cutoff]:
             _money_last.pop(k, None)
     _money_last[key] = now
+
+
+def _idempotency_hash(tg_id: int, action: str, raw_key: str) -> str:
+    """Hash user_id:action:key into a fixed-length DB key."""
+    return hashlib.sha256(f'{tg_id}:{action}:{raw_key}'.encode()).hexdigest()
+
+
+async def _reserve_idempotency(request: Request, action: str, tg_id: int) -> str:
+    """Require an Idempotency-Key header and reserve it. Returns the key hash.
+    Raises 400 if missing, 409 if duplicate."""
+    raw_key = request.headers.get('Idempotency-Key', '').strip()
+    if not raw_key:
+        raise HTTPException(400, 'missing Idempotency-Key header')
+    key_hash = _idempotency_hash(tg_id, action, raw_key)
+    if not await ledger.reserve_idempotency(key_hash, tg_id, action):
+        raise HTTPException(409, 'duplicate request — reuse the original Idempotency-Key to check status')
+    return key_hash
+
+
+class _IdempotencyContext:
+    """Context manager for idempotent operations: reserves on enter, rolls back
+    on exception, completes on success. Usage:
+        async with _idempotent(request, 'action', tg_id) as key_hash:
+            ... do work ...
+    """
+    __slots__ = ('action', 'key_hash', 'request', 'tg_id')
+
+    def __init__(self, request: Request, action: str, tg_id: int):
+        self.request = request
+        self.action = action
+        self.tg_id = tg_id
+        self.key_hash = None
+
+    async def __aenter__(self) -> str:
+        self.key_hash = await _reserve_idempotency(self.request, self.action, self.tg_id)
+        return self.key_hash
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            await ledger.rollback_idempotency(self.key_hash)
+        return False
+
+
+def _idempotent(request: Request, action: str, tg_id: int) -> _IdempotencyContext:
+    return _IdempotencyContext(request, action, tg_id)
 
 @router.post('/api/mini/auth', tags=['auth'])
 async def mini_auth(body: InitAuth, request: Request):
@@ -206,7 +252,7 @@ async def mini_smartwallet(request: Request) -> dict:
         'enabled': True,
         'address': address,
         'deployed': deployed,
-        'balance_usdc': round(balance_micro / MICRO, 2),
+        'balance_usdc': float(Decimal(balance_micro) / Decimal(MICRO)),
         'nonce': nonce,
         'paymaster_sponsored': True,
         'deposit_address': address,
@@ -214,8 +260,8 @@ async def mini_smartwallet(request: Request) -> dict:
 
 class SmartBuyBody(BaseModel):
     market_id: int
-    outcome: int
-    shares: int = Field(gt=0)
+    outcome: int = Field(ge=0)
+    shares: int = Field(gt=0, le=10**9)
     max_cost_usdc: Decimal = Field(gt=0, allow_inf_nan=False)
 
 @router.post('/api/mini/smartbuy', tags=['wallet'])
@@ -259,14 +305,16 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
     if balance_micro < max_cost_micro:
         raise HTTPException(400, 'insufficient smart-wallet USDC balance')
 
-    tx_hash = await sw.smart_buy(
-        tg_id, body.market_id, body.outcome, body.shares, max_cost_micro
-    )
+    async with _idempotent(request, 'smartbuy', tg_id) as key_hash:
+        tx_hash = await sw.smart_buy(
+            tg_id, body.market_id, body.outcome, body.shares, max_cost_micro
+        )
+    await ledger.complete_idempotency(key_hash, result_id=tx_hash)
     return {'ok': True, 'tx_hash': tx_hash}
 
 class TipBody(BaseModel):
-    to: str
-    amount: Decimal = Field(allow_inf_nan=False)
+    to: str = Field(min_length=1, max_length=32)
+    amount: Decimal = Field(gt=0, allow_inf_nan=False)
 _ERR_MSG = {'closed': 'market closed', 'deadline': 'deadline passed', 'badopt': 'no such option', 'balance': 'insufficient balance'}
 
 @router.post('/api/mini/tip', tags=['users'])
@@ -297,14 +345,18 @@ async def mini_tip(body: TipBody, request: Request) -> dict:
         raise HTTPException(404, f'user @{to} not found — they must open the bot first')
     if target == tg_id:
         raise HTTPException(400, 'cannot tip yourself')
-    if not await ledger.transfer(tg_id, target, micro):
-        raise HTTPException(400, 'insufficient balance')
+    async with _idempotent(request, 'tip', tg_id) as key_hash:
+        ok = await ledger.transfer(tg_id, target, micro)
+        if not ok:
+            await ledger.rollback_idempotency(key_hash)
+            raise HTTPException(400, 'insufficient balance')
+    await ledger.complete_idempotency(key_hash)
     return {'ok': True, 'new_balance': float(await ledger.balance(tg_id))}
 
 class TradeBody(BaseModel):
     market_id: int
-    option: int
-    amount: Decimal = Field(allow_inf_nan=False)
+    option: int = Field(ge=0)
+    amount: Decimal = Field(gt=0, allow_inf_nan=False)
 
 @router.post('/api/mini/trade', tags=['markets'])
 async def mini_trade(body: TradeBody, request: Request) -> dict:
@@ -316,17 +368,20 @@ async def mini_trade(body: TradeBody, request: Request) -> dict:
     max_micro = _cap_micro(config.MARKET_MAX_TRADE_USDC)
     if micro > max_micro:
         raise HTTPException(400, f'trade exceeds the {_fmt(max_micro)} USDC cap')
-    status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro)
-    if status != 'ok':
-        raise HTTPException(400, _ERR_MSG.get(status, status))
+    async with _idempotent(request, 'trade', tg_id) as key_hash:
+        status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro)
+        if status != 'ok':
+            await ledger.rollback_idempotency(key_hash)
+            raise HTTPException(400, _ERR_MSG.get(status, status))
+    await ledger.complete_idempotency(key_hash)
     bal = float(await ledger.balance(tg_id))
     pos = await ledger.user_market_position(body.market_id, tg_id) or {}
     return {'ok': True, 'info': info, 'new_balance': bal, 'position': pos}
 
 class BetPlaceBody(BaseModel):
     bet_id: int
-    option: int
-    amount: Decimal = Field(allow_inf_nan=False)
+    option: int = Field(ge=0)
+    amount: Decimal = Field(gt=0, allow_inf_nan=False)
 
 @router.post('/api/mini/betplace', tags=['markets'])
 async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
@@ -338,9 +393,12 @@ async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
     max_micro = _cap_micro(config.MAX_BET_USDC)
     if micro > max_micro:
         raise HTTPException(400, f'bet exceeds the {_fmt(max_micro)} USDC cap')
-    res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro)
-    if res != 'ok':
-        raise HTTPException(400, _ERR_MSG.get(res, res))
+    async with _idempotent(request, 'betplace', tg_id) as key_hash:
+        res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro)
+        if res != 'ok':
+            await ledger.rollback_idempotency(key_hash)
+            raise HTTPException(400, _ERR_MSG.get(res, res))
+    await ledger.complete_idempotency(key_hash)
     return {'ok': True, 'new_balance': float(await ledger.balance(tg_id))}
 
 _ADDR_RE = re.compile(r'^0x[a-fA-F0-9]{40}$')
@@ -371,7 +429,7 @@ def _exact(micro: int) -> str:
 
 class WithdrawStageBody(BaseModel):
     address: str
-    amount: Decimal = Field(allow_inf_nan=False)
+    amount: Decimal = Field(gt=0, allow_inf_nan=False)
 
 
 class WithdrawConfirmBody(BaseModel):
@@ -498,7 +556,7 @@ async def mini_onchain_market(market_id: int, request: Request) -> dict:
             {
                 'index': i,
                 'label': o,
-                'price_pct': float(round(prices[i] * 100, 2)),
+                'price_pct': float((Decimal(str(prices[i])) * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'shares': balances[i] if i < len(balances) else 0,
             }
             for i, o in enumerate(options)
@@ -507,11 +565,11 @@ async def mini_onchain_market(market_id: int, request: Request) -> dict:
 
 
 class CreateBody(BaseModel):
-    kind: str
+    kind: Literal['market', 'bet']
     question: str
     options: list[str]
     hours: float | None = None
-    subsidy_usdc: Decimal = Decimal("10.0")
+    subsidy_usdc: Decimal = Field(default=Decimal("10.0"), gt=0, allow_inf_nan=False)
 
 def _parse_deadline(hours: float | None) -> int | None:
     if not hours or hours <= 0:
@@ -539,7 +597,9 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
             raise HTTPException(400, f'subsidy below the {_fmt(min_micro)} USDC minimum')
         if subsidy_micro > max_micro:
             raise HTTPException(400, f'subsidy above the {_fmt(max_micro)} USDC maximum')
-        mid = await ledger.create_market(tg_id, question, options, subsidy_micro, close_at=close_at)
+        async with _idempotent(request, 'create_market', tg_id) as key_hash:
+            mid = await ledger.create_market(tg_id, question, options, subsidy_micro, close_at=close_at)
+        await ledger.complete_idempotency(key_hash, str(mid))
         return {'ok': True, 'id': mid}
     if body.kind == 'bet':
         bid = await ledger.create_bet(tg_id, question, options, close_at=close_at)
@@ -547,13 +607,11 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
     raise HTTPException(400, 'kind must be market or bet')
 
 class LangBody(BaseModel):
-    lang: str
+    lang: Literal['ru', 'en', 'zh']
 
 @router.post('/api/mini/lang', tags=['users'])
 async def mini_lang(body: LangBody, request: Request) -> dict:
     tg_id = await _user(request)
-    if body.lang not in ('ru', 'en', 'zh'):
-        raise HTTPException(400, 'unsupported language')
     await ledger.set_setting(tg_id, 'lang', body.lang)
     return {'ok': True, 'lang': body.lang}
 
@@ -561,17 +619,16 @@ def public_base_url() -> str:
     """https://host part where the Mini App lives (used for WebApp buttons).
 
     Prefers MINI_APP_URL (dedicated, works in polling mode too), then
-    WEBHOOK_URL, then RENDER_EXTERNAL_URL (auto-assigned by Render for Docker
-    deployments). Falls back to a http://HOST:PORT that Telegram will reject,
+    WEBHOOK_URL. Falls back to a http://HOST:PORT that Telegram will reject,
     logging a clear warning so the misconfiguration is obvious.
     """
-    for cand in (config.MINI_APP_URL, config.WEBHOOK_URL, config.RENDER_EXTERNAL_URL):
+    for cand in (config.MINI_APP_URL, config.WEBHOOK_URL):
         if cand:
             base = '/'.join(str(cand).split('/')[:3]).rstrip('/')
             if base.startswith(('http://', 'https://')):
                 return base
     log.warning(
-        'MINI_APP_URL / WEBHOOK_URL / RENDER_EXTERNAL_URL not set — WebApp '
+        'MINI_APP_URL / WEBHOOK_URL not set — WebApp '
         'button will use http://%s:%s, which Telegram rejects (https required). '
         'Set MINI_APP_URL=https://your-public-host', config.WEB_HOST, config.WEB_PORT)
     return f'http://{config.WEB_HOST}:{config.WEB_PORT}'

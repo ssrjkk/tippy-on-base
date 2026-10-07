@@ -56,7 +56,8 @@ class BatchExecutor:
         results = []
 
         try:
-            async with self._ledger._lock if hasattr(self._ledger, '_lock') else _noop_lock():
+            lock = self._ledger.batch_lock() if hasattr(self._ledger, 'batch_lock') else None
+            async with lock if lock else _noop_lock():
                 for action in actions_sorted:
                     result = await self._execute_single(from_tg_id, action)
                     results.append(result)

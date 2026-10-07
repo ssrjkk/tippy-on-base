@@ -6,7 +6,6 @@ POST {WEBHOOK_PATH} (verified by the secret token header), and the
 dispatcher feeds them through the same handler router as long polling.
 """
 
-import hashlib
 import hmac
 import logging
 
@@ -47,11 +46,19 @@ def _dispatcher() -> Dispatcher:
 
 
 def webhook_secret() -> str:
-    """Telegram Bot API secret token: explicit WEBHOOK_SECRET or a stable
-    derivation from the bot token (so no extra env var is required)."""
-    if config.WEBHOOK_SECRET:
-        return config.WEBHOOK_SECRET
-    return hashlib.sha256(config.BOT_TOKEN.encode()).hexdigest()[:32]
+    """Telegram Bot API secret token.
+
+    Requires WEBHOOK_SECRET to be set explicitly — deriving it from BOT_TOKEN
+    would let anyone who reads the bot token (leaked logs, shared configs)
+    forge webhook requests. Missing secret -> clear startup failure instead of
+    silent insecurity.
+    """
+    if not config.WEBHOOK_SECRET:
+        raise RuntimeError(
+            "WEBHOOK_SECRET is not set — the webhook endpoint cannot verify "
+            "requests without it. Set WEBHOOK_SECRET in your environment."
+        )
+    return config.WEBHOOK_SECRET
 
 
 async def telegram_webhook(request: Request) -> Response:

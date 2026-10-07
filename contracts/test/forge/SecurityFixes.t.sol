@@ -325,7 +325,7 @@ contract SecurityFixesTest is Test {
 
     function test_DisputeBlocksOracleReResolve() public {
         uint256 id = _create(2, 50e6);
-        vm.warp(1 days + 1);
+        vm.warp(2 days + 1);
 
         address oracleAddr = address(0xA0C1E);
         vm.prank(creator);

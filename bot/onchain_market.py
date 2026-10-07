@@ -124,8 +124,13 @@ async def _ensure_gas(w3: Web3, user_addr: str, needed_wei: int) -> None:
 
     daily_max = int(getattr(config, "GAS_DRIP_DAILY_MAX", 50))
     now = time.monotonic()
-    last = _last_drip.get(user_addr.lower(), 0.0)
-    if now - last < _DRIP_COOLDOWN_SECONDS:
+    # A wallet that never got a drip has no entry, and that is not the same as
+    # "dripped at clock zero": time.monotonic() counts from boot, so a default
+    # of 0.0 reads as a drip that just happened on any machine younger than the
+    # cooldown — a fresh VPS or a container restart would refuse every top-up
+    # for its first hour.
+    last = _last_drip.get(user_addr.lower())
+    if last is not None and now - last < _DRIP_COOLDOWN_SECONDS:
         raise RuntimeError("gas top-up cooldown — try again in an hour")
     drip_wei = int(config.GAS_DRIP_ETH * Decimal(10**18))
     if drip_wei <= 0:

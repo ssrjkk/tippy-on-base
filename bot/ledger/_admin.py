@@ -1,6 +1,7 @@
 """Ledger domain mixin: LedgerAdminMixin (split from bot/ledger.py)."""
 import secrets
 import time
+from decimal import Decimal
 
 from .. import config
 from ._base import MICRO
@@ -286,7 +287,7 @@ class LedgerAdminMixin:
                     (to_id, str(sender_id), share),
                 )
             self._conn.commit()
-        return True, f"🌧️ Разбросано {share * count / MICRO:g} USDC: {count} × {share / MICRO:g} USDC", chosen
+        return True, f"🌧️ Разбросано {float(Decimal(share * count) / Decimal(MICRO)):g} USDC: {count} × {float(Decimal(share) / Decimal(MICRO)):g} USDC", chosen
 
 
 

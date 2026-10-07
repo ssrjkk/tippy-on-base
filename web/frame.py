@@ -10,6 +10,7 @@ on the t.me deep link (one-tap buy inside the bot) or on the x402 invoice URL
 Warpcast requires the frame image to be an absolute https URL, so the page
 is only meaningful once the webhook URL is configured (after deploy).
 """
+from decimal import Decimal
 from html import escape
 
 from fastapi import APIRouter
@@ -33,10 +34,10 @@ async def frame_page(item_id: int) -> str:
     if item is None:
         return '<html><body>Post not found</body></html>'
     base_url = _public_base()
-    price = int(item['price_micro']) / MICRO
+    price = Decimal(int(item['price_micro'])) / Decimal(MICRO)
     title = escape(item['title'])
-    image_url = f'{base_url}/static/frame.png'
-    bot_url = f'https://t.me/{config.BOT_USERNAME}?start=paywall_{item_id}'
-    api_url = f'{base_url}/api/x402/paywall?item={item_id}&amount={price:g}'
-    html = f'<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta property="og:title" content="{title} вЂ” {price:g} USDC on Base">\n<meta property="og:description" content="Paywalled USDC content via Tippy. Pay with x402 or inside Telegram.">\n<meta property="og:image" content="{image_url}">\n<meta property="fc:frame" content="vNext">\n<meta property="fc:frame:image" content="{image_url}">\n<meta property="fc:frame:button:1" content="Buy in Telegram">\n<meta property="fc:frame:button:1:action" content="link">\n<meta property="fc:frame:button:1:target" content="{bot_url}">\n<meta property="fc:frame:button:2" content="x402 API (agents)">\n<meta property="fc:frame:button:2:action" content="link">\n<meta property="fc:frame:button:2:target" content="{api_url}">\n</head>\n<body>{title} вЂ” {price:g} USDC</body>\n</html>\n'
+    image_url = escape(f'{base_url}/static/frame.png')
+    bot_url = escape(f'https://t.me/{config.BOT_USERNAME}?start=paywall_{item_id}')
+    api_url = escape(f'{base_url}/api/x402/paywall?item={item_id}&amount={price:f}')
+    html = f'<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta property="og:title" content="{title} вЂ” {price:f} USDC on Base">\n<meta property="og:description" content="Paywalled USDC content via Tippy. Pay with x402 or inside Telegram.">\n<meta property="og:image" content="{image_url}">\n<meta property="fc:frame" content="vNext">\n<meta property="fc:frame:image" content="{image_url}">\n<meta property="fc:frame:button:1" content="Buy in Telegram">\n<meta property="fc:frame:button:1:action" content="link">\n<meta property="fc:frame:button:1:target" content="{bot_url}">\n<meta property="fc:frame:button:2" content="x402 API (agents)">\n<meta property="fc:frame:button:2:action" content="link">\n<meta property="fc:frame:button:2:target" content="{api_url}">\n</head>\n<body>{title} вЂ” {price:f} USDC</body>\n</html>\n'
     return html

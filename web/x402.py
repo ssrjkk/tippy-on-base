@@ -210,7 +210,7 @@ def _parse_amount(raw_amount: str) -> int | None:
 def _invoice_response(amount_micro: int, resource: str = '', description: str = '', error: str = 'payment required',
                       pay_addr: str | None = None, invoice_id: str = '', **extra) -> JSONResponse:
     receive = pay_addr or (_x402_receive_address() or hot_wallet())
-    body = {'detail': error, 'amount_usdc': round(amount_micro / MICRO, 2), 'pay_to': str(receive), 'expires_in_seconds': PAYMENT_TTL_SECONDS, **extra}
+    body = {'detail': error, 'amount_usdc': float(Decimal(amount_micro) / Decimal(MICRO)), 'pay_to': str(receive), 'expires_in_seconds': PAYMENT_TTL_SECONDS, **extra}
     if invoice_id:
         body['x-402-invoice-id'] = invoice_id
     if resource:
@@ -224,7 +224,7 @@ def _invoice_response(amount_micro: int, resource: str = '', description: str = 
 def _payment_rejected_response(amount_micro: int, resource: str = '', reason: str = 'payment not found or too small',
                                pay_addr: str | None = None, invoice_id: str = '') -> JSONResponse:
     receive = pay_addr or (_x402_receive_address() or hot_wallet())
-    body = {'detail': reason, 'expected_amount_usdc': round(amount_micro / MICRO, 2)}
+    body = {'detail': reason, 'expected_amount_usdc': float(Decimal(amount_micro) / Decimal(MICRO))}
     if invoice_id:
         body['x-402-invoice-id'] = invoice_id
     if resource:
@@ -391,7 +391,7 @@ async def x402_tip(request: Request) -> JSONResponse:
     if tg_id is None:
         return JSONResponse(status_code=404, content={'detail': 'unknown recipient'})
 
-    resource = f'/api/x402/tip?recipient={recipient}&amount={amount_micro / MICRO:g}'
+    resource = f'/api/x402/tip?recipient={recipient}&amount={Decimal(amount_micro) / Decimal(MICRO):f}'
 
     # The per-invoice unique pay address: minted for (recipient, amount, kind)
     # and echoed back to the client. A payment to this address can only ever be
@@ -469,7 +469,7 @@ async def x402_tip(request: Request) -> JSONResponse:
     if not credited:
         return JSONResponse(status_code=409, content={'detail': 'payment already processed'})
     await ledger.mark_x402_invoice_credited(invoice_id)
-    return JSONResponse(status_code=200, content={'status': 'ok', 'tip': {'recipient': recipient, 'amount_usdc': round(verified['amount_micro'] / MICRO, 2), 'sender': verified['sender'], 'tx_hash': tx_hash}})
+    return JSONResponse(status_code=200, content={'status': 'ok', 'tip': {'recipient': recipient, 'amount_usdc': float(Decimal(verified['amount_micro']) / Decimal(MICRO)), 'sender': verified['sender'], 'tx_hash': tx_hash}})
 
 async def x402_paywall(request: Request) -> JSONResponse:
     if not config.X402_ENABLED or _x402_receive_address() is None:
@@ -490,7 +490,7 @@ async def x402_paywall(request: Request) -> JSONResponse:
     owner_tg = int(item['owner_tg'])
     price_micro = int(item['price_micro'])
     # Official x402 (X-PAYMENT header, scheme "exact").
-    resource = f'/api/x402/paywall?item={raw_item}&amount={amount_micro / MICRO:g}'
+    resource = f'/api/x402/paywall?item={raw_item}&amount={Decimal(amount_micro) / Decimal(MICRO):f}'
 
     if amount_micro < price_micro:
         return _invoice_response(price_micro, resource=resource, item=raw_item)
@@ -531,7 +531,7 @@ async def x402_paywall(request: Request) -> JSONResponse:
             # x402 agents pay for the CONTENT: the 200 must carry it.
             body['content'] = item['content']
             body['item'] = {'id': int(raw_item), 'title': item['title'],
-                            'amount_usdc': round(price_micro / MICRO, 2)}
+                            'amount_usdc': float(Decimal(price_micro) / Decimal(MICRO))}
         headers.setdefault('X-CONTENT-TYPE-OPTIONS', 'nosniff')
         return JSONResponse(status_code=status, content=body, headers=headers)
 
@@ -551,7 +551,7 @@ async def x402_paywall(request: Request) -> JSONResponse:
     if res == 'replay':
         return JSONResponse(status_code=409, content={'detail': 'payment already processed'})
     await ledger.mark_x402_invoice_credited(invoice_id)
-    return JSONResponse(status_code=200, content={'status': 'ok', 'item': {'id': int(raw_item), 'title': item['title'], 'amount_usdc': round(verified['amount_micro'] / MICRO, 2), 'sender': verified['sender'], 'tx_hash': tx_hash}, 'content': item['content']})
+    return JSONResponse(status_code=200, content={'status': 'ok', 'item': {'id': int(raw_item), 'title': item['title'], 'amount_usdc': float(Decimal(verified['amount_micro']) / Decimal(MICRO)), 'sender': verified['sender'], 'tx_hash': tx_hash}, 'content': item['content']})
 
 async def _resolve_recipient(recipient: str) -> int | None:
     # Basenames first (`name.base.eth` -> address -> the owning Tippy user).

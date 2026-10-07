@@ -76,6 +76,10 @@ scripts/*
 !scripts/check_i18n.py
 !scripts/deploy_smart_wallet.py
 !scripts/smoke_smart_buy.py
+!scripts/backup_db.sh
+!scripts/restore_db.sh
+!scripts/backup_and_monitor.sh
+!scripts/final_release_check.sh
 
 # Agent runtime artifacts
 .agent_seen_news.json

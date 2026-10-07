@@ -10,6 +10,7 @@ Sources are tried in order until one yields items:
 
 import hashlib
 import html
+import json
 import os
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -65,8 +66,6 @@ def _score_relevance(title: str, summary: str) -> float:
 
 
 def _load_seen() -> set:
-    import json
-
     p = config.state_file(SEEN_FILENAME)
     if p.exists():
         try:
@@ -77,8 +76,6 @@ def _load_seen() -> set:
 
 
 def _save_seen(seen: set) -> None:
-    import json
-
     # Cap the file: without pruning it grows (and is re-read) forever.
     if len(seen) > 5000:
         seen = set(sorted(seen)[-5000:])
@@ -127,10 +124,8 @@ def _parse_items(data: bytes, source_label: str, seen: set) -> list[NewsItem]:
 def _parse_json_items(data: bytes, source_label: str, seen: set) -> list[NewsItem]:
     """CryptoPanic v1 JSON: {"results": [{"title", "url", "published_at",
     "source": {"title": ...}}, ...]}."""
-    import json as _json
-
     try:
-        payload = _json.loads(data)
+        payload = json.loads(data)
     except ValueError:
         return []
     results = payload.get("results") or []

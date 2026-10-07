@@ -12,6 +12,7 @@ Exposes key metrics in Prometheus text format:
 """
 
 import time
+from decimal import Decimal
 
 from bot import base, config
 from bot.ledger import async_ledger as ledger
@@ -35,7 +36,7 @@ async def collect_metrics() -> str:
     # Solvency
     try:
         liabilities = await ledger.total_liabilities()
-        m["liabilities_usdc"] = liabilities / _MICRO
+        m["liabilities_usdc"] = float(Decimal(liabilities) / Decimal(_MICRO))
     except Exception:
         m["liabilities_usdc"] = -1
 
@@ -60,9 +61,9 @@ async def collect_metrics() -> str:
     try:
         s = await ledger.global_stats()
         m["users_total"] = s.get("users", 0)
-        m["volume_usdc"] = s.get("volume_micro", 0) / _MICRO
-        m["tips_usdc"] = s.get("tips_micro", 0) / _MICRO
-        m["deposits_usdc"] = s.get("deposits_micro", 0) / _MICRO
+        m["volume_usdc"] = float(Decimal(s.get("volume_micro", 0)) / Decimal(_MICRO))
+        m["tips_usdc"] = float(Decimal(s.get("tips_micro", 0)) / Decimal(_MICRO))
+        m["deposits_usdc"] = float(Decimal(s.get("deposits_micro", 0)) / Decimal(_MICRO))
     except Exception:
         m["users_total"] = 0
         m["volume_usdc"] = 0

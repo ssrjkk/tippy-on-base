@@ -1,0 +1,78 @@
+name: Prod Health Check & Validation
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # Запуск каждые 6 часов для мониторинга прода
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Возможность ручного запуска
+
+jobs:
+  validate-prod:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+
+      - name: Verify latest commit on remote (optional sanity check)
+        run: |
+          REMOTE_COMMIT=$(git ls-remote https://github.com/${{ github.repository }}.git main | awk '{print $1}')
+          LOCAL_COMMIT=${{ github.sha }}
+          echo "Remote main: $REMOTE_COMMIT"
+          echo "Current workflow sha: $LOCAL_COMMIT"
+          # Если нужно строго проверить, раскомментируй:
+          # if [ "$REMOTE_COMMIT" != "$LOCAL_COMMIT" ]; then exit 1; fi
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install pytest-playwright
+          playwright install chromium
+
+      - name: Check if production site is reachable
+        id: check_site
+        run: |
+          if curl -sf --max-time 10 https://tippy-egi.pages.dev > /dev/null 2>&1; then
+            echo "reachable=true" >> $GITHUB_OUTPUT
+            echo "Production site is reachable"
+          else
+            echo "reachable=false" >> $GITHUB_OUTPUT
+            echo "::warning::Production site at https://tippy-egi.pages.dev is not reachable. Skipping validation."
+          fi
+
+      - name: Check if backend is configured
+        id: check_backend
+        run: |
+          response=$(curl -s --max-time 10 https://tippy-egi.pages.dev/api/health)
+          if echo "$response" | grep -q "BACKEND_URL is not set"; then
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::warning::Backend not configured (BACKEND_URL not set). Skipping validation."
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+            echo "Backend is configured"
+          fi
+
+      - name: Run Production Validation Tests
+        if: steps.check_site.outputs.reachable == 'true' && steps.check_backend.outputs.configured == 'true'
+        env:
+          PYTEST_ADDOPTS: "-v --tb=short"
+        run: |
+          pytest tests/test_production_health.py -m production
+
+      - name: Notify on Failure (optional)
+        if: failure()
+        run: |
+          echo "⚠️ Прод-валидация не пройдена! Проверьте https://tippy-egi.pages.dev"
+          # Здесь можно добавить шаг с отправкой уведомления в Telegram через curl, 
+          # используя твой же бот или webhook.

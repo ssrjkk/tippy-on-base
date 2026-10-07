@@ -23,18 +23,26 @@ contract TipBotVault {
     error TransferFailed();
     error NotPendingOwner();
     error InsufficientReserves(uint256 requested, uint256 available);
+    error Paused();
+    error NotPaused();
+    error BatchTooLarge(uint256 size, uint256 max);
 
     IERC20 public immutable usdc;
 
     address public owner;
     address public pendingOwner;
     address public relayer;
+    bool public paused;
 
     uint256 public dailyLimit;
     uint256 public windowStart;
     uint256 public spentInWindow;
 
     uint256 private _locked = 1;
+
+    /// @dev Maximum batch size to prevent unbounded loops that could exceed
+    ///      block gas limits. 100 recipients is generous for a single tx.
+    uint256 public constant MAX_BATCH_SIZE = 100;
 
     event Distributed(address indexed recipient, uint256 amount);
     event DistributeSkipped(address indexed recipient, uint256 amount);
@@ -43,6 +51,7 @@ contract TipBotVault {
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event ReserveWithdrawn(address indexed to, uint256 amount);
+    event PausedToggle(bool paused);
 
     constructor(address usdc_, address owner_, address relayer_, uint256 dailyLimit_) {
         usdc = IERC20(usdc_);
@@ -69,24 +78,30 @@ contract TipBotVault {
         _locked = 1;
     }
 
+    modifier whenNotPaused() {
+        if (paused) revert Paused();
+        _;
+    }
+
     /// @notice Total USDC backing every balance inside the bot.
     function totalReserves() external view returns (uint256) {
         return usdc.balanceOf(address(this));
     }
 
-    /// @notice Distribute payouts. The relayer is capped by a daily limit;
-    ///         the owner is not. Recipients whose transfer fails (e.g. USDC
-    ///         blacklisted) are SKIPPED and reported via DistributeSkipped —
-    ///         one bad address can no longer revert the whole batch and brick
-    ///         the daily window. Only successful amounts count against the
-    ///         relayer limit; the cap itself is still checked against the
-    ///         requested sum.
+    /// @notice Distribute payouts. Both relayer and owner are capped by the
+    ///         daily limit to limit blast radius if either key is compromised.
+    ///         Recipients whose transfer fails (e.g. USDC blacklisted) are
+    ///         SKIPPED and reported via DistributeSkipped — one bad address
+    ///         can no longer revert the whole batch and brick the daily window.
+    ///         Only successful amounts count against the limit; the cap itself
+    ///         is still checked against the requested sum.
     function batchDistribute(
         address[] calldata recipients,
         uint256[] calldata amounts
-    ) external onlyOwnerOrRelayer nonReentrant returns (uint256 total) {
+    ) external onlyOwnerOrRelayer nonReentrant whenNotPaused returns (uint256 total) {
         if (recipients.length == 0) revert EmptyDistribution();
         if (recipients.length != amounts.length) revert MismatchedArrays();
+        if (recipients.length > MAX_BATCH_SIZE) revert BatchTooLarge(recipients.length, MAX_BATCH_SIZE);
 
         uint256 requested = 0;
         for (uint256 i = 0; i < recipients.length; i++) {
@@ -99,12 +114,11 @@ contract TipBotVault {
             revert InsufficientReserves(requested, usdc.balanceOf(address(this)));
         }
 
-        if (msg.sender == relayer) {
-            _rollWindow();
-            uint256 next = spentInWindow + requested;
-            if (next > dailyLimit) {
-                revert DailyLimitExceeded(spentInWindow, dailyLimit, requested);
-            }
+        // Both relayer and owner are subject to the daily limit.
+        _rollWindow();
+        uint256 next = spentInWindow + requested;
+        if (next > dailyLimit) {
+            revert DailyLimitExceeded(spentInWindow, dailyLimit, requested);
         }
 
         for (uint256 i = 0; i < recipients.length; i++) {
@@ -122,7 +136,7 @@ contract TipBotVault {
             emit Distributed(recipients[i], amounts[i]);
         }
 
-        if (msg.sender == relayer && total > 0) {
+        if (total > 0) {
             // Same tx as the cap check above, so the window cannot have
             // rolled in between — only successful payouts consume budget.
             spentInWindow += total;
@@ -130,9 +144,19 @@ contract TipBotVault {
     }
 
     /// @notice Withdraw excess reserves (owner only, e.g. when winding down).
-    function withdrawReserve(address to, uint256 amount) external onlyOwner nonReentrant {
+    ///         SECURITY: subject to the same daily cap as relayer distributions
+    ///         to limit blast radius if owner key is compromised. Transfer to
+    ///         multisig/timelock before mainnet deploy.
+    function withdrawReserve(address to, uint256 amount) external onlyOwner nonReentrant whenNotPaused {
+        if (to == address(0)) revert OnlyOwner();
+        _rollWindow();
+        uint256 next = spentInWindow + amount;
+        if (next > dailyLimit) {
+            revert DailyLimitExceeded(spentInWindow, dailyLimit, amount);
+        }
         bool ok = usdc.transfer(to, amount);
         if (!ok) revert TransferFailed();
+        spentInWindow += amount;
         emit ReserveWithdrawn(to, amount);
     }
 
@@ -144,6 +168,18 @@ contract TipBotVault {
     function setDailyLimit(uint256 limit_) external onlyOwner {
         dailyLimit = limit_;
         emit LimitChanged(limit_);
+    }
+
+    /// @notice Emergency pause: halt distributions and withdrawals. Owner-only.
+    function pause() external onlyOwner {
+        paused = true;
+        emit PausedToggle(true);
+    }
+
+    /// @notice Resume after a pause.
+    function unpause() external onlyOwner {
+        paused = false;
+        emit PausedToggle(false);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {

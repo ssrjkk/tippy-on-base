@@ -100,6 +100,13 @@ chats. Ledger-internal paths stay plain text where no `parse_mode` is set.
   event handlers (`onclick=` etc. are all replaced by delegated
   `data-act` listeners in the Mini App); `style-src` allows inline style
   attributes (`'unsafe-inline'`) only for styling, scripts stay locked down.
+- The same policy pins the other fetches: `connect-src 'self'` (the page only
+  talks to its own `/api/*`), external script origins are limited to
+  `esm.sh`, `cdn.jsdelivr.net` and `telegram.org`, and `frame-src` allows
+  `'self'` plus `https://oauth.telegram.org` — the origin the Telegram Login
+  Widget renders its button from. Without that `frame-src` entry the widget
+  falls back to `default-src 'self'`, the frame is blocked and the login
+  button stays an empty box.
 - Wallet login nonces are stored hashed (SHA-256) in `login_nonces`, are
   single-use (PK-enforced, atomic claim), and are pruned after
   `LOGIN_NONCE_TTL_SECONDS` (default 7 days).

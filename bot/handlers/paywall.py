@@ -322,15 +322,18 @@ async def on_reaction(update: types.MessageReactionUpdated) -> None:
     if not ok:
         if reason == 'balance':
             try:
-                await update.bot.send_message(reactor.id, i18n.t('ru', 'paywall_reaction_balance'))
+                lang = await common.user_lang(reactor.id)
+                await update.bot.send_message(reactor.id, i18n.t(lang, 'paywall_reaction_balance'))
             except Exception:
                 pass
         return
     try:
-        await update.bot.send_message(author_id, i18n.t('ru', 'paywall_reaction_received', amount=common._fmt(amount_micro), reactor=html.escape(reactor.username or str(reactor.id))))
+        author_lang = await common.user_lang(author_id)
+        await update.bot.send_message(author_id, i18n.t(author_lang, 'paywall_reaction_received', amount=common._fmt(amount_micro), reactor=html.escape(reactor.username or str(reactor.id))))
     except Exception:
         pass
     try:
-        await update.bot.send_message(reactor.id, i18n.t('ru', 'paywall_reaction_sent', amount=common._fmt(amount_micro)))
+        reactor_lang = await common.user_lang(reactor.id)
+        await update.bot.send_message(reactor.id, i18n.t(reactor_lang, 'paywall_reaction_sent', amount=common._fmt(amount_micro)))
     except Exception:
         pass

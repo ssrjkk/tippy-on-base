@@ -1,0 +1,10 @@
+name = "tippy"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "web/static"
+
+# BACKEND_URL is the origin that runs web/server.py — the VPS, e.g.
+# https://tippy.example.internal. functions/[[path]].js proxies every request
+# that is not a static asset to it. Set it in the Pages project under
+# Settings -> Variables, or uncomment here for local `wrangler pages dev`.
+# [vars]
+# BACKEND_URL = "http://127.0.0.1:8000"
