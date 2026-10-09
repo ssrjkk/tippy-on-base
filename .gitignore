@@ -33,6 +33,7 @@ dbg.db
 pytest-result.xml
 coverage.xml
 .pytest_cache/
+.pytest_tmp/
 .coverage
 htmlcov/
 .ruff_cache/

@@ -1,5 +1,11 @@
 # Tippy - Community Economy in USDC on Base
 
+[![CI](https://github.com/ssrjkk/tippy-on-base/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/tippy-on-base/actions/workflows/ci.yml)
+[python-3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
+
 A Telegram bot that turns any chat or community into a financial ecosystem:
 **instant USDC tips, Polymarket-style prediction markets with live AMM odds,
 an AI assistant, paywalled content, and per-user wallets** — all on Base.
@@ -453,3 +459,18 @@ program — pitch and application package in **[docs/GRANT.md](docs/GRANT.md)**.
 **Author:** [@ssrjkk](https://t.me/ssrjkk) · [@b2wmain](https://t.me/b2wmain) · [X / Twitter](https://x.com/ludych1) · [GitHub](https://github.com/ssrjkk)
 
 Built on [Base](https://base.org) · Powered by USDC
+
+
+## Installation
+
+```bash
+git clone https://github.com/ssrjkk/tippy-on-base.git
+cd tippy-on-base
+pip install -r requirements.txt
+```
+
+## Usage
+
+```bash
+python main.py
+```
