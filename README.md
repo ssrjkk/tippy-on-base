@@ -41,13 +41,13 @@ accounting backed by public proof-of-reserves.
 
 ## Features
 
-### 💸 Instant tips (zero gas)
+### Instant tips (zero gas)
 - `/tip 5 @nick` — or reply `/tip 5` to any message
 - Recipient gets an immediate DM notification
-- 🌧️ `/rain 10 [N]` — scatter USDC across active group members
-- 🔥❤️⚡👏🎉 emoji reactions tip the message author (groups)
+-  `/rain 10 [N]` — scatter USDC across active group members
+- emoji reactions tip the message author (groups)
 
-### 📈 Prediction markets v2 — Polymarket analog (LMSR AMM)
+### Prediction markets v2 — Polymarket analog (LMSR AMM)
 - `/market create 50 Who wins? | Alice | Bob 7d` — creator funds the AMM liquidity
 - **Live odds that move with demand** — Hanson's Logarithmic Market Scoring Rule,
   exact `Decimal` math (`b = subsidy / ln(n)`)
@@ -62,12 +62,12 @@ accounting backed by public proof-of-reserves.
   random trading paths
 - Deadline pings + grace-period auto-refund protection for forgotten markets
 
-### 🎲 Parimutuel polls (quick group games)
+### Parimutuel polls (quick group games)
 - `/bet create Question | Option 1 | Option 2 [24h]`, `/bet <id> <opt> <amount>`
 - Winners split the whole pot proportionally (2% fee on net profit to the creator)
 - Inline cards, quick-amount buttons, two-tap resolution, cancel/refund paths
 
-### 🎯 Cally — Polymarket on Base (`/oc*`)
+### Cally — Polymarket on Base (`/oc*`)
 - `/oc_create 50 Who wins? | Alice | Bob 7d` — creates a market in the
   **OutcomeMarket.sol** contract: the subsidy is locked on-chain, shares are
   real **ERC-1155 tokens**, every trade is a USDC transfer anyone can verify
@@ -84,13 +84,13 @@ accounting backed by public proof-of-reserves.
   for first trades is auto-topped-up from the hot wallet with a per-wallet
   anti-drain cooldown
 
-### 🧠 AI assistant
+### AI assistant
 - `/ask <question>` — ask about crypto, Base, market strategy, bot usage
 - Works with **any OpenAI-compatible API** (OpenAI, OpenRouter, local vLLM/llama.cpp)
   via `AI_API_URL` / `AI_API_KEY` / `AI_MODEL`
 - Reply to a message with `/ask` to use it as context; rate-limited, typing indicator
 
-### 💛 Donations & wallets
+### Donations & wallets
 - `/donate` — personal donation page with QR (`t.me/<bot>?start=donate_<id>`)
 - Deposits auto-credit with push notifications (Basescan tx link included)
 - `/link <address>` + signature → automatic deposit crediting (ecrecover-verified;
@@ -111,14 +111,14 @@ accounting backed by public proof-of-reserves.
 - Tips by name: `/tip <name>.base.eth` resolves the basename to its on-chain
   owner — the chain is the source of truth, nothing is stored bot-side
 
-### 🔐 Paid content & channels
+### Paid content & channels
 - `/paywall create 5 Title` → sell posts for USDC (buyers read instantly)
 - `/paywall channel 5` → paid Telegram channel access, 5 USDC / 30 days,
   one-time invite links, expired subscribers auto-kicked
 - **x402 HTTP payments**: `POST /api/x402/tip` and `POST /api/x402/paywall` —
   AI agents pay on-chain via the 402 handshake (invoice → pay → replay-proof credit)
 
-### 🤖 Autonomous agent (fail-closed)
+### Autonomous agent (fail-closed)
 - Perceives crypto news → LLM filters noise → creates markets, bets, sells
   analysis as paywall posts — **every action EAS-attested on Base**
 - News sources: CryptoPanic (with `CRYPTOPANIC_TOKEN`) plus free RSS fallbacks
@@ -136,7 +136,7 @@ accounting backed by public proof-of-reserves.
 - `/agent` (admin-only) — live caps state, circuit-breaker status and the
   agent's recent actions straight in Telegram, no web dashboard needed
 
-### 🖥 Web dashboard (public transparency)
+### Web dashboard (public transparency)
 - Live stats, volume chart, markets with odds/backers, leaderboards, user profiles
 - **Proof of Reserves** `/api/solvency`: bot liabilities vs on-chain USDC
   (read from the TipBotVault contract when deployed, else the hot wallet)
@@ -145,7 +145,7 @@ accounting backed by public proof-of-reserves.
 - Public JSON API: `/api/stats`, `/api/markets`, `/api/predictions`,
   `/api/prediction/{id}`, `/api/leaderboard`, `/api/health`, `/qr`, rate-limited per IP
 
-### 🪄 Smart Wallet (ERC-4337) — gasless, non-custodial
+### Smart Wallet (ERC-4337) — gasless, non-custodial
 - **Per-user Smart Accounts** via CREATE2 (`SmartAccountFactory`) — deterministic
   counterfactual addresses; no ETH needed from the user
 - **VerifyingPaymaster sponsors gas** — users tip/trade without ever holding ETH
@@ -154,11 +154,11 @@ accounting backed by public proof-of-reserves.
   `approveAndTrade` from the wallet's own USDC
 - Details: `docs/ECOSYSTEM_DESIGN.md` §8
 
-### 🚀 Breakthrough Base L2 Features
+### Breakthrough Base L2 Features
 
 5 killer functions leveraging unique Base L2 capabilities:
 
-#### 🎁 1. Gasless Onboarding
+#### 1. Gasless Onboarding
 **New users get 10 FREE transactions — zero barrier to entry.**
 
 - `/gasless` — check your free transaction balance
@@ -167,13 +167,13 @@ accounting backed by public proof-of-reserves.
 - After 10 free txs — standard Base fees (still just fractions of a cent)
 
 ```
-/gasless → 🎁 You have 10 of 10 free transactions left!
+/gasless -> You have 10 of 10 free transactions left!
            Gas is sponsored by Base — you pay nothing.
 ```
 
 **Why it's a breakthrough:** Traditional bots require users to hold ETH for gas. Base Paymaster eliminates this entirely — users onboard with USDC only and transact for free until they're hooked.
 
-#### 💳 2. Recurring Payments (Subscriptions)
+#### 2. Recurring Payments (Subscriptions)
 **Automated scheduled transfers — daily, weekly, biweekly, monthly.**
 
 - `/subscribe @user <amount> <interval>` — create a subscription
@@ -183,13 +183,13 @@ accounting backed by public proof-of-reserves.
 - Supports: daily (24h), weekly (7d), biweekly (14d), monthly (30d)
 
 ```
-/subscribe @creator 10 monthly → ✅ Subscription created!
-                                 💸 @creator: $10.00 every monthly
+/subscribe @creator 10 monthly -> Subscription created!
+                                  @creator: $10.00 every monthly
 ```
 
 **Why it's a breakthrough:** First Telegram bot with native recurring payments on Base. Creators can set up patronage, teams can automate salaries, communities can run membership programs — all trustless and automatic.
 
-#### ⚡ 3. Batch Transactions
+#### 3. Batch Transactions
 **Multiple actions in ONE UserOperation — save 60% gas.**
 
 - Atomic execution — all succeed or all fail (transaction-style)
@@ -206,7 +206,7 @@ accounting backed by public proof-of-reserves.
 
 **Why it's a breakthrough:** ERC-4337 batch operations are unique to Account Abstraction. This is a native L2 feature that Base exposes — traditional EOA wallets can't do this efficiently.
 
-#### 📊 4. On-chain Credit Score
+#### 4. On-chain Credit Score
 **History-based reputation for P2P micro-lending — no collateral needed.**
 
 - `/credit` — view your credit score (300-850) and loan limit
@@ -220,14 +220,14 @@ accounting backed by public proof-of-reserves.
 - Max loan: base_limit × grade_multiplier × confidence
 
 ```
-/credit → 📊 Credit Score: 775 (A)
+/credit -> Credit Score: 775 (A)
            Confidence: 100%
            Max loan: $1000.00
 ```
 
 **Why it's a breakthrough:** Traditional DeFi requires collateral. This uses on-chain behavior to establish trust — enabling undercollateralized lending in Telegram communities. Perfect for micro-loans between people who tip and trade together.
 
-#### 🪙 5. Creator Tokens with Revenue Sharing
+#### 5. Creator Tokens with Revenue Sharing
 **Issue tokens that automatically distribute your earnings to holders.**
 
 - `/createtoken <name> <SYMBOL> <supply> <price>` — launch a creator token
@@ -240,17 +240,17 @@ accounting backed by public proof-of-reserves.
 
 ```
 /createtoken "My Token" MTK 1000000 0.10
-→ 🪙 Token created! ID: ct_123456_1790013544
+-> Token created! ID: ct_123456_1790013544
    Holders receive dividends from your earnings automatically.
 
 /buytoken ct_123456_1790013544 1000
-→ ✅ Bought 1000 tokens for $100.00!
+-> Bought 1000 tokens for $100.00!
 
 [Creator earns $50 in tips]
-→ Dividend auto-distributed: $0.05 per token
+-> Dividend auto-distributed: $0.05 per token
 
 /claim ct_123456_1790013544
-→ 💰 Claimed $50.00 in dividends!
+-> Claimed $50.00 in dividends!
 ```
 
 **Why it's a breakthrough:** This is the creator economy natively on-chain. Fans invest in creators, creators share revenue automatically — all powered by Base's smart accounts. No traditional equity needed; the token IS the revenue share.
@@ -343,7 +343,7 @@ bot/
 ├─ smart_wallet.py      ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
 ├─ paymaster.py         Base Paymaster integration: gasless onboarding (10 free txs)
 ├─ recurring.py         Recurring payments: subscriptions executor (hourly watcher)
-─ batch.py             Batch transactions: multiple actions in one UserOperation
+─ batch.py              Batch transactions: multiple actions in one UserOperation
 ├─ credit.py            Credit scoring: 300-850 P2P lending score
 ├─ creator_tokens.py    Revenue sharing: creator tokens + dividend distribution
 ├─ create2.py           CREATE2 deterministic address computation
@@ -356,14 +356,14 @@ bot/
 ├─ x402_sweep.py        x402 invoice settlement sweeper
 ├─ audit.py             Audit log helpers
 ├─ onchain_market.py    OutcomeMarket contract ABI + helpers
-─ i18n.py              RU/EN/ZH message tables
+─ i18n.py               RU/EN/ZH message tables
 └─ config.py            env-driven configuration
 agent/                  autonomous market-maker: news → LLM → markets, EAS attestations
 web/
 ├─ server.py            FastAPI: public API, proof-of-reserves, x402 endpoints
 ├─ auth.py              Telegram OAuth, session cookies, rate limiting
 ├─ mini.py              Mini App: balance, tip, deposit, withdraw, markets
-─ x402.py              x402 handshake: invoice → verify → replay-proof credit
+─ x402.py               x402 handshake: invoice → verify → replay-proof credit
 ├─ x402_spec.py         x402 protocol spec + types
 ├─ metrics.py           Prometheus metrics endpoint
 ├─ frame.py             Farcaster Frame endpoints
@@ -435,11 +435,11 @@ worst-case payout.
 
 ## Roadmap
 
-- Per-user deposit addresses (CREATE2 vaults) ✅
-- ~~Smart Wallet (ERC-4337) + gasless paymaster~~ ✅ core shipped + Sepolia-proven (P2)
-- ~~Withdrawal batching for gas savings~~ ✅ shipped (queued payouts flushed as a batch; multi-relayer pool with persisted daily caps)
+- Per-user deposit addresses (CREATE2 vaults) 
+- ~~Smart Wallet (ERC-4337) + gasless paymaster~~ core shipped + Sepolia-proven (P2)
+- ~~Withdrawal batching for gas savings~~  shipped (queued payouts flushed as a batch; multi-relayer pool with persisted daily caps)
 - Order-book style CLOB on top of the AMM
-- ~~On-chain market escrow (trustless resolution via UMA-style oracle)~~ ✅ shipped as **Cally** (OutcomeMarket ERC-1155)
+- ~~On-chain market escrow (trustless resolution via UMA-style oracle)~~ shipped as **Cally** (OutcomeMarket ERC-1155)
 
 ## Contributing
 
