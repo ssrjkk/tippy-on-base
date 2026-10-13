@@ -1,4 +1,4 @@
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 
 LABEL org.opencontainers.image.title="Tippy" \
       org.opencontainers.image.description="Community economy in USDC on Base: tips, Polymarket-style on-chain markets, x402" \
