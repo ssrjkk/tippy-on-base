@@ -2,10 +2,10 @@
 # All tool versions are pinned: unpinned majors (e.g. pytest 9) broke CI.
 -r requirements.txt
 py-solc-x==2.0.5
-eth-tester==0.13.0b1
+eth-tester==0.14.0b1
 py-evm==0.12.1b1
-ruff==0.16.4
-coverage==7.14.1
+ruff==0.16.10
+coverage==7.16.2
 pytest==8.4.2
 pytest-asyncio==1.4.0
 httpx==0.28.1
