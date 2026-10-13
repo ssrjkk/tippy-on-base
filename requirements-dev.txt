@@ -6,6 +6,6 @@ eth-tester==0.14.0b1
 py-evm==0.12.1b1
 ruff==0.16.10
 coverage==7.16.2
-pytest==8.4.2
+pytest==9.0.3
 pytest-asyncio==1.4.0
 httpx==0.28.1
