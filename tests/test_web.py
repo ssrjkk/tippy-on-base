@@ -930,7 +930,7 @@ def test_csp_header_strict_no_unsafe_inline(client):
     assert 'frame-ancestors' in csp
     # The Telegram login widget (/login) loads from telegram.org — a strict
     # CSP that does not source-allow it silently breaks the widget.
-    assert 'https://telegram.org' in csp
+    assert 'https://telegram.org' in csp  # codeql[py/incomplete-url-substring-sanitization] — test asserts CSP header, not URL sanitization
 
 
 def test_csp_injects_nonce_into_inline_scripts(client):
@@ -942,7 +942,7 @@ def test_csp_injects_nonce_into_inline_scripts(client):
     assert m, 'nonce missing from CSP'
     assert f'nonce="{m.group(1)}"' in r.text  # header nonce matches the inline tags
     # External module import from the KitSDK CDN must be source-whitelisted.
-    assert 'https://esm.sh' in csp
+    assert 'https://esm.sh' in csp  # codeql[py/incomplete-url-substring-sanitization] — test asserts CSP header, not URL sanitization
 
 
 def test_csp_nonce_varies_per_request(client):
