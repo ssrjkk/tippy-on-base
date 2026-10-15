@@ -29,6 +29,10 @@ from bot.ledger import async_ledger as ledger
 
 MICRO = 10 ** config.USDC_DECIMALS
 
+def _usdc_from_micro(micro) -> float:
+    """Exact micro→USDC float. Matches web/mini._fmt and web/server._usdc."""
+    return float(Decimal(micro) / Decimal(MICRO))
+
 router = APIRouter()
 COOKIE_NAME = 'tippy_session'
 SESSION_TTL_SECONDS = 30 * 24 * 3600
@@ -259,5 +263,5 @@ async def api_me(request: Request):
     if not await ledger.user_exists(tg_id):
         raise HTTPException(401, 'unknown user')
     bal = await ledger.balance(tg_id)
-    positions = [{'market_id': p['market_id'], 'question': p['question'], 'option': p['option'], 'shares': float(Decimal(p['shares']) / MICRO), 'cost_usdc': float(Decimal(p['cost']) / MICRO), 'price': float(p['price']), 'value_usdc': float(Decimal(p['value']) / MICRO)} for p in await ledger.user_market_positions(tg_id)]
+    positions = [{'market_id': p['market_id'], 'question': p['question'], 'option': p['option'], 'shares': _usdc_from_micro(p['shares']), 'cost_usdc': _usdc_from_micro(p['cost']), 'price': float(p['price']), 'value_usdc': _usdc_from_micro(p['value'])} for p in await ledger.user_market_positions(tg_id)]
     return {'tg_id': tg_id, 'balance_usdc': float(bal), 'linked_address': await ledger.linked_address(tg_id), 'positions': positions, 'bot_link': f'https://t.me/{config.BOT_USERNAME}'}

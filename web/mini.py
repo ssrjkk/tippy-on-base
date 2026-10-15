@@ -252,7 +252,7 @@ async def mini_smartwallet(request: Request) -> dict:
         'enabled': True,
         'address': address,
         'deployed': deployed,
-        'balance_usdc': float(Decimal(balance_micro) / Decimal(MICRO)),
+        'balance_usdc': _fmt(balance_micro),
         'nonce': nonce,
         'paymaster_sponsored': True,
         'deposit_address': address,
