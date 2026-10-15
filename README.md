@@ -379,13 +379,13 @@ contracts/
 ├─ LMSR.sol             on-chain LMSR market maker
 ├─ MiniUSDC.sol         minimal USDC mock for testing
 └─ USDCForwarder.sol    USDC transfer helper
-tests/                  974 tests: real Postgres, real dispatcher, real crypto, local EVM
+tests/                  986 tests: real Postgres, real dispatcher, real crypto, local EVM
 ```
 ## Testing
 
 ```bash
 docker compose up -d db       # PostgreSQL for tests (port 5433)
-python -m pytest tests -q     # 974 passed
+python -m pytest tests -q     # 986 passed
 ```
 
 What is tested *for real* (not mocked): money conservation across every flow
