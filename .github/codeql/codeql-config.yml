@@ -1,0 +1,6 @@
+name: "Tippy CodeQL config"
+
+paths-ignore:
+  - tests/**
+  - contracts/lib/**
+  - web/static/**
