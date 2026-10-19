@@ -132,8 +132,9 @@ export async function onRequest(context) {
   // drops the Secure flag from the session and login-state cookies.
   headers.set('x-forwarded-proto', 'https');
 
+  let upstream;
   try {
-    return await fetch(backend + pathname + search, {
+    upstream = await fetch(backend + pathname + search, {
       method: request.method,
       headers,
       body: reads ? undefined : request.body,
@@ -141,4 +142,13 @@ export async function onRequest(context) {
   } catch {
     return maintenance();
   }
+  // 52x is Cloudflare's own "the origin never answered" family. A bare
+  // 502/503/504 that does not carry JSON comes from a proxy in front of
+  // uvicorn, not from the app: every error the app raises renders as JSON.
+  // Both mean the visitor would get a gateway's stock HTML instead of Tippy.
+  const gateway = upstream.status >= 520 && upstream.status <= 527;
+  const isJson = (upstream.headers.get('content-type') || '').includes('application/json');
+  const proxy = [502, 503, 504].includes(upstream.status) && !isJson;
+  if (gateway || proxy) return maintenance();
+  return upstream;
 }

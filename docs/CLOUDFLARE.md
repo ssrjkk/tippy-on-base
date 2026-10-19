@@ -67,8 +67,9 @@ echo -n "https://tippy.yourdomain.com" | wrangler pages secret put BACKEND_URL -
 ```
 
 or in the dashboard under **Workers & Pages → tippy → Settings → Variables**.
-Requests that reach the function without it return 503 with a plain-text
-explanation instead of a silent failure.
+Requests that reach the function without it get a 503 maintenance card with
+`Retry-After: 300` instead of a silent failure — the same card replaces a gateway
+5xx from a dead origin, so a visitor never sees an infrastructure error page.
 
 ## 4. Proxy trust on the backend
 
@@ -129,7 +130,8 @@ stay on `/` and show the workspace with your balance.
 
 | Symptom | Cause |
 |---|---|
-| 503 `BACKEND_URL is not set…` | Variable missing on the Pages project |
+| 503 maintenance card on every dynamic page | `BACKEND_URL` missing on the project, or the origin is down (the function replaces a gateway 5xx that carries no JSON) |
+| `cloudflared: Could not lookup srv records on _v2-origintunneld._tcp.argotunnel.com` | The host's resolver answers A but not SRV, which is how VPN/TUN resolvers behave. Allow SRV for `argotunnel.com`, or run the origin where DNS is normal |
 | Every page shows the landing page | A `_redirects` rewrite is still in the bundle |
 | Signs in, then immediately signed out | `Secure` cookie rejected: check `X-Forwarded-Proto` and that the origin is https |
 | `403 missing or expired login state` | Cookie not surviving the proxy (same as above) or older than 30 minutes |

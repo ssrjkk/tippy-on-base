@@ -22,15 +22,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Verify latest commit on remote (optional sanity check)
-        run: |
-          REMOTE_COMMIT=$(git ls-remote https://github.com/${{ github.repository }}.git main | awk '{print $1}')
-          LOCAL_COMMIT=${{ github.sha }}
-          echo "Remote main: $REMOTE_COMMIT"
-          echo "Current workflow sha: $LOCAL_COMMIT"
-          # Если нужно строго проверить, раскомментируй:
-          # if [ "$REMOTE_COMMIT" != "$LOCAL_COMMIT" ]; then exit 1; fi
-
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
@@ -58,10 +49,10 @@ jobs:
       - name: Check if backend is configured
         id: check_backend
         run: |
-          response=$(curl -s --max-time 10 https://tippy-egi.pages.dev/api/health)
-          if echo "$response" | grep -q "BACKEND_URL is not set"; then
+          status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://tippy-egi.pages.dev/api/health)
+          if [ "$status" != "200" ]; then
             echo "configured=false" >> $GITHUB_OUTPUT
-            echo "::warning::Backend not configured (BACKEND_URL not set). Skipping validation."
+            echo "::warning::Origin does not serve /api/health (HTTP $status): BACKEND_URL is unset or the backend is down. Skipping validation."
           else
             echo "configured=true" >> $GITHUB_OUTPUT
             echo "Backend is configured"
@@ -74,9 +65,7 @@ jobs:
         run: |
           pytest tests/test_production_health.py -m production
 
-      - name: Notify on Failure (optional)
+      - name: Report failure
         if: failure()
         run: |
           echo "⚠️ Прод-валидация не пройдена! Проверьте https://tippy-egi.pages.dev"
-          # Здесь можно добавить шаг с отправкой уведомления в Telegram через curl, 
-          # используя твой же бот или webhook.
