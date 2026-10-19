@@ -21,7 +21,7 @@ import time
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from bot import config
@@ -181,7 +181,7 @@ def _check_login_state(request: Request) -> bool:
         del _consumed_login_states[k]
     return True
 
-def _secure_request(request: Request) -> bool:
+def secure_request(request: Request) -> bool:
     """True when the browser reached us over HTTPS, including behind a proxy
     (Cloudflare Pages sets ``X-Forwarded-Proto`` and terminates TLS itself)."""
     return (request.url.scheme == 'https'
@@ -190,23 +190,26 @@ def _secure_request(request: Request) -> bool:
 def attach_login_state(request: Request, response):
     """Issue the signed one-time state the Telegram callback must echo back.
 
-    Both ``/`` and ``/login`` call this: the landing page renders the widget
-    inline, so signing in there must not require a prior trip to /login.
+    Both ``/`` and the legacy ``/login`` bookmark call this: the landing page
+    renders the widget inline, so signing in there must not require a prior
+    trip elsewhere.
     """
     response.set_cookie(
         LOGIN_STATE_COOKIE, _issue_login_state(),
         max_age=LOGIN_STATE_TTL, httponly=True, samesite='lax',
-        secure=_secure_request(request),
+        secure=secure_request(request),
     )
     return response
 
-def _login_page() -> str:
-    bot = config.BOT_USERNAME or 'tippy_on_base_bot'
-    return f'''<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8"/>\n<meta name="viewport" content="width=device-width, initial-scale=1.0"/>\n<title>Tippy — Login</title>\n<link rel="stylesheet" href="/style.css"/>\n<style>\n  .login-card {{ max-width: 420px; margin: 8vh auto; padding: 32px;\n    border-radius: 16px; background: #0a0b0d; border: 1px solid #1f2125; }}\n  .login-card h1 {{ font-size: 22px; margin: 0 0 6px; }}\n  .login-card p {{ color: #9aa0a6; margin: 0 0 24px; font-size: 14px; }}\n  .or {{ text-align: center; color: #555; margin: 18px 0; font-size: 13px; }}\n  .btn-wallet {{ width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #0052ff;\n    background: transparent; color: #fff; font-size: 15px; cursor: pointer; }}\n  .btn-wallet:hover {{ background: #0052ff22; }}\n  #tg-widget {{ display: flex; justify-content: center; min-height: 40px; }}\n  .err {{ color: #ff6b6b; font-size: 13px; margin-top: 14px; min-height: 16px; }}\n</style>\n</head>\n<body>\n<div class="orb orb-a" aria-hidden="true"></div>\n<div class="login-card">\n  <h1>Sign in to Tippy</h1>\n  <p>Access your personal dashboard — balance, positions and deposits.</p>\n\n  <div id="tg-widget">\n    <script async src="https://telegram.org/js/telegram-widget.js?22"\n      data-telegram-login="{bot}"\n      data-size="large"\n      data-auth-url="/api/auth/telegram"\n      data-request-access="write"></script>\n  </div>\n\n  <div class="or">— or —</div>\n\n  <button class="btn-wallet" id="connect">🦊 Connect Wallet</button>\n  <div class="err" id="err"></div>\n</div>\n<script>\nconst err = (m) => document.getElementById('err').textContent = m;\ndocument.getElementById('connect').onclick = async () => {{\n  if (!window.ethereum) return err('No EVM wallet found (install MetaMask)');\n  try {{\n    const [addr] = await ethereum.request({{method: 'eth_requestAccounts'}});\n    const msg = 'Tippy login\\nAddress: ' + addr +\n      '\\nNonce: ' + crypto.getRandomValues(new Uint8Array(16)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),'') +\n      '\\nExpires: ' + Math.floor(Date.now()/1000 + 600);\n    const sig = await ethereum.request({{method: 'personal_sign',\n      params: [msg, addr]}});\n    const r = await fetch('/api/auth/wallet', {{method: 'POST',\n      headers: {{'Content-Type': 'application/json'}},\n      body: JSON.stringify({{address: addr, message: msg, signature: sig}})}});\n    if (r.ok) location.href = '/';\n    else err((await r.json()).detail || 'Login failed');\n  }} catch (e) {{ err(e.message); }}\n}};\n</script>\n</body>\n</html>'''
+@router.get('/login', include_in_schema=False)
+async def login_page(request: Request) -> RedirectResponse:
+    """Old bookmark — the cabinet lives on the landing page now.
 
-@router.get('/login', response_class=HTMLResponse, tags=['auth'])
-async def login_page(request: Request) -> HTMLResponse:
-    return attach_login_state(request, HTMLResponse(_login_page()))
+    The redirect still issues the login-state cookie: someone arriving from a
+    saved link or a cached page gets the widget's callback accepted without a
+    second trip.
+    """
+    return attach_login_state(request, RedirectResponse('/#workspace-section', status_code=303))
 
 # Stateless session: signed HMAC cookie, no server-side store.  The only
 # revocation mechanism is rotating SECRET_KEY, which logs out every user.
@@ -220,7 +223,7 @@ def _session_response(request: Request, tg_id: int, redirect: str | None=None) -
     resp.set_cookie(
         COOKIE_NAME, make_session(tg_id), max_age=SESSION_TTL_SECONDS,
         httponly=True, samesite='lax',
-        secure=_secure_request(request),
+        secure=secure_request(request),
     )
     return resp
 
@@ -250,7 +253,7 @@ async def logout(request: Request):
     # or the browser refuses to clear the cookie — a mismatched Secure flag is
     # the common case: an HTTPS-only cookie cannot be deleted from an http://
     # response, so the user stays logged in after clicking logout.
-    secure = _secure_request(request)
+    secure = secure_request(request)
     resp.delete_cookie(COOKIE_NAME, httponly=True, samesite='lax', secure=secure)
     resp.delete_cookie(LOGIN_STATE_COOKIE, httponly=True, samesite='lax', secure=secure)
     return resp

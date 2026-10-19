@@ -24,6 +24,20 @@ def _extract_fee(note: str | None) -> int:
     return 0
 
 
+# Amounts in tx_log are always positive: the sign of a row comes from its kind,
+# because `tg_id` names the account the row belongs to, not the side it is on.
+CREDIT_KINDS = frozenset({
+    'deposit', 'bet_win', 'bet_cancel', 'market_win', 'market_cancel',
+    'market_sell', 'paywall_earn', 'channel_earn', 'x402', 'rain_in',
+    'creator_income',
+})
+
+
+def is_credit(kind: str) -> bool:
+    """True when this tx_log row added money to the account it belongs to."""
+    return kind in CREDIT_KINDS
+
+
 # ---------- LMSR AMM math (prediction markets v2) ----------
 #
 # The Logarithmic Market Scoring Rule (Hanson 2003) prices outcome shares:

@@ -283,7 +283,7 @@ class LedgerAdminMixin:
                 )
                 self._conn.execute(
                     "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                    "VALUES ('tip', %s, %s, %s, 'rain')",
+                    "VALUES ('rain_in', %s, %s, %s, 'rain')",
                     (to_id, str(sender_id), share),
                 )
             self._conn.commit()

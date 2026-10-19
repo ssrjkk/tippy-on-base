@@ -5,14 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tippy — чаевые и рынки в USDC на Base</title>
   <meta name="description" content="Кошелёк USDC на Base в Telegram: чаевые, парамутюэль-ставки, LMSR-рынки предсказаний, ончейн-доли ERC-1155 и публичный proof-of-reserves." />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
 </head>
 <body>
   <div class="scroll-progress" id="scrollProgress"></div>
-  <div class="orb orb-a" aria-hidden="true"></div>
-  <div class="orb orb-b" aria-hidden="true"></div>
-  <div class="orb orb-c" aria-hidden="true"></div>
 
   <header class="nav">
     <div class="nav-inner">
@@ -22,11 +20,11 @@
       </a>
       <div class="nav-actions">
         <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
-          <span class="icon-moon">🌙</span>
-          <span class="icon-sun">☀️</span>
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
         </button>
         <span id="authArea"><a class="btn btn-ghost btn-sm" href="#workspace-section">Войти</a></span>
-        <a class="btn btn-ghost btn-sm" href="https://t.me/__BOT_USERNAME__" data-tg-link>Открыть в Telegram →</a>
+        <a class="btn btn-ghost btn-sm nav-tg" href="https://t.me/__BOT_USERNAME__" data-tg-link>Открыть в Telegram →</a>
       </div>
     </div>
   </header>
@@ -34,7 +32,7 @@
   <main>
     <section class="hero">
       <a class="hero-badge" data-net-explorer>
-        <span class="base-mark pulse-ring"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
         <span data-net="chain">Base</span> · USDC
       </a>
       <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
@@ -50,12 +48,13 @@
     </section>
 
     <section class="section reveal" id="workspace-section">
-      <h2>Кабинет</h2>
+      <span class="eyebrow">Кабинет</span>
+      <h2>Баланс, чаевые и позиции</h2>
 
       <div id="connect" class="connect">
         <div class="connect-grid">
           <div class="wallet">
-            <div class="wallet-row"><span>Telegram</span><b>вход по виджету</b></div>
+            <div class="wallet-row"><span>Telegram</span><span class="eyebrow">вход по виджету</span></div>
             <p class="hint">
               Telegram подписывает свой набор полей HMAC-SHA256 с ключом
               SHA256(bot token). Сайт проверяет подпись и выдаёт сессионную
@@ -63,7 +62,7 @@
             </p>
             <div class="tg-widget" id="tg-widget"></div>
 
-            <div class="wallet-row" style="margin-top:18px"><span>Кошелёк</span><b>EIP-191 подпись</b></div>
+            <div class="wallet-row wallet-sep"><span>Кошелёк</span><span class="eyebrow">подпись EIP-191</span></div>
             <p class="hint">
               Подписываете одноразовое сообщение — адрес сверяется с таблицей
               <span class="mono">wallet_links</span>, которую заполняет бот командой
@@ -82,7 +81,7 @@
               <li><b>LMSR-рынки</b> — покупка долей по живой цене, позиция и PnL.</li>
               <li><b>Ставки-пулы</b> — парамутюэль: пул, шанс и доля выплат после закрытия.</li>
               <li><b>Создание</b> — рынок с субсидией ликвидности или пул-ставка, дедлайн до 30 дней.</li>
-              <li><b>Ончейн (Cally)</b> — доли как ERC-1155 и gasless-покупка через smart-кошелёк.</li>
+              <li><b>Ончейн (Cally)</b> — доли как ERC-1155 и покупка без газа через смарт-кошелёк.</li>
               <li><b>История</b> — последние операции с контрагентом и назначением.</li>
             </ul>
           </div>
@@ -96,7 +95,7 @@
             <div class="ws-bal"><span id="wsBalance">–</span> <span class="ws-cur">USDC</span></div>
           </div>
           <div class="ws-actions">
-            <button class="btn btn-ghost btn-sm" data-act="refreshState">↻ Обновить</button>
+            <button class="btn btn-ghost btn-sm" data-act="refreshState"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>Обновить</button>
             <button class="btn btn-ghost btn-sm" data-act="logout">Выйти</button>
           </div>
         </div>
@@ -128,7 +127,7 @@
                   транзакцию и зачисляет баланс автоматически.
                 </p>
               </div>
-              <div class="wallet" style="margin-top:14px">
+              <div class="wallet">
                 <div class="wallet-row"><span>Привязанный кошелёк</span><b class="mono" id="linkedAddress">—</b></div>
                 <div class="wallet-row"><span>Язык сообщений бота</span></div>
                 <div class="amount-chips">
@@ -195,7 +194,7 @@
         <div class="panel" id="panel-markets" hidden>
           <div class="field">
             <label class="label" for="tradeMarket">Рынок (LMSR)</label>
-            <select class="input select" id="tradeMarket"></select>
+            <select class="input" id="tradeMarket"></select>
           </div>
           <div class="field">
             <span class="label">Исход</span>
@@ -213,7 +212,7 @@
         <div class="panel" id="panel-bets" hidden>
           <div class="field">
             <label class="label" for="betPick">Ставка-пул</label>
-            <select class="input select" id="betPick"></select>
+            <select class="input" id="betPick"></select>
           </div>
           <div class="field">
             <span class="label">Вариант</span>
@@ -229,7 +228,7 @@
         </div>
 
         <div class="panel" id="panel-create" hidden>
-          <div class="amount-chips" style="margin-bottom:14px">
+          <div class="amount-chips switch-row">
             <button class="amount-chip active" data-act="createKind" data-kind="market">Рынок LMSR</button>
             <button class="amount-chip" data-act="createKind" data-kind="bet">Ставка-пул</button>
           </div>
@@ -241,7 +240,7 @@
           <div class="field">
             <span class="label">Варианты (2–4)</span>
             <div id="newOptions"></div>
-            <button class="btn btn-ghost btn-sm" data-act="addOption" style="margin-top:8px">+ Добавить вариант</button>
+            <button data-act="addOption" class="btn btn-ghost btn-sm"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить вариант</button>
           </div>
           <div class="field">
             <label class="label" for="newHours">Дедлайн, часов</label>
@@ -260,7 +259,7 @@
         <div class="panel" id="panel-onchain" hidden>
           <div id="smartWalletBox">
             <div class="wallet">
-              <div class="wallet-row"><span>Smart-кошелёк (ERC-4337)</span><b id="swStatus">–</b></div>
+              <div class="wallet-row"><span>Смарт-кошелёк (ERC-4337)</span><b id="swStatus">–</b></div>
               <div class="wallet-addr" id="swAddress">—</div>
               <div class="wallet-row"><span>USDC в кошельке</span><b id="swBalance">–</b></div>
               <p class="hint" id="swHint">
@@ -270,15 +269,15 @@
             </div>
           </div>
 
-          <div class="field" style="margin-top:16px">
+          <div class="field field-after">
             <label class="label" for="ocMarket">Ончейн-рынок</label>
-            <select class="input select" id="ocMarket"></select>
+            <select class="input" id="ocMarket"></select>
           </div>
           <div class="field">
             <span class="label">Исход</span>
             <div class="opt-list" id="ocOptions"></div>
           </div>
-          <div class="grid-2">
+          <div class="field grid-2">
             <div class="field">
               <label class="label" for="ocShares">Долей</label>
               <input class="input" id="ocShares" type="number" min="1" step="1" inputmode="numeric" placeholder="1" />
@@ -288,7 +287,7 @@
               <input class="input" id="ocMaxCost" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="1.00" />
             </div>
           </div>
-          <button class="btn btn-primary" data-act="smartBuy">Купить gasless</button>
+          <button class="btn btn-primary" data-act="smartBuy">Купить без газа</button>
           <div class="msg" id="ocMsg"></div>
         </div>
 
@@ -298,30 +297,35 @@
       </div>
     </section>
 
-    <section class="stats" id="stats">
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-volume">–</div><div class="stat-label">Объём, USDC</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-vol30">–</div><div class="stat-label">Объём за 30 дней, USDC</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-users">–</div><div class="stat-label">Пользователей</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-markets">–</div><div class="stat-label">Открытых ставок-пулов</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-tx">–</div><div class="stat-label">Транзакций</div></div>
-      <div class="stat-card"><div class="stat-value skeleton" id="stat-fees">–</div><div class="stat-label">Собрано комиссий, USDC</div></div>
+    <section class="section reveal" id="metrics">
+      <span class="eyebrow">Метрики</span>
+      <div class="stats" id="stats">
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-volume">–</div><div class="stat-label">Объём, USDC</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-vol30">–</div><div class="stat-label">Объём за 30 дней, USDC</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-users">–</div><div class="stat-label">Пользователей</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-markets">–</div><div class="stat-label">Открытых ставок-пулов</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-tx">–</div><div class="stat-label">Транзакций</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-fees">–</div><div class="stat-label">Собрано комиссий, USDC</div></div>
+      </div>
     </section>
 
     <section class="section reveal" id="volume-chart-section">
-      <h2>Объём за 14 дней</h2>
+      <span class="eyebrow">Объём</span>
+      <h2>Последние 14 дней</h2>
       <div class="chart" id="volume-chart">
-        <div class="skeleton-bar" style="height:38%"></div>
-        <div class="skeleton-bar" style="height:62%"></div>
-        <div class="skeleton-bar" style="height:45%"></div>
-        <div class="skeleton-bar" style="height:78%"></div>
-        <div class="skeleton-bar" style="height:55%"></div>
-        <div class="skeleton-bar" style="height:90%"></div>
-        <div class="skeleton-bar" style="height:70%"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
       </div>
     </section>
 
     <section class="section reveal" id="predictions">
-      <h2>Рынки предсказаний (LMSR)</h2>
+      <span class="eyebrow">Рынки</span>
+      <h2>Предсказания на LMSR</h2>
       <p class="hint">
         Цены долей задаёт LMSR — логарифмический маркет-мейкер: каждая покупка
         сдвигает котировку, поэтому цена и есть вероятность, а не ручная оценка.
@@ -334,7 +338,8 @@
     </section>
 
     <section class="section reveal" id="markets">
-      <h2>Ставки-пулы (парамутюэль)</h2>
+      <span class="eyebrow">Ставки</span>
+      <h2>Пулы по парамутюэлю</h2>
       <p class="hint">
         Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
         выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
@@ -348,14 +353,16 @@
     </section>
 
     <section class="section reveal" id="closed-markets">
-      <h2>Закрытые ставки</h2>
+      <span class="eyebrow">Ставки</span>
+      <h2>Закрытые пулы</h2>
       <div class="markets" id="closed-markets-list">
         <div class="skeleton-card"></div>
       </div>
     </section>
 
-    <section class="section reveal" id="onchain-markets" style="display:none">
-      <h2>Cally — ончейн-рынки на Base</h2>
+    <section class="section reveal" id="onchain-markets" hidden>
+      <span class="eyebrow">Ончейн</span>
+      <h2>Cally — рынки на Base</h2>
       <p class="hint">
         Доли — настоящие ERC-1155 токены в контракте OutcomeMarket, расчёты в
         USDC на-цепи. В боте: /oc_create · /oc_buy · /oc_redeem.
@@ -366,20 +373,24 @@
     </section>
 
     <section class="section reveal" id="terms">
+      <span class="eyebrow">Условия</span>
       <h2>Комиссии и лимиты</h2>
       <p class="hint">
         Значения читаются из конфигурации бота тем же API, который их
         проверяет, — то, что написано здесь, и есть то, что отклонит запрос.
       </p>
-      <table class="terms-table">
-        <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
-        <tbody id="terms-body">
-          <tr><td>загрузка…</td><td>–</td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="terms-table">
+          <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
+          <tbody id="terms-body">
+            <tr><td>загрузка…</td><td>–</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="section reveal" id="commands">
+      <span class="eyebrow">Telegram</span>
       <h2>Команды бота</h2>
       <p class="hint">
         Тот же список, который бот регистрирует в меню Telegram через
@@ -394,20 +405,21 @@
     </section>
 
     <section class="section reveal" id="treasury">
+      <span class="eyebrow">Резервы</span>
       <h2>Прозрачный кошелёк</h2>
       <div class="grid-2">
         <div>
           <div class="wallet" id="wallet">
             <div class="wallet-row"><span>USDC на горячем кошельке</span><b id="wallet-balance">–</b></div>
-            <div class="wallet-row" id="wallet-vault-row" style="display:none">
-              <span>Резервы в TipBotVault (on-chain)</span><b id="wallet-vault">–</b>
+            <div class="wallet-row" id="wallet-vault-row" hidden>
+              <span>Резервы в контракте TipBotVault</span><b id="wallet-vault">–</b>
             </div>
             <div class="wallet-row"><span>Обязательства перед пользователями</span><b id="wallet-liabilities">–</b></div>
             <div class="wallet-row"><span>Незачтённые депозиты</span><b id="wallet-pending">–</b></div>
             <div class="wallet-row"><span>Свободный резерв</span><b id="wallet-reserve">–</b></div>
             <div class="wallet-row"><span>Платёжеспособность</span><b id="wallet-solvent">–</b></div>
             <div class="wallet-addr mono" id="wallet-address">загрузка…</div>
-            <div class="wallet-addr mono" id="wallet-vault-addr" style="display:none">загрузка…</div>
+            <div class="wallet-addr mono" id="wallet-vault-addr" hidden>загрузка…</div>
           </div>
         </div>
         <div>
@@ -418,7 +430,7 @@
             внутренних балансов: обязательство не может превысить то, что
             реально лежит на адресе.
           </p>
-          <p class="hint" style="margin-top:10px">
+          <p class="hint">
             Источник резервов сейчас: <b id="reserve-source">–</b>.
             Баланс и reserves обновляются на этой странице автоматически.
           </p>
@@ -426,33 +438,34 @@
       </div>
     </section>
 
-    <section class="section grid-2">
-      <div class="reveal">
-        <h2>Топ чаевых</h2>
-        <div class="leaderboard" id="leaderboard">
-          <div class="skeleton-card" style="height:56px"></div>
-          <div class="skeleton-card" style="height:56px"></div>
-          <div class="skeleton-card" style="height:56px"></div>
-        </div>
+    <section class="section reveal" id="leaderboard-section">
+      <span class="eyebrow">Сообщество</span>
+      <h2>Топ чаевых</h2>
+      <div class="leaderboard" id="leaderboard">
+        <div class="skeleton-card skeleton-row"></div>
+        <div class="skeleton-card skeleton-row"></div>
+        <div class="skeleton-card skeleton-row"></div>
       </div>
-      <div class="reveal">
-        <h2>Как это устроено</h2>
-        <div class="steps">
-          <div class="step">
-            <div class="step-num">1</div>
-            <h3>Пополнение</h3>
-            <p>USDC в сети Base на ваш адрес бота. Бот находит транзакцию в блоке и зачисляет баланс — без ручной приёмки.</p>
-          </div>
-          <div class="step">
-            <div class="step-num">2</div>
-            <h3>Действия</h3>
-            <p>Чаевые, покупка долей и ставки — внутренние проводки по той же ledger, что и в Telegram. Остаток пересчитывается сразу.</p>
-          </div>
-          <div class="step">
-            <div class="step-num">3</div>
-            <h3>Вывод</h3>
-            <p>Двухшаговый: сначала фиксируются комиссия и итог, затем подтверждение одноразовым токеном с ограниченным сроком действия.</p>
-          </div>
+    </section>
+
+    <section class="section reveal" id="how">
+      <span class="eyebrow">Механика</span>
+      <h2>Как это устроено</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Пополнение</h3>
+          <p>USDC в сети Base на ваш адрес бота. Бот находит транзакцию в блоке и зачисляет баланс — без ручной приёмки.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Действия</h3>
+          <p>Чаевые, покупка долей и ставки — внутренние проводки по той же ledger, что и в Telegram. Остаток пересчитывается сразу.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Вывод</h3>
+          <p>Двухшаговый: сначала фиксируются комиссия и итог, затем подтверждение одноразовым токеном с ограниченным сроком действия.</p>
         </div>
       </div>
     </section>
@@ -468,9 +481,9 @@
         </div>
       </div>
       <div class="footer-meta">
-        <span class="chain-chip">🟦 <span data-net="chain">Base</span></span>
-        <span class="chain-chip">🪙 <span data-net="usdc">USDC</span></span>
-        <span class="chain-chip" id="reserve-chip" style="display:none">🔒 <span id="reserve-chip-text"></span></span>
+        <span class="chain-chip"><span data-net="chain">Base</span></span>
+        <span class="chain-chip"><span data-net="usdc">USDC</span></span>
+        <span class="chain-chip" id="reserve-chip" hidden><span id="reserve-chip-text"></span></span>
       </div>
     </div>
     <div class="author-links">
@@ -480,31 +493,13 @@
       <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
       <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
     </div>
+    <p class="footer-legal"><a href="/tos">Условия использования</a></p>
     <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
       <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
       Built on Base · открытая кодовая база
     </a>
   </footer>
 
-  <script>
-    (function() {
-      var saved = localStorage.getItem('theme');
-      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-      else if (saved === 'light') document.documentElement.removeAttribute('data-theme');
-      else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      }
-    })();
-    function toggleTheme() {
-      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      if (isDark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('theme', 'light'); }
-      else { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('theme', 'dark'); }
-    }
-    document.addEventListener('click', function (e) {
-      var el = e.target.closest('[data-act="toggleTheme"]');
-      if (el) toggleTheme();
-    });
-  </script>
   <script src="/chain.js"></script>
   <script src="/app.js"></script>
   <script src="/site.js"></script>

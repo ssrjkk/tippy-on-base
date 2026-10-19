@@ -662,6 +662,63 @@ def test_market_page_served(client, ledger):
     assert r.headers["content-type"].startswith("text/html")
 
 
+def test_owner_history_carries_the_rendered_fields(client, ledger):
+    """The page must not guess: label, sign and counterparty come from the API.
+
+    Amounts in tx_log are always positive, so a renderer that derives the sign
+    from the amount prints a withdrawal as income.
+    """
+    ledger.ensure_user(778, "receiver")
+    ledger.credit(777, 5_000_000, "deposit")
+    ledger.transfer(777, 778, 2_000_000)
+    _auth(client, 777)
+    history = client.get("/api/user/777").json()["history"]
+    by_kind = {row["kind"]: row for row in history}
+    assert by_kind["deposit"]["incoming"] is True
+    assert by_kind["tip"]["incoming"] is False
+    assert by_kind["tip"]["ref"] == "@receiver"
+    assert by_kind["tip"]["amount_usdc"] == 2.0
+    assert all(row["label"] for row in history)
+    assert all(isinstance(row["created_at"], int) for row in history)
+
+
+def test_history_localized_to_the_owner_language(client, ledger):
+    ledger.credit(777, 5_000_000, "deposit")
+    ledger.set_setting(777, "lang", "en")
+    _auth(client, 777)
+    row = client.get("/api/user/777").json()["history"][0]
+    assert row["label"] == "Deposit"
+
+
+def test_onchain_market_page_api_names_the_contract_and_creator(client, ledger, monkeypatch):
+    """/m/oc/{id} renders from this payload: without the contract address the
+    explorer link cannot be built, and without the username the creator is a
+    bare number."""
+    from bot import config
+    from bot import onchain_market as om
+
+    async def fake_prices(market_id, count):
+        return [0.62, 0.38]
+
+    async def fake_info(market_id):
+        return {"b": 5_000_000_000, "escrow_micro": 250_000_000, "resolved": False,
+                "disputed": False, "cancelled": False, "winning_outcome": None}
+
+    monkeypatch.setattr(om, "market_prices", fake_prices)
+    monkeypatch.setattr(om, "get_market_info", fake_info)
+    monkeypatch.setattr(config, "OUTCOME_MARKET_ADDRESS", "0x" + "ab" * 20)
+    ledger.ensure_user(777, "creator")
+    ledger.save_onchain_market(3, 777, "Кто победит?", ["да", "нет"], 4_000_000_000)
+
+    data = client.get("/api/onchain/market/3").json()
+    assert data["creator"] == {"id": 777, "username": "creator"}
+    assert data["market_address"] == "0x" + "ab" * 20
+    assert data["escrow_micro"] == 250_000_000
+    assert [o["price_pct"] for o in data["options"]] == [62.0, 38.0]
+    assert client.get("/m/oc/3").status_code == 200
+    assert client.get("/api/onchain/market/999").status_code == 404
+
+
 def test_api_rate_limited(client, monkeypatch):
     from web import server
 
@@ -799,6 +856,35 @@ def test_user_page_has_js_wiring(client):
         assert needle in html
 
 
+def test_agent_page_served_at_the_url_readme_documents(client):
+    # The mounted StaticFiles resolves only paths that name the file, so
+    # without this route /agent is a 404 while /agent.html works.
+    r = client.get("/agent")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert "/agent.js" in r.text
+    assert client.get("/api/agent/status").status_code == 403
+
+
+def test_tos_renders_as_a_document_not_raw_markdown(client):
+    """As text/plain the browser invents a 980px layout for its own <pre>, so a
+    phone got a pinched dump of ``##`` and ``**`` markers for its legal terms."""
+    r = client.get("/tos")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    body = r.text
+    assert 'name="viewport"' in body
+    assert "<h1>Terms of Service" in body
+    assert "<li>USDC tipping between users</li>" in body
+    assert "<b>Last updated:</b>" in body
+    assert "<code>/api/solvency</code>" in body
+    assert "**" not in body
+    # The terms are the only place a user can read the custody warning, so the
+    # footer of every money page has to reach it.
+    for path in ("/", "/m/1", "/u/777", "/m/oc/1"):
+        assert 'href="/tos"' in client.get(path).text
+
+
 @pytest.mark.parametrize(
     "path,static_tg_link",
     [("/", True), ("/u/777", True), ("/m/oc/1", True), ("/m/1", False)],
@@ -862,6 +948,20 @@ def test_miniapp_meta_tags_render_public_url(client, monkeypatch):
     assert 'fc:miniapp' in r.text
     assert 'https://tippy.example.com/app' in r.text
     assert '__PUBLIC_URL__' not in r.text, "placeholder must never leak to users"
+
+
+def test_miniapp_clickables_are_real_buttons(client):
+    """A ``<div data-act>`` never fires click from Enter and is not focusable, so
+    the keyboard could not open a market card, pick a chip or choose an option.
+    The templates are inline in the document, so this reads what /app serves."""
+    html = client.get("/app").text
+    offenders = [
+        tag
+        for tag in re.findall(r"<[a-z]+[^>]*\bdata-act\b[^>]*>", html)
+        if not tag.startswith("<button") and 'id="modalOverlay"' not in tag
+    ]
+    assert offenders == [], "only #modalOverlay (a dismissal scrim) may stay a div"
+    assert 'role="button"' not in html
 
 
 @pytest.mark.parametrize("chain_id,label", [(8453, "Base"), (84532, "Base Sepolia")])

@@ -1961,6 +1961,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": " (cancel)",
         "zh": "（取消）",
     },
+    "hist_rain": {
+        "ru": "дождь",
+        "en": "rain",
+        "zh": "红包雨",
+    },
+    "hist_creator_fee": {
+        "ru": " (комиссия создателя)",
+        "en": " (creator fee)",
+        "zh": "（创建者费用）",
+    },
     "hist_fee": {
         "ru": " (комиссия вывода)",
         "en": " (withdrawal fee)",
@@ -2415,6 +2425,26 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "💰 Claimed <b>${amount:.2f}</b> in dividends!",
         "zh": "💰 已领取 <b>${amount:.2f}</b> 分红！",
     },
+    "kind_deposit": {"ru": "Пополнение", "en": "Deposit", "zh": "充值"},
+    "kind_withdraw": {"ru": "Вывод", "en": "Withdrawal", "zh": "提现"},
+    "kind_fee": {"ru": "Комиссия вывода", "en": "Withdrawal fee", "zh": "提现手续费"},
+    "kind_tip": {"ru": "Чаевые", "en": "Tip", "zh": "打赏"},
+    "kind_rain": {"ru": "Дождь", "en": "Rain", "zh": "红包雨"},
+    "kind_rain_in": {"ru": "Получен дождь", "en": "Rain received", "zh": "收到红包雨"},
+    "kind_bet": {"ru": "Ставка", "en": "Bet", "zh": "投注"},
+    "kind_bet_win": {"ru": "Выигрыш ставки", "en": "Bet win", "zh": "投注盈利"},
+    "kind_bet_cancel": {"ru": "Возврат ставки", "en": "Bet refund", "zh": "投注退款"},
+    "kind_creator_income": {"ru": "Комиссия создателя", "en": "Creator fee", "zh": "创建者费用"},
+    "kind_x402": {"ru": "Оплата от агента", "en": "Agent payment", "zh": "代理付款"},
+    "kind_paywall": {"ru": "Платный пост", "en": "Paid post", "zh": "付费内容"},
+    "kind_paywall_earn": {"ru": "Доход с платного поста", "en": "Paid post income", "zh": "付费内容收入"},
+    "kind_channel_pay": {"ru": "Подписка на канал", "en": "Channel subscription", "zh": "频道订阅"},
+    "kind_channel_earn": {"ru": "Доход с канала", "en": "Channel income", "zh": "频道收入"},
+    "kind_market_create": {"ru": "Создание рынка", "en": "Market creation", "zh": "创建市场"},
+    "kind_market_buy": {"ru": "Покупка долей", "en": "Share purchase", "zh": "购买份额"},
+    "kind_market_sell": {"ru": "Продажа долей", "en": "Share sale", "zh": "出售份额"},
+    "kind_market_win": {"ru": "Выплата по рынку", "en": "Market payout", "zh": "市场派息"},
+    "kind_market_cancel": {"ru": "Возврат по рынку", "en": "Market refund", "zh": "市场退款"},
 }
 
 

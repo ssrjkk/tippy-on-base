@@ -2,10 +2,13 @@
 import csv
 import io
 import json
+import logging
 import secrets
 import time
 
 from .. import config
+
+log = logging.getLogger("tipbot.ledger")
 
 
 def _csv_text(value: str | None) -> str:
@@ -136,7 +139,7 @@ class LedgerWithdrawMixin:
                     metadata={"amount_micro": amount_micro, "fee_micro": fee_micro, "to_address": to_address},
                 )
             except Exception:
-                pass
+                log.warning("audit write failed for withdraw", exc_info=True)
             return result_wd_id, ""
         return None, "cap"
 
@@ -359,10 +362,8 @@ class LedgerWithdrawMixin:
                     metadata={"amount_micro": result_amount, "tx_hash": tx_hash, "sender": result_sender},
                 )
             except Exception:
-                pass
+                log.warning("audit write failed for deposit claim", exc_info=True)
         return result_ok, result_amount, result_sender, ""
-
-
 
     def claim_for_sender(self, tg_id: int, sender: str, maturity_block: int | None = None) -> list[dict]:
         """Auto-claim pending deposits from a linked sender address.
@@ -416,7 +417,7 @@ class LedgerWithdrawMixin:
                     metadata={"amount_micro": cr["amount_micro"], "tx_hash": cr["tx_hash"], "sender": sender},
                 )
             except Exception:
-                pass
+                log.warning("audit write failed for batch deposit claim", exc_info=True)
         return claimed_results
 
 

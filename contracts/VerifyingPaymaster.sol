@@ -79,13 +79,7 @@ contract VerifyingPaymaster {
 
         // Verify relayer signature over a hash that EXCLUDES paymasterAndData,
         // breaking the chicken-and-egg: the relayer can sign before paymasterAndData is set.
-        // hash = keccak256(sender, nonce, initCode, callData, gas params — all except paymasterAndData + signature).
-        bytes32 rawHash = keccak256(abi.encode(
-            userOp.sender, userOp.nonce, userOp.initCode, userOp.callData,
-            userOp.callGasLimit, userOp.verificationGasLimit, userOp.preVerificationGas,
-            userOp.maxFeePerGas, userOp.maxPriorityFeePerGas
-        ));
-        bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", rawHash));
+        bytes32 hash = relayerMessageHash(userOp);
         bytes calldata pmd = userOp.paymasterAndData;
         bytes calldata sig = pmd[52:];  // after paymaster(20) + tgId(32)
         require(_recover(hash, sig) == owner, "Paymaster: bad relayer sig");
@@ -138,6 +132,22 @@ contract VerifyingPaymaster {
 
     function entryPoint() public pure returns (address) {
         return 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
+    }
+
+    /// @notice The EIP-191 message the relayer must sign for a UserOperation.
+    ///         keccak256(sender, nonce, initCode, callData, gas params,
+    ///                  block.chainid, address(this)) — the chain and paymaster
+    ///         binding stops cross-chain and cross-deployment replay.
+    /// @dev Exposed as a view so off-chain signers and tests can verify the
+    ///      exact domain without being the EntryPoint.
+    function relayerMessageHash(UserOperation calldata userOp) public view returns (bytes32) {
+        bytes32 rawHash = keccak256(abi.encode(
+            userOp.sender, userOp.nonce, userOp.initCode, userOp.callData,
+            userOp.callGasLimit, userOp.verificationGasLimit, userOp.preVerificationGas,
+            userOp.maxFeePerGas, userOp.maxPriorityFeePerGas,
+            block.chainid, address(this)
+        ));
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", rawHash));
     }
 
     function _recover(bytes32 hash, bytes calldata sig) internal pure returns (address) {

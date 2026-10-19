@@ -377,19 +377,15 @@ def _encode_execute_batch(dest1: str, data1: bytes, dest2: str, data2: bytes) ->
 def _sign_user_op(user_op: dict, key_hex: str) -> bytes:
     """Sign a UserOperation with the given private key.
 
-    The hash excludes the signature field (ERC-4337 standard): we can't sign a
-    hash that depends on the signature we're about to create. The SmartAccount's
-    validateUserOp recomputes the same hash (without signature) for verification.
+    We hash through the EntryPoint's own getUserOpHash() — keccak over the
+    packed op plus block.chainid and the EntryPoint address — so the signature
+    is bound to this chain and this EntryPoint and SmartAccount.validateUserOp
+    verifies exactly the hash the EntryPoint passes it.
     """
-    w3 = _get_w3()
-    ep_addr = Web3.to_checksum_address(config.SMART_WALLET_ENTRYPOINT)
-    chain_id = w3.eth.chain_id
-    # Hash = keccak256(abi.encode(userOp WITHOUT signature, entryPoint, chainId))
-    hash_input = _user_op_hash_input(user_op)
-    user_op_hash = Web3.keccak(abi_encode(
-        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256", "bytes", "address", "uint256"],
-        [*hash_input, ep_addr, chain_id],
-    ))
+    ep = _entrypoint()
+    user_op_hash = ep.functions.getUserOpHash(
+        (*_user_op_hash_input(user_op), b"")
+    ).call()
     # Sign as an EIP-191 "Ethereum Signed Message" so SmartAccount.validateUserOp
     # (which prefixes with \x19Ethereum Signed Message:\n32) recovers the owner.
     signed = Account.sign_message(
@@ -439,11 +435,16 @@ def _sign_paymaster(user_op: dict, key_hex: str) -> bytes:
     """Sign the paymaster hash for a UserOperation.
 
     The hash excludes paymasterAndData (breaking the chicken-and-egg):
-    rawHash = keccak256(sender, nonce, initCode, callData, gas params)
+    rawHash = keccak256(sender, nonce, initCode, callData, gas params,
+                        chainId, paymaster address)
+    chainId + paymaster bind the relayer signature to one chain and one
+    deployment; a signature minted for Sepolia cannot sponsor a mainnet op.
     Then EIP-191 prefixed for ecrecover compatibility.
     """
+    chain_id = _get_w3().eth.chain_id
+    paymaster = Web3.to_checksum_address(config.SMART_WALLET_PAYMASTER_ADDRESS)
     raw_hash = Web3.keccak(abi_encode(
-        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256"],
+        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256", "address"],
         [
             user_op["sender"],
             user_op["nonce"],
@@ -454,6 +455,8 @@ def _sign_paymaster(user_op: dict, key_hex: str) -> bytes:
             user_op["preVerificationGas"],
             user_op["maxFeePerGas"],
             user_op["maxPriorityFeePerGas"],
+            chain_id,
+            paymaster,
         ],
     ))
     signed = Account.sign_message(

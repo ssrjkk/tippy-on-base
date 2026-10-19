@@ -16,6 +16,9 @@ const fmtUSDC = (x) =>
   (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
 
 /* ---------- reveal-on-scroll ---------- */
+/* threshold 0.1 meant a section taller than ten viewports could never reach
+ * 10% visibility and stayed transparent; any pixel entering the band above
+ * the last 10% now triggers it. */
 const io = new IntersectionObserver(
   (entries) => {
     for (const e of entries) {
@@ -25,7 +28,7 @@ const io = new IntersectionObserver(
       }
     }
   },
-  { threshold: 0.1 }
+  { rootMargin: "0px 0px -10% 0px" }
 );
 document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
 
@@ -38,12 +41,16 @@ function animateCount(el, target) {
     el.textContent = fmtUSDC(target);
     return;
   }
+  const integer = Number.isInteger(target);
   const dur = 900;
   const start = performance.now();
   function frame(now) {
-    const p = Math.min((now - start) / dur, 1);
+    // rAF timestamps are the frame start and can precede `start`; unclamped,
+    // the cubic ease overshoots far below zero.
+    const p = Math.min(Math.max((now - start) / dur, 0), 1);
     const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = fmtUSDC(target * eased);
+    const v = target * eased;
+    el.textContent = fmtUSDC(integer ? Math.round(v) : v);
     if (p < 1) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -52,6 +59,9 @@ function animateCount(el, target) {
 function setCount(el, value) {
   if (!el) return;
   el.classList.remove("skeleton");
+  // A failed /api/stats used to leave "NaN" behind: fmtUSDC only defaults
+  // null/undefined, and NaN survives toLocaleString.
+  if (!Number.isFinite(value)) { el.textContent = "–"; return; }
   animateCount(el, value);
 }
 
@@ -145,7 +155,7 @@ function renderTerms(info) {
     ["Сеть", info.chain_name + " · chain id " + info.chain_id],
     ["Контракт USDC", info.usdc_address],
     ["Ончейн-рынки (Cally)", info.onchain_markets_enabled ? "включены" : "контракт не подключён"],
-    ["Gasless-покупка долей", info.smart_wallet_enabled ? "включена" : "не настроена"],
+    ["Покупка долей без газа", info.smart_wallet_enabled ? "включена" : "не настроена"],
   ];
   el.innerHTML = rows
     .map((row) => {
@@ -157,9 +167,12 @@ function renderTerms(info) {
     .join("");
 }
 
+const STAT_IDS = ["stat-volume", "stat-vol30", "stat-users", "stat-markets", "stat-tx", "stat-fees"];
+
 async function loadStats() {
   try {
     const r = await fetch("/api/stats");
+    if (!r.ok) throw new Error("stats " + r.status);
     const s = await r.json();
     setCount($("stat-volume"), s.volume_usdc);
     setCount($("stat-vol30"), s.volume_30d_usdc);
@@ -167,7 +180,11 @@ async function loadStats() {
     setCount($("stat-markets"), s.open_markets);
     setCount($("stat-tx"), s.transactions);
     setCount($("stat-fees"), s.fees_usdc);
-  } catch (e) { /* keep placeholders */ }
+  } catch (e) {
+    // Shimmering forever reads as a slow load, not a failed one. Settle every
+    // card on the dash so the grid still makes sense when the API is down.
+    STAT_IDS.forEach((id) => setCount($(id), null));
+  }
 }
 
 function fmtDay(day) {
@@ -187,7 +204,7 @@ async function loadVolumeChart() {
     const max = Math.max(...days.map((d) => d.volume_usdc), 1);
     el.innerHTML = days.map((d, i) => `
       <div class="chart-col" title="${fmtDay(d.day)}: ${fmtUSDC(d.volume_usdc)} USDC">
-        <div class="chart-bar" style="height:${Math.max(d.volume_usdc / max * 100, 2)}%;animation-delay:${Math.min(i * 60, 600)}ms"></div>
+        <div class="chart-plot"><div class="chart-bar" style="height:${Math.max(d.volume_usdc / max * 100, 2)}%;animation-delay:${Math.min(i * 60, 600)}ms"></div></div>
         <div class="chart-day">${fmtDay(d.day)}</div>
       </div>`).join("");
   } catch (e) {
@@ -215,20 +232,22 @@ async function loadWallet() {
         ? "RPC недоступен"
         : fmtUSDC(s.reserve_usdc) + " USDC";
     const source =
-      s.reserves_source === "vault" ? "TipBotVault (on-chain)" : "горячий кошелёк";
+      s.reserves_source === "vault" ? "контракт TipBotVault" : "горячий кошелёк";
     $("reserve-source").textContent = source;
     const chip = $("reserve-chip");
     if (chip) {
       $("reserve-chip-text").textContent = "Резервы: " + source;
-      chip.style.display = "";
+      chip.hidden = false;
     }
-    $("wallet-solvent").textContent =
-      s.solvent === true ? "✅ покрыто"
-      : s.solvent === false ? "⚠️ недостаточно"
+    const solvent = $("wallet-solvent");
+    solvent.textContent =
+      s.solvent === true ? "покрыто"
+      : s.solvent === false ? "недостаточно"
       : "RPC недоступен";
+    solvent.className = s.solvent === true ? "pos" : s.solvent === false ? "neg" : "";
     if (s.vault_address) {
-      $("wallet-vault-row").style.display = "";
-      $("wallet-vault-addr").style.display = "";
+      $("wallet-vault-row").hidden = false;
+      $("wallet-vault-addr").hidden = false;
       $("wallet-vault").textContent =
         s.vault_balance_usdc === null || s.vault_balance_usdc === undefined
           ? "RPC недоступен"
@@ -239,9 +258,15 @@ async function loadWallet() {
 }
 
 function statusBadge(status) {
-  if (status === "open") return '<span class="chip chip-open">● открыт</span>';
-  if (status === "resolved") return '<span class="chip chip-resolved">закрыт</span>';
+  if (status === "open") return '<span class="chip chip-open">открыт</span>';
+  if (status === "resolved") return '<span class="chip chip-resolved">завершён</span>';
   return '<span class="chip chip-cancelled">отменён</span>';
+}
+
+/* Cards carry an optional deadline and a status chip, and either can be empty.
+ * Joining them with a literal " · " left a dangling separator in the meta line. */
+function metaLine(...parts) {
+  return parts.filter(Boolean).join(" · ");
 }
 
 function relDeadline(ts) {
@@ -256,9 +281,9 @@ function relDeadline(ts) {
 
 function marketCard(m, i) {
   const deadline = m.expired
-    ? "🕳️ истёк — можно вернуть деньги"
+    ? "истёк — можно вернуть деньги"
     : m.close_at
-      ? "⏰ <span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
+      ? "<span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
       : "";
   const winnerIdx = m.status === "resolved" && m.winner !== null && m.winner !== undefined ? m.winner : null;
   const options = m.options.map((o, j) => {
@@ -266,8 +291,8 @@ function marketCard(m, i) {
     return `
     <div class="option${isWinner ? " option-winner" : ""}">
       <div class="option-top">
-        <span class="option-label">${isWinner ? "🏆 " : ""}${escapeHtml(o.label)}</span>
-        <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${escapeHtml(String(o.probability))}% · ${escapeHtml(String(o.backers))}👤</span>
+        <span class="option-label">${escapeHtml(o.label)}</span>
+        <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${escapeHtml(String(o.probability))}% · ${escapeHtml(String(o.backers))} чел.</span>
       </div>
       <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
@@ -277,14 +302,14 @@ function marketCard(m, i) {
     <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
       <div class="market-head">
         <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
-        <span class="market-meta">${deadline} · ${statusBadge(m.status)}</span>
+        <span class="market-meta">${metaLine(deadline, statusBadge(m.status))}</span>
       </div>
       ${options}
       <div class="market-footer">
-        <span class="pot">Пул: <b>${fmtUSDC(m.pot_usdc)} USDC</b> · ${escapeHtml(String(m.total_backers))}👤</span>
+        <span class="pot">Пул: <b>${fmtUSDC(m.pot_usdc)} USDC</b> · ${escapeHtml(String(m.total_backers))} чел.</span>
         <span class="pot">
           <a class="m-link" href="/m/${m.id}">Подробнее →</a>
-          <span style="margin-left: 10px">@${escapeHtml(m.creator.username || ("id" + m.creator.id))}</span>
+          <span class="market-author">@${escapeHtml(m.creator.username || ("id" + m.creator.id))}</span>
         </span>
       </div>
     </div>`;
@@ -323,14 +348,14 @@ async function loadClosedMarkets() {
 function predictionCard(m, i) {
   const winner = m.status === "resolved" && m.winner != null ? m.winner : null;
   const deadline = m.close_at
-    ? "⏰ <span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
+    ? "<span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
     : "";
   const options = m.options.map((o, j) => {
     const isWinner = winner !== null && o.index === winner;
     return `
     <div class="option${isWinner ? " option-winner" : ""}">
       <div class="option-top">
-        <span class="option-label">${isWinner ? "🏆 " : ""}${escapeHtml(o.label)}</span>
+        <span class="option-label">${escapeHtml(o.label)}</span>
         <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
       </div>
       <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
@@ -341,12 +366,12 @@ function predictionCard(m, i) {
     <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
       <div class="market-head">
         <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
-        <span class="market-meta">${deadline} · ${statusBadge(m.status)}</span>
+        <span class="market-meta">${metaLine(deadline, statusBadge(m.status))}</span>
       </div>
       ${options}
       <div class="market-footer">
         <span class="pot">Ликвидность: <b>${fmtUSDC(m.liquidity_usdc)} USDC</b></span>
-        <span class="pot">Оборот долей: ${fmtUSDC(m.volume_usdc)} USDC · ${escapeHtml(String(m.traders))}👤</span>
+        <span class="pot">Оборот долей: ${fmtUSDC(m.volume_usdc)} USDC · ${escapeHtml(String(m.traders))} чел.</span>
       </div>
     </div>`;
 }
@@ -375,10 +400,9 @@ async function loadLeaderboard() {
       el.innerHTML = '<div class="empty">Пока пусто</div>';
       return;
     }
-    const medals = ["🥇", "🥈", "🥉"];
     el.innerHTML = rows.map((row, i) => `
       <div class="lb-row" style="animation-delay:${Math.min(i * 60, 400)}ms">
-        <span class="lb-place">${medals[i] || (i + 1)}</span>
+        <span class="lb-place">${String(i + 1).padStart(2, "0")}</span>
         <span class="lb-name">@${escapeHtml(row.username)}</span>
         <span class="lb-amt">${fmtUSDC(row.total_usdc)} USDC</span>
       </div>`).join("");
@@ -404,10 +428,14 @@ async function loadOnchainMarkets() {
     if (!section || !el) return;
     if (!markets.length) {
       // Contract not deployed or nothing created yet — hide the section.
-      section.style.display = "none";
+      section.hidden = true;
       return;
     }
-    section.style.display = "";
+    section.hidden = false;
+    /* Reveal only un-hides on intersection, and this section can be unhidden
+       after the user has already scrolled past it — then it would never
+       intersect and stay invisible. */
+    section.classList.add("is-visible");
     el.innerHTML = markets.map((m, i) => {
       const winnerIdx = m.resolved ? m.winner : null;
       const badge = m.cancelled
@@ -418,14 +446,14 @@ async function loadOnchainMarkets() {
       const deadline = m.resolved || m.cancelled
         ? ""
         : m.close_at
-          ? "⏰ <span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
+          ? "<span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
           : "";
       const options = m.options.map((o, j) => {
         const isWinner = winnerIdx !== null && o.index === winnerIdx;
         return `
         <div class="option${isWinner ? " option-winner" : ""}">
           <div class="option-top">
-            <span class="option-label">${isWinner ? "🏆 " : ""}${escapeHtml(o.label)}</span>
+            <span class="option-label">${escapeHtml(o.label)}</span>
             <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
           </div>
           <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
@@ -435,18 +463,21 @@ async function loadOnchainMarkets() {
         <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
           <div class="market-head">
             <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
-            <span class="market-meta">${deadline} · ${badge}</span>
+            <span class="market-meta">${metaLine(deadline, badge)}</span>
           </div>
           ${options}
           <div class="market-footer">
             <span class="pot">On-chain · ERC-1155 · USDC на ${escapeHtml(net.chain_name || "—")}</span>
-            <span class="pot">${m.market_address && net.explorer ? `<a class="m-link" href="${escapeHtml(net.explorer)}/address/${encodeURIComponent(m.market_address)}" target="_blank" rel="noopener">Открыть в обозревателе</a>` : ""}</span>
+            <span class="pot">
+              <a class="m-link" href="/m/oc/${m.id}">Подробнее →</a>
+              ${m.market_address && net.explorer ? `<a class="m-link" href="${escapeHtml(net.explorer)}/address/${encodeURIComponent(m.market_address)}" target="_blank" rel="noopener">Открыть в обозревателе</a>` : ""}
+            </span>
           </div>
         </div>`;
     }).join("");
   } catch (e) {
     const section = $("onchain-markets");
-    if (section) section.style.display = "none";
+    if (section) section.hidden = true;
   }
 }
 

@@ -6,7 +6,7 @@ content on Base. Two processes, one database.
 ```
 ┌─────────────────┐  ┌──────────────────────┐  ┌──────────────────┐
 │  bot (aiogram)   │  │  web (FastAPI)        │  │  agent (optional) │
-│  long-polling or │  │  /api/*, /me, /login  │  │  news → LLM →    │
+│  long-polling or │  │  /, /app, /api/*      │  │  news → LLM →    │
 │  webhook         │  │  Telegram Login Widget │  │  markets + EAS   │
 └────────┬────────┘  └──────────┬───────────┘  └────────┬─────────┘
          │                      │                        │
@@ -41,8 +41,10 @@ content on Base. Two processes, one database.
 ### web (`uvicorn web.server:app`)
 - FastAPI dashboard + API
 - `/api/stats`, `/api/solvency`, `/api/wallet` — public
-- `/login`, `/api/auth/telegram`, `/api/auth/wallet` — auth
-- `/me` — user dashboard (requires session cookie)
+- `/`, `/api/auth/telegram`, `/api/auth/wallet` — auth (the login widget and
+  the wallet signature both live in the cabinet block on the landing page;
+  `/login` and `/me` only redirect there)
+- `/u/{id}`, `/m/{id}`, `/m/oc/{id}` — shareable public pages
 - One Ledger instance, one DB connection, serialized by `threading.RLock`
 - Serves static files (HTML/CSS/JS)
 - Strict CSP: nonce-based `script-src` (no inline `<script>` without a nonce,
@@ -108,15 +110,18 @@ Key tables:
 
 Gasless, non-custodial per-user accounts on Base via account abstraction.
 User operations are sponsored by a VerifyingPaymaster so users don't need
-ETH. Deployed & proven on Base Sepolia (see `docs/ECOSYSTEM_DESIGN.md` §8).
+ETH. Deployed & proven on Base Sepolia.
 
 - **SmartAccount** (CREATE2, deterministic) — each Telegram user gets a
-  counterfactual address; no creation until first fund. Implements
-  `IAccount.executeUserOp` + `UserOperation calldata` struct.
+  counterfactual address; no creation until first fund. `validateUserOp`
+  verifies an EIP-191 signature over the EntryPoint-provided `userOpHash`
+  (which binds chainid and the EntryPoint address).
 - **SmartAccountFactory** — `createAccount(owner, salt)` via CREATE2 with
   deployer/owner enforcement.
 - **EntryPoint v0.6** — standard ERC-4337 singleton.
-- **VerifyingPaymaster** — sponsors gas; daily limits, `_recordUsage`,
+- **VerifyingPaymaster** — sponsors gas; the relayer signature binds
+  (op fields, chainid, paymaster address), so it cannot replay across
+  chains or deployments; daily limits, `_recordUsage`,
   correct `postOp(PostOpMode, bytes, uint256)` for EP v0.6.
 - **bot/smart_wallet.py** — UserOp build + EIP-191 signing, paymaster data,
   `create_account` / `approve_and_trade_sync`. Config `SMART_WALLET_*`.

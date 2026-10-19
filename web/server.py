@@ -15,12 +15,14 @@ import secrets
 import sys
 import threading
 import time
+from html import escape as _esc
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import (
-    FileResponse,
     JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
     Response,
     StreamingResponse,
 )
@@ -35,6 +37,7 @@ from bot import qr as qrlib
 from bot.base import hot_balance, hot_wallet, vault_balance
 from bot.commands_catalog import BOT_COMMAND_SPECS
 from bot.ledger import async_ledger as ledger
+from bot.tx_view import rows_view
 from web.auth import COOKIE_NAME, attach_login_state, parse_session
 from web.auth import router as auth_router
 from web.frame import router as frame_router
@@ -410,7 +413,8 @@ async def api_user(tg_id: int, request: Request) -> dict:
     # public aggregate only (no per-tx amounts, no live balance, no positions).
     if is_owner:
         positions = [{**p, 'stake_usdc': _usdc(p['stake_micro']), 'potential_usdc': _usdc(p['potential_micro'])} for p in await ledger.user_positions(tg_id)]
-        history = [{'kind': r['kind'], 'amount_usdc': _usdc(r['amount']), 'created_at': r['created_at']} for r in await ledger.history(tg_id, 12)]
+        lang = (await ledger.get_settings(tg_id)).get('lang', 'ru')
+        history = await rows_view(await ledger.history(tg_id, 12), lang, ledger)
         return {
             **v,
             'balance_usdc': _usdc(v['balance_micro']),
@@ -549,12 +553,14 @@ async def api_onchain_market(market_id: int) -> dict:
         'id': market_id,
         'question': m['question'],
         'close_at': m['close_at'],
+        'creator': {'id': m['creator'], 'username': await ledger.username_of(int(m['creator']))},
         'b': info.get('b'),
         'escrow_micro': info.get('escrow_micro'),
         'resolved': info.get('resolved'),
         'disputed': info.get('disputed'),
         'cancelled': info.get('cancelled'),
         'winner': info.get('winning_outcome'),
+        'market_address': config.OUTCOME_MARKET_ADDRESS,
         'options': [
             {'index': i, 'label': o, 'price_pct': float((Decimal(str(prices[i])) * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))}
             for i, o in enumerate(options)
@@ -768,9 +774,10 @@ async def onchain_market_page(market_id: int) -> Response:
     """Shareable page for an ON-CHAIN market (OutcomeMarket ERC-1155)."""
     return _static_page('oc.html')
 
-@app.get('/me')
-async def me_page() -> FileResponse:
-    return FileResponse(STATIC / 'me.html')
+@app.get('/me', include_in_schema=False)
+async def me_page() -> RedirectResponse:
+    """Legacy cabinet URL — the workspace on the landing page replaced it."""
+    return RedirectResponse('/#workspace-section', status_code=303)
 
 @app.get('/', include_in_schema=False)
 async def root(request: Request):
@@ -797,6 +804,13 @@ async def mini_app():
     html = html.replace('__PUBLIC_HOST__', base_url.split('//')[-1])
     html = html.replace('__CHAIN_NAME__', chain_label())
     return Response(content=html.encode('utf-8'), media_type='text/html')
+
+@app.get('/agent', include_in_schema=False)
+async def agent_page() -> Response:
+    """Operator dashboard. README documents this URL, and the mounted
+    StaticFiles only resolves paths that name the file, so ``/agent.html``
+    alone would leave ``/agent`` a 404."""
+    return _static_page('agent.html')
 
 @app.post('/api/webhook-miniaction', include_in_schema=False)
 async def miniapp_webhook(request: Request):
@@ -835,14 +849,106 @@ async def farcaster_manifest():
         return JSONResponse(status_code=404, content={'detail': 'farcaster manifest not configured'})
     return Response(content=manifest.read_bytes(), media_type='application/json')
 
+def _legal_html(md: str) -> str:
+    """Render the Markdown constructs the legal files actually use.
+
+    ``/tos`` used to answer ``text/plain``. A plain-text document carries no
+    viewport meta, so a phone invents a 980px layout and shows a pinched dump
+    of ``##`` and ``**`` markers. The input is a file from this repo, not user
+    text, and it is escaped line by line before any markup is added.
+    """
+    def inline(text: str) -> str:
+        text = _esc(text, quote=False)
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+        return re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
+
+    out: list[str] = []
+    bullets: list[str] = []
+
+    def flush() -> None:
+        if bullets:
+            out.append('<ul>' + ''.join(f'<li>{inline(b)}</li>' for b in bullets) + '</ul>')
+            bullets.clear()
+
+    for line in md.splitlines():
+        s = line.strip()
+        if not s:
+            flush()
+            continue
+        if s == '---':
+            flush()
+            out.append('<hr />')
+            continue
+        heading = re.match(r'(#{1,6})\s+(.*)', s)
+        if heading:
+            flush()
+            level = len(heading.group(1))
+            out.append(f'<h{level}>{inline(heading.group(2))}</h{level}>')
+            continue
+        if s.startswith('- '):
+            bullets.append(s[2:])
+            continue
+        flush()
+        out.append(f'<p>{inline(s)}</p>')
+    flush()
+    return ''.join(out)
+
+
+_TOS_ICON = (
+    '<span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true">'
+    '<text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" '
+    'fill="white">b</text></svg></span>'
+)
+
+
 @app.get('/tos', tags=['legal'])
 async def tos() -> Response:
-    """Terms of Service page."""
-    from fastapi.responses import PlainTextResponse
+    """Terms of Service, rendered out of ``web/static/tos.md``."""
     tos_file = STATIC / 'tos.md'
-    if tos_file.exists():
-        return PlainTextResponse(tos_file.read_text(encoding='utf-8'))
-    return PlainTextResponse("Terms of Service not found.", status_code=404)
+    if not tos_file.exists():
+        return PlainTextResponse('Terms of Service not found.', status_code=404)
+    md = tos_file.read_text(encoding='utf-8')
+    body = _legal_html(md)
+    first_heading = re.search(r'^#\s+(.*)', md, re.MULTILINE)
+    title = first_heading.group(1) if first_heading else 'Terms of Service'
+    html_doc = f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{_esc(title)}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        {_TOS_ICON}
+        <span class="brand-name"><b>Tippy</b></span>
+      </a>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="/">Назад</a>
+      </div>
+    </div>
+  </header>
+  <main>
+    <article class="page legal">
+{body}
+    </article>
+  </main>
+  <footer class="footer">
+    <p>Tippy · USDC на {_esc(chain_label())}</p>
+  </footer>
+</body>
+</html>
+"""
+    return Response(content=html_doc.encode('utf-8'), media_type='text/html')
 
 @app.get('/metrics', tags=['monitoring'])
 async def metrics(request: Request) -> Response:

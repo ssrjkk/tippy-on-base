@@ -51,4 +51,10 @@ async def cmd_ask(message: types.Message) -> None:
     if len(answer) > common.config.AI_MAX_ANSWER_CHARS:
         answer = answer[:common.config.AI_MAX_ANSWER_CHARS - 1] + '…'
     header = '🧠 <b>Tippy AI</b>\n\n'
-    await message.answer(header + html.escape(answer)[:4096 - len(header)])
+    body = html.escape(answer)[:4096 - len(header)]
+    # The cut can land inside an escaped entity ('&l' without ';'), which
+    # Telegram rejects as malformed markup — drop a dangling partial entity.
+    amp = body.rfind('&')
+    if amp != -1 and ';' not in body[amp:] and len(body) - amp <= 7:
+        body = body[:amp]
+    await message.answer(header + body)

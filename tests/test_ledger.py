@@ -7,6 +7,8 @@ import os
 import time
 from decimal import Decimal
 
+import pytest
+
 from bot import config
 from bot.ledger import Ledger
 
@@ -456,6 +458,56 @@ def test_claim_for_sender_autoclaims_all(ledger):
     assert ledger.balance(ALICE) == Decimal("1.000000")
     # Nothing left to claim.
     assert ledger.claim_for_sender(BOB, "0xowner") == []
+
+
+def _audit_rows(ledger, action):
+    return ledger._conn.execute(
+        "SELECT user_id, resource, metadata FROM audit_logs WHERE action = %s ORDER BY id",
+        (action,),
+    ).fetchall()
+
+
+def test_withdraw_writes_audit_entry(ledger):
+    fund(ledger, ALICE, 10_000_000)
+    dest = "0x" + "b" * 40
+    wd_id, reason = ledger.reserve_withdraw(ALICE, dest, 5_000_000, 50_000)
+    assert reason == "" and wd_id is not None
+    rows = _audit_rows(ledger, "withdraw")
+    assert len(rows) == 1
+    assert rows[0]["user_id"] == ALICE
+    assert rows[0]["metadata"] == {"amount_micro": 5_000_000, "fee_micro": 50_000, "to_address": dest}
+
+
+def test_refused_withdraw_writes_no_audit_entry(ledger):
+    assert ledger.reserve_withdraw(ALICE, "0x" + "c" * 40, 100_000_000, 1) == (None, "balance")
+    assert _audit_rows(ledger, "withdraw") == []
+
+
+def test_claim_for_sender_audits_only_claimed_rows(ledger):
+    for h, amt in (("6", 1_000_000), ("7", 2_000_000), ("8", 3_000_000)):
+        ledger.record_pending("0x" + h * 64, "0xowner", amt)
+    nonce = ledger.new_link_nonce(ALICE, "0xowner")
+    assert ledger.confirm_link(ALICE, "0xowner", nonce)
+    assert ledger.claim(ALICE, "0x" + "6" * 64)[0] is True
+
+    claimed = ledger.claim_for_sender(BOB, "0xowner")
+    batch = [r for r in _audit_rows(ledger, "deposit") if r["user_id"] == BOB]
+    assert sorted(r["metadata"]["tx_hash"] for r in batch) == sorted(c["tx_hash"] for c in claimed)
+    assert len(batch) == 2
+
+
+def test_audit_failure_does_not_break_withdraw(ledger, monkeypatch, caplog):
+    fund(ledger, ALICE, 10_000_000)
+
+    def boom(*a, **kw):
+        raise RuntimeError("audit table gone")
+
+    monkeypatch.setattr(ledger, "log_audit_entry", boom)
+    with caplog.at_level("WARNING", logger="tipbot.ledger"):
+        wd_id, reason = ledger.reserve_withdraw(ALICE, "0x" + "b" * 40, 5_000_000, 0)
+    assert reason == "" and wd_id is not None
+    assert ledger.balance(ALICE) == Decimal("5.000000")
+    assert "audit write failed for withdraw" in caplog.text
 
 
 def test_claim_for_sender_respects_maturity_block(ledger):
@@ -1107,6 +1159,29 @@ def test_x402_counts_into_volume_and_stats(ledger):
     assert stats["volume_micro"] == 8_000_000
     assert stats["volume_30d_micro"] == 8_000_000
     assert ledger.user_stats(ALICE)[1] == 7_000_000  # tips_received
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_rain_is_counted_once_and_in_the_right_direction(ledger, count):
+    """A rain is one debit of the sender and `count` credits. Recipients must
+    not show up as tippers, the sender must not receive their own shares, and
+    the shares must not be added to volume a second time."""
+    fund(ledger, ALICE, 10_000_000)
+    for u in (BOB, CAROL)[:count]:
+        ledger.record_message(-1000, u, u)
+    ok, _, chosen = ledger.rain(-1000, ALICE, 2_000_000, count)
+    assert ok and sorted(chosen) == sorted((BOB, CAROL)[:count])
+    share = 2_000_000 // count
+
+    assert ledger.user_stats(ALICE)[:2] == (2_000_000, 0)
+    for u in chosen:
+        assert ledger.user_stats(u)[:2] == (0, share)
+    assert [int(r["tg_id"]) for r in ledger.top_tippers()] == [ALICE]
+    stats = ledger.global_stats()
+    assert stats["tips_micro"] == 2_000_000
+    assert stats["volume_micro"] == 12_000_000
+    assert stats["volume_30d_micro"] == 12_000_000
+    assert sum(r["volume_micro"] for r in ledger.volume_history()) == 12_000_000
 
 
 def test_credit_negative_amount_rejected(ledger):

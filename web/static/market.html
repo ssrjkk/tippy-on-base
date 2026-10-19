@@ -3,45 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Рынок — Tippy</title>
-  <meta property="og:title" content="Рынок — Tippy" />
-  <meta property="og:description" content="Рынок предсказаний в USDC на Base. Смотри пулы и вероятности, ставь прямо в Telegram." />
+  <title>Ставка-пул — Tippy</title>
+  <meta property="og:title" content="Ставка-пул — Tippy" />
+  <meta property="og:description" content="Ставка-пул в USDC на Base: пулы исходов, шансы и выплаты по парамутюэлю. Ставка — в Telegram." />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
 </head>
 <body>
-  <div class="orb orb-a" aria-hidden="true"></div>
-  <div class="orb orb-b" aria-hidden="true"></div>
-
   <header class="nav">
     <div class="nav-inner">
       <a class="brand" href="/">
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
         <span class="brand-name"><b>Tippy</b></span>
       </a>
-      <a class="btn btn-ghost" href="/#markets">← Все рынки</a>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="/#markets">← Все пулы</a>
+      </div>
     </div>
   </header>
 
   <main>
-    <section id="market" class="section reveal" style="max-width: 720px; margin: 0 auto;">
+    <article class="page" id="market">
+      <span class="eyebrow" id="m-kind">Ставка-пул</span>
+      <h1 class="page-title" id="m-question">Загрузка…</h1>
+      <div class="page-meta" id="m-meta"></div>
+
       <div class="market-card">
-        <div class="market-head">
-          <span class="market-question" id="m-question">Загрузка…</span>
-          <span class="market-meta" id="m-meta"></span>
-        </div>
         <div id="m-options"></div>
         <div class="market-footer">
           <span class="pot" id="m-pot"></span>
           <span class="pot" id="m-creator"></span>
         </div>
       </div>
-      <p class="hint" style="margin-top: 14px; text-align: center;">
-        Ставка — в два тапа прямо в Telegram: открой бота по кнопке ниже или вручную
-        /bet &lt;id&gt; &lt;номер&gt; &lt;сумма&gt;.
-      </p>
-    </section>
+
+      <div class="cta-row" id="m-cta" hidden>
+        <a class="btn btn-primary" id="m-bet" target="_blank" rel="noopener">Поставить в Telegram</a>
+        <button class="btn btn-ghost" id="m-share" type="button">Скопировать ссылку</button>
+      </div>
+
+      <section class="page-block">
+        <span class="eyebrow">Механика</span>
+        <p class="hint">
+          Все ставки складываются в общий пул. Если ваш исход выиграл, вы получаете
+          долю всего пула, пропорциональную вашему вкладу в этот исход; шанс рядом
+          с вариантом — его доля в пуле на текущий момент. Вручную в боте:
+          <code>/bet &lt;id&gt; &lt;номер&gt; &lt;сумма&gt;</code>.
+        </p>
+      </section>
+    </article>
   </main>
 
   <footer class="footer">
@@ -50,12 +65,12 @@
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
         <div>
           <b>Tippy</b>
-          <span class="footer-tag">Рынки предсказаний на USDC</span>
+          <span class="footer-tag">USDC-экономика в Telegram и вебе</span>
         </div>
       </div>
       <div class="footer-meta">
-        <span class="chain-chip">🟦 <span data-net="chain">Base</span></span>
-        <span class="chain-chip">🪙 <span data-net="usdc">USDC</span></span>
+        <span class="chain-chip"><span data-net="chain">Base</span></span>
+        <span class="chain-chip"><span data-net="usdc">USDC</span></span>
       </div>
     </div>
     <div class="author-links">
@@ -65,30 +80,24 @@
       <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
       <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
     </div>
-    <a class="powered" href="https://buildonbase.com" target="_blank" rel="noopener">
+    <p class="footer-legal"><a href="/tos">Условия использования</a></p>
+    <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
       <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
-      Built on Base · buildonbase.com
+      Built on Base · открытая кодовая база
     </a>
   </footer>
 
   <script src="/chain.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
-    document.body.classList.add("js");
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const fmtUSDC = (x) =>
       (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
-    const escapeHtml = (s) =>
+    const esc = (s) =>
       String(s).replace(/[&<>"']/g, (c) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
       })[c]);
-
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
-    }, { threshold: 0.1 });
-    document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
-
-    const betId = location.pathname.split("/").filter(Boolean).pop();
+    // Basenames (name.base.eth) are shown as-is; Telegram usernames get an @.
+    const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
     const relDeadline = (ts) => {
       const left = ts * 1000 - Date.now();
       if (left <= 0) return "дедлайн прошёл";
@@ -98,12 +107,15 @@
       if (h) return "осталось " + h + "ч " + m + "м";
       return "осталось " + m + "м";
     };
+    const STATUS = {
+      open: '<span class="chip chip-open">открыт</span>',
+      resolved: '<span class="chip chip-resolved">завершён</span>',
+      cancelled: '<span class="chip chip-cancelled">отменён</span>',
+    };
 
-    /* One /api/info read feeds both: the network labels land as soon as it
-     * resolves, the deep link only after the market itself has rendered —
-     * the error branch rewrites #market, so a button added earlier would
-     * either survive on a page for a market that does not exist or be wiped,
-     * depending on which response arrived first. */
+    const betId = location.pathname.split("/").filter(Boolean).pop();
+    /* The deep link is added only after the market itself has rendered, so a
+     * missing market never shows a working "bet" button. */
     const infoPromise = fetch("/api/info")
       .then((r) => (r.ok ? r.json() : {}))
       .catch(() => ({}));
@@ -111,67 +123,62 @@
 
     (async () => {
       try {
-        const m = await (await fetch("/api/market/" + betId)).json();
-        $("m-question").textContent = "#" + m.id + " " + m.question;
-        const winnerIdx = m.status === "resolved" && m.winner !== null && m.winner !== undefined ? m.winner : null;
-        const meta = [];
-        if (m.close_at) meta.push("⏰ <span id='m-countdown' data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>");
-        meta.push(m.status === "open"
-          ? '<span class="chip chip-open">● открыт</span>'
-          : m.status === "resolved"
-            ? '<span class="chip chip-resolved">закрыт</span>'
-            : '<span class="chip chip-cancelled">отменён</span>');
-        $("m-meta").innerHTML = meta.join(" · ");
+        const r = await fetch("/api/market/" + encodeURIComponent(betId));
+        if (!r.ok) throw new Error();
+        const m = await r.json();
+        const winnerIdx = m.status === "resolved" && m.winner != null ? m.winner : null;
+
+        $("m-kind").textContent = "Ставка-пул · #" + m.id;
+        $("m-question").textContent = m.question;
+        document.title = m.question + " — Tippy";
+        document.querySelector('meta[property="og:title"]').content = "#" + m.id + " " + m.question;
+
+        const meta = [STATUS[m.status] || STATUS.cancelled];
+        if (m.status === "open" && m.expired) meta.push("<span>истёк — ставки можно вернуть</span>");
+        else if (m.status === "open" && m.close_at) {
+          meta.push('<span id="m-countdown" data-close-at="' + parseInt(m.close_at) + '">' + relDeadline(m.close_at) + "</span>");
+        }
+        if (winnerIdx !== null) meta.push("<span>исход: " + esc(m.options[winnerIdx].label) + "</span>");
+        $("m-meta").innerHTML = meta.join("<span>·</span>");
+
         $("m-options").innerHTML = m.options.map((o, i) => {
           const isWinner = winnerIdx !== null && o.index === winnerIdx;
           return `
           <div class="option${isWinner ? " option-winner" : ""}">
             <div class="option-top">
-              <span class="option-label">${isWinner ? "🏆 " : ""}${escapeHtml(o.label)}</span>
-              <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${escapeHtml(String(o.probability))}% · ${escapeHtml(String(o.backers))}👤</span>
+              <span class="option-label">${esc(o.label)}</span>
+              <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${esc(String(o.probability))}% · ${esc(String(o.backers))} чел.</span>
             </div>
             <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
           </div>`;
         }).join("");
-        $("m-pot").innerHTML = "Пул: <b>" + fmtUSDC(m.pot_usdc) + " USDC</b> · " + escapeHtml(String(m.total_backers)) + "👤";
-        $("m-creator").textContent = "@" + (m.creator.username || ("id" + m.creator.id));
-        document.title = "#" + m.id + " " + m.question + " — Tippy";
-        document.querySelector('meta[property="og:title"]').content = "#" + m.id + " " + m.question;
-
-        if (m.status === "resolved" && winnerIdx !== null) {
-          $("m-meta").innerHTML += " · 🏆 " + escapeHtml(m.options[winnerIdx].label);
-        }
+        $("m-pot").innerHTML = "Пул: <b>" + fmtUSDC(m.pot_usdc) + " USDC</b> · " + esc(String(m.total_backers)) + " чел.";
+        $("m-creator").innerHTML = 'Автор: <a class="m-link" href="/u/' + encodeURIComponent(m.creator.id) + '">' +
+          esc(handle(m.creator.username, m.creator.id)) + "</a>";
 
         const info = await infoPromise;
-        if (info.bot_username) {
-          const deep = "https://t.me/" + encodeURIComponent(info.bot_username) +
-            "?start=bet_" + encodeURIComponent(betId);
-          $("market").insertAdjacentHTML("beforeend",
-            '<div style="display:flex; gap:10px; margin-top:16px; animation:fadeUp .6s cubic-bezier(.22,1,.36,1) .15s both;">' +
-            '<a class="btn btn-primary" style="flex:2; text-align:center;" href="' + deep + '" target="_blank" rel="noopener">🎯 Поставить в Telegram</a>' +
-            '<button class="btn btn-ghost" style="flex:1; cursor:pointer;" id="m-share">🔗 Поделиться</button>' +
-            '</div>');
+        if (info.bot_username && m.status === "open" && !m.expired) {
+          $("m-bet").href = "https://t.me/" + encodeURIComponent(info.bot_username) +
+            "?start=bet_" + encodeURIComponent(m.id);
+          $("m-cta").hidden = false;
           $("m-share").addEventListener("click", async () => {
             try {
               await navigator.clipboard.writeText(location.href);
-              $("m-share").textContent = "✅ Скопировано";
-              setTimeout(() => { $("m-share").textContent = "🔗 Поделиться"; }, 2000);
-            } catch (e) { /* ignore */ }
+              $("m-share").textContent = "Ссылка скопирована";
+              setTimeout(() => { $("m-share").textContent = "Скопировать ссылку"; }, 2000);
+            } catch (e) { /* clipboard denied: the address bar still has the link */ }
           });
         }
-        if (m.close_at) {
-          const tick = () => {
+        if (m.status === "open" && m.close_at && !m.expired) {
+          setInterval(() => {
             const el = $("m-countdown");
-            if (el) {
-              el.textContent = relDeadline(m.close_at);
-              el.classList.toggle("countdown-urgent", !reduceMotion && m.close_at * 1000 - Date.now() < 3600 * 1000);
-            }
-          };
-          tick();
-          setInterval(tick, 10000);
+            el.textContent = relDeadline(m.close_at);
+            el.classList.toggle("countdown-urgent", m.close_at * 1000 - Date.now() < 3600 * 1000);
+          }, 10000);
         }
       } catch (e) {
-        $("market").innerHTML = '<div class="empty">Рынок не найден</div>';
+        $("market").innerHTML = '<div class="empty">Пул #' + esc(betId) +
+          ' не найден. Открытые пулы — на <a class="m-link" href="/#markets">главной</a>.</div>';
       }
     })();
   </script>

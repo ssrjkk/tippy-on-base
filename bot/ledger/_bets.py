@@ -257,7 +257,7 @@ class LedgerBetsMixin:
                 )
                 self._conn.execute(
                     "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                    "VALUES ('fee', %s, %s, %s, %s)",
+                    "VALUES ('creator_income', %s, %s, %s, %s)",
                     (bet["creator"], str(bet_id), creator_income, "market fees"),
                 )
             self._conn.execute(

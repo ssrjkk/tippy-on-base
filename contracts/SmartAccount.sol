@@ -64,7 +64,9 @@ contract SmartAccount {
     event OwnerTransferred(address indexed oldOwner, address indexed newOwner);
 
     /// @notice Validate a UserOperation. Called by the EntryPoint before execution.
-    /// @dev owner signs hash(sender, nonce, chainId, callData); we verify here.
+    /// @dev owner signs EIP-191(userOpHash); userOpHash is the EntryPoint's own
+    ///      keccak(packUserOp, block.chainid, address(this)) — chain and
+    ///      EntryPoint bound, so the same signature can't replay on another chain.
     function validateUserOp(
         UserOperation calldata userOp,
         bytes32 userOpHash,
@@ -78,36 +80,16 @@ contract SmartAccount {
             require(success, "SmartAccount: prefund transfer failed");
         }
 
-        bytes calldata sig = userOp.signature;
-        // Recompute the hash WITHOUT the signature field (ERC-4337 standard):
-        // the EntryPoint's userOpHash includes signature, but we signed the hash
-        // of the UserOp with signature excluded (chicken-and-egg: can't sign a
-        // hash that depends on the signature we're creating).
-        bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _hashUserOp(userOp)));
-        address signer = _recover(hash, sig);
+        // Verify against the hash the EntryPoint computed (packUserOp excludes
+        // the signature field, so there is no chicken-and-egg here).
+        bytes32 hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
+        address signer = _recover(hash, userOp.signature);
 
         if (signer == owner) {
             return 0; // validation succeeded
         } else {
             return 1; // validation failed
         }
-    }
-
-    /// @dev Keccak256 over the UserOp fields excluding the signature. Kept in a
-    ///      separate frame so validateUserOp does not hit the stack-too-deep limit.
-    function _hashUserOp(UserOperation calldata userOp) internal pure returns (bytes32) {
-        return keccak256(abi.encode(
-            userOp.sender,
-            userOp.nonce,
-            userOp.initCode,
-            userOp.callData,
-            userOp.callGasLimit,
-            userOp.verificationGasLimit,
-            userOp.preVerificationGas,
-            userOp.maxFeePerGas,
-            userOp.maxPriorityFeePerGas,
-            userOp.paymasterAndData
-        ));
     }
 
     /// @notice Execute a single call from the account.

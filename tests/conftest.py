@@ -58,6 +58,7 @@ TABLES = [
     "withdraw_confirmations",
     "recurring_payments",
     "paymaster_usage",
+    "audit_logs",
 ]
 
 

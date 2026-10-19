@@ -187,8 +187,10 @@ def help_text(lang: str = "ru") -> str:
 KIND_EMOJI = {
     "deposit": "⬇️",
     "tip": "💸",
+    "rain_in": "🌧️",
     "withdraw": "⬆️",
     "fee": "🧾",
+    "creator_income": "🧾",
     "bet": "🎲",
     "bet_win": "🏆",
     "bet_cancel": "↩️",

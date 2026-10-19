@@ -119,11 +119,22 @@ def test_telegram_login_future_auth_date(client):
     assert r.status_code == 403
 
 
-def test_login_page_renders_widget(client):
-    r = client.get("/login")
-    assert r.status_code == 200
-    assert "data-telegram-login" in r.text
-    assert "Connect Wallet" in r.text
+def test_login_page_redirects_to_the_cabinet(client):
+    """``/login`` is a bookmark from before the cabinet moved onto ``/``.
+
+    It must still hand out the login-state cookie, otherwise an old link
+    dead-ends: the widget callback rejects requests without that cookie.
+    """
+    r = client.get("/login", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/#workspace-section"
+    assert r.cookies.get(auth.LOGIN_STATE_COOKIE)
+
+
+def test_me_page_redirects_to_the_cabinet(client):
+    r = client.get("/me", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/#workspace-section"
 
 
 def test_landing_page_hosts_the_widget_and_its_state(client):

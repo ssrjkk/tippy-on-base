@@ -367,15 +367,6 @@ Mini app = наш дашборд `/app` внутри ленты Base App. Что
 
 ---
 
-## Этап 5. Демо для гранта (Loom)
-
-1. Запиши экран: `/start` → `/deposit` → депозит → DM → `/tip` → рынок →
-   `/api/solvency` (сценарий в `GRANT.md`, §4).
-2. Залей в **Loom** (форма гранта просит именно Loom), сохрани ссылку.
-3. Заполни форму по таблице `GRANT.md` §1.
-
----
-
 ## Обслуживание
 
 ### Логи
@@ -441,16 +432,7 @@ docker compose restart app cloudflared
 
 ---
 
-## Чек-лист перед формой гранта (из GRANT.md §9)
-
-- [ ] live на mainnet: `/start` → депозит → DM → `/tip` → `/withdraw` прошли
-- [ ] `https://<домен>` отвечает, `/api/solvency` публичный
-- [ ] TipBotVault развёрнут (`python scripts/deploy_vault.py`), `reserves_source: "vault"`
-- [ ] X-аккаунт с постом «мы live»
-- [ ] Loom-демо по сценарию GRANT.md §4
-- [ ] `.env` на сервере, бэкап БД настроен
-
-## Этап 6. CREATE2 персональные депозитные адреса (Base Sepolia)
+## Этап 5. CREATE2 персональные депозитные адреса (Base Sepolia)
 
 Вместо общего hot-адреса каждый юзер получает детерминированный USDC-адрес
 (EIP-1167 прокси за `Create2Factory`). Отправка USDC на прокси `forward()`-ится
@@ -469,7 +451,7 @@ CREATE2_SAFE_DEPOSITS=1
 - Диагностика E2E: `D:/Dev/Temp/opencode/e2e_create2.py` (копируется как `/app/e2e_create2.py`).
 - **Комиссия за деплой прокси** платит hot wallet (ETH на Sepolia), юзер платит только gas сети за Swift USDC.
 
-## Этап 7. Telecom API через прокси
+## Этап 6. Telecom API через прокси
 
 Если `api.telegram.org` заблокирован на уровне сети, бот может ходить через
 HTTP(S)/SOCKS-прокси. Задайте в `.env` (перезапустить после этого):

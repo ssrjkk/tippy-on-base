@@ -4,6 +4,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+# Windows Python install manager bootstrap (machine artifact, never repo content)
+Python/
 
 # Secrets & local config. Ignore ALL local env variants (they hold real
 # tokens/keys) but keep the committed PLACEHOLDER example files tracked.
@@ -101,3 +103,6 @@ out/
 cache/
 artifacts/
 .benchmarks/
+
+# Cloudflare Pages/Workers local state (cache, dev certs, persisted D1)
+.wrangler/

@@ -668,7 +668,7 @@ class LedgerMarketsMixin:
                     )
                     self._conn.execute(
                         "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                        "VALUES ('fee', %s, %s, %s, %s)",
+                        "VALUES ('creator_income', %s, %s, %s, %s)",
                         (int(m["creator"]), str(market_id), creator_fee, "market fees"),
                     )
                     leftover -= creator_fee
@@ -776,7 +776,7 @@ class LedgerMarketsMixin:
                 )
                 self._conn.execute(
                     "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                    "VALUES ('fee', %s, %s, %s, %s)",
+                    "VALUES ('market_cancel', %s, %s, %s, %s)",
                     (int(m["creator"]), str(market_id), available, "market subsidy back"),
                 )
             # Atomic: refunds + status flip commit together so a crash can't

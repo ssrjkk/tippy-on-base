@@ -7,6 +7,7 @@ from ._audit import LedgerAuditMixin
 from ._base import (
     MICRO,
     audit_log,
+    is_credit,
     lmsr_buy_shares,
     lmsr_cost,
     lmsr_prices,
@@ -39,6 +40,7 @@ __all__ = [
     "async_ledger",
     "audit_log",
     "blocked_destination",
+    "is_credit",
     "ledger",
     "lmsr_buy_shares",
     "lmsr_cost",

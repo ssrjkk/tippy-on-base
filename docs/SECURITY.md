@@ -153,6 +153,29 @@ webhook UI adds no separate money path.
   "insufficient balance" for an address the bot was going to refuse anyway.
   A mismatch is recorded in `suspicious_activity` with the exact reason.
 
+## Money endpoints require an Idempotency-Key
+
+`POST /api/mini/{tip,trade,betplace,smartbuy,create_market}` debit or reserve
+funds, so each one requires an `Idempotency-Key` header. The key is hashed
+together with the caller's `tg_id` and the action name (`web/mini.py`,
+`_idempotency_hash`), so the same header value replayed by a different user or
+against a different action is a different reservation.
+
+- **Missing header → 400.** The request never reaches the ledger.
+- **Already reserved → 409.** A retried request cannot spend twice; the client
+  is told to reuse the original key to check status.
+- **Failure rolls the reservation back.** `_IdempotencyContext.__aexit__`
+  releases the key when the handler raises, so a genuine error (insufficient
+  balance, validation) leaves the client free to retry with the same key
+  instead of locking it out.
+
+`/api/mini/withdraw` is the exception: it is protected by the staged
+single-use token below rather than by a header.
+
+The Mini App keeps one key per unresolved action and replaces it only after
+the server accepts the request
+(`web/static/app.html`, `moneyHeaders` / `resetIdem`).
+
 ## Multi-relayer pool
 
 `RELAYER_PRIVATE_KEYS` runs a pool of dedicated relayer keys, each capped by

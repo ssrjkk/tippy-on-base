@@ -5,6 +5,7 @@ from aiogram import types
 from aiogram.filters import Command
 
 from bot import i18n, tip_targets
+from bot.ledger import is_credit
 
 from . import _common as common
 
@@ -49,7 +50,7 @@ def _tip_counterparties(rows: list[dict]) -> list[int]:
     return [
         int(r['counterparty'])
         for r in rows
-        if r['kind'] == 'tip' and str(r['counterparty'] or '').isdigit()
+        if r['kind'] in ('tip', 'rain_in') and str(r['counterparty'] or '').isdigit()
     ]
 
 
@@ -66,10 +67,21 @@ async def _history_text(tg_id: int, limit: int=15, rows_override: list[dict] | N
         emoji = common.KIND_EMOJI.get(r['kind'], '•')
         amt = common._fmt(r['amount'])
         if r['kind'] == 'tip':
-            cid = int(r['counterparty']) if r['counterparty'].isdigit() else None
+            if r['note'] == 'rain':
+                n = len([c for c in str(r['counterparty'] or '').split(',') if c])
+                lines.append(f'{emoji} −{amt} {i18n.t(lang, "hist_rain")} ×{n}')
+            else:
+                cid = int(r['counterparty']) if r['counterparty'].isdigit() else None
+                cname = names.get(cid) if cid else None
+                who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
+                lines.append(f'{emoji} {amt} → {who}')
+        elif r['kind'] == 'rain_in':
+            cid = int(r['counterparty']) if str(r['counterparty'] or '').isdigit() else None
             cname = names.get(cid) if cid else None
             who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
-            lines.append(f'{emoji} {amt} → {who}')
+            lines.append(f'{emoji} +{amt} ← {who}')
+        elif r['kind'] == 'creator_income':
+            lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_creator_fee')}")
         elif r['kind'] == 'deposit':
             lines.append(f"{emoji} +{amt} <code>{common._esc(r['counterparty'])}</code>")
         elif r['kind'] == 'withdraw':
@@ -95,7 +107,8 @@ async def _history_text(tg_id: int, limit: int=15, rows_override: list[dict] | N
         elif r['kind'] == 'channel_earn':
             lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_channel_sell')}")
         else:
-            lines.append(f"{emoji} {amt} ({r['kind']})")
+            sign = '+' if is_credit(r['kind']) else '−'
+            lines.append(f"{emoji} {sign}{amt} ({r['kind']})")
     return i18n.t(lang, 'history_title') + '\n\n' + '\n'.join(lines)
 
 @common.router.message(Command('top'))
@@ -118,7 +131,12 @@ async def cmd_history(message: types.Message) -> None:
         return
     limit = 15
     kind = None
-    valid_kinds = {'tip', 'bet', 'bet_win', 'deposit', 'withdraw', 'fee', 'x402', 'paywall', 'market_buy', 'market_sell'}
+    valid_kinds = {
+        'tip', 'rain_in', 'bet', 'bet_win', 'bet_cancel', 'deposit', 'withdraw',
+        'fee', 'creator_income', 'x402', 'paywall', 'paywall_earn',
+        'channel_pay', 'channel_earn', 'market_create', 'market_buy',
+        'market_sell', 'market_win', 'market_cancel',
+    }
     for p in parts[1:]:
         if p.isdigit():
             limit = min(max(int(p), 1), 50)

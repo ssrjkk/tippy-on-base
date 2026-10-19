@@ -152,7 +152,7 @@ accounting backed by public proof-of-reserves.
   (Base Sepolia proven: direct `handleOps` and gasless paymaster UserOps, status=1)
 - `bot/smart_wallet.py` builds + signs UserOperations (EIP-191) and drives
   `approveAndTrade` from the wallet's own USDC
-- Details: `docs/ECOSYSTEM_DESIGN.md` §8
+- Details: `docs/ARCHITECTURE.md` (Smart Wallet section)
 
 ### Breakthrough Base L2 Features
 
@@ -354,9 +354,8 @@ bot/
 ├─ commands_catalog.py  Command registry for /help
 ├─ telegram_transport.py  Telegram API wrapper (send/edit/delete)
 ├─ x402_sweep.py        x402 invoice settlement sweeper
-├─ audit.py             Audit log helpers
 ├─ onchain_market.py    OutcomeMarket contract ABI + helpers
-─ i18n.py               RU/EN/ZH message tables
+├─ i18n.py              RU/EN/ZH message tables
 └─ config.py            env-driven configuration
 agent/                  autonomous market-maker: news → LLM → markets, EAS attestations
 web/
@@ -448,11 +447,6 @@ and the money-conservation requirement for any fund-touching change.
 Security issues: [docs/SECURITY.md](docs/SECURITY.md) (no public issues).
 Community rules: [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md).
 Licensed under [MIT](LICENSE).
-
-## Grant
-
-Prepared for the [Base Builder Grants](https://www.base.io/ecosystem/grants)
-program — pitch and application package in **[docs/GRANT.md](docs/GRANT.md)**.
 
 ---
 

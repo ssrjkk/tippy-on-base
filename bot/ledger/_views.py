@@ -106,15 +106,13 @@ class LedgerViewsMixin:
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE tg_id = %s AND kind = 'tip'",
                 (tg_id,),
             ).fetchone()["s"]
+            # A rain's sender row names its recipients as a comma list (or a
+            # single id); their shares are counted from their own rain_in rows.
             received = self._conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log "
-                "WHERE kind = 'tip' AND counterparty = %s",
-                (str(tg_id),),
-            ).fetchone()["s"]
-            received += self._conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log "
-                "WHERE kind = 'x402' AND tg_id = %s",
-                (tg_id,),
+                "WHERE (kind = 'tip' AND counterparty = %s AND note IS DISTINCT FROM 'rain') "
+                "OR (kind IN ('rain_in', 'x402') AND tg_id = %s)",
+                (str(tg_id), tg_id),
             ).fetchone()["s"]
             won = self._conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE tg_id = %s AND kind = 'bet_win'",
@@ -133,7 +131,7 @@ class LedgerViewsMixin:
         with self._lock:
             row = self._conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log "
-                "WHERE tg_id = %s AND kind = 'fee' AND note = 'market fees'",
+                "WHERE tg_id = %s AND kind = 'creator_income'",
                 (tg_id,),
             ).fetchone()
         return int(row["s"])

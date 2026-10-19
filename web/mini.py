@@ -25,7 +25,8 @@ from pydantic import BaseModel, Field
 from bot import base, config
 from bot.ledger import async_ledger as ledger
 from bot.ledger import blocked_destination
-from web.auth import COOKIE_NAME, SESSION_TTL_SECONDS, make_session, parse_session
+from bot.tx_view import rows_view
+from web.auth import COOKIE_NAME, SESSION_TTL_SECONDS, make_session, parse_session, secure_request
 
 router = APIRouter()
 log = logging.getLogger('web.mini')
@@ -181,8 +182,7 @@ async def mini_auth(body: InitAuth, request: Request):
     resp = JSONResponse({'ok': True, 'tg_id': tg_id})
     resp.set_cookie(COOKIE_NAME, make_session(tg_id), max_age=SESSION_TTL_SECONDS,
                     httponly=True, samesite='lax',
-                    secure=request.url.scheme == 'https'
-                    or request.headers.get('x-forwarded-proto', '').lower() == 'https')
+                    secure=secure_request(request))
     return resp
 
 @router.get('/api/mini/state', tags=['users'])
@@ -205,7 +205,8 @@ async def mini_state(request: Request) -> dict:
     for view in await ledger.bulk_market_views([int(b['id']) for b in bet_rows]):
         pot = view['pot']
         bets.append({'id': view['id'], 'question': view['question'], 'creator': int(view['creator']['id']), 'pot_usdc': _fmt(pot), 'options': [{'index': o['index'], 'label': o['label'], 'pool_usdc': _fmt(o['pool']), 'chance_pct': round(100 * o['pool'] / pot, 1) if pot else 0.0} for o in view['options']]})
-    history = [{'kind': r['kind'], 'amount': _fmt(r['amount']), 'note': r['note'] or '', 'counterparty': r['counterparty'] or '', 'created_at': r['created_at']} for r in await ledger.history(tg_id, 10)]
+    lang = (await ledger.get_settings(tg_id)).get('lang', 'ru')
+    history = await rows_view(await ledger.history(tg_id, 10), lang, ledger)
     from bot import tip_targets
     top_rows = await ledger.leaderboard(5)
     top = []
@@ -217,7 +218,6 @@ async def mini_state(request: Request) -> dict:
             except Exception:
                 name = None
         top.append({'username': name or f"id{r['tg_id']}", 'total_usdc': _fmt(r['total_micro'])})
-    lang = (await ledger.get_settings(tg_id)).get('lang', 'ru')
     from bot import onchain_market as om
     onchain = await om.market_views(8)
     return {'tg_id': tg_id, 'username': await ledger.username_of(tg_id), 'balance_usdc': float(await ledger.balance(tg_id)), 'deposit_address': str(base.hot_wallet()), 'linked_address': await ledger.linked_address(tg_id), 'lang': lang, 'markets': markets, 'bets': bets, 'onchain_markets': onchain, 'history': history, 'top': top}

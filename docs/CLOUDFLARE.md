@@ -6,7 +6,7 @@
 |---|---|---|
 | Cloudflare Pages | `web/static` (build output dir) | `style.css`, `app.js`, `site.js`, images |
 | Pages Functions | `functions/[[path]].js` | proxies every other request to the VPS |
-| FastAPI backend | VPS, Docker (`web/server.py`) | `/`, `/login`, `/app`, `/me`, `/u/{id}`, `/m/{id}`, `/tos`, `/metrics`, `/qr`, `/api/*`, `/telegram-webhook`, `/.well-known/farcaster.json` |
+| FastAPI backend | VPS, Docker (`web/server.py`) | `/`, `/app`, `/u/{id}`, `/m/{id}`, `/tos`, `/metrics`, `/qr`, `/api/*`, `/telegram-webhook`, `/.well-known/farcaster.json`; `/login` and `/me` redirect to `/#workspace-section` |
 
 The function catches all requests first (a Pages Function takes precedence over
 the asset bundle) and asks the asset bundle only for `GET`/`HEAD` paths that end

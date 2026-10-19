@@ -6,6 +6,7 @@ and the fallback behavior when smart wallet is not configured.
 
 import types
 
+import pytest
 from eth_abi import decode as abi_decode
 from web3 import Web3
 
@@ -212,11 +213,12 @@ def test_eth_account_signing_primitive():
     assert recovered.lower() == acct.address.lower()
 
 
-def test_sign_paymaster_is_eip191():
+def test_sign_paymaster_is_eip191(monkeypatch):
     # _sign_paymaster must produce a recoverable signature without any network.
     from eth_account import Account
     key = "0x" + "cd" * 32
     acct = Account.from_key(key)
+    _monkeypatch_smart_wallet(monkeypatch)  # chain_id 8453, paymaster 0x22*20
     user_op = {
         "sender": "0x" + "11" * 20,
         "nonce": 0,
@@ -230,17 +232,19 @@ def test_sign_paymaster_is_eip191():
     }
     sig = sw._sign_paymaster(user_op, key)
     assert len(sig) == 65
-    # Recover using the rawHash that _sign_paymaster computes internally.
+    # Recover using the rawHash that _sign_paymaster computes internally:
+    # the 9 op fields PLUS chainid and the paymaster address (replay binding).
     from eth_abi import encode as abi_encode
+    from eth_account.messages import encode_defunct
     raw_hash = Web3.keccak(abi_encode(
-        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256"],
+        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256", "address"],
         [
             user_op["sender"], user_op["nonce"], user_op["initCode"], user_op["callData"],
             user_op["callGasLimit"], user_op["verificationGasLimit"], user_op["preVerificationGas"],
             user_op["maxFeePerGas"], user_op["maxPriorityFeePerGas"],
+            8453, Web3.to_checksum_address(config.SMART_WALLET_PAYMASTER_ADDRESS),
         ],
     ))
-    from eth_account.messages import encode_defunct
     recovered = Account.recover_message(
         encode_defunct(primitive=raw_hash), signature=sig
     )
@@ -270,19 +274,227 @@ def test_sign_user_op_uses_mocked_entrypoint_hash(monkeypatch):
     }
     sig = sw._sign_user_op(op, key)
     assert len(sig) == 65
-    # The hash is now computed locally (excluding signature field), not from EntryPoint.
-    # Recompute it the same way _sign_user_op does to verify the signature.
-    from eth_abi import encode as abi_encode
-    w3 = sw._get_w3()
-    hash_input = sw._user_op_hash_input(op)
-    user_op_hash = Web3.keccak(abi_encode(
-        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256", "bytes", "address", "uint256"],
-        [*hash_input, Web3.to_checksum_address(config.SMART_WALLET_ENTRYPOINT), w3.eth.chain_id],
-    ))
+    # _sign_user_op now asks the EntryPoint itself for the hash (RPC call),
+    # never recomputes it locally — so the signed digest is exactly whatever
+    # getUserOpHash returns. The stub returns b"\x00"*32.
     recovered = Account.recover_message(
-        encode_defunct(primitive=user_op_hash), signature=sig
+        encode_defunct(primitive=b"\x00" * 32), signature=sig
     )
     assert recovered.lower() == acct.address.lower()
+
+
+# ---------------------------------------------------------------------------
+# On-chain paymaster hash domain (solcx + eth-tester)
+# ---------------------------------------------------------------------------
+
+_ENTRYPOINT_SINGLETON = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+
+
+def _compile_test_variant(file_name: str, contract_name: str, fake_ep: str):
+    """Compile contracts/<file_name> with the EntryPoint singleton constant
+    replaced by a controllable eth-tester account.
+
+    eth-tester cannot spoof msg.sender, so the test build redirects the
+    `require(msg.sender == entryPoint())` gate; the signature domain
+    (chainid + contract address, or the EntryPoint-provided userOpHash)
+    is untouched. Each source must contain the singleton exactly once.
+    """
+    import os
+
+    import solcx
+
+    path = os.path.join(os.path.dirname(__file__), "..", "contracts", file_name)
+    with open(path, encoding="utf-8") as f:
+        src = f.read()
+    assert src.count(_ENTRYPOINT_SINGLETON) == 1
+    solcx.set_solc_version("0.8.24")
+    # optimize=True: the 11-field abi.encode in relayerMessageHash overflows
+    # the EVM stack without the optimizer's stack-height reduction.
+    compiled = solcx.compile_source(
+        src.replace(_ENTRYPOINT_SINGLETON, fake_ep),
+        output_values=["abi", "bin"], optimize=True,
+    )
+    return next(
+        a for k, a in compiled.items()
+        if k.endswith(":" + contract_name) and a["bin"]
+    )
+
+
+def _tester_chain():
+    import solcx
+    from web3 import Web3
+    from web3.providers.eth_tester import EthereumTesterProvider
+
+    solcx.set_solc_version("0.8.24")
+    w3 = Web3(EthereumTesterProvider())
+    fake_ep = Web3.to_checksum_address(w3.eth.accounts[5])
+    return w3, fake_ep
+
+
+def _deploy_paymaster_with_test_entrypoint():
+    """Deploy a VerifyingPaymaster whose entryPoint() returns a tester account.
+
+    Returns (w3, pm_contract, relayer_account, entry_point_address).
+    """
+    import os
+
+    import solcx
+    from eth_account import Account
+
+    solcx.set_solc_version("0.8.24")
+    # Also build-check the real sources (incl. SmartAccount's validateUserOp
+    # change) before compiling the test variants.
+    base = os.path.join(os.path.dirname(__file__), "..", "contracts")
+    solcx.compile_files(
+        [os.path.join(base, "VerifyingPaymaster.sol"), os.path.join(base, "SmartAccount.sol")],
+        output_values=["abi"], optimize=True,
+    )
+
+    w3, fake_ep = _tester_chain()
+    art = _compile_test_variant("VerifyingPaymaster.sol", "VerifyingPaymaster", fake_ep)
+    relayer = Account.create()
+    pm = w3.eth.contract(abi=art["abi"], bytecode=art["bin"])
+    receipt = w3.eth.wait_for_transaction_receipt(
+        pm.constructor(relayer.address, "0x" + "33" * 20, 1_000).transact({"from": w3.eth.accounts[0]})
+    )
+    return w3, w3.eth.contract(address=receipt.contractAddress, abi=art["abi"]), relayer, fake_ep
+
+
+def _deploy_smart_account_with_test_entrypoint():
+    """Deploy and initialize a SmartAccount with a tester-account EntryPoint.
+
+    Returns (w3, sa_contract, owner_account, entry_point_address).
+    """
+    from eth_account import Account
+
+    w3, fake_ep = _tester_chain()
+    art = _compile_test_variant("SmartAccount.sol", "SmartAccount", fake_ep)
+    owner = Account.create()
+    sa = w3.eth.contract(abi=art["abi"], bytecode=art["bin"])
+    receipt = w3.eth.wait_for_transaction_receipt(
+        sa.constructor().transact({"from": w3.eth.accounts[0]})
+    )
+    sa = w3.eth.contract(address=receipt.contractAddress, abi=art["abi"])
+    w3.eth.wait_for_transaction_receipt(
+        sa.functions.initialize(owner.address).transact({"from": w3.eth.accounts[0]})
+    )
+    return w3, sa, owner, fake_ep
+
+
+_TEST_OP = {
+    "sender": "0x" + "11" * 20,
+    "nonce": 7,
+    "initCode": b"",
+    "callData": b"\xab" * 4,
+    "callGasLimit": 200_000,
+    "verificationGasLimit": 150_000,
+    "preVerificationGas": 50_000,
+    "maxFeePerGas": 10_000_000,
+    "maxPriorityFeePerGas": 1_000_000,
+}
+
+
+def _py_relayer_raw_hash(op, chain_id, paymaster_addr):
+    """The rawHash exactly as bot _sign_paymaster computes it."""
+    from eth_abi import encode as abi_encode
+    return Web3.keccak(abi_encode(
+        ["address", "uint256", "bytes", "bytes", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256", "address"],
+        [op["sender"], op["nonce"], op["initCode"], op["callData"],
+         op["callGasLimit"], op["verificationGasLimit"], op["preVerificationGas"],
+         op["maxFeePerGas"], op["maxPriorityFeePerGas"], chain_id, paymaster_addr],
+    ))
+
+
+def _op_struct(op, pmd, sig=b""):
+    return (op["sender"], op["nonce"], op["initCode"], op["callData"],
+            op["callGasLimit"], op["verificationGasLimit"], op["preVerificationGas"],
+            op["maxFeePerGas"], op["maxPriorityFeePerGas"], pmd, sig)
+
+
+def _pmd_for(pm_address, tg_id, sig):
+    return bytes.fromhex(Web3.to_checksum_address(pm_address)[2:]) + tg_id.to_bytes(32, "big") + sig
+
+
+def _validate(pm, op_full, hash_for_call, from_addr):
+    return pm.functions.validatePaymasterUserOp(op_full, hash_for_call, 10**24).call({"from": from_addr})
+
+
+def test_paymaster_relayer_hash_matches_python():
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+    w3, pm, relayer, fake_ep = _deploy_paymaster_with_test_entrypoint()
+    raw = _py_relayer_raw_hash(_TEST_OP, w3.eth.chain_id, pm.address)
+
+    # The contract view returns the EIP-191 digest over the same rawHash the
+    # bot signs with Account.sign_message(encode_defunct(primitive=raw)).
+    on_chain = pm.functions.relayerMessageHash(_op_struct(_TEST_OP, b"")).call()
+    assert on_chain == Web3.keccak(b"\x19Ethereum Signed Message:\n32" + raw)
+
+    # The hash excludes paymasterAndData, so it is stable across the bot's
+    # sign-then-attach sequence.
+    sig = Account.sign_message(encode_defunct(primitive=raw), relayer.key).signature
+    pmd = _pmd_for(pm.address, 4242, sig)
+    assert pm.functions.relayerMessageHash(_op_struct(_TEST_OP, pmd)).call() == on_chain
+
+    # validatePaymasterUserOp accepts the off-chain bot signature as EntryPoint.
+    _validate(pm, _op_struct(_TEST_OP, pmd), raw, fake_ep)
+
+
+def test_paymaster_rejects_cross_chain_replay():
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+    w3, pm, relayer, fake_ep = _deploy_paymaster_with_test_entrypoint()
+
+    # Same relayer, same op — but the signature was minted for chain 1 (a
+    # relayer key leaked from another chain cannot sponsor ops here).
+    raw_other_chain = _py_relayer_raw_hash(_TEST_OP, 1, pm.address)
+    sig = Account.sign_message(encode_defunct(primitive=raw_other_chain), relayer.key).signature
+    pmd = _pmd_for(pm.address, 4242, sig)
+    with pytest.raises(Exception, match="bad relayer sig"):
+        _validate(pm, _op_struct(_TEST_OP, pmd), raw_other_chain, fake_ep)
+
+
+def test_paymaster_rejects_foreign_signer():
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+    w3, pm, relayer, fake_ep = _deploy_paymaster_with_test_entrypoint()
+
+    attacker = Account.create()
+    raw = _py_relayer_raw_hash(_TEST_OP, w3.eth.chain_id, pm.address)
+    sig = Account.sign_message(encode_defunct(primitive=raw), attacker.key).signature
+    pmd = _pmd_for(pm.address, 4242, sig)
+    with pytest.raises(Exception, match="bad relayer sig"):
+        _validate(pm, _op_struct(_TEST_OP, pmd), raw, fake_ep)
+
+
+def test_smart_account_owner_sig_over_entrypoint_hash():
+    # validateUserOp verifies EIP-191 over the hash the EntryPoint passes it:
+    # 0 (valid) for the owner's signature, 1 (sig validation failed) otherwise.
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+    w3, sa, owner, fake_ep = _deploy_smart_account_with_test_entrypoint()
+    h = Web3.keccak(text="ep-computed userOpHash")
+    sig = Account.sign_message(encode_defunct(primitive=h), owner.key).signature
+    assert sa.functions.validateUserOp(
+        _op_struct(_TEST_OP, b"", sig), h, 0
+    ).call({"from": fake_ep}) == 0
+    attacker = Account.create()
+    bad_sig = Account.sign_message(encode_defunct(primitive=h), attacker.key).signature
+    assert sa.functions.validateUserOp(
+        _op_struct(_TEST_OP, b"", bad_sig), h, 0
+    ).call({"from": fake_ep}) == 1
+
+
+def test_smart_account_rejects_non_entrypoint_caller():
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+    w3, sa, owner, fake_ep = _deploy_smart_account_with_test_entrypoint()
+    h = Web3.keccak(text="ep-computed userOpHash")
+    sig = Account.sign_message(encode_defunct(primitive=h), owner.key).signature
+    with pytest.raises(Exception, match="not EntryPoint"):
+        sa.functions.validateUserOp(
+            _op_struct(_TEST_OP, b"", sig), h, 0
+        ).call({"from": w3.eth.accounts[1]})
 
 
 # ---------------------------------------------------------------------------

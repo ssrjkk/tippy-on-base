@@ -40,6 +40,17 @@
     return String(x).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   }
 
+  // tx_log stores created_at as epoch seconds, so it has to be read as a number:
+  // slicing it like a timestamp string prints the digits, and new Date(seconds)
+  // lands in 1970.
+  function fmtDate(sec) {
+    var n = Number(sec);
+    if (!isFinite(n) || n <= 0) return '';
+    return new Date(n * 1000).toLocaleString('ru-RU', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
   function showError(id, text) {
     var el = $(id);
     if (!el) return;
@@ -343,43 +354,23 @@
     $('ocMsg').textContent = '';
   }
 
-  var KIND_LABEL = {
-    deposit: 'Депозит',
-    withdraw: 'Вывод',
-    tip: 'Чаевые',
-    bet: 'Ставка',
-    bet_win: 'Выигрыш ставки',
-    bet_cancel: 'Возврат ставки',
-    market_buy: 'Покупка долей',
-    market_sell: 'Продажа долей',
-    market_win: 'Выплата по рынку',
-    market_cancel: 'Возврат по рынку',
-    market_create: 'Создание рынка',
-    paywall: 'Платный пост',
-    paywall_earn: 'Доход с платного поста',
-    channel_earn: 'Доход с канала',
-    channel_pay: 'Оплата канала',
-    x402: 'Оплата x402',
-    fee: 'Комиссия',
-  };
-
+  // Labels, sign and the counterparty reference come from /api/mini/state, which
+  // builds them from tx_log via bot/tx_view: amounts there are always positive,
+  // so a renderer that guesses the sign from the number shows a withdrawal as
+  // income.
   function renderHistory() {
     var box = $('historyList');
     var rows = state.history || [];
     if (!rows.length) {
-      box.innerHTML = '<div class="empty">Операций пока нет</div>';
+      box.innerHTML = '<div class="empty">Операций пока нет — пополни баланс через кошелёк ниже</div>';
       return;
     }
     box.innerHTML = rows.map(function (r) {
-      var out = r.kind !== 'deposit' && r.kind !== 'tip' && r.kind !== 'bet_win'
-        && r.kind !== 'market_win' && r.kind !== 'paywall_earn' && r.kind !== 'channel_earn';
-      var label = KIND_LABEL[r.kind] || r.kind;
-      var sub = [r.counterparty ? '@' + r.counterparty : '', r.note || '']
-        .filter(Boolean).join(' — ');
-      return '<div class="row"><span class="row-k">' + esc(label) +
+      var sub = [r.ref || '', r.note || ''].filter(Boolean).join(' — ');
+      return '<div class="row"><span class="row-k">' + esc(r.label || r.kind) +
         (sub ? ' <span class="hint">' + esc(sub) + '</span>' : '') +
-        '<br><span class="hint">' + esc(String(r.created_at || '').replace('T', ' ').slice(0, 16)) + '</span></span>' +
-        '<b class="row-v ' + (out ? 'neg' : 'pos') + '">' + (out ? '−' : '+') + fmt(r.amount) + '</b></div>';
+        '<br><span class="hint">' + esc(fmtDate(r.created_at)) + '</span></span>' +
+        '<b class="row-v ' + (r.incoming ? 'pos' : 'neg') + '">' + (r.incoming ? '+' : '−') + fmt(r.amount_usdc) + '</b></div>';
     }).join('');
   }
 
@@ -636,7 +627,8 @@
       var rm = document.createElement('button');
       rm.type = 'button';
       rm.className = 'btn btn-ghost btn-sm';
-      rm.textContent = '×';
+      rm.setAttribute('aria-label', 'Удалить вариант');
+      rm.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
       rm.dataset.act = 'removeOption';
       div.appendChild(rm);
     }
@@ -649,7 +641,7 @@
       b.style.visibility = rows.length > 2 ? 'visible' : 'hidden';
     });
     var add = document.querySelector('[data-act="addOption"]');
-    if (add) add.style.display = rows.length >= 4 ? 'none' : '';
+    if (add) add.hidden = rows.length >= 4;
   }
 
   function wireCreateOptions() {

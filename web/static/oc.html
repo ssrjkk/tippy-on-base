@@ -5,91 +5,190 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ончейн-рынок — Tippy</title>
   <meta property="og:title" content="Ончейн-рынок — Tippy" />
-  <meta property="og:description" content="Polymarket-стиль на Base: доли ERC-1155, расчёты в USDC прямо в контракте. Смотри живые шансы и торгуй в Telegram." />
+  <meta property="og:description" content="Рынок на Base: доли ERC-1155, расчёты в USDC внутри контракта. Живые шансы и торговля через Telegram-бота." />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
 </head>
 <body>
-  <div class="orb orb-a" aria-hidden="true"></div>
-  <div class="orb orb-b" aria-hidden="true"></div>
-
   <header class="nav">
     <div class="nav-inner">
       <a class="brand" href="/">
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
-        <b>Tippy</b>
+        <span class="brand-name"><b>Tippy</b></span>
       </a>
-      <span class="chain-chip">🟦 <span data-net="chain">Base</span> · on-chain</span>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="/#onchain">Все ончейн-рынки</a>
+      </div>
     </div>
   </header>
 
-  <main class="container">
-    <section class="section reveal" id="oc-page">
-      <h2 id="oc-title">Загрузка…</h2>
-      <p class="hint" id="oc-meta"></p>
-      <div id="oc-options"></div>
-      <div class="oc-actions">
-        <a class="btn btn-primary" id="oc-tg" href="https://t.me/__BOT_USERNAME__" target="_blank" rel="noopener">Открыть в Telegram</a>
-        <a class="btn btn-ghost" id="oc-scan" href="#" target="_blank" rel="noopener" style="display:none">🔗 Контракт в обозревателе</a>
+  <main>
+    <article class="page" id="oc">
+      <span class="eyebrow" id="oc-kind">Ончейн-рынок</span>
+      <h1 class="page-title" id="oc-question">Загрузка…</h1>
+      <div class="page-meta" id="oc-meta"></div>
+
+      <div class="market-card">
+        <div id="oc-options"></div>
+        <div class="market-footer">
+          <span class="pot" id="oc-pool"></span>
+          <span class="pot" id="oc-creator"></span>
+        </div>
       </div>
-      <p class="hint" style="margin-top:14px">
-        Доли — настоящие ERC-1155 токены в контракте OutcomeMarket; расчёты в USDC
-        на-цепи. Создавай и торгуй в боте: /oc_create · /oc_buy · /oc_redeem.
-      </p>
-    </section>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://t.me/__BOT_USERNAME__" data-tg-link>Торговать в Telegram</a>
+        <a class="btn btn-ghost" id="oc-scan" href="#" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
+        <button class="btn btn-ghost" id="oc-share" type="button">Скопировать ссылку</button>
+      </div>
+
+      <section class="page-block">
+        <span class="eyebrow">Механика</span>
+        <p class="hint">
+          Исходные доли — токены ERC-1155 в контракте OutcomeMarket, расчёты идут в
+          USDC на-цепи. Цены держит LMSR-кривая: чем больше доли куплены, тем выше
+          их цена, и покупка следующего юнита всегда дороже. В боте:
+          <code>/oc_create</code>, <code>/oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt;</code>,
+          <code>/oc_sell</code>, <code>/oc_redeem &lt;id&gt;</code>.
+        </p>
+      </section>
+    </article>
   </main>
+
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+        <div>
+          <b>Tippy</b>
+          <span class="footer-tag">USDC-экономика в Telegram и вебе</span>
+        </div>
+      </div>
+      <div class="footer-meta">
+        <span class="chain-chip"><span data-net="chain">Base</span></span>
+        <span class="chain-chip"><span data-net="usdc">USDC</span></span>
+      </div>
+    </div>
+    <div class="author-links">
+      <span>Автор:</span>
+      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">@b2wmain</a>
+      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a>
+      <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
+      <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p class="footer-legal"><a href="/tos">Условия использования</a></p>
+    <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
+      <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+      Built on Base · открытая кодовая база
+    </a>
+  </footer>
 
   <script src="/chain.js"></script>
   <script>
-    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const $ = (id) => document.getElementById(id);
+    const esc = (s) =>
+      String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      })[c]);
+    const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
+    const fmtUSDC = (x) =>
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    const relDeadline = (ts) => {
+      const left = ts * 1000 - Date.now();
+      if (left <= 0) return "дедлайн прошёл";
+      const s = Math.floor(left / 1000);
+      const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+      if (d) return "осталось " + d + "д " + h + "ч";
+      if (h) return "осталось " + h + "ч " + m + "м";
+      return "осталось " + m + "м";
+    };
 
-    async function load() {
-      const id = location.pathname.split('/').filter(Boolean).pop();
+    const marketId = location.pathname.split("/").filter(Boolean).pop();
+    const infoPromise = fetch("/api/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+    infoPromise.then(applyNetInfo);
+
+    (async () => {
+      let m;
       try {
-        const [infoR, mR] = await Promise.all([fetch('/api/info'), fetch('/api/onchain/market/' + id)]);
-        let info = {};
-        try { info = await infoR.json(); } catch (e) { /* labels keep their fallback */ }
-        applyNetInfo(info);
-        if (!mR.ok) throw new Error();
-        const m = await mR.json();
-
-        const badge = m.cancelled ? '⛔ отменён' : (m.resolved ? '🏁 завершён' : '⛓️ открыт');
-        $('oc-title').textContent = '#' + m.id + ' ' + m.question;
-        document.title = '#' + m.id + ' ' + m.question + ' — Tippy';
-        document.querySelector('meta[property="og:title"]').content = document.title;
-        $('oc-meta').innerHTML = badge + (m.close_at && !m.resolved && !m.cancelled
-          ? ' · ⏰ ' + new Date(m.close_at * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-          : '') + ' · пул ' + ((m.escrow_micro || 0) / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' USDC';
-
-        $('oc-options').innerHTML = (m.options || []).map((o, j) => {
-          const pct = o.price_pct || 0;
-          const isWinner = m.resolved && m.winner === o.index;
-          return `<div class="oc-option">
-            <div class="oc-option-head">
-              <span>${isWinner ? '🏆 ' : ''}${esc(o.label)}</span>
-              <b>${pct.toFixed(1)}%</b>
-            </div>
-            <div class="oc-option-bar">
-              <div class="oc-option-fill" style="width:${Math.max(pct, 2)}%"></div>
-            </div>
-          </div>`;
-        }).join('');
-
-        /* No explorer, no link: pointing at basescan.org from a testnet deploy
-         * would send users to a page that does not know this contract. */
-        if (m.market_address && info.explorer) {
-          $('oc-scan').href = info.explorer + '/address/' + encodeURIComponent(m.market_address);
-          $('oc-scan').style.display = '';
-        }
+        const r = await fetch("/api/onchain/market/" + encodeURIComponent(marketId));
+        if (!r.ok) throw new Error();
+        m = await r.json();
       } catch (e) {
-        $('oc-title').textContent = 'Рынок не найден';
-        $('oc-meta').textContent = 'Возможно, ончейн-рынки ещё не включены.';
+        $("oc").innerHTML = '<div class="empty">Ончейн-рынок #' + esc(marketId) +
+          ' не найден — возможно, контракты ещё не развёрнуты в этой сети. Список рынков: <a class="m-link" href="/#onchain">на главной</a>.</div>';
+        return;
       }
-    }
 
-    load();
+      // The contract answers with three flags, and a disputed market is neither
+      // settled nor tradable, so it needs its own word instead of "открыт".
+      let state;
+      if (m.cancelled) state = '<span class="chip chip-cancelled">отменён</span>';
+      else if (m.resolved) state = '<span class="chip chip-resolved">' + (m.disputed ? "оспорен" : "завершён") + "</span>";
+      else state = '<span class="chip chip-open">открыт</span>';
+
+      const winnerIdx = m.resolved && !m.cancelled && m.winner != null ? m.winner : null;
+      const meta = [state];
+      if (!m.resolved && !m.cancelled && m.close_at) {
+        meta.push('<span id="oc-countdown" data-close-at="' + parseInt(m.close_at) + '">' + relDeadline(m.close_at) + "</span>");
+      }
+      if (winnerIdx !== null) meta.push("<span>исход: " + esc((m.options[winnerIdx] || {}).label || "#" + winnerIdx) + "</span>");
+      $("oc-meta").innerHTML = meta.join("<span>·</span>");
+
+      $("oc-kind").textContent = "Ончейн-рынок · #" + m.id;
+      $("oc-question").textContent = m.question;
+      document.title = m.question + " — Tippy";
+      document.querySelector('meta[property="og:title"]').content = "#" + m.id + " " + m.question;
+
+      $("oc-options").innerHTML = m.options.map((o, i) => {
+        const isWinner = winnerIdx !== null && o.index === winnerIdx;
+        const pct = Number(o.price_pct || 0);
+        return `
+        <div class="option${isWinner ? " option-winner" : ""}">
+          <div class="option-top">
+            <span class="option-label">${esc(o.label)}</span>
+            <span class="option-val">${esc(String(pct))}%</span>
+          </div>
+          <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(pct, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
+        </div>`;
+      }).join("");
+
+      const pool = fmtUSDC((m.escrow_micro || 0) / 1e6);
+      $("oc-pool").innerHTML = "В контракте: <b>" + pool + " USDC</b>";
+      $("oc-creator").innerHTML = 'Автор: <a class="m-link" href="/u/' + encodeURIComponent(m.creator.id) + '">' +
+        esc(handle(m.creator.username, m.creator.id)) + "</a>";
+
+      /* No explorer means no link: pointing at basescan.org from a testnet
+       * deploy opens a page that does not know this contract. */
+      const info = await infoPromise;
+      const scan = $("oc-scan");
+      if (!m.market_address || !info.explorer) {
+        scan.remove();
+      } else {
+        scan.href = info.explorer + "/address/" + encodeURIComponent(m.market_address);
+      }
+
+      $("oc-share").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(location.href);
+          $("oc-share").textContent = "Ссылка скопирована";
+          setTimeout(() => { $("oc-share").textContent = "Скопировать ссылку"; }, 2000);
+        } catch (e) { /* clipboard denied: the address bar still has the link */ }
+      });
+
+      if (!m.resolved && !m.cancelled && m.close_at) {
+        setInterval(() => {
+          const el = $("oc-countdown");
+          el.textContent = relDeadline(m.close_at);
+          el.classList.toggle("countdown-urgent", m.close_at * 1000 - Date.now() < 3600 * 1000);
+        }, 10000);
+      }
+    })();
   </script>
 </body>
 </html>

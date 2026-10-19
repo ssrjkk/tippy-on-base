@@ -4,222 +4,333 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Tippy</title>
-<meta name="fc:miniapp" content='{"version":"1","imageUrl":"__PUBLIC_URL__/static/miniapp-hero.png","button":{"title":"💸 Открыть Tippy","action":{"type":"launch_miniapp","url":"__PUBLIC_URL__/app"}}}'>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E">
+<meta name="fc:miniapp" content='{"version":"1","imageUrl":"__PUBLIC_URL__/static/miniapp-hero.png","button":{"title":"Открыть Tippy","action":{"type":"launch_miniapp","url":"__PUBLIC_URL__/app"}}}'>
 <meta property="og:title" content="Tippy — чаевые и рынки в USDC на Base">
 <meta property="og:description" content="Чаевые, ончейн-рынки и AI-агент в USDC. Открой прямо в Base App.">
 <meta property="og:image" content="__PUBLIC_URL__/static/miniapp-hero.png">
 <script type="module">
+  /* Module scripts are deferred, so this runs after the app's classic script has
+     already finished booting — the "Add to Base App" button has to be revealed
+     here, not from init(), which cannot see the SDK yet. */
   import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
   window.__fcSdk = sdk;
   try { await sdk.actions.ready(); } catch(e) {}
+  try {
+    const ctx = await sdk.context;
+    if (ctx && !ctx.client?.added) document.getElementById('addMiniApp')?.removeAttribute('hidden');
+  } catch(e) {}
+</script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+/* Theme and the Telegram handshake have to land before first paint: without
+   telegram-web-app.js there is no WebApp.initData, so /api/mini/auth never runs
+   and the app opens anonymous inside Telegram. */
+(function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+  var saved = localStorage.getItem('theme');
+  var dark;
+  if (saved) dark = saved === 'dark';
+  else if (tg && tg.colorScheme) dark = tg.colorScheme === 'dark';
+  else dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+})();
 </script>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root,[data-theme="light"]{--bg:#f8f9fb;--card:#ffffff;--card2:#f4f5f7;--accent:#0052ff;--accent2:#1859ff;--success:#16a34a;--danger:#ef4444;--text:#0a0b0d;--text2:#6b7280;--text3:#9ca3af;--border:#e2e4e8;--radius:12px;--safe-b:env(safe-area-inset-bottom,0px)}
-[data-theme="dark"]{--bg:#0A0B0D;--card:#14161A;--card2:#1C1F26;--accent:#0052ff;--accent2:#1a6aff;--success:#16a34a;--danger:#ef4444;--text:#fff;--text2:#9aa0a6;--text3:#6b7280;--border:#2a2d35}
-html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent;transition:background .3s,color .3s}
-a{color:var(--accent);text-decoration:none}
-button{font-family:inherit;cursor:pointer;border:none;outline:none}
-input,textarea{font-family:inherit;outline:none}
+/* Tokens copied from /style.css — base.org values: one brand blue, neutral greys,
+ * hairline borders, no shadows. --accent paints surfaces, --accent-text paints type,
+ * because #224bff is a fill colour and is not readable as text on the dark canvas. */
+:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#6f6f6f;--text4:#9a9a9a;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Helvetica Neue",Helvetica,Arial,sans-serif;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
+[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65)}
+html,body{height:100%;font-family:var(--font-ui);font-size:15px;line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
+a{color:var(--accent-text);text-decoration:none}
+button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit;outline:none}
+input,textarea{font-family:inherit;outline:none;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:var(--blue-line)}
 ::-webkit-scrollbar{width:0;height:0}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+.icon{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 
 #app{max-width:480px;margin:0 auto;height:100%;position:relative;display:flex;flex-direction:column;overflow:hidden}
 
 /* Header */
-.header{position:sticky;top:0;z-index:100;background:var(--bg);opacity:.96;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);min-height:56px}
-.header-logo{font-size:22px;font-weight:700;letter-spacing:-.5px}
-.header-logo span{color:var(--accent)}
+.header{position:sticky;top:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);min-height:54px}
+.header-logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600;letter-spacing:-.02em}
+.header-logo .base-mark{width:22px;height:22px;border-radius:6px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.header-logo .base-mark svg{width:14px;height:14px}
+.header-logo .dot{color:var(--accent-text)}
 .header-right{display:flex;align-items:center;gap:8px}
-.theme-toggle{width:36px;height:36px;border-radius:50%;background:var(--card2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .2s;color:var(--text2)}
-.theme-toggle:active{transform:scale(.92);border-color:var(--accent)}
+.theme-toggle{width:34px;height:34px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text3);transition:color .2s var(--ease),border-color .2s var(--ease)}
+.theme-toggle:hover,.theme-toggle:active{border-color:var(--text);color:var(--text)}
 [data-theme="dark"] .theme-toggle .icon-sun{display:inline}
 [data-theme="dark"] .theme-toggle .icon-moon{display:none}
 .theme-toggle .icon-sun{display:none}
 .theme-toggle .icon-moon{display:inline}
-.balance-chip{background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;transition:all .2s}
-.balance-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.balance-chip{border:1px solid var(--border-strong);border-radius:var(--pill);padding:6px 12px;font-size:13px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:7px;transition:border-color .2s var(--ease)}
+.balance-chip:hover{border-color:var(--text)}
+.balance-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex-shrink:0}
 
 /* Content */
-.content{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:calc(70px + var(--safe-b));-webkit-overflow-scrolling:touch}
-.tab-page{display:none;padding:16px;animation:fadeUp .25s ease}
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:calc(72px + var(--safe-b));-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.tab-page{display:none;padding:16px;animation:fadeUp .25s var(--ease)}
 .tab-page.active{display:block}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* Tab Bar */
-.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--bg);opacity:.97;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:var(--safe-b)}
-.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 8px;font-size:10px;color:var(--text3);transition:color .2s;position:relative}
-.tab-item.active{color:var(--accent)}
-.tab-item .tab-icon{font-size:22px;line-height:1}
-.tab-item.active .tab-icon{transform:scale(1.1)}
-.tab-item::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:2px;border-radius:1px;background:var(--accent);opacity:0;transition:opacity .2s}
+.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:var(--safe-b)}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 8px;font-size:11px;color:var(--text4);transition:color .2s var(--ease);position:relative}
+.tab-item.active{color:var(--accent-text)}
+.tab-item .icon{width:20px;height:20px}
+.tab-item::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:2px;border-radius:var(--pill);background:var(--accent-text);opacity:0;transition:opacity .2s var(--ease)}
 .tab-item.active::after{opacity:1}
 
 /* Cards */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;transition:transform .15s}
-.card:active{transform:scale(.985)}
-.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.card-title{font-size:13px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
-.big-number{font-size:36px;font-weight:700;letter-spacing:-1px;line-height:1.1}
-.big-number .currency{font-size:16px;color:var(--text2);font-weight:500;margin-left:4px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
+.card-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.card-title{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.08em}
+.big-number{font-size:30px;font-weight:500;letter-spacing:-.03em;line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.big-number .currency{font-size:14px;color:var(--text3);font-weight:500;margin-left:6px;letter-spacing:0}
 
 /* Buttons */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:10px;font-weight:600;font-size:14px;padding:12px 20px;transition:all .15s;white-space:nowrap}
-.btn:active{transform:scale(.97)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--pill);font-weight:500;font-size:14px;padding:12px 20px;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease),opacity .2s var(--ease);white-space:nowrap}
+.btn:active{opacity:.8}
 .btn-primary{background:var(--accent);color:#fff}
-.btn-primary:active{background:var(--accent2)}
-.btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border)}
-.btn-success{background:var(--success);color:#fff}
-.btn-danger{background:var(--danger);color:#fff}
-.btn-sm{padding:8px 14px;font-size:12px;border-radius:8px}
+.btn-primary:hover,.btn-primary:active{background:var(--accent2)}
+.btn-secondary{background:transparent;color:var(--text);border-color:var(--border-strong)}
+.btn-secondary:hover{border-color:var(--text);background:var(--card2)}
+.btn-sm{padding:9px 14px;font-size:13px}
 .btn-full{width:100%}
-.btn-group{display:flex;gap:8px;flex-wrap:wrap}
+.btn .icon{width:15px;height:15px}
 
 /* Action Row */
-.action-row{display:flex;gap:8px;margin:16px 0}
-.action-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--text);transition:all .15s}
-.action-btn:active{transform:scale(.96);border-color:var(--accent);background:rgba(0,82,255,.08)}
-.action-btn .icon{font-size:24px}
+.action-row{display:flex;gap:8px;margin:14px 0}
+.action-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--text);transition:border-color .2s var(--ease),background-color .2s var(--ease)}
+.action-btn:hover,.action-btn:active{border-color:var(--accent-text)}
+.action-btn .icon{width:20px;height:20px;color:var(--accent-text)}
 
 /* Amount Chips */
 .chips{display:flex;gap:8px;margin:8px 0}
-.chip{background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;transition:all .15s;min-width:48px;text-align:center}
-.chip:active,.chip.active{border-color:var(--accent);background:rgba(0,82,255,.12);color:var(--accent)}
-.chip-btn{background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:4px 12px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;transition:all .15s}
-.chip-btn:active{opacity:.7}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.chip{background:var(--card2);border:1px solid var(--border);border-radius:var(--pill);padding:8px 16px;font-size:13px;font-weight:500;font-family:var(--font-mono);color:var(--text);cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease),color .2s var(--ease);min-width:48px;text-align:center}
+.chip:active,.chip.active{border-color:var(--accent);background:var(--blue-soft);color:var(--accent-text)}
+.chip-btn{border:1px solid var(--border-strong);border-radius:var(--pill);padding:5px 12px;font-size:12px;font-weight:500;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s var(--ease)}
+.chip-btn:hover,.chip-btn:active{border-color:var(--text)}
+.chip-btn .icon{width:13px;height:13px}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 
 /* Input */
-.input{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:14px;color:var(--text);transition:border-color .2s}
-.input:focus{border-color:var(--accent)}
-.input::placeholder{color:var(--text3)}
+.input{width:100%;background:var(--card2);border:1px solid var(--border-strong);border-radius:var(--radius);padding:11px 14px;font-size:14px;color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--blue-soft)}
+.input::placeholder{color:var(--text4)}
 .input-group{margin-bottom:12px}
-.input-label{font-size:12px;color:var(--text2);margin-bottom:6px;display:block;font-weight:500}
+.input-label{font-size:12px;color:var(--text3);margin-bottom:6px;display:block;font-weight:500}
+.hint{font-size:12px;color:var(--text3);line-height:1.5}
 
 /* Market / Bet Card */
-.market-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:all .15s}
-.market-card:active{transform:scale(.98);border-color:var(--accent)}
-.market-question{font-size:15px;font-weight:600;margin-bottom:10px;line-height:1.4}
-.market-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text3);margin-top:8px}
-.prob-bars{display:flex;flex-direction:column;gap:6px}
-.prob-bar{height:6px;border-radius:3px;background:var(--card2);overflow:hidden;position:relative}
-.prob-bar-fill{height:100%;border-radius:3px;transition:width .4s ease}
-.prob-bar-label{display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:2px}
-.opt-colors{--c0:#0052FF;--c1:#7c3aed;--c2:#f59e0b;--c3:#ef4444}
+.market-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease);display:block;width:100%;text-align:left}
+.market-card:hover,.market-card:active{border-color:var(--border-strong);background:var(--card2)}
+.market-question{font-size:15px;font-weight:500;margin-bottom:10px;line-height:1.4;letter-spacing:-.01em}
+.market-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--text3);font-family:var(--font-mono);letter-spacing:.03em;margin-top:8px}
+.prob-bars{display:flex;flex-direction:column;gap:8px}
+.prob-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
+.prob-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
+.prob-bar-label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;color:var(--text2);margin-bottom:5px}
+.prob-bar-label .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.prob-bar-label .win{color:var(--accent-text);font-weight:600}
+
+/* Status chips */
+.tag{display:inline-flex;align-items:center;border-radius:var(--pill);padding:2px 8px;font-size:10px;font-weight:500;font-family:var(--font-mono);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.tag-open{background:var(--blue-soft);color:var(--accent-text)}
+.tag-resolved{background:var(--success-bg);color:var(--success)}
+.tag-cancelled{background:var(--card3);color:var(--text3)}
 
 /* Transaction History */
-.tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.tx-item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
 .tx-item:last-child{border-bottom:none}
-.tx-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
-.tx-icon.tip{background:rgba(0,82,255,.12)}
-.tx-icon.deposit{background:rgba(22,163,74,.12)}
-.tx-icon.withdraw{background:rgba(239,68,68,.12)}
-.tx-icon.trade{background:rgba(124,58,237,.12)}
-.tx-icon.bet{background:rgba(245,158,11,.12)}
+.tx-icon{width:30px;height:30px;border-radius:var(--pill);border:1px solid var(--border);background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
+.tx-icon .icon{width:14px;height:14px}
+.tx-icon.in{background:var(--success-bg);border-color:transparent;color:var(--success)}
+.tx-icon.out{background:var(--danger-bg);border-color:transparent;color:var(--danger)}
 .tx-details{flex:1;min-width:0}
 .tx-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tx-time{font-size:11px;color:var(--text3)}
-.tx-amount{font-size:14px;font-weight:600;white-space:nowrap}
+.tx-time{font-size:11px;color:var(--text3);font-family:var(--font-mono)}
+.tx-amount{font-size:14px;font-weight:500;white-space:nowrap;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .tx-amount.pos{color:var(--success)}
 .tx-amount.neg{color:var(--danger)}
 
 /* Deposit Section */
-.deposit-box{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px;margin-top:8px}
-.deposit-addr{font-size:12px;color:var(--text2);word-break:break-all;flex:1;user-select:all}
-.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;color:var(--text2);padding:5px 0}
-.wd-row b{color:var(--text);font-variant-numeric:tabular-nums}
-.deposit-qr{width:80px;height:80px;border-radius:8px;background:#fff;padding:4px;flex-shrink:0}
-.deposit-qr img{width:100%;height:100%}
+.deposit-box{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;gap:12px;margin-top:8px}
+.deposit-addr{font-size:12px;color:var(--text2);word-break:break-all;flex:1;user-select:all;font-family:var(--font-mono)}
+.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;color:var(--text3);padding:5px 0}
+.wd-row b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
+/* QR readers need a light quiet zone in both themes, so this one box stays white. */
+.deposit-qr{width:80px;height:80px;border-radius:var(--radius);border:1px solid var(--border);background:#fff;padding:4px;flex-shrink:0}
+.deposit-qr img{width:100%;height:100%;display:block}
 
 /* Modal / Bottom Sheet */
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .25s}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--scrim);z-index:200;display:none;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .25s var(--ease)}
 .modal-overlay.show{display:flex;opacity:1}
-.modal-sheet{background:var(--card);border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:16px 16px calc(20px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.modal-sheet{background:var(--card);border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:14px 16px calc(20px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
 .modal-overlay.show .modal-sheet{transform:translateY(0)}
-.modal-handle{width:36px;height:4px;background:var(--text3);border-radius:2px;margin:0 auto 16px;opacity:.5}
-.modal-title{font-size:18px;font-weight:700;margin-bottom:16px}
-.modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text2);cursor:pointer}
+.modal-handle{width:32px;height:3px;background:var(--border-strong);border-radius:var(--pill);margin:0 auto 16px}
+.modal-title{font-size:17px;font-weight:600;letter-spacing:-.02em;margin-bottom:14px}
 
 /* Toast */
-.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:500;z-index:300;transition:transform .3s cubic-bezier(.32,.72,0,1);pointer-events:none;white-space:nowrap}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--card);border:1px solid var(--border-strong);border-radius:var(--pill);padding:10px 18px;font-size:13px;font-weight:500;z-index:300;transition:transform .3s cubic-bezier(.32,.72,0,1);pointer-events:none;max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.success{border-color:var(--success);color:var(--success)}
 .toast.error{border-color:var(--danger);color:var(--danger)}
 
 /* Detail View */
 .detail-view{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:150;overflow-y:auto;max-width:480px;margin:0 auto}
-.detail-header{position:sticky;top:0;z-index:10;background:var(--bg);opacity:.97;backdrop-filter:blur(12px);padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
-.detail-back{width:32px;height:32px;border-radius:8px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer}
-.detail-title{font-size:16px;font-weight:600;flex:1}
+.detail-header{position:sticky;top:0;z-index:10;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);min-height:52px}
+.detail-back{width:32px;height:32px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text);flex-shrink:0;cursor:pointer;transition:border-color .2s var(--ease)}
+.detail-back:hover,.detail-back:active{border-color:var(--text)}
+.detail-back .icon{width:16px;height:16px}
+.detail-title{font-size:15px;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
 .detail-body{padding:16px}
-.detail-question{font-size:20px;font-weight:700;line-height:1.4;margin-bottom:16px}
-.detail-options{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
-.detail-opt{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
-.detail-opt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.detail-opt-name{font-weight:600;font-size:15px}
-.detail-opt-pct{font-size:20px;font-weight:700;color:var(--accent)}
-.detail-opt-bar{height:8px;border-radius:4px;background:var(--card2);overflow:hidden}
-.detail-opt-bar-fill{height:100%;border-radius:4px;transition:width .4s}
+.detail-question{font-size:19px;font-weight:600;line-height:1.35;letter-spacing:-.02em;margin-bottom:14px}
+.detail-options{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.detail-opt{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:block;width:100%;text-align:left}
+.detail-opt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.detail-opt-name{font-weight:500;font-size:14px}
+.detail-opt-name.win{color:var(--accent-text);font-weight:600}
+.detail-opt-pct{font-size:18px;font-weight:500;color:var(--accent-text);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.detail-opt-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
+.detail-opt-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
+.detail-opt.pickable{cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease)}
+.detail-opt.pickable:active{border-color:var(--accent)}
+.detail-opt.selected{border-color:var(--accent);background:var(--blue-soft)}
+.buy-panel{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--border);padding:12px 0 6px}
+.buy-panel .input{margin-bottom:10px}
 
 /* Create Form */
-.create-options{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.create-options{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .create-opt-row{display:flex;gap:8px;align-items:center}
 .create-opt-row .input{flex:1}
-.create-opt-rm{width:32px;height:32px;border-radius:8px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;color:var(--danger);font-size:16px;cursor:pointer;flex-shrink:0}
-.create-add{background:none;border:1px dashed var(--border);border-radius:8px;padding:10px;color:var(--text3);font-size:13px;width:100%;text-align:center;cursor:pointer;transition:all .15s}
-.create-add:active{border-color:var(--accent);color:var(--accent)}
+.create-opt-rm{width:32px;height:32px;border-radius:var(--pill);background:var(--danger-bg);display:flex;align-items:center;justify-content:center;color:var(--danger);cursor:pointer;flex-shrink:0}
+.create-opt-rm .icon{width:14px;height:14px}
+.create-add{background:none;border:1px dashed var(--border-strong);border-radius:var(--radius);padding:10px;color:var(--text3);font-size:13px;font-weight:500;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .2s var(--ease),color .2s var(--ease)}
+.create-add:hover,.create-add:active{border-color:var(--accent-text);color:var(--accent-text)}
+.create-add .icon{width:13px;height:13px}
 
 /* Language items */
-.lang-item{display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;cursor:pointer;transition:background .15s}
+.lang-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--radius);cursor:pointer;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease)}
 .lang-item:active{background:var(--card2)}
-.lang-item.active{background:rgba(0,82,255,.1);border:1px solid var(--accent)}
-.lang-flag{font-size:24px}
+.lang-item.active{background:var(--blue-soft);border-color:var(--accent)}
 .lang-name{font-size:14px;font-weight:500}
-.lang-check{margin-left:auto;color:var(--accent);font-size:16px;display:none}
+.lang-check{margin-left:auto;color:var(--accent-text);display:none}
 .lang-item.active .lang-check{display:block}
+.lang-check .icon{width:16px;height:16px}
 
 /* Top users */
 .top-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
 .top-item:last-child{border-bottom:none}
-.top-rank{width:24px;font-size:14px;font-weight:700;color:var(--text3);text-align:center}
-.top-rank.gold{color:#f59e0b}
-.top-rank.silver{color:#9ca3af}
-.top-rank.bronze{color:#d97706}
-.top-name{flex:1;font-size:14px;font-weight:500}
-.top-vol{font-size:13px;color:var(--text2);font-weight:600}
+.top-rank{width:22px;font-size:13px;font-weight:500;color:var(--text4);text-align:center;font-family:var(--font-mono)}
+.top-rank.lead{color:var(--accent-text)}
+.top-name{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-vol{font-size:13px;color:var(--text2);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* Stats */
-.stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0}
-.stat-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 8px;text-align:center}
-.stat-val{font-size:20px;font-weight:700}
-.stat-label{font-size:11px;color:var(--text3);margin-top:2px}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0}
+.stat-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 8px;text-align:center}
+.stat-val{font-size:18px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat-label{font-size:10px;color:var(--text3);margin-top:3px;letter-spacing:.06em;text-transform:uppercase}
 
 /* Section title */
-.section-title{font-size:13px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px}
+.section-title{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.09em;margin:18px 0 8px}
 
 /* Empty state */
-.empty{text-align:center;padding:40px 16px;color:var(--text3)}
-.empty .icon{font-size:40px;margin-bottom:8px;opacity:.5}
-.empty .text{font-size:14px}
+.empty{text-align:center;padding:30px 16px;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:var(--radius)}
 
-/* Scrollbar hide */
-.content::-webkit-scrollbar{display:none}
-.content{scrollbar-width:none}
+/* Page-local layout helpers (they replace per-element style="" attributes) */
+[hidden]{display:none!important}
+.card-compact{padding:12px}
+.sheet-gap{margin-bottom:14px}
+.gap-top{margin-top:12px}
+.gap-top-sm{margin-top:8px}
+.sheet-note{font-size:13px;color:var(--text2);margin:0 0 12px}
+.hint-block{margin:0 0 12px}
+.mini-label{font-size:11px;color:var(--text3);margin:0 0 4px}
+.mini-label.late{margin:10px 0 0}
+.deposit-col{flex:1;min-width:0}
+.sw-state{font-size:13px;color:var(--text2);margin-bottom:8px}
+.sw-addr{font-size:12px;color:var(--text);word-break:break-all}
+.sw-bal{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:10px;font-size:13px;color:var(--text3)}
+.sw-bal .mono{font-size:18px;color:var(--text);letter-spacing:-.02em}
+.sw-card .hint{margin-top:8px}
+.ai-chat{max-height:200px;overflow-y:auto;margin-bottom:10px;font-size:13px;color:var(--text2)}
+.ai-row{display:flex;gap:8px}
+.ai-row .input{flex:1}
+.ai-item{margin-bottom:6px}
+.ai-item .who{font-weight:500;color:var(--accent-text)}
+.ai-item.ans .who{color:var(--success)}
+.ai-item.pending{color:var(--text4)}
+.ai-item.err{color:var(--danger)}
+.market-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:13px}
+.market-line .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--accent-text);font-weight:500}
+.pot-line{font-size:13px;color:var(--text3);margin-bottom:8px}
+.pot-line b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
+.won-line{font-size:13px;font-weight:600;color:var(--accent-text);margin-bottom:8px}
+.oc-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.oc-title .q{font-size:15px;font-weight:500;line-height:1.4;letter-spacing:-.01em}
+.shares{margin-top:6px;font-size:12px;color:var(--accent-text)}
+.deadline{font-size:13px;color:var(--text3);margin-bottom:10px}
+.action-card{margin-top:12px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.action-card .icon{width:16px;height:16px;color:var(--accent-text);flex-shrink:0}
+.about{font-size:14px;line-height:1.6;color:var(--text2)}
+.about b{color:var(--text);font-weight:600}
+.about .by{margin-top:6px;color:var(--text3);font-size:13px}
+
+/* Thumb targets. The Mini App is a phone surface but it also opens in the
+   desktop Base App, so the 44px floor is keyed to the pointer, not the width. */
+@media (pointer: coarse){
+  .theme-toggle{width:44px;height:44px}
+  .balance-chip,.chip,.action-card{min-height:44px}
+  .detail-back,.create-opt-rm{width:44px;height:44px}
+  .lang-item{min-height:48px}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
 </style>
 </head>
 <body>
+<!-- Line icons, drawn once here and referenced with <use> so the JS templates stay short. -->
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M3 11h18"/><path d="M16.6 15.6h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4.5 4.5v15h15"/><path d="M8 15l3.4-4.2 2.9 2.4L18.5 8"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M9 9h.01M15 15h.01M12 12h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 3 10.6l7.3 2.6 2.6 7.3L21 3Z"/><path d="M10.3 13.2 21 3"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12.5" rx="2.5"/><path d="M3 10.5h18"/><path d="M7 14.8h4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16.5V4"/><path d="M6.5 9.5 12 4l5.5 5.5"/><path d="M4 20h16"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v12.5"/><path d="M6.5 11.5 12 17l5.5-5.5"/><path d="M4 20h16"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 4h8.5A1.5 1.5 0 0 1 15 5.5V6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5.5 12h13"/></symbol>
+</svg>
 <div id="app">
   <!-- Header -->
   <div class="header">
-    <div class="header-logo">Tippy<span>.</span></div>
+    <div class="header-logo"><span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span><span>Tippy<span class="dot">.</span></span></div>
     <div class="header-right">
-      <button class="theme-toggle" data-act="toggleTheme" aria-label="Toggle theme">
-        <span class="icon-moon">🌙</span>
-        <span class="icon-sun">☀️</span>
+      <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+        <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+        <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
       </button>
-      <div class="balance-chip" id="balanceChip" data-act="switchTab" data-tab="0">
+      <button class="balance-chip" id="balanceChip" data-act="switchTab" data-tab="0">
         <span class="dot"></span>
         <span id="balanceDisplay">--</span>
-      </div>
+      </button>
     </div>
   </div>
 
@@ -236,33 +347,31 @@ input,textarea{font-family:inherit;outline:none}
 
       <div class="action-row">
         <button class="action-btn" data-act="openTipSheet">
-          <span class="icon">💸</span>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-send"/></svg>
           <span data-i18n="send_tip">Send tip</span>
         </button>
         <button class="action-btn" data-act="openDepositSheet">
-          <span class="icon">💳</span>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-card"/></svg>
           <span data-i18n="deposit">Deposit</span>
         </button>
         <button class="action-btn" data-act="openWithdrawSheet">
-          <span class="icon">⬆️</span>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-up"/></svg>
           <span data-i18n="withdraw">Withdraw</span>
         </button>
       </div>
 
-      <div class="card" id="smartWalletCard" style="display:none">
+      <div class="card sw-card" id="smartWalletCard" hidden>
         <div class="card-header">
           <div class="card-title" data-i18n="smart_wallet">Smart Wallet</div>
-          <button class="chip-btn" data-act="copyAddr" data-target="swAddress" style="font-size:12px" id="swCopy">💳 <span data-i18n="copy">Copy</span></button>
+          <button class="chip-btn" data-act="copyAddr" data-target="swAddress" id="swCopy">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-copy"/></svg>
+            <span data-i18n="copy">Copy</span>
+          </button>
         </div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:8px">
-          <span id="swDeployed">—</span>
-        </div>
-        <div class="mono" style="font-size:12px;color:var(--text);word-break:break-all" id="swAddress" data-addr="">—</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-          <span style="font-size:13px;color:var(--text2)"><span data-i18n="balance">Balance</span> (USDC)</span>
-          <span class="big-number" style="font-size:18px"><span id="swBalance">--</span></span>
-        </div>
-        <div class="hint" id="swDepositHint" style="margin-top:8px">—</div>
+        <div class="sw-state"><span id="swDeployed">—</span></div>
+        <div class="mono sw-addr" id="swAddress" data-addr="">—</div>
+        <div class="sw-bal"><span><span data-i18n="balance">Balance</span> (USDC)</span><span class="mono" id="swBalance">--</span></div>
+        <div class="hint" id="swDepositHint">—</div>
       </div>
 
       <div class="section-title" data-i18n="history">History</div>
@@ -271,16 +380,18 @@ input,textarea{font-family:inherit;outline:none}
 
     <!-- TAB 1: Markets -->
     <div class="tab-page" id="tab1">
-      <button class="btn btn-primary btn-full" data-act="openCreateMarket" style="margin-bottom:14px">
-        <span>+</span> <span data-i18n="create_market">Create market</span>
+      <button class="btn btn-primary btn-full sheet-gap" data-act="openCreateMarket">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span data-i18n="create_market">Create market</span>
       </button>
       <div id="marketsList"></div>
     </div>
 
     <!-- TAB 2: Bets -->
     <div class="tab-page" id="tab2">
-      <button class="btn btn-primary btn-full" data-act="openCreateBet" style="margin-bottom:14px">
-        <span>+</span> <span data-i18n="create_bet">Create bet</span>
+      <button class="btn btn-primary btn-full sheet-gap" data-act="openCreateBet">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span data-i18n="create_bet">Create bet</span>
       </button>
       <div id="betsList"></div>
     </div>
@@ -289,29 +400,28 @@ input,textarea{font-family:inherit;outline:none}
     <div class="tab-page" id="tab3">
       <div class="section-title" data-i18n="lang">Language</div>
       <div id="langList">
-        <div class="lang-item" data-act="setLang" data-lang="ru">
-          <span class="lang-flag">🇷🇺</span>
+        <button class="lang-item" data-act="setLang" data-lang="ru">
           <span class="lang-name">Русский</span>
-          <span class="lang-check">✓</span>
-        </div>
-        <div class="lang-item" data-act="setLang" data-lang="en">
-          <span class="lang-flag">🇬🇧</span>
+          <span class="lang-check"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </button>
+        <button class="lang-item" data-act="setLang" data-lang="en">
           <span class="lang-name">English</span>
-          <span class="lang-check">✓</span>
-        </div>
-        <div class="lang-item" data-act="setLang" data-lang="zh">
-          <span class="lang-flag">🇨🇳</span>
+          <span class="lang-check"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </button>
+        <button class="lang-item" data-act="setLang" data-lang="zh">
           <span class="lang-name">中文</span>
-          <span class="lang-check">✓</span>
-        </div>
+          <span class="lang-check"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </button>
       </div>
 
-      <div class="section-title">🤖 AI Assistant</div>
-      <div class="card" style="padding:12px">
-        <div id="aiChat" style="max-height:200px;overflow-y:auto;margin-bottom:10px;font-size:13px;color:var(--text2)"></div>
-        <div style="display:flex;gap:8px">
-          <input class="input" id="aiInput" placeholder="Ask about markets..." style="flex:1">
-          <button class="btn btn-primary btn-sm" data-act="askAI">→</button>
+      <div class="section-title" data-i18n="ai">AI Assistant</div>
+      <div class="card card-compact">
+        <div class="ai-chat" id="aiChat"></div>
+        <div class="ai-row">
+          <input class="input" id="aiInput" data-i18n-ph="ai_placeholder" placeholder="Ask about markets...">
+          <button class="btn btn-primary btn-sm" data-act="askAI" data-i18n-label="send">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+          </button>
         </div>
       </div>
 
@@ -321,46 +431,49 @@ input,textarea{font-family:inherit;outline:none}
       <div class="section-title" data-i18n="top">Top</div>
       <div id="topList"></div>
 
-      <div class="section-title">Stats</div>
+      <div class="section-title" data-i18n="stats">Stats</div>
       <div class="stats-grid">
         <div class="stat-item">
           <div class="stat-val" id="statUsers">--</div>
-          <div class="stat-label">Users</div>
+          <div class="stat-label" data-i18n="stat_users">Users</div>
         </div>
         <div class="stat-item">
           <div class="stat-val" id="statVolume">--</div>
-          <div class="stat-label">Volume</div>
+          <div class="stat-label" data-i18n="stat_volume">Volume</div>
         </div>
         <div class="stat-item">
           <div class="stat-val" id="statTips">--</div>
-          <div class="stat-label">Tips</div>
+          <div class="stat-label" data-i18n="stat_tips">Tips</div>
         </div>
       </div>
 
-      <a href="https://t.me/tippy_on_base_bot" target="_blank" class="btn btn-secondary btn-full" style="margin-top:12px">Telegram Bot</a>
+      <a href="https://t.me/TippyOnBaseBot" target="_blank" rel="noopener" class="btn btn-secondary btn-full gap-top">@TippyOnBaseBot</a>
 
-      <button class="btn btn-primary btn-full" id="addMiniApp" style="margin-top:8px;display:none" data-act="addMiniApp">⭐ Add to Base App</button>
+      <button class="btn btn-primary btn-full gap-top" id="addMiniApp" data-act="addMiniApp" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span data-i18n="add_app">Add to Base App</span>
+      </button>
     </div>
   </div>
 
   <!-- Tab Bar -->
   <div class="tab-bar">
-    <div class="tab-item active" data-act="switchTab" data-tab="0">
-      <span class="tab-icon">💰</span>
+    <button class="tab-item active" data-act="switchTab" data-tab="0" aria-current="true">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wallet"/></svg>
       <span data-i18n="wallet">Wallet</span>
-    </div>
-    <div class="tab-item" data-act="switchTab" data-tab="1">
-      <span class="tab-icon">📈</span>
+    </button>
+    <button class="tab-item" data-act="switchTab" data-tab="1">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chart"/></svg>
       <span data-i18n="markets">Markets</span>
-    </div>
-    <div class="tab-item" data-act="switchTab" data-tab="2">
-      <span class="tab-icon">🎲</span>
+    </button>
+    <button class="tab-item" data-act="switchTab" data-tab="2">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dice"/></svg>
       <span data-i18n="bets">Bets</span>
-    </div>
-    <div class="tab-item" data-act="switchTab" data-tab="3">
-      <span class="tab-icon">⋯</span>
+    </button>
+    <button class="tab-item" data-act="switchTab" data-tab="3">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-more"/></svg>
       <span data-i18n="more">More</span>
-    </div>
+    </button>
   </div>
 </div>
 
@@ -376,26 +489,27 @@ input,textarea{font-family:inherit;outline:none}
 <div class="toast" id="toast"></div>
 
 <!-- Detail View -->
-<div class="detail-view" id="detailView" style="display:none"></div>
+<div class="detail-view" id="detailView" hidden></div>
 
 <script>
 const I18N = {
-  ru: { wallet: "Кошелёк", balance: "Баланс", tip: "Чаевые", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", amount: "Сумма", username: "Никнейм", address: "Адрес", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", creating: "Создаём...", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", deposit_note: "Отправь USDC на этот адрес (сеть __CHAIN_NAME__)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн (часы, опционально)", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут - пополните USDC для активации", smart_deposit_hint: "Пополните USDC на __CHAIN_NAME__ по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", wd_hint: "1% комиссия, минимум 1 USDC, не более 5 в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "✅ Подтвердить", wd_cancel_btn: "✖️ Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе" },
-  en: { wallet: "Wallet", balance: "Balance", tip: "Tips", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", amount: "Amount", username: "Username", address: "Address", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", creating: "Creating...", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", deposit_note: "Send USDC to this address (__CHAIN_NAME__ network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline (hours, optional)", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed - deposit USDC to activate", smart_deposit_hint: "Deposit USDC on __CHAIN_NAME__ to this address to trade gasless", smart_enabled: "Gasless trading is ON", wd_hint: "1% fee, min 1 USDC, up to 5 per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "✅ Confirm", wd_cancel_btn: "✖️ Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance" },
-  zh: { wallet: "钱包", balance: "余额", tip: "打赏", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", amount: "金额", username: "用户名", address: "地址", copied: "已复制!", copy: "复制", fill_fields: "请填写所有字段", creating: "创建中...", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", deposit_note: "将 USDC 发送到此地址（__CHAIN_NAME__ 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，可选）", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署 - 存入 USDC 激活", smart_deposit_hint: "在 __CHAIN_NAME__ 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", wd_hint: "手续费 1%，最低 1 USDC，每天最多 5 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "✅ 确认", wd_cancel_btn: "✖️ 取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中" }
+  ru: { wallet: "Кошелёк", balance: "Баланс", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", option: "Вариант", amount: "Сумма", username: "Никнейм", address: "Адрес", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", deposit_note: "Отправь USDC на этот адрес (сеть __CHAIN_NAME__)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн (часы, опционально)", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут — пополните USDC для активации", smart_deposit_hint: "Пополните USDC на __CHAIN_NAME__ по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", wd_hint: "1% комиссия, минимум 1 USDC, не более 5 в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "Подтвердить", wd_cancel_btn: "Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе", ai: "AI-ассистент", ai_placeholder: "Спроси о рынках…", ai_you: "Вы", ai_ai: "ИИ", ai_no_answer: "Ответ не найден", stats: "Статистика", stat_users: "Пользователи", stat_volume: "Объём", stat_tips: "Чаевые", about_text: "Чаевые, рынки предсказаний и ставки в USDC на Base.", tos: "Условия использования", pot: "Пот", traders: "Трейдеры", deadline: "Завершение", st_open: "открыт", st_resolved: "завершён", st_cancelled: "отменён", add_option: "Добавить вариант", remove: "Удалить", kind_market: "Рынок", kind_bet: "Ставка", add_app: "Добавить в Base App", add_app_error: "Не удалось добавить", buy_ok: "Куплено за {amt} USDC", bet_ok: "Ставка принята: {amt} USDC", market_created: "Рынок создан", bet_created: "Ставка создана", network_error: "Сеть недоступна", load_error: "Не удалось загрузить", error_generic: "Ошибка", dup_request: "Такой запрос уже отправлен", connect_wallet: "Сначала подключи кошелёк", open_in_app: "Открой в Telegram или Base App — так видно твой баланс", back: "Назад", no_top: "Топ пуст" },
+  en: { wallet: "Wallet", balance: "Balance", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", option: "Option", amount: "Amount", username: "Username", address: "Address", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", deposit_note: "Send USDC to this address (__CHAIN_NAME__ network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline (hours, optional)", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed — deposit USDC to activate", smart_deposit_hint: "Deposit USDC on __CHAIN_NAME__ to this address to trade gasless", smart_enabled: "Gasless trading is ON", wd_hint: "1% fee, min 1 USDC, up to 5 per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "Confirm", wd_cancel_btn: "Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance", ai: "AI Assistant", ai_placeholder: "Ask about markets...", ai_you: "You", ai_ai: "AI", ai_no_answer: "No answer", stats: "Stats", stat_users: "Users", stat_volume: "Volume", stat_tips: "Tips", about_text: "Tips, prediction markets and pool bets in USDC on Base.", tos: "Terms of Service", pot: "Pot", traders: "Traders", deadline: "Closes", st_open: "open", st_resolved: "resolved", st_cancelled: "cancelled", add_option: "Add option", remove: "Remove", kind_market: "Market", kind_bet: "Bet", add_app: "Add to Base App", add_app_error: "Could not add the app", buy_ok: "Bought for {amt} USDC", bet_ok: "Bet placed: {amt} USDC", market_created: "Market created", bet_created: "Bet created", network_error: "Network error", load_error: "Failed to load", error_generic: "Error", dup_request: "That request has already been sent", connect_wallet: "Connect the wallet first", open_in_app: "Open in Telegram or Base App to see your balance", back: "Back", no_top: "No leaders yet" },
+  zh: { wallet: "钱包", balance: "余额", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", option: "选项", amount: "金额", username: "用户名", address: "地址", copied: "已复制！", copy: "复制", fill_fields: "请填写所有字段", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", deposit_note: "将 USDC 发送到此地址（__CHAIN_NAME__ 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，可选）", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署，存入 USDC 即可激活", smart_deposit_hint: "在 __CHAIN_NAME__ 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", wd_hint: "手续费 1%，最低 1 USDC，每天最多 5 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "确认", wd_cancel_btn: "取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中", ai: "AI 助手", ai_placeholder: "询问市场…", ai_you: "你", ai_ai: "AI", ai_no_answer: "未找到答案", stats: "统计", stat_users: "用户", stat_volume: "交易量", stat_tips: "打赏", about_text: "在 Base 上用 USDC 打赏、预测市场和奖池投注。", tos: "服务条款", pot: "奖池", traders: "交易者", deadline: "截止", st_open: "进行中", st_resolved: "已结算", st_cancelled: "已取消", add_option: "添加选项", remove: "删除", kind_market: "市场", kind_bet: "投注", add_app: "添加到 Base App", add_app_error: "添加失败", buy_ok: "已买入 {amt} USDC", bet_ok: "投注成功：{amt} USDC", market_created: "市场已创建", bet_created: "投注已创建", network_error: "网络不可用", load_error: "加载失败", error_generic: "错误", dup_request: "该请求已发送", connect_wallet: "请先连接钱包", open_in_app: "在 Telegram 或 Base App 中打开即可查看余额", back: "返回", no_top: "暂无排行" }
 };
 
-const OPT_COLORS = ['#0052FF','#7c3aed','#f59e0b','#ef4444'];
 let STATE = { lang: 'en', balance_usdc: 0, deposit_address: '', markets: [], bets: [], onchain_markets: [], history: [], top: [], username: '', tg_id: null, linked_address: '' };
 let currentTab = 0;
 let toastTimer = null;
 
 // ─── i18n ───
 function t(key) { return (I18N[STATE.lang] && I18N[STATE.lang][key]) || I18N.en[key] || key; }
+function icon(name, cls) { return `<svg class="${cls || 'icon'}" viewBox="0 0 24 24" aria-hidden="true"><use href="#${name}"/></svg>`; }
 function applyI18n() {
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    el.textContent = t(el.dataset.i18n);
-  });
+  document.documentElement.lang = STATE.lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nLabel)); });
 }
 
 // ─── Toast ───
@@ -412,17 +526,19 @@ function toast(msg, type = 'success') {
 function switchTab(i) {
   currentTab = i;
   document.querySelectorAll('.tab-page').forEach((p, idx) => p.classList.toggle('active', idx === i));
-  document.querySelectorAll('.tab-item').forEach((t, idx) => t.classList.toggle('active', idx === i));
+  document.querySelectorAll('.tab-item').forEach((el, idx) => {
+    el.classList.toggle('active', idx === i);
+    if (idx === i) el.setAttribute('aria-current', 'true');
+    else el.removeAttribute('aria-current');
+  });
   document.getElementById('contentArea').scrollTop = 0;
-  // Close detail if open
   hideDetail();
 }
 
 // ─── Modal ───
 function openModal(html) {
-  const overlay = document.getElementById('modalOverlay');
-  document.getElementById('modalContent').innerHTML = '<div class="modal-handle"></div>' + html;
-  overlay.classList.add('show');
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalOverlay').classList.add('show');
 }
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modalOverlay') && e.type === 'click') return;
@@ -436,40 +552,25 @@ function closeModalForce() {
 function showDetail(html) {
   const dv = document.getElementById('detailView');
   dv.innerHTML = html;
-  dv.style.display = 'block';
+  dv.hidden = false;
 }
 function hideDetail() {
-  const dv = document.getElementById('detailView');
-  dv.style.display = 'none';
+  document.getElementById('detailView').hidden = true;
 }
 
 // ─── Auth + Load ───
 async function init() {
   const tg = window.Telegram?.WebApp;
-  if (tg) {
-    try { tg.ready(); } catch(e) {}
-    try { tg.expand(); } catch(e) {}
-    const initData = tg.initData || '';
-    if (initData) {
-      try {
-        await fetch('/api/mini/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ initData })
-        });
-      } catch(e) { console.error('auth error', e); }
-    }
-  }
-  // Farcaster Mini App: show "Add" button if not already added
-  const sdk = window.__fcSdk;
-  if (sdk) {
+  const initData = tg ? (tg.initData || '') : '';
+  if (initData) {
     try {
-      const ctx = await sdk.context;
-      if (ctx && !ctx.client?.added) {
-        document.getElementById('addMiniApp').style.display = '';
-      }
-    } catch(e) {}
+      await fetch('/api/mini/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ initData })
+      });
+    } catch(e) { console.error('auth error', e); }
   }
   await loadState();
 }
@@ -477,7 +578,7 @@ async function init() {
 async function addMiniApp() {
   const sdk = window.__fcSdk;
   if (sdk) {
-    try { await sdk.actions.addMiniApp(); } catch(e) { toast('Could not add app', 'error'); }
+    try { await sdk.actions.addMiniApp(); } catch(e) { toast(t('add_app_error'), 'error'); }
   }
 }
 
@@ -489,12 +590,18 @@ async function loadState() {
       Object.assign(STATE, d);
       renderAll();
       loadSmartWallet();
+    } else if (r.status === 401) {
+      // Opened outside Telegram/Base App there is no initData to sign, so no
+      // session ever exists. Render the tabs empty rather than leaving blank
+      // sections behind a generic error toast.
+      renderAll();
+      toast(t('open_in_app'), 'error');
     } else {
-      toast('Failed to load state', 'error');
+      toast(t('load_error'), 'error');
     }
   } catch(e) {
     console.error('state error', e);
-    toast('Network error', 'error');
+    toast(t('network_error'), 'error');
   }
 }
 
@@ -509,7 +616,10 @@ function renderAll() {
 }
 
 function renderBalance() {
-  const bal = Number(STATE.balance_usdc || 0).toFixed(2);
+  // No session means no known balance: rendering 0.00 reads as "this account is
+  // empty" rather than "we cannot tell who you are yet".
+  const known = STATE.tg_id !== null && STATE.tg_id !== undefined;
+  const bal = known ? usdc(STATE.balance_usdc) : '--';
   document.getElementById('balanceDisplay').textContent = bal + ' USDC';
   document.getElementById('bigBalance').textContent = bal;
 }
@@ -520,49 +630,68 @@ async function loadSmartWallet() {
   try {
     const r = await fetch('/api/mini/smartwallet', { credentials: 'same-origin' });
     if (r.status === 503 || !r.ok) {
-      card.style.display = 'none';
+      card.hidden = true;
       return;
     }
     const d = await r.json();
-    card.style.display = 'block';
+    card.hidden = false;
     const addrEl = document.getElementById('swAddress');
     addrEl.textContent = d.address;
     addrEl.dataset.addr = d.address;
-    document.getElementById('swBalance').textContent = Number(d.balance_usdc || 0).toFixed(2);
+    document.getElementById('swBalance').textContent = usdc(d.balance_usdc);
     document.getElementById('swDeployed').textContent = d.deployed ? t('smart_deployed') : t('smart_not_deployed');
     document.getElementById('swDepositHint').textContent = d.deployed ? t('smart_enabled') : t('smart_deposit_hint');
   } catch(e) {
-    card.style.display = 'none';
+    card.hidden = true;
   }
+}
+
+/* Amounts read with the interface separators, not a raw toFixed. */
+function usdc(v) { return Number(v || 0).toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function num(v) { return v == null || v === '' ? '--' : Number(v).toLocaleString(locale(), { maximumFractionDigits: 0 }); }
+
+function timeLabel(epochSec) {
+  if (!epochSec) return '';
+  return new Date(epochSec * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function statusTag(m) {
+  if (m.cancelled) return `<span class="tag tag-cancelled">${t('st_cancelled')}</span>`;
+  if (m.resolved) return `<span class="tag tag-resolved">${t('st_resolved')}</span>`;
+  return `<span class="tag tag-open">${t('st_open')}</span>`;
+}
+
+/* One brand blue for every option bar: the label and the percentage carry the
+ * meaning, the fill only shows weight. Winner options get the accent text colour. */
+function probBars(opts, pctKey, winnerIdx) {
+  const rows = (opts || []).map(o => {
+    const pct = Number(o[pctKey] || 0);
+    const win = winnerIdx != null && o.index === winnerIdx;
+    return `<div>
+      <div class="prob-bar-label"><span${win ? ' class="win"' : ''}>${esc(o.label || o.name || '—')}</span><span class="num${win ? ' win' : ''}">${pct.toFixed(1)}%</span></div>
+      <div class="prob-bar"><div class="prob-bar-fill" style="width:${Math.max(pct, 1)}%"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="prob-bars">${rows}</div>`;
 }
 
 function renderHistory() {
   const c = document.getElementById('historyList');
   const h = STATE.history || [];
-  if (!h.length) {
-    c.innerHTML = `<div class="empty"><div class="icon">📋</div><div class="text">${t('no_history')}</div></div>`;
-    return;
-  }
+  if (!h.length) { c.innerHTML = `<div class="empty">${t('no_history')}</div>`; return; }
+  // Label, sign and the counterparty come from the server (bot/tx_view):
+  // tx_log amounts are always positive, so guessing here shows a withdrawal
+  // as income. created_at is epoch seconds, not milliseconds.
   c.innerHTML = h.slice(0, 10).map(tx => {
-    const kind = tx.kind || tx.type || '';
-    let icon = '💸', cls = 'tip', amt = tx.amount, sign = '';
-    if (kind === 'deposit') { icon = '💳'; cls = 'deposit'; sign = '+'; }
-    else if (kind === 'withdraw') { icon = '⬆️'; cls = 'withdraw'; sign = '-'; }
-    else if (kind === 'trade_buy' || kind === 'trade_sell') { icon = '📈'; cls = 'trade'; sign = tx.amount > 0 ? '+' : ''; }
-    else if (kind === 'bet') { icon = '🎲'; cls = 'bet'; sign = tx.amount > 0 ? '+' : ''; }
-    else { sign = tx.amount < 0 ? '-' : '+'; }
-    const isPos = tx.amount >= 0;
-    const ts = tx.created_at || tx.time;
-    const timeStr = ts ? new Date(ts).toLocaleDateString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
-    const desc = tx.note || tx.description || kind;
-    const cpty = tx.counterparty ? esc(` @${tx.counterparty}`) : '';
+    const dir = tx.incoming ? 'in' : 'out';
+    const sub = [tx.ref, tx.note].filter(Boolean).join(' — ');
     return `<div class="tx-item">
-      <div class="tx-icon ${cls}">${icon}</div>
+      <span class="tx-icon ${dir}">${icon(dir === 'in' ? 'i-down' : 'i-up')}</span>
       <div class="tx-details">
-        <div class="tx-title">${esc(desc)}${cpty}</div>
-        <div class="tx-time">${timeStr}</div>
+        <div class="tx-title">${esc(tx.label || tx.kind || '')}${sub ? ' <span class="tx-time">' + esc(sub) + '</span>' : ''}</div>
+        <div class="tx-time">${timeLabel(Number(tx.created_at || 0))}</div>
       </div>
-      <div class="tx-amount ${isPos?'pos':'neg'}">${sign}${Math.abs(Number(amt||0)).toFixed(2)}</div>
+      <div class="tx-amount ${tx.incoming ? 'pos' : 'neg'}">${tx.incoming ? '+' : '−'}${usdc(tx.amount_usdc)}</div>
     </div>`;
   }).join('');
 }
@@ -570,107 +699,86 @@ function renderHistory() {
 function renderMarkets() {
   const c = document.getElementById('marketsList');
   const m = STATE.markets || [];
-  if (!m.length) {
-    c.innerHTML = `<div class="empty"><div class="icon">📈</div><div class="text">${t('no_markets')}</div></div>`;
-    return;
-  }
+  if (!m.length) { c.innerHTML = `<div class="empty">${t('no_markets')}</div>`; return; }
   c.innerHTML = m.map(mk => {
     const opts = mk.options || [];
-    return `<div class="market-card opt-colors" data-act="openMarketDetail" data-id="${mk.id}">
+    return `<button class="market-card" data-act="openMarketDetail" data-id="${mk.id}">
       <div class="market-question">${esc(mk.question)}</div>
-      <div class="prob-bars">${opts.map((o, i) => {
-        const pct = o.price_pct || 0;
-        return `<div>
-          <div class="prob-bar-label"><span>${esc(o.label || o.name || 'Option '+(i+1))}</span><span>${pct.toFixed(1)}%</span></div>
-          <div class="prob-bar"><div class="prob-bar-fill" style="width:${pct}%;background:var(--c${i})"></div></div>
-        </div>`;
-      }).join('')}</div>
-      <div class="market-meta">
-        <span>${opts.length} options</span>
-        <span>${mk.traders || 0} traders</span>
-      </div>
-    </div>`;
+      ${probBars(opts, 'price_pct')}
+      <div class="market-meta"><span>${t('options')}: ${opts.length}</span><span>${t('traders')}: ${mk.traders || 0}</span></div>
+    </button>`;
   }).join('') + ocBlock();
 }
 
 function ocBlock() {
   const oc = STATE.onchain_markets || [];
   if (!oc.length) return '';
-  return `<div class="market-meta" style="margin:16px 0 8px;font-weight:700">⛓️ ${t('onchain')}</div>` + oc.map(ocCard).join('');
+  return `<div class="section-title">${t('onchain')}</div>` + oc.map(ocCard).join('');
 }
 
 function ocCard(m) {
-  const opts = m.options || [];
-  const badge = m.cancelled ? '⛔' : (m.resolved ? '🏁' : '⛓️');
-  const close = m.close_at && !m.resolved && !m.cancelled
-    ? new Date(m.close_at * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    : '';
-  return `<div class="market-card" data-act="openOcDetail" data-id="${m.id}">
-    <div class="market-question">${badge} #${m.id} ${esc(m.question)}</div>
-    <div class="prob-bars">${opts.map((o, j) => {
-      const pct = o.price_pct || 0;
-      const isWinner = m.resolved && m.winner === o.index;
-      return `<div>
-        <div class="prob-bar-label"><span>${isWinner ? '🏆 ' : ''}${esc(o.label || 'Option ' + (j + 1))}</span><span>${pct.toFixed(1)}%</span></div>
-        <div class="prob-bar"><div class="prob-bar-fill" style="width:${Math.max(pct, 2)}%;background:var(--c${j % 4})"></div></div>
-      </div>`;
-    }).join('')}</div>
-    <div class="market-meta"><span>ERC-1155 · Base</span>${close ? `<span>⏰ ${close}</span>` : ''}</div>
-  </div>`;
+  const close = m.close_at && !m.resolved && !m.cancelled ? timeLabel(m.close_at) : '';
+  return `<button class="market-card" data-act="openOcDetail" data-id="${m.id}">
+    <div class="oc-title"><span class="q">#${m.id} ${esc(m.question)}</span>${statusTag(m)}</div>
+    ${probBars(m.options || [], 'price_pct', m.resolved ? m.winner : null)}
+    <div class="market-meta"><span>ERC-1155 · USDC</span>${close ? `<span>${t('deadline')}: ${close}</span>` : ''}</div>
+  </button>`;
 }
 
 function ocTradeHint(id) {
   return t('onchain_hint').replace('{id}', id);
 }
 
+function locale() {
+  return { ru: 'ru-RU', en: 'en-US', zh: 'zh-CN' }[STATE.lang] || navigator.language || 'en-US';
+}
+
 function formatShares(micro) {
-  return (Number(micro || 0) / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  return (Number(micro || 0) / 1e6).toLocaleString(locale(), { maximumFractionDigits: 2 });
+}
+
+function detailShell(title, body, tag) {
+  return `<div class="detail-header">
+      <button class="detail-back" data-act="hideDetail" aria-label="${esc(t('back'))}">${icon('i-left')}</button>
+      <div class="detail-title">${title}</div>${tag || ''}
+    </div>
+    <div class="detail-body">${body}</div>`;
+}
+
+function actionCard(iconName, msg) {
+  return `<button class="card action-card" data-act="toast" data-msg="${esc(msg)}">${icon(iconName)}<span>${esc(msg)}</span></button>`;
 }
 
 async function openOcDetail(id) {
-  showDetail('<div class="detail-header"><div class="detail-back" data-act="hideDetail">←</div><div class="detail-title">⛓️ #' + id + '</div></div><div class="detail-body"><div class="empty"><div class="icon">⛓️</div><div class="text">…</div></div></div>');
+  showDetail(detailShell('#' + id, `<div class="empty">…</div>`));
   try {
     const r = await fetch('/api/mini/onchain/' + id, { credentials: 'same-origin' });
     if (!r.ok) throw new Error();
     const mk = await r.json();
     const opts = mk.options || [];
-    const badge = mk.cancelled ? '⛔' : (mk.resolved ? '🏁' : '⛓️');
-    const close = mk.close_at && !mk.resolved && !mk.cancelled
-      ? new Date(mk.close_at * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-      : '';
-    const rows = opts.map((o, j) => {
-      const pct = o.price_pct || 0;
-      const isWinner = mk.resolved && mk.winner === o.index;
-      const mine = o.shares > 0
-        ? `<div style="margin-top:6px;font-size:12px;color:var(--accent)">${t('your_shares')}: ${formatShares(o.shares)}</div>`
-        : '';
+    const close = mk.close_at && !mk.resolved && !mk.cancelled ? timeLabel(mk.close_at) : '';
+    const rows = opts.map(o => {
+      const pct = Number(o.price_pct || 0);
+      const win = mk.resolved && mk.winner === o.index;
+      const mine = o.shares > 0 ? `<div class="shares">${t('your_shares')}: ${formatShares(o.shares)}</div>` : '';
       return `<div class="detail-opt">
         <div class="detail-opt-head">
-          <div class="detail-opt-name">${isWinner ? '🏆 ' : ''}${esc(o.label || 'Option ' + (j + 1))}</div>
+          <div class="detail-opt-name${win ? ' win' : ''}">${esc(o.label || '—')}</div>
           <div class="detail-opt-pct">${pct.toFixed(1)}%</div>
         </div>
-        <div class="detail-opt-bar"><div class="detail-opt-bar-fill" style="width:${Math.max(pct, 2)}%;background:var(--c${j % 4})"></div></div>
+        <div class="detail-opt-bar"><div class="detail-opt-bar-fill" style="width:${Math.max(pct, 1)}%"></div></div>
         ${mine}
       </div>`;
     }).join('');
     const heldWinner = mk.resolved && opts.some(o => o.index === mk.winner && o.shares > 0);
     let actions = '';
-    if (mk.resolved && heldWinner) {
-      actions = `<div class="card" style="margin-top:12px;cursor:pointer" data-act="toast" data-msg="${esc(t('oc_redeem_hint').replace('{id}', id))}">🏆 ${t('you_won')}</div>`;
-    } else if (!mk.resolved && !mk.cancelled) {
-      actions = `<div class="card" style="margin-top:12px;cursor:pointer" data-act="toast" data-msg="${esc(ocTradeHint(id))}">🛒 ${esc(t('onchain_hint').replace('{id}', id))}</div>`;
-    }
-    showDetail(`
-      <div class="detail-header">
-        <div class="detail-back" data-act="hideDetail">←</div>
-        <div class="detail-title">${badge} #${mk.id}</div>
-      </div>
-      <div class="detail-body">
-        <div class="detail-question">${esc(mk.question)}</div>
-        ${close ? `<div style="font-size:13px;color:var(--text2);margin-bottom:10px">⏰ ${close}</div>` : ''}
-        <div class="detail-options">${rows}</div>
-        ${actions}
-      </div>`);
+    if (heldWinner) actions = `<div class="won-line">${t('you_won')}</div>` + actionCard('i-check', t('oc_redeem_hint').replace('{id}', id));
+    else if (!mk.resolved && !mk.cancelled) actions = actionCard('i-send', ocTradeHint(id));
+    showDetail(detailShell('#' + mk.id, `
+      <div class="detail-question">${esc(mk.question)}</div>
+      ${close ? `<div class="deadline">${t('deadline')}: ${close}</div>` : ''}
+      <div class="detail-options">${rows}</div>
+      ${actions}`, statusTag(mk)));
   } catch (e) {
     hideDetail();
     toast(t('onchain_load_fail'), 'error');
@@ -680,45 +788,34 @@ async function openOcDetail(id) {
 function renderBets() {
   const c = document.getElementById('betsList');
   const b = STATE.bets || [];
-  if (!b.length) {
-    c.innerHTML = `<div class="empty"><div class="icon">🎲</div><div class="text">${t('no_bets')}</div></div>`;
-    return;
-  }
+  if (!b.length) { c.innerHTML = `<div class="empty">${t('no_bets')}</div>`; return; }
   c.innerHTML = b.map(bet => {
     const opts = bet.options || [];
-    return `<div class="market-card" data-act="openBetDetail" data-id="${bet.id}">
+    const lines = opts.map(o => `<div class="market-line"><span>${esc(o.label || o.name || '—')}</span><span class="num">${Number(o.chance_pct || 0).toFixed(1)}%</span></div>`).join('');
+    return `<button class="market-card" data-act="openBetDetail" data-id="${bet.id}">
       <div class="market-question">${esc(bet.question)}</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:8px">Pot: <strong style="color:var(--text)">${Number(bet.pot_usdc||bet.pot||0).toFixed(2)} USDC</strong></div>
-      <div class="prob-bars">${opts.map(o => {
-        const pct = o.chance_pct || 0;
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border)">
-          <span style="font-size:13px">${esc(o.label || o.name || 'Option')}</span>
-          <span style="font-size:13px;font-weight:600;color:var(--accent)">${pct.toFixed(1)}%</span>
-        </div>`;
-      }).join('')}</div>
-    </div>`;
+      <div class="pot-line">${t('pot')}: <b>${usdc(bet.pot_usdc || bet.pot)} USDC</b></div>
+      ${lines}
+    </button>`;
   }).join('');
 }
 
 function renderMore() {
-  document.getElementById('aboutCard').innerHTML = `<div style="font-size:14px;line-height:1.6;color:var(--text2)">
-    <strong style="color:var(--text)">Tippy</strong> — ${STATE.lang === 'ru' ? 'USDC экономика в Telegram. Чаевые, рынки предсказаний и ставки на Base.' : STATE.lang === 'zh' ? 'Telegram 中的 USDC 经济。小费、预测市场和 Base 网络投注。' : 'USDC economy in Telegram. Tips, prediction markets & pool bets on Base.'}
-    <div style="margin-top:6px;color:var(--text3)">by <a href="https://github.com/ssrjkk" target="_blank" rel="noopener" style="color:var(--accent)">@ssrjkk</a></div>
+  document.getElementById('aboutCard').innerHTML = `<div class="about">
+    <b>Tippy</b> — ${t('about_text')}
+    <div class="by"><a href="https://github.com/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a> · <a href="/tos" target="_blank" rel="noopener">${t('tos')}</a></div>
   </div>`;
 
   const top = STATE.top || [];
-  document.getElementById('topList').innerHTML = top.slice(0, 5).map((u, i) => {
-    const rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-    return `<div class="top-item">
-      <div class="top-rank ${rankCls}">${i + 1}</div>
+  document.getElementById('topList').innerHTML = top.slice(0, 5).map((u, i) => `<div class="top-item">
+      <div class="top-rank${i === 0 ? ' lead' : ''}">${i + 1}</div>
       <div class="top-name">@${esc(u.username || u.tg_id || '?')}</div>
-      <div class="top-vol">${Number(u.volume || 0).toFixed(2)} USDC</div>
-    </div>`;
-  }).join('') || '<div class="empty"><div class="text">—</div></div>';
+      <div class="top-vol">${usdc(u.volume)} USDC</div>
+    </div>`).join('') || `<div class="empty">${t('no_top')}</div>`;
 
-  document.getElementById('statUsers').textContent = STATE.stats?.users ?? '--';
-  document.getElementById('statVolume').textContent = STATE.stats?.volume ? Number(STATE.stats.volume).toFixed(0) : '--';
-  document.getElementById('statTips').textContent = STATE.stats?.tips ?? '--';
+  document.getElementById('statUsers').textContent = num(STATE.stats?.users);
+  document.getElementById('statVolume').textContent = num(STATE.stats?.volume);
+  document.getElementById('statTips').textContent = num(STATE.stats?.tips);
 }
 
 function updateLangHighlight() {
@@ -731,7 +828,23 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s; re
 
 // FastAPI puts the rejection reason in `detail`; a non-error response carries
 // `error`. Without both, every refusal toast says just "Error".
-function errMsg(d) { return d && (d.error || d.detail) || 'Error'; }
+function errMsg(d, status) {
+  if (status === 409) return t('dup_request');
+  return (d && (d.error || d.detail)) || t('error_generic');
+}
+
+/* The money endpoints reserve an Idempotency-Key so a retried request cannot
+   spend twice. One key per action, kept while the attempt is unresolved (the
+   server rolls the reservation back on failure, so the retry replays it) and
+   replaced once the server accepted the action. */
+const _idemKeys = {};
+function idemKey(action) {
+  return _idemKeys[action] || (_idemKeys[action] = crypto.randomUUID?.() || String(Date.now()) + Math.random().toString(36).slice(2));
+}
+function resetIdem(action) { delete _idemKeys[action]; }
+function moneyHeaders(action) {
+  return { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey(action) };
+}
 
 // ─── Tip ───
 function openTipSheet() {
@@ -744,10 +857,10 @@ function openTipSheet() {
     <div class="input-group">
       <label class="input-label">${t('amount')} (USDC)</label>
       <div class="chips" id="tipChips">
-        <div class="chip" data-act="pickChip" data-target="tipAmt" data-val="1">1</div>
-        <div class="chip active" data-act="pickChip" data-target="tipAmt" data-val="5">5</div>
-        <div class="chip" data-act="pickChip" data-target="tipAmt" data-val="10">10</div>
-        <div class="chip" data-act="pickChip" data-target="tipAmt" data-val="25">25</div>
+        <button class="chip" data-act="pickChip" data-target="tipAmt" data-val="1">1</button>
+        <button class="chip active" data-act="pickChip" data-target="tipAmt" data-val="5">5</button>
+        <button class="chip" data-act="pickChip" data-target="tipAmt" data-val="10">10</button>
+        <button class="chip" data-act="pickChip" data-target="tipAmt" data-val="25">25</button>
       </div>
       <input class="input" id="tipAmt" type="number" step="0.01" min="0" value="5" placeholder="5">
     </div>
@@ -762,32 +875,33 @@ async function doTip() {
   try {
     const r = await fetch('/api/mini/tip', {
       method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: moneyHeaders('tip'),
       body: JSON.stringify({ to, amount })
     });
     const d = await r.json();
     if (d.ok) {
+      resetIdem('tip');
       STATE.balance_usdc = d.new_balance;
       renderBalance();
       closeModalForce();
-      toast('+' + amount.toFixed(2) + ' USDC → @' + to);
+      toast('+' + usdc(amount) + ' USDC → @' + to);
       loadState();
-    } else { toast(errMsg(d), 'error'); }
-  } catch(e) { toast('Network error', 'error'); }
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(t('network_error'), 'error'); }
 }
 
 // ─── Deposit ───
 function openDepositSheet() {
-  const addr = STATE.deposit_address || STATE.linked_address || 'Connect wallet first';
+  const addr = STATE.deposit_address || STATE.linked_address || t('connect_wallet');
   openModal(`
     <div class="modal-title">${t('deposit_title')}</div>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:12px">${STATE.linked_address ? t('linked') : t('deposit_note')}</p>
+    <p class="sheet-note">${STATE.linked_address ? t('linked') : t('deposit_note')}</p>
     <div class="deposit-box">
       <div class="deposit-qr"><img src="/qr?data=${encodeURIComponent(addr)}" alt="QR"></div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">${t('address')}</div>
+      <div class="deposit-col">
+        <div class="mini-label">${t('address')}</div>
         <div class="deposit-addr" id="depAddr">${esc(addr)}</div>
-        <button class="btn btn-sm btn-secondary" style="margin-top:8px" data-act="copyAddr" data-addr="${esc(addr)}">${t('copy')}</button>
+        <button class="btn btn-sm btn-secondary gap-top-sm" data-act="copyAddr" data-addr="${esc(addr)}">${t('copy')}</button>
       </div>
     </div>
   `);
@@ -809,7 +923,7 @@ function openWithdrawSheet() {
       <label class="input-label">${t('amount')} (USDC)</label>
       <input class="input" id="wdAmt" type="number" step="0.01" min="0" placeholder="0.00">
     </div>
-    <p style="font-size:12px;color:var(--text3);margin:-4px 0 12px">${t('wd_hint')}</p>
+    <p class="hint hint-block">${t('wd_hint')}</p>
     <button class="btn btn-primary btn-full" data-act="stageWithdraw">${t('withdraw')}</button>
   `);
 }
@@ -830,8 +944,8 @@ async function stageWithdraw() {
     });
     const d = await r.json();
     if (d.ok && d.staged) showWithdrawConfirm(d);
-    else toast(errMsg(d), 'error');
-  } catch(e) { toast('Network error', 'error'); }
+    else toast(errMsg(d, r.status), 'error');
+  } catch(e) { toast(t('network_error'), 'error'); }
   finally { _wdBusy = false; }
 }
 
@@ -844,12 +958,12 @@ function showWithdrawConfirm(d) {
       <div class="wd-row"><span>${t('wd_fee')}</span><b>${esc(d.fee)} USDC</b></div>
       <div class="wd-row"><span>${t('wd_total')}</span><b>${esc(d.total)} USDC</b></div>
       <div class="wd-row"><span>${t('wd_after')}</span><b>${esc(d.balance_after)} USDC</b></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:10px">${t('address')}</div>
+      <div class="mini-label late">${t('address')}</div>
       <div class="deposit-addr">${esc(d.address)}</div>
     </div>
-    <p style="font-size:12px;color:var(--text3);margin:0 0 12px">${t('wd_check')}</p>
+    <p class="hint hint-block">${t('wd_check')}</p>
     <button class="btn btn-primary btn-full" data-act="confirmWithdraw" data-token="${tok}" data-yes="1">${t('wd_confirm_btn')}</button>
-    <button class="btn btn-secondary btn-full" style="margin-top:8px" data-act="confirmWithdraw" data-token="${tok}" data-yes="0">${t('wd_cancel_btn')}</button>
+    <button class="btn btn-secondary btn-full gap-top-sm" data-act="confirmWithdraw" data-token="${tok}" data-yes="0">${t('wd_cancel_btn')}</button>
   `);
 }
 
@@ -873,127 +987,104 @@ async function confirmWithdraw(token, yes) {
       closeModalForce();
       toast(t('wd_cancelled'));
     } else {
-      toast(errMsg(d), 'error');
+      toast(errMsg(d, r.status), 'error');
     }
-  } catch(e) { toast('Network error', 'error'); }
+  } catch(e) { toast(t('network_error'), 'error'); }
   finally { _wdBusy = false; }
 }
 
-// ─── Markets Detail ───
+// ─── Market / Bet Detail ───
+/* One buy panel per screen: tapping an option selects it and the single CTA names
+ * that option, so a four-option market does not repeat the same button four times. */
+let BUY = null;
+
+function optionLabel(o, i) { return o.label || o.name || String(i + 1); }
+
+function optRows(opts, pctKey) {
+  return (opts || []).map((o, i) => {
+    const pct = Number(o[pctKey] || 0);
+    return `<button class="detail-opt pickable${i === 0 ? ' selected' : ''}" data-act="pickOpt" data-i="${i}">
+      <div class="detail-opt-head">
+        <div class="detail-opt-name">${esc(optionLabel(o, i))}</div>
+        <div class="detail-opt-pct">${pct.toFixed(1)}%</div>
+      </div>
+      <div class="detail-opt-bar"><div class="detail-opt-bar-fill" style="width:${Math.max(pct, 1)}%"></div></div>
+    </button>`;
+  }).join('');
+}
+
+function buyPanel() {
+  const chips = [1, 5, 10, 25].map(v =>
+    `<button class="chip${v === 5 ? ' active' : ''}" data-act="pickChip" data-target="tradeAmt" data-val="${v}">${v}</button>`).join('');
+  return `<div class="buy-panel">
+    <div class="chips">${chips}</div>
+    <input class="input" id="tradeAmt" type="number" step="0.01" min="0" value="5" placeholder="5" inputmode="decimal" aria-label="${esc(t('amount'))}">
+    <button class="btn btn-primary btn-full" id="buyBtn" data-act="buy"></button>
+  </div>`;
+}
+
+function setBuyLabel() {
+  const btn = document.getElementById('buyBtn');
+  if (btn && BUY) btn.textContent = `${t('buy')} ${optionLabel(BUY.opts[BUY.opt] || {}, BUY.opt)}`;
+}
+
+function pickOpt(el) {
+  if (!BUY) return;
+  BUY.opt = parseInt(el.dataset.i, 10) || 0;
+  el.parentElement.querySelectorAll('.detail-opt').forEach(o => o.classList.toggle('selected', o === el));
+  setBuyLabel();
+}
+
 function openMarketDetail(id) {
   const mk = (STATE.markets || []).find(m => m.id == id);
   if (!mk) return;
   const opts = mk.options || [];
-  showDetail(`
-    <div class="detail-header">
-      <div class="detail-back" data-act="hideDetail">←</div>
-      <div class="detail-title">${esc(mk.question)}</div>
-    </div>
-    <div class="detail-body">
+  BUY = { kind: 'mkt', id: mk.id, opts, opt: 0 };
+  showDetail(detailShell(t('kind_market'), `
       <div class="detail-question">${esc(mk.question)}</div>
-      <div class="detail-options opt-colors">${opts.map((o, i) => {
-        const pct = o.price_pct || 0;
-        return `<div class="detail-opt">
-          <div class="detail-opt-head">
-            <div class="detail-opt-name">${esc(o.label || o.name || 'Option '+(i+1))}</div>
-            <div class="detail-opt-pct">${pct.toFixed(1)}%</div>
-          </div>
-          <div class="detail-opt-bar"><div class="detail-opt-bar-fill" style="width:${pct}%;background:var(--c${i})"></div></div>
-          <div style="margin-top:10px">
-            <div class="chips">
-              <div class="chip" data-act="pickChip" data-target="mktAmt_${i}" data-val="1">1</div>
-              <div class="chip active" data-act="pickChip" data-target="mktAmt_${i}" data-val="5">5</div>
-              <div class="chip" data-act="pickChip" data-target="mktAmt_${i}" data-val="10">10</div>
-              <div class="chip" data-act="pickChip" data-target="mktAmt_${i}" data-val="25">25</div>
-            </div>
-            <input class="input" id="mktAmt_${i}" type="number" step="0.01" min="0" value="5" placeholder="5" style="margin-bottom:8px">
-            <button class="btn btn-primary btn-full btn-sm" data-act="doTrade" data-mid="${mk.id}" data-opt="${i}">${t('buy')} ${esc(o.label || o.name || 'Option')}</button>
-          </div>
-        </div>`;
-      }).join('')}</div>
-      <div class="market-meta" style="margin-top:8px">
-        <span>${opts.length} options</span>
-        <span>${mk.traders || 0} traders</span>
-      </div>
-    </div>
-  `);
+      <div class="market-meta sheet-gap"><span>${t('options')}: ${opts.length}</span><span>${t('traders')}: ${mk.traders || 0}</span></div>
+      <div class="detail-options">${optRows(opts, 'price_pct')}</div>
+      ${buyPanel()}`));
+  setBuyLabel();
 }
 
-async function doTrade(marketId, option) {
-  const amt = parseFloat(document.getElementById('mktAmt_' + option).value);
-  if (!amt || amt <= 0) { toast(t('fill_fields'), 'error'); return; }
-  try {
-    const r = await fetch('/api/mini/trade', {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ market_id: marketId, option, amount: amt })
-    });
-    const d = await r.json();
-    if (d.ok) {
-      STATE.balance_usdc = d.new_balance;
-      renderBalance();
-      toast('Bought for ' + amt.toFixed(2) + ' USDC');
-      hideDetail();
-      loadState();
-    } else { toast(errMsg(d), 'error'); }
-  } catch(e) { toast('Network error', 'error'); }
-}
-
-// ─── Bets Detail ───
 function openBetDetail(id) {
   const bet = (STATE.bets || []).find(b => b.id == id);
   if (!bet) return;
   const opts = bet.options || [];
-  showDetail(`
-    <div class="detail-header">
-      <div class="detail-back" data-act="hideDetail">←</div>
-      <div class="detail-title">${esc(bet.question)}</div>
-    </div>
-    <div class="detail-body">
+  BUY = { kind: 'bet', id: bet.id, opts, opt: 0 };
+  showDetail(detailShell(t('kind_bet'), `
       <div class="detail-question">${esc(bet.question)}</div>
-      <div style="font-size:15px;color:var(--text2);margin-bottom:16px">Pot: <strong style="color:var(--text)">${Number(bet.pot_usdc||bet.pot||0).toFixed(2)} USDC</strong></div>
-      <div class="detail-options">${opts.map((o, i) => {
-        const pct = o.chance_pct || 0;
-        return `<div class="detail-opt">
-          <div class="detail-opt-head">
-            <div class="detail-opt-name">${esc(o.label || o.name || 'Option')}</div>
-            <div class="detail-opt-pct">${pct.toFixed(1)}%</div>
-          </div>
-          <div class="detail-opt-bar"><div class="detail-opt-bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>
-          <div style="margin-top:10px">
-            <div class="chips">
-              <div class="chip" data-act="pickChip" data-target="betAmt_${i}" data-val="1">1</div>
-              <div class="chip active" data-act="pickChip" data-target="betAmt_${i}" data-val="5">5</div>
-              <div class="chip" data-act="pickChip" data-target="betAmt_${i}" data-val="10">10</div>
-              <div class="chip" data-act="pickChip" data-target="betAmt_${i}" data-val="25">25</div>
-            </div>
-            <input class="input" id="betAmt_${i}" type="number" step="0.01" min="0" value="5" placeholder="5" style="margin-bottom:8px">
-            <button class="btn btn-primary btn-full btn-sm" data-act="doBet" data-betid="${bet.id}" data-opt="${i}">${t('buy')} ${esc(o.label || o.name || 'Option')}</button>
-          </div>
-        </div>`;
-      }).join('')}</div>
-    </div>
-  `);
+      <div class="pot-line">${t('pot')}: <b>${usdc(bet.pot_usdc || bet.pot)} USDC</b></div>
+      <div class="detail-options">${optRows(opts, 'chance_pct')}</div>
+      ${buyPanel()}`));
+  setBuyLabel();
 }
 
-async function doBet(betId, option) {
-  const amt = parseFloat(document.getElementById('betAmt_' + option).value);
+async function doBuy() {
+  if (!BUY) return;
+  const amt = parseFloat(document.getElementById('tradeAmt').value);
   if (!amt || amt <= 0) { toast(t('fill_fields'), 'error'); return; }
+  const isMarket = BUY.kind === 'mkt';
+  const action = isMarket ? 'trade' : 'betplace';
+  const body = { option: BUY.opt, amount: amt };
+  body[isMarket ? 'market_id' : 'bet_id'] = BUY.id;
   try {
-    const r = await fetch('/api/mini/betplace', {
+    const r = await fetch(isMarket ? '/api/mini/trade' : '/api/mini/betplace', {
       method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bet_id: betId, option, amount: amt })
+      headers: moneyHeaders(action),
+      body: JSON.stringify(body)
     });
     const d = await r.json();
     if (d.ok) {
+      resetIdem(action);
       STATE.balance_usdc = d.new_balance;
       renderBalance();
-      toast('Bet placed: ' + amt.toFixed(2) + ' USDC');
+      toast(t(isMarket ? 'buy_ok' : 'bet_ok').replace('{amt}', usdc(amt)));
       hideDetail();
       loadState();
-    } else { toast(errMsg(d), 'error'); }
-  } catch(e) { toast('Network error', 'error'); }
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(t('network_error'), 'error'); }
 }
 
 // ─── Create Market ───
@@ -1010,7 +1101,7 @@ function openCreateMarket() {
         <div class="create-opt-row"><input class="input" placeholder="Option 1"></div>
         <div class="create-opt-row"><input class="input" placeholder="Option 2"></div>
       </div>
-      <button class="create-add" data-act="addCreateOpt" data-container="mkOpts">+ Add option</button>
+      <button class="create-add" data-act="addCreateOpt" data-container="mkOpts">${icon('i-plus')} ${t('add_option')}</button>
     </div>
     <div class="input-group">
       <label class="input-label">${t('hours')}</label>
@@ -1033,7 +1124,7 @@ function openCreateBet() {
         <div class="create-opt-row"><input class="input" placeholder="Option 1"></div>
         <div class="create-opt-row"><input class="input" placeholder="Option 2"></div>
       </div>
-      <button class="create-add" data-act="addCreateOpt" data-container="btOpts">+ Add option</button>
+      <button class="create-add" data-act="addCreateOpt" data-container="btOpts">${icon('i-plus')} ${t('add_option')}</button>
     </div>
     <div class="input-group">
       <label class="input-label">${t('hours')}</label>
@@ -1049,7 +1140,7 @@ function addCreateOpt(containerId) {
   const n = c.children.length + 1;
   const row = document.createElement('div');
   row.className = 'create-opt-row';
-  row.innerHTML = `<input class="input" placeholder="Option ${n}"><div class="create-opt-rm" data-act="rmCreateOpt">×</div>`;
+  row.innerHTML = `<input class="input" placeholder="${esc(t('option'))} ${n}"><button class="create-opt-rm" data-act="rmCreateOpt" aria-label="${esc(t('remove'))}">${icon('i-minus')}</button>`;
   c.appendChild(row);
 }
 
@@ -1073,16 +1164,17 @@ async function doCreateMarket() {
   try {
     const r = await fetch('/api/mini/create', {
       method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: moneyHeaders('create_market'),
       body: JSON.stringify({ kind: 'market', question: q, options, hours })
     });
     const d = await r.json();
     if (d.ok) {
+      resetIdem('create_market');
       closeModalForce();
-      toast('Market created!');
+      toast(t('market_created'));
       loadState();
-    } else { toast(errMsg(d), 'error'); }
-  } catch(e) { toast('Network error', 'error'); }
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(t('network_error'), 'error'); }
 }
 
 async function doCreateBet() {
@@ -1093,16 +1185,17 @@ async function doCreateBet() {
   try {
     const r = await fetch('/api/mini/create', {
       method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: moneyHeaders('create_market'),
       body: JSON.stringify({ kind: 'bet', question: q, options, hours })
     });
     const d = await r.json();
     if (d.ok) {
+      resetIdem('create_market');
       closeModalForce();
-      toast('Bet created!');
+      toast(t('bet_created'));
       loadState();
-    } else { toast(errMsg(d), 'error'); }
-  } catch(e) { toast('Network error', 'error'); }
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(t('network_error'), 'error'); }
 }
 
 // ─── Language ───
@@ -1127,8 +1220,9 @@ async function askAI() {
   if (!q) return;
   input.value = '';
   const chat = document.getElementById('aiChat');
-  chat.innerHTML += `<div style="margin-bottom:6px"><strong style="color:var(--accent)">You:</strong> ${esc(q)}</div>`;
-  chat.innerHTML += `<div style="margin-bottom:6px;color:var(--text3)">...</div>`;
+  chat.insertAdjacentHTML('beforeend',
+    `<div class="ai-item"><span class="who">${esc(t('ai_you'))}:</span> ${esc(q)}</div><div class="ai-item pending">…</div>`);
+  const pending = chat.lastElementChild;
   chat.scrollTop = chat.scrollHeight;
   try {
     const r = await fetch('/api/ask', {
@@ -1137,15 +1231,16 @@ async function askAI() {
       body: JSON.stringify({ question: q })
     });
     const d = await r.json();
-    chat.innerHTML = chat.innerHTML.replace(/<div[^>]*>\.\.\.<\/div>$/, '');
+    pending.remove();
     if (r.ok) {
-      chat.innerHTML += `<div style="margin-bottom:8px"><strong style="color:var(--success)">AI:</strong> ${esc(d.answer || 'No answer')}</div>`;
+      chat.insertAdjacentHTML('beforeend',
+        `<div class="ai-item ans"><span class="who">${esc(t('ai_ai'))}:</span> ${esc(d.answer || t('ai_no_answer'))}</div>`);
     } else {
-      chat.innerHTML += `<div style="margin-bottom:8px;color:var(--danger)">Error: ${esc(d.detail || 'request failed')}</div>`;
+      chat.insertAdjacentHTML('beforeend', `<div class="ai-item err">${esc(errMsg(d, r.status))}</div>`);
     }
   } catch(e) {
-    chat.innerHTML = chat.innerHTML.replace(/<div[^>]*>\.\.\.<\/div>$/, '');
-    chat.innerHTML += `<div style="margin-bottom:8px;color:var(--danger)">Network error</div>`;
+    pending.remove();
+    chat.insertAdjacentHTML('beforeend', `<div class="ai-item err">${esc(t('network_error'))}</div>`);
   }
   chat.scrollTop = chat.scrollHeight;
 }
@@ -1158,14 +1253,8 @@ function pickChip(el, inputId, val) {
 }
 
 // ─── Theme ───
-(function() {
-  var saved = localStorage.getItem('theme');
-  if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-  else if (saved === 'light') document.documentElement.removeAttribute('data-theme');
-  else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  }
-})();
+/* The pre-paint bootstrap in <head> already resolved the saved theme; this only
+   flips it and persists the choice. */
 function toggleTheme() {
   var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   if (isDark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('theme', 'light'); }
@@ -1203,8 +1292,8 @@ document.addEventListener('click', (e) => {
   if (act === 'doTip') { doTip(); return; }
   if (act === 'stageWithdraw') { stageWithdraw(); return; }
   if (act === 'confirmWithdraw') { confirmWithdraw(el.dataset.token, el.dataset.yes === '1'); return; }
-  if (act === 'doTrade') { doTrade(el.dataset.mid, parseInt(el.dataset.opt, 10)); return; }
-  if (act === 'doBet') { doBet(el.dataset.betid, parseInt(el.dataset.opt, 10)); return; }
+  if (act === 'pickOpt') { pickOpt(el); return; }
+  if (act === 'buy') { doBuy(); return; }
   if (act === 'addCreateOpt') { addCreateOpt(el.dataset.container); return; }
   if (act === 'doCreateMarket') { doCreateMarket(); return; }
   if (act === 'doCreateBet') { doCreateBet(); return; }

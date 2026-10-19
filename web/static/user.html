@@ -4,71 +4,85 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Профиль — Tippy</title>
-  <meta property="og:title" content="Профиль — Tippy" />
-  <meta property="og:description" content="Донат-страница пользователя Tippy: адрес для USDC, статистика, открытые позиции." />
+  <meta property="og:title" content="Профиль в Tippy" />
+  <meta property="og:description" content="Донат-страница: как поддержать этого пользователя USDC в Telegram и что он уже получил через Tippy." />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230052ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
 </head>
 <body>
-  <div class="orb orb-a" aria-hidden="true"></div>
-  <div class="orb orb-b" aria-hidden="true"></div>
-
   <header class="nav">
     <div class="nav-inner">
       <a class="brand" href="/">
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
         <span class="brand-name"><b>Tippy</b></span>
       </a>
-      <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__" data-tg-link>Открыть в Telegram →</a>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="https://t.me/__BOT_USERNAME__" data-tg-link>Открыть бота</a>
+      </div>
     </div>
   </header>
 
   <main>
-    <section class="user-hero" id="user-hero">
-      <div class="avatar pulse-ring" id="user-avatar">?</div>
-      <h1 id="user-name">Загрузка…</h1>
-      <p class="hero-sub" id="user-meta"></p>
-    </section>
+    <article class="page" id="profile">
+      <span class="eyebrow">Профиль Tippy</span>
+      <div class="avatar" id="user-avatar">·</div>
+      <h1 class="page-title" id="user-name">Загрузка…</h1>
+      <div class="page-meta" id="user-meta"></div>
 
-    <section class="section grid-2">
-      <div class="reveal">
-        <h2>Статистика</h2>
-        <div class="leaderboard">
-          <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Баланс</span><span class="lb-amt" id="u-balance">–</span></div>
-          <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Получено чаевых</span><span class="lb-amt" id="u-received">–</span></div>
-          <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Отправлено чаевых</span><span class="lb-amt" id="u-sent">–</span></div>
-          <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Выиграно на рынках</span><span class="lb-amt" id="u-won">–</span></div>
-          <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Поставлено на рынках</span><span class="lb-amt" id="u-placed">–</span></div>
-          <div class="lb-row"><span class="lb-place">◉</span><span class="lb-name">Заработано на рынках</span><span class="lb-amt" id="u-fees">–</span></div>
-        </div>
+      <div class="cta-row">
+        <a class="btn btn-primary" id="u-donate" href="https://t.me/__BOT_USERNAME__" target="_blank" rel="noopener">Поддержать в Telegram</a>
+        <button class="btn btn-ghost" id="u-share" type="button">Скопировать ссылку</button>
       </div>
-      <div class="reveal">
-        <h2>Поддержать</h2>
-        <div class="wallet deposit-box">
-          <div class="wallet-row"><span>Адрес бота (<span data-net="chain">Base</span> / USDC)</span><b id="u-deposit">–</b></div>
+
+      <section class="page-block">
+        <span class="eyebrow">Через Tippy прошло</span>
+        <div class="stats">
+          <div class="stat-card"><div class="stat-value" id="u-received">–</div><div class="stat-label">Получено чаевых</div></div>
+          <div class="stat-card"><div class="stat-value" id="u-sent">–</div><div class="stat-label">Отправлено чаевых</div></div>
+          <div class="stat-card"><div class="stat-value" id="u-won">–</div><div class="stat-label">Выиграно на рынках</div></div>
+          <div class="stat-card"><div class="stat-value" id="u-placed">–</div><div class="stat-label">Поставлено на рынках</div></div>
+          <div class="stat-card"><div class="stat-value" id="u-fees">–</div><div class="stat-label">Комиссия создателя</div></div>
+          <div class="stat-card" id="u-balance-card" hidden><div class="stat-value" id="u-balance">–</div><div class="stat-label">Твой баланс</div></div>
+        </div>
+      </section>
+
+      <section class="page-block" id="support-how" hidden>
+        <span class="eyebrow">Как устроены чаевые</span>
+        <p class="hint">
+          Донат приходит на баланс самого отправителя и списывается с него при
+          переводе — адрес ниже это кошелёк бота, а не адрес пользователя.
+          Пополнить свой баланс можно на этот адрес в сети
+          <span data-net="chain">Base</span> (USDC), а затем закрепить приход
+          командой <code>/claim</code> или привязкой кошелька через
+          <code>/link</code>. После этого чаевые отправляются одной командой
+          <code>/tip 5 @ник</code> или по кнопке «Поддержать» на этой странице.
+        </p>
+        <div class="wallet">
+          <div class="wallet-row"><span class="eyebrow">Адрес пополнения (<span data-net="usdc">USDC</span> / <span data-net="chain">Base</span>)</span></div>
           <div class="wallet-addr" id="u-address">загрузка…</div>
-          <button class="btn btn-ghost" id="u-copy" style="margin-top: 10px; width: 100%;">📋 Скопировать адрес</button>
-          <div class="qr"><img id="u-qr" alt="QR-код депозита" /></div>
-          <p class="hint">
-            Отправь USDC на этот адрес в сети <span data-net="chain">Base</span>, затем
-            нажми <b>/claim</b> в боте,
-            чтобы средства зачислились на баланс этого пользователя. Или просто напишите
-            ему в Telegram: <span id="u-tip-link">–</span>
-          </p>
+          <div class="cta-row">
+            <div class="qr-wrap"><div class="qr"><img id="u-qr" alt="QR-код адреса пополнения" /></div></div>
+            <button class="btn btn-ghost" id="u-copy" type="button">Скопировать адрес</button>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="section reveal" id="positions" hidden>
-      <h2>Открытые позиции</h2>
-      <div class="markets" id="positions-list"></div>
-    </section>
+      <section class="page-block" id="positions" hidden>
+        <span class="eyebrow">Открытые позиции</span>
+        <div id="positions-list"></div>
+      </section>
 
-    <section class="section reveal" id="history" hidden>
-      <h2>Последние операции</h2>
-      <div class="leaderboard" id="history-list"></div>
-    </section>
+      <section class="page-block" id="history" hidden>
+        <span class="eyebrow">Последние операции</span>
+        <div class="rows" id="history-list"></div>
+      </section>
+    </article>
   </main>
 
   <footer class="footer">
@@ -77,12 +91,12 @@
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
         <div>
           <b>Tippy</b>
-          <span class="footer-tag">Донаты и чаевые на USDC</span>
+          <span class="footer-tag">USDC-экономика в Telegram и вебе</span>
         </div>
       </div>
       <div class="footer-meta">
-        <span class="chain-chip">🟦 <span data-net="chain">Base</span></span>
-        <span class="chain-chip">🪙 <span data-net="usdc">USDC</span></span>
+        <span class="chain-chip"><span data-net="chain">Base</span></span>
+        <span class="chain-chip"><span data-net="usdc">USDC</span></span>
       </div>
     </div>
     <div class="author-links">
@@ -92,113 +106,120 @@
       <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
       <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
     </div>
-    <a class="powered" href="https://buildonbase.com" target="_blank" rel="noopener">
+    <p class="footer-legal"><a href="/tos">Условия использования</a></p>
+    <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
       <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
-      Built on Base · buildonbase.com
+      Built on Base · открытая кодовая база
     </a>
   </footer>
 
   <script src="/chain.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
-    document.body.classList.add("js");
-    const fmtUSDC = (x) =>
-      (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
-    const escapeHtml = (s) =>
+    const esc = (s) =>
       String(s).replace(/[&<>"']/g, (c) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
       })[c]);
-
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
-    }, { threshold: 0.1 });
-    document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+    const fmtUSDC = (x) =>
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    // tx_log.created_at is epoch seconds.
+    const fmtDate = (sec) => {
+      const n = Number(sec || 0);
+      if (!isFinite(n) || n <= 0) return "";
+      return new Date(n * 1000).toLocaleString("ru-RU", {
+        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+      });
+    };
+    const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
 
     const tgId = location.pathname.split("/").filter(Boolean).pop();
 
     (async () => {
-      let info = { bot_username: "" };
-      try {
-        info = await (await fetch("/api/info")).json();
-      } catch (e) { /* ignore */ }
-      const username = info.bot_username;
-      const tgLink = username ? "https://t.me/" + encodeURIComponent(username) : "";
-      document.querySelectorAll("[data-tg-link]").forEach((a) => { a.href = tgLink || a.href; });
+      const info = await fetch("/api/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
       applyNetInfo(info);
 
+      let u;
       try {
-        const u = await (await fetch("/api/user/" + tgId)).json();
-        $("user-avatar").textContent = (u.username || "?")[0].toUpperCase();
-        $("user-name").textContent = "@" + (u.username || "id" + tgId);
-        const hasBalance = u.balance_usdc !== undefined && u.balance_usdc !== null;
-        $("user-meta").textContent = "Пользователь Tippy" + (hasBalance ? " · " + u.balance_usdc + " USDC на балансе" : "");
-        $("u-balance").textContent = hasBalance ? fmtUSDC(u.balance_usdc) + " USDC" : "—";
-        $("u-received").textContent = fmtUSDC(u.tips_received_usdc) + " USDC";
-        $("u-sent").textContent = fmtUSDC(u.tips_sent_usdc) + " USDC";
-        $("u-won").textContent = fmtUSDC(u.bets_won_usdc) + " USDC";
-        $("u-placed").textContent = fmtUSDC(u.bets_placed_usdc) + " USDC";
-        $("u-fees").textContent = fmtUSDC(u.creator_fees_usdc) + " USDC";
-        $("u-deposit").textContent = "USDC";
-        $("u-address").textContent = u.deposit_address;
-        /* The QR carries the bare address, like the cabinet does: an EIP-681
-         * "base:…" URI would tell a wallet to send the native coin, and deposits
-         * here are USDC. */
-        $("u-qr").src = "/qr?size=220&data=" + encodeURIComponent(u.deposit_address);
-        $("u-copy").addEventListener("click", () => {
-          navigator.clipboard.writeText(u.deposit_address).then(() => {
-            $("u-copy").textContent = "✅ Скопировано";
-            setTimeout(() => { $("u-copy").textContent = "📋 Скопировать адрес"; }, 2000);
-          });
-        });
-        if (username) {
-          $("u-tip-link").innerHTML =
-            '<a class="btn btn-primary" href="https://t.me/' + encodeURIComponent(username) +
-            '?start=donate_' + encodeURIComponent(tgId) + '" target="_blank" rel="noopener">💸 Чаевые в Telegram</a>';
-        }
-
-        if (u.positions && u.positions.length) {
-          const fmt = (x) => fmtUSDC(x) + " USDC";
-          const esc = escapeHtml;
-          const html = u.positions.map((p, i) => `
-            <div class="market-card" style="animation-delay:${Math.min(i * 80, 400)}ms">
-              <div class="market-head">
-                <span class="market-question">#${esc(p.bet_id)} ${esc(p.question)}</span>
-                <span class="market-meta">${esc(p.option)}</span>
-              </div>
-              <div class="market-footer">
-                <span class="pot">Поставлено: <b>${fmt(p.stake_usdc)}</b></span>
-                <span class="pot">Потенциально: <b>${fmt(p.potential_usdc)}</b></span>
-              </div>
-            </div>`).join("");
-          $("positions-list").innerHTML = html;
-          $("positions").hidden = false;
-        }
-
-        if (u.history && u.history.length) {
-          const icons = {
-            deposit: "⬇️", tip: "💸", withdraw: "⬆️", fee: "🧾",
-            bet: "🎲", bet_win: "🏆", bet_cancel: "↩️",
-          };
-          const names = {
-            deposit: "Пополнение", tip: "Чаевые", withdraw: "Вывод", fee: "Комиссия",
-            bet: "Ставка", bet_win: "Выигрыш", bet_cancel: "Возврат",
-          };
-          const html = u.history.map((h, i) => {
-            const isRain = h.kind === "tip" && h.note === "rain";
-            const icon = isRain ? "🌧️" : (icons[h.kind] || "•");
-            const name = isRain ? "Дождь" : (names[h.kind] || esc(h.kind));
-            return `
-            <div class="lb-row" style="animation-delay:${Math.min(i * 50, 400)}ms">
-              <span class="lb-place">${icon}</span>
-              <span class="lb-name">${name}</span>
-              <span class="lb-amt">${h.amount_usdc > 0 ? "+" : ""}${fmtUSDC(h.amount_usdc)} USDC</span>
-            </div>`;
-          }).join("");
-          $("history-list").innerHTML = html;
-          $("history").hidden = false;
-        }
+        const r = await fetch("/api/user/" + encodeURIComponent(tgId));
+        if (!r.ok) throw new Error();
+        u = await r.json();
       } catch (e) {
-        $("user-hero").innerHTML = '<div class="empty">Пользователь не найден</div>';
+        $("profile").innerHTML = '<div class="empty">Профиль ещё не появился — этот пользователь ничего не отправлял и не получал через Tippy.</div>';
+        return;
+      }
+
+      const name = u.username || ("id" + tgId);
+      $("user-avatar").textContent = name.replace(/^@/, "")[0].toUpperCase();
+      $("user-name").textContent = handle(u.username, tgId);
+      document.title = handle(u.username, tgId) + " — Tippy";
+      document.querySelector('meta[property="og:title"]').content =
+        "Поддержать " + handle(u.username, tgId) + " в Tippy";
+      $("user-meta").innerHTML = [
+        "<span>Чаевых получено: " + fmtUSDC(u.tips_received_usdc) + " USDC</span>",
+        u.is_owner ? "<span>это твой профиль</span>" : "",
+      ].filter(Boolean).join("<span>·</span>");
+
+      if (info.bot_username) {
+        $("u-donate").href = "https://t.me/" + encodeURIComponent(info.bot_username) +
+          "?start=donate_" + encodeURIComponent(tgId);
+      }
+      $("u-share").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(location.href);
+          $("u-share").textContent = "Ссылка скопирована";
+          setTimeout(() => { $("u-share").textContent = "Скопировать ссылку"; }, 2000);
+        } catch (e) { /* clipboard denied: the address bar still has the link */ }
+      });
+
+      $("u-received").textContent = fmtUSDC(u.tips_received_usdc);
+      $("u-sent").textContent = fmtUSDC(u.tips_sent_usdc);
+      $("u-won").textContent = fmtUSDC(u.bets_won_usdc);
+      $("u-placed").textContent = fmtUSDC(u.bets_placed_usdc);
+      $("u-fees").textContent = fmtUSDC(u.creator_fees_usdc);
+      if (u.is_owner) {
+        $("u-balance-card").hidden = false;
+        $("u-balance").textContent = fmtUSDC(u.balance_usdc);
+        $("support-how").hidden = false;
+        $("u-address").textContent = u.deposit_address;
+        /* The QR carries the bare address: an EIP-681 "base:…" URI tells a wallet
+         * to send the native coin, and deposits here are USDC. */
+        $("u-qr").src = "/qr?size=220&data=" + encodeURIComponent(u.deposit_address);
+        $("u-copy").addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(u.deposit_address);
+            $("u-copy").textContent = "Адрес скопирован";
+            setTimeout(() => { $("u-copy").textContent = "Скопировать адрес"; }, 2000);
+          } catch (e) { $("u-copy").textContent = "Не удалось скопировать"; }
+        });
+      }
+
+      if (u.positions && u.positions.length) {
+        $("positions-list").innerHTML = u.positions.map((p) => `
+          <div class="market-card">
+            <div class="market-head">
+              <span class="market-question"><a class="m-link" href="/m/${encodeURIComponent(p.bet_id)}">#${esc(p.bet_id)} ${esc(p.question)}</a></span>
+              <span class="market-meta">${esc(p.option)}</span>
+            </div>
+            <div class="market-footer">
+              <span class="pot">Вложено: <b>${fmtUSDC(p.stake_usdc)} USDC</b></span>
+              <span class="pot">При выигрыше: <b>${fmtUSDC(p.potential_usdc)} USDC</b></span>
+            </div>
+          </div>`).join("");
+        $("positions").hidden = false;
+      }
+
+      if (u.history && u.history.length) {
+        // Label, direction and the counterparty name come from the server:
+        // tx_log amounts are always positive, so the sign has to come from kind.
+        $("history-list").innerHTML = u.history.map((h) =>
+          '<div class="row"><span class="row-k">' + esc(h.label || h.kind) +
+          (h.ref || h.note ? ' <span class="hint">' +
+            esc([h.ref || "", h.note || ""].filter(Boolean).join(" — ")) + "</span>" : "") +
+          '<br><span class="hint">' + esc(fmtDate(h.created_at)) + "</span></span>" +
+          '<b class="row-v ' + (h.incoming ? "pos" : "neg") + '">' +
+          (h.incoming ? "+" : "−") + fmtUSDC(h.amount_usdc) + "</b></div>"
+        ).join("");
+        $("history").hidden = false;
       }
     })();
   </script>
