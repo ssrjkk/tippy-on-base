@@ -19,6 +19,7 @@ jobs:
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
@@ -32,6 +33,7 @@ jobs:
   test:
     name: Tests (pytest)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
@@ -74,6 +76,7 @@ jobs:
   security:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -86,6 +89,7 @@ jobs:
   contract:
     name: Contracts (forge test)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Install Foundry
