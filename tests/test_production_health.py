@@ -56,11 +56,21 @@ def test_prod_cookie_security(page):
                 f"Кука {cookie['name']} имеет небезопасный SameSite: {cookie.get('sameSite')}"
 
 def test_prod_health_endpoint():
-    """Прямая проверка /api/health без браузера"""
+    """Прямая проверка /api/health без браузера
+
+    Запрос идёт с явным User-Agent, как у любого реального клиента: Cloudflare
+    на аккаунте отвечает `403 error code: 1010` на сигнатуру urllib по умолчанию
+    (Python-urllib/3.x), и без этого тест проверял бы правило бот-защиты, а не
+    здоровье приложения.
+    """
     import json
     import urllib.request
 
-    req = urllib.request.Request(f"{PROD_URL}/api/health", method="GET")
+    req = urllib.request.Request(
+        f"{PROD_URL}/api/health",
+        method="GET",
+        headers={"user-agent": "tippy-health-check/1.0"},
+    )
     try:
         with urllib.request.urlopen(req) as response:
             assert response.status == 200

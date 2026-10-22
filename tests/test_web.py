@@ -1130,3 +1130,22 @@ def test_agent_audit_missing_trail_is_empty(client, ledger, monkeypatch, tmp_pat
     state_dir, _ = _agent_env(ledger, monkeypatch, tmp_path)
     _auth(client, 111)
     assert client.get("/api/agent/audit").json() == []
+
+
+def test_pages_render_the_session_state_instead_of_a_doomed_probe(client):
+    """Both scripts used to probe the session endpoints before knowing whether a
+    session exists, so every anonymous visitor got a 401 in the browser console.
+    The cookie is HttpOnly, so the server says whether it is there and the
+    scripts read that off <html data-signed-in>."""
+    anon = client.get("/").text
+    assert 'data-signed-in="0"' in anon
+    assert "__SIGNED_IN__" not in anon
+    assert "dataset.signedIn" in client.get("/site.js").text
+
+    app = client.get("/app").text
+    assert 'data-signed-in="0"' in app
+    assert "dataset.signedIn" in app
+
+    _auth(client, 777)
+    assert 'data-signed-in="1"' in client.get("/").text
+    assert 'data-signed-in="1"' in client.get("/app").text

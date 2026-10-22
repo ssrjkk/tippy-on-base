@@ -749,30 +749,39 @@ def chain_label() -> str:
     """Name of the chain the bot signs on, for anything user-facing."""
     return CHAIN_NAMES.get(config.EXPECTED_CHAIN_ID, f'chain {config.EXPECTED_CHAIN_ID}')
 
-def _static_page(page: str) -> Response:
-    """Serve a static page with the bot username already rendered into it.
+def _signed_in(request: Request | None) -> bool:
+    """True when the request carries a session cookie that parses."""
+    return request is not None and parse_session(request.cookies.get(COOKIE_NAME)) is not None
+
+def _static_page(page: str, request: Request | None = None) -> Response:
+    """Serve a static page with the running config rendered into it.
 
     ``t.me/TIPBOT_USERNAME`` shipped in the HTML is a link that 404s for anyone
     whose scripts have not replaced it yet, so the real name is substituted
     here. Network and USDC labels stay on /api/info — only the running config
     knows those.
+
+    ``__SIGNED_IN__`` is the session cookie seen from the server. The scripts
+    cannot read it (HttpOnly) and probing ``/api/me`` with it missing answers
+    401, which every anonymous landing-page visitor used to see in the console.
     """
     html = (STATIC / page).read_text(encoding='utf-8')
     html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
+    html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
     return Response(content=html.encode('utf-8'), media_type='text/html')
 
 @app.get('/u/{tg_id}')
-async def user_page(tg_id: int) -> Response:
-    return _static_page('user.html')
+async def user_page(tg_id: int, request: Request) -> Response:
+    return _static_page('user.html', request)
 
 @app.get('/m/{bet_id}')
-async def market_page(bet_id: int) -> Response:
-    return _static_page('market.html')
+async def market_page(bet_id: int, request: Request) -> Response:
+    return _static_page('market.html', request)
 
 @app.get('/m/oc/{market_id}')
-async def onchain_market_page(market_id: int) -> Response:
+async def onchain_market_page(market_id: int, request: Request) -> Response:
     """Shareable page for an ON-CHAIN market (OutcomeMarket ERC-1155)."""
-    return _static_page('oc.html')
+    return _static_page('oc.html', request)
 
 @app.get('/me', include_in_schema=False)
 async def me_page() -> RedirectResponse:
@@ -791,10 +800,10 @@ async def root(request: Request):
     Login Widget renders inline on this page, and its callback is rejected
     without that state.
     """
-    return attach_login_state(request, _static_page('index.html'))
+    return attach_login_state(request, _static_page('index.html', request))
 
 @app.get('/app', include_in_schema=False)
-async def mini_app():
+async def mini_app(request: Request):
     """The Mini App page, with Base-App embed meta tags rendered against the
     public URL (the Base App crawls these tags to render the launch card)."""
     from web.mini import public_base_url
@@ -803,6 +812,7 @@ async def mini_app():
     html = html.replace('__PUBLIC_URL__', base_url)
     html = html.replace('__PUBLIC_HOST__', base_url.split('//')[-1])
     html = html.replace('__CHAIN_NAME__', chain_label())
+    html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
     return Response(content=html.encode('utf-8'), media_type='text/html')
 
 @app.get('/agent', include_in_schema=False)

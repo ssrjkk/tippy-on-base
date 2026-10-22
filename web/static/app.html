@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-signed-in="__SIGNED_IN__">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -583,6 +583,17 @@ async function addMiniApp() {
 }
 
 async function loadState() {
+  // Nothing can authorise this call before the state has ever loaded: the
+  // session cookie is HttpOnly (the server tells us if it exists) and outside
+  // Telegram/Base App there is no initData to exchange for one. Render the
+  // empty shell instead of firing a request that only answers 401.
+  const tg = window.Telegram?.WebApp;
+  if (STATE.tg_id === null && !(tg && tg.initData)
+      && document.documentElement.dataset.signedIn !== '1') {
+    renderAll();
+    toast(t('open_in_app'), 'error');
+    return;
+  }
   try {
     const r = await fetch('/api/mini/state', { credentials: 'same-origin' });
     if (r.ok) {

@@ -135,18 +135,21 @@
     return true;
   }
 
+  async function probeMe() {
+    try { me = await api('/api/me'); return true; } catch (e) { return false; }
+  }
+
   async function boot() {
-    try {
-      me = await api('/api/me');
-    } catch (e) {
-      try {
-        if (!(await telegramAutoAuth())) throw new Error('no telegram session');
-        me = await api('/api/me');
-      } catch (e2) {
-        signedOut();
-        wireConnect();
-        return;
-      }
+    // The session cookie is HttpOnly, so the server renders whether there is
+    // one: probing /api/me without it only answers 401, which every anonymous
+    // visitor used to see as a console error. Inside Telegram the handshake
+    // takes the seat instead.
+    var ok = document.documentElement.dataset.signedIn === '1' && await probeMe();
+    if (!ok) ok = (await telegramAutoAuth()) && await probeMe();
+    if (!ok) {
+      signedOut();
+      wireConnect();
+      return;
     }
     await afterSignIn();
     wireConnect();
