@@ -132,23 +132,33 @@ export async function onRequest(context) {
   // drops the Secure flag from the session and login-state cookies.
   headers.set('x-forwarded-proto', 'https');
 
-  let upstream;
-  try {
-    upstream = await fetch(backend + pathname + search, {
-      method: request.method,
-      headers,
-      body: reads ? undefined : request.body,
-    });
-  } catch {
-    return maintenance();
-  }
   // 52x is Cloudflare's own "the origin never answered" family. A bare
-  // 502/503/504 that does not carry JSON comes from a proxy in front of
-  // uvicorn, not from the app: every error the app raises renders as JSON.
-  // Both mean the visitor would get a gateway's stock HTML instead of Tippy.
-  const gateway = upstream.status >= 520 && upstream.status <= 527;
-  const isJson = (upstream.headers.get('content-type') || '').includes('application/json');
-  const proxy = [502, 503, 504].includes(upstream.status) && !isJson;
-  if (gateway || proxy) return maintenance();
-  return upstream;
+  // 502/503/504 that does not carry JSON comes from a proxy in front of uvicorn,
+  // not from the app — every error the app raises renders as JSON. Both mean the
+  // visitor would otherwise get a gateway's stock HTML instead of Tippy.
+  const isDown = (res) =>
+    (res.status >= 520 && res.status <= 527)
+    || ([502, 503, 504].includes(res.status)
+        && !(res.headers.get('content-type') || '').includes('application/json'));
+
+  const send = () => fetch(backend + pathname + search, {
+    method: request.method,
+    headers,
+    body: reads ? undefined : request.body,
+  });
+
+  // Edge subrequests blink occasionally, and for a read the cost of one more
+  // try is milliseconds while the alternative is a maintenance card for a page
+  // the origin would have served. Writes are never retried: a second POST is a
+  // second action, and the money endpoints rely on Idempotency-Key instead.
+  let upstream = null;
+  for (let attempt = 0, tries = reads ? 2 : 1; attempt < tries; attempt += 1) {
+    try {
+      upstream = await send();
+      if (!isDown(upstream)) break;
+    } catch {
+      upstream = null;
+    }
+  }
+  return upstream && !isDown(upstream) ? upstream : maintenance();
 }
