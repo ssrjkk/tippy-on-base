@@ -37,10 +37,7 @@ from ._common import (
     wallets,
 )
 from .agent import cmd_agent
-from .ai import (
-    AI_BOT_COMMAND,
-    cmd_ask,
-)
+from .ai import cmd_ask
 from .basename import cb_basename, cmd_basename
 from .bets import (
     _bet_card,
@@ -174,7 +171,6 @@ router.message.register(cmd_claim_dividends, Command('claim'))
 _index_message = router.message()(_index_message)
 
 __all__ = [
-    "AI_BOT_COMMAND",
     "AMOUNT_RE",
     "BET_ID_RE",
     "BET_LINK_RE",

@@ -282,7 +282,7 @@ def _menu_kb(lang: str = "ru") -> InlineKeyboardMarkup:
             [b("markets", "markets_amm"), b("bets")],
             [b("donate"), b("top")],
             [b("hist"), b("stats")],
-            [b("wallet"), b("paywall")],
+            [b("wallet"), b("paywall", "paywall_list")],
             [b("basename")],
             [b("settings")],
             [b("about")],

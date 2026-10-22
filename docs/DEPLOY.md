@@ -351,8 +351,8 @@ python scripts/smoke_onchain.py
 Mini app = наш дашборд `/app` внутри ленты Base App. Чтобы Base App
 принял приложение:
 
-**1. Подпиши манифест** в [Base Build portal](https://portal.base.dev)
-(или fc-домен верификацией Farcaster-ключом): возьми `deploy/farcaster_manifest.example.json`,
+**1. Подпиши манифест** в [Base Build portal](https://dashboard.base.org)
+(`base.dev` туда же; или fc-домен верификацией Farcaster-ключом): возьми `deploy/farcaster_manifest.example.json`,
 подставь свой публичный хост и подпись, сохрани как `deploy/farcaster_manifest.json`.
 
 **2. Проверь** — `GET /.well-known/farcaster.json` должен отдать твой JSON (404 =

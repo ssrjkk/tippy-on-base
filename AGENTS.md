@@ -16,8 +16,8 @@
 ## Gate
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
-  `deploy/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1008 tests. The four `production` tests hit
+  `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
+- `python -m pytest -q -m "not production"` — ~7 min, 1015 tests. The four `production` tests hit
   the deployed site and belong to `.github/workflows/prod-health-check.yml`, not to this gate.
 - Run targeted files first (`pytest tests/test_web.py -q --timeout=60`), the whole suite last.
   `--timeout=60 --timeout-method=thread` makes a hung test print its stack instead of freezing.

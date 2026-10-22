@@ -2561,3 +2561,77 @@ def test_deposit_has_disclaimer(ledger):
     caption = m.photos[0][1]
     assert "Дисклеймер" in caption
     assert "кастодиальный" in caption
+
+
+# Commands the dispatcher answers but the user menu must not list: /start is
+# Telegram's own entry point, the rest are gated on ADMIN_TG_ID or the oracle
+# role, so autocompleting them would only invite "not authorized".
+OPERATOR_COMMANDS = {"start", "agent", "broadcast", "oc_resolve"}
+
+
+def test_every_user_command_is_in_the_menu():
+    """/oc_buy, /oc_create, /oc_sell, /oc_redeem and /ask worked for weeks without
+    ever appearing in Telegram's command list or in the website's command table,
+    because the menu is a separate list from the handlers. Enumerate what the
+    dispatcher actually answers and compare it with what is published."""
+    from aiogram.filters import Command
+
+    from bot.commands_catalog import BOT_COMMAND_SPECS
+    from bot.handlers import router
+
+    handled = set()
+    for handler in router.message.handlers:
+        for flt in (handler.filters or []):
+            cb = getattr(flt, "callback", None)
+            if isinstance(cb, Command):
+                handled.update(
+                    (c.command if hasattr(c, "command") else str(c)).lstrip("/")
+                    for c in cb.commands
+                )
+    menu = {name for name, _ in BOT_COMMAND_SPECS}
+    assert handled - OPERATOR_COMMANDS <= menu
+    assert menu <= handled
+
+
+def test_readme_documents_every_menu_command():
+    """A command that ships in the Telegram menu but appears in no README is a
+    command nobody but the bot knows about. Checked against the whole file, not a
+    fixed section, so the README can be reorganised freely."""
+    import re
+    from pathlib import Path
+
+    from bot.commands_catalog import BOT_COMMAND_SPECS
+
+    readme = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
+    documented = set(re.findall(r"`/([a-z_]+)", readme))
+    missing = sorted(name for name, _ in BOT_COMMAND_SPECS if name not in documented)
+    assert not missing, f"README never mentions: {missing}"
+
+
+def test_every_menu_button_has_a_handler():
+    """The main keyboard is assembled from one list and the callback routes from
+    another: «Платные посты» shipped callback_data="paywall" while the handler
+    listens for "paywall_list", so that button did nothing when tapped. Resolve
+    every callback_data in the menu against the router's filters, for all
+    languages, because the labels are translated but the data is not."""
+    from types import SimpleNamespace
+
+    from bot import i18n
+    from bot.handlers import router
+    from bot.handlers._common import _menu_kb
+
+    def matches(flt, data):
+        try:
+            return bool(flt.callback(SimpleNamespace(data=data)))
+        except Exception:
+            return False
+
+    def handled(data):
+        return any(not h.filters or all(matches(f, data) for f in h.filters)
+                   for h in router.callback_query.handlers)
+
+    for lang in i18n.LANGS:
+        for row in _menu_kb(lang).inline_keyboard:
+            for btn in row:
+                if btn.callback_data:
+                    assert handled(btn.callback_data), f"{lang}: {btn.callback_data} has no handler"

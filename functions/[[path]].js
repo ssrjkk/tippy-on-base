@@ -28,12 +28,13 @@ const MAINTENANCE = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tippy — временно недоступен</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Golos+Text:wght@400;500;600;700&display=swap');
   :root {
     --blue: #0000ff; --blue-hover: #0000cc; --blue-soft: rgba(0, 0, 255, .07);
     --canvas: #ffffff; --surface: #f8f8f8; --border: #efefef; --border-strong: #dadada;
     --ink: #111111; --muted: #6f6f6f; --muted-2: #9a9a9a; --warning: #8a5a00;
     --pill: 9999px;
-    --font-ui: "Schibsted Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-ui: "Schibsted Grotesk", "Golos Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
     --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     color-scheme: light;
   }

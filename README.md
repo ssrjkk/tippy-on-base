@@ -1,11 +1,5 @@
 # Tippy - Community Economy in USDC on Base
 
-[![CI](https://github.com/ssrjkk/tippy-on-base/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/tippy-on-base/actions/workflows/ci.yml)
-[python-3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-
-
 A Telegram bot that turns any chat or community into a financial ecosystem:
 **instant USDC tips, Polymarket-style prediction markets with live AMM odds,
 an AI assistant, paywalled content, and per-user wallets** — all on Base.
@@ -13,7 +7,7 @@ No custom contracts in the hot path: only the official USDC contract plus an
 optional audited-style treasury vault; everything else is instant internal
 accounting backed by public proof-of-reserves.
 
-**Made by [@ssrjkk](https://github.com/ssrjkk) — by ssrjkk.**
+**Made by [@ssrjkk](https://github.com/ssrjkk).**
 
 **Author:** [@ssrjkk](https://t.me/ssrjkk) · [@b2wmain](https://t.me/b2wmain) · [X / Twitter](https://x.com/ludych1) · [GitHub](https://github.com/ssrjkk)
 
@@ -101,7 +95,7 @@ accounting backed by public proof-of-reserves.
   full auto-refund for stuck/reverted transactions
 - `/tx <hash>` — look up any Base transaction and decode its USDC transfer
 
-### 🏷 Basenames (on-chain identity on Base)
+### Basenames (on-chain identity on Base)
 - `/basename` — your on-chain name (ENSIP-19 reverse resolution of your deposit
   address against the Base L2 resolver); shows in `/wallet` and the public
   donate page automatically
@@ -140,10 +134,13 @@ accounting backed by public proof-of-reserves.
 - Live stats, volume chart, markets with odds/backers, leaderboards, user profiles
 - **Proof of Reserves** `/api/solvency`: bot liabilities vs on-chain USDC
   (read from the TipBotVault contract when deployed, else the hot wallet)
-- **Base design system UI** — light (default) + dark theme with a toggle
-  (Base White/Black #F8F9FB / #0A0B0D, Primary Blue #0052FF)
+- **Base design system UI** — light (default) + dark theme with a toggle, on the
+  tokens measured on base.org: brand `#0000ff` / `#224bff`, canvases `#ffffff` /
+  `#111111`, Schibsted Grotesk with Golos Text behind it for Cyrillic, Geist Mono
+  for every number
 - Public JSON API: `/api/stats`, `/api/markets`, `/api/predictions`,
-  `/api/prediction/{id}`, `/api/leaderboard`, `/api/health`, `/qr`, rate-limited per IP
+  `/api/prediction/{id}`, `/api/leaderboard`, `/api/user/{id}`, `/api/info`,
+  `/api/health`, `/qr`, rate-limited per IP
 
 ### Smart Wallet (ERC-4337) — gasless, non-custodial
 - **Per-user Smart Accounts** via CREATE2 (`SmartAccountFactory`) — deterministic
@@ -255,7 +252,7 @@ accounting backed by public proof-of-reserves.
 
 **Why it's a breakthrough:** This is the creator economy natively on-chain. Fans invest in creators, creators share revenue automatically — all powered by Base's smart accounts. No traditional equity needed; the token IS the revenue share.
 
-### ⛓ On-chain treasury (TipBotVault)
+### On-chain treasury (TipBotVault)
 - Users deposit USDC into the vault contract — visible to anyone on Base
 - Relayer distributes under a daily limit; owner (multisig) keeps full control
 - `Distributed` events make every payout publicly auditable
@@ -274,17 +271,19 @@ A plain-language walkthrough for Telegram users lives in
 
 | Command | What it does |
 |---|---|
-| `/start` | Menu with all sections |
+| `/menu` · `/help` | Menu with all sections, command list |
 | `/tip 5 @nick` | Instant USDC tip (or reply to a message) |
 | `/market create 50 Q \| A \| B [24h]` | Create an AMM prediction market |
 | `/markets` · `/trade` · `/sell` · `/positions` | Trade shares at live odds |
-| `/oc_create` · `/oc_buy` · `/oc_sell` · `/oc_redeem` · `/oc_pos` | **On-chain** markets (OutcomeMarket.sol, ERC-1155) |
-| `/bet create Q \| A \| B [24h]` · `/bets` · `/resolve` · `/cancel` | Parimutuel polls |
+| `/oc` · `/oc_create` · `/oc_buy` · `/oc_sell` · `/oc_redeem` · `/oc_pos` | **On-chain** markets (OutcomeMarket.sol, ERC-1155) |
+| `/bet create Q \| A \| B [24h]` · `/bets` · `/mybets` · `/resolve` · `/cancel` | Parimutuel polls |
 | `/ask <question>` | AI assistant |
 | `/deposit` / `/claim <tx>` / `/link` / `/confirm` | Fund your account (private chat only) |
 | `/withdraw <addr> <amt>` | On-chain payout — 1% fee, min 1 USDC, ≤5/day (atomic DB cap), needs a Confirm tap, private chat only |
+| `/wallet` · `/import` · `/export` | Per-user key pair, generated in chat |
 | `/tx <hash>` | Decode a Base transaction |
 | `/rain 10 [N]` | Group giveaway |
+| `/donate` | Your donation page, linkable from anywhere |
 | `/paywall ...` | Paid posts and channels |
 | `/balance` / `/stats` / `/top` / `/history` | Analytics |
 | `/gasless` | Check free gasless transactions |
@@ -292,6 +291,8 @@ A plain-language walkthrough for Telegram users lives in
 | `/credit` | On-chain credit score + loan limit |
 | `/createtoken <name> <SYM> <supply> <price>` | Launch a creator token |
 | `/buytoken <id> <amount>` · `/claim <id>` | Buy tokens / claim dividends |
+| `/basename` | Claim a Basename (on-chain identity) |
+| `/settings` · `/language` · `/about` · `/app` | Notifications, ru/en/zh, what this is, Mini App |
 
 ## Architecture
 
@@ -378,14 +379,21 @@ contracts/
 ├─ LMSR.sol             on-chain LMSR market maker
 ├─ MiniUSDC.sol         minimal USDC mock for testing
 └─ USDCForwarder.sol    USDC transfer helper
-tests/                  986 tests: real Postgres, real dispatcher, real crypto, local EVM
+tests/                  real Postgres, real dispatcher, real crypto, local EVM
 ```
 ## Testing
 
 ```bash
-docker compose up -d db       # PostgreSQL for tests (port 5433)
-python -m pytest tests -q     # 986 passed
+python -m ruff check bot web tests deploy agent scripts
+python -m pytest -q -m "not production"   # 1015 passed
 ```
+
+Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password
+`tipbot`): `tests/conftest.py` drops and recreates `tipbot_test` once per
+session, so the dev database is never touched. Point `TEST_DATABASE_URL` and
+`TEST_ADMIN_DATABASE_URL` elsewhere if your server listens somewhere else. The
+four `production`-marked tests are excluded from this run — they check the
+deployed site and belong to the `Prod Health Check` workflow.
 
 What is tested *for real* (not mocked): money conservation across every flow
 (tips, fees, refunds, parimutuel payouts, rain, **AMM buy/sell/resolve/cancel**
@@ -393,9 +401,10 @@ What is tested *for real* (not mocked): money conservation across every flow
 someone else's tx is rejected), fee math, real signature recovery, the full
 aiogram dispatcher with real Update objects, USDC ABI decoding, the FastAPI
 dashboard against a real ledger, background watchers, 14 end-to-end scenarios,
-and 12 TipBotVault tests on a local EVM (eth-tester + py-evm). Only external
-networks are mocked (Telegram transport, RPC) — `tests/conftest.py` pins the
-chain endpoint to a refused port, because a test that reads a live node answers
+and 13 TipBotVault tests on a local EVM (eth-tester + py-evm, real compiled
+bytecode). Only external networks are mocked (Telegram transport, RPC) —
+`tests/conftest.py` pins the chain endpoint to a refused port, because a test
+that reads a live node answers
 whatever that node holds: on Base mainnet one of the suite's test addresses
 carries EIP-7702 delegation code, so `/withdraw` there refuses it as a smart
 contract while the same test passes against a Sepolia endpoint.
@@ -460,11 +469,18 @@ Built on [Base](https://base.org) · Powered by USDC
 ```bash
 git clone https://github.com/ssrjkk/tippy-on-base.git
 cd tippy-on-base
-pip install -r requirements.txt
+python -m pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env        # then fill in BOT_TOKEN and the wallet keys
 ```
 
 ## Usage
 
 ```bash
-python main.py
+python deploy/run.py                      # bot + dashboard in one process
+python -m bot.main                        # bot only (long polling)
+python -m uvicorn web.server:app          # dashboard only, on WEB_HOST:WEB_PORT
 ```
+
+The dashboard listens on `WEB_HOST:WEB_PORT` (`0.0.0.0:8000` by default) and the
+bot answers in Telegram; `docs/DEPLOY.md` covers the server, `docs/CLOUDFLARE.md`
+the Pages front.

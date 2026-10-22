@@ -355,8 +355,7 @@ async def main() -> None:
     dp = Dispatcher()
     dp.include_router(router)
     try:
-        from .handlers import AI_BOT_COMMAND
-        await bot.set_my_commands([AI_BOT_COMMAND, *BOT_COMMANDS])
+        await bot.set_my_commands(BOT_COMMANDS)
     except Exception as e:
         log.warning('set_my_commands failed: %s', e)
 

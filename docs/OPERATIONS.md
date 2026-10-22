@@ -100,9 +100,9 @@ Test restore regularly:
 # Create test database
 createdb tipbot_test_restore
 
-# Restore to test DB
+# Restore the newest backup (scripts/backup_db.sh writes tipbot_YYYYMMDD_HHMMSS.sql.gz)
 DATABASE_URL=postgresql://user:pass@localhost:5432/tipbot_test_restore \
-  ./scripts/restore_db.sh backups/tipbot_latest.sql.gz
+  ./scripts/restore_db.sh "$(ls -t backups/tipbot_*.sql.gz | head -1)"
 
 # Verify
 psql $DATABASE_URL -c "SELECT count(*) FROM users;"
@@ -186,7 +186,7 @@ async def admin_audit(request: Request, action: str = None, limit: int = 100):
 
 1. Check Postgres status: `systemctl status postgresql`
 2. Check connection: `psql $DATABASE_URL -c "SELECT 1;"`
-3. If down, restore from backup: `./scripts/restore_db.sh backups/tipbot_latest.sql.gz`
+3. If down, restore from backup: `./scripts/restore_db.sh "$(ls -t backups/tipbot_*.sql.gz | head -1)"`
 4. Apply migrations: `alembic upgrade head`
 
 ## Security

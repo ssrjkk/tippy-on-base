@@ -156,6 +156,7 @@ revenue.
 | `/ask <question>` | Ask the AI assistant |
 | `/agent` | Autonomous agent mode |
 | `/settings` · `/language` | Preferences |
+| `/about` | What the bot is, in one screen |
 | `/stats` | Platform stats |
 
 ---

@@ -161,9 +161,8 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
     dp.include_router(router)
 
     try:
-        from bot.handlers import AI_BOT_COMMAND
         # Single source of truth for the command menu: bot.main.BOT_COMMANDS.
-        await tg_bot.set_my_commands([AI_BOT_COMMAND, *bot_main.BOT_COMMANDS])
+        await tg_bot.set_my_commands(bot_main.BOT_COMMANDS)
     except Exception as e:
         log.warning("set_my_commands failed: %s", e)
 

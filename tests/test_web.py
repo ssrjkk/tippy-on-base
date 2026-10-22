@@ -1149,3 +1149,20 @@ def test_pages_render_the_session_state_instead_of_a_doomed_probe(client):
     _auth(client, 777)
     assert 'data-signed-in="1"' in client.get("/").text
     assert 'data-signed-in="1"' in client.get("/app").text
+
+
+def test_docs_do_not_advertise_a_palette_or_entrypoint_that_does_not_exist():
+    """base.org was measured, not assumed, and #0052FF appears zero times on it —
+    yet the README still described the design system with that hex for weeks after
+    the rebuild. Same for `python main.py`, a command for a file the repo never
+    had. Both are the kind of drift that only a check can keep out."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    for rel in ("README.md", "docs/ARCHITECTURE.md", "web/static/style.css", "web/static/app.html"):
+        text = (root / rel).read_text(encoding="utf-8").upper()
+        assert "#0052FF" not in text, rel
+
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert "python main.py" not in readme
+    assert "deploy/run.py" in readme

@@ -32,7 +32,7 @@ content on Base. Two processes, one database.
 ## Processes
 
 ### bot (`python -m bot.main`)
-- Telegram bot via aiogram 3.17.0
+- Telegram bot via aiogram 3 (exact pins live in `requirements.txt`)
 - Handles all user commands (/balance, /tip, /deposit, /market, etc.)
 - One Ledger instance, one DB connection, serialized by `threading.RLock`
 - Runs deposit scanner (polls `eth_getLogs` for USDC transfers)

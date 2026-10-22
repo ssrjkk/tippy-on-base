@@ -3,13 +3,11 @@ import html
 
 from aiogram import types
 from aiogram.filters import Command
-from aiogram.types import BotCommand
 
 from .. import ai, i18n
 from . import _common as common
 
-__all__ = ['AI_BOT_COMMAND', 'cmd_ask']
-AI_BOT_COMMAND = BotCommand(command='ask', description=i18n.t('en', 'ai_bot_cmd'))
+__all__ = ['cmd_ask']
 
 def _quote_context(message: types.Message) -> str:
     ref = getattr(message, 'reply_to_message', None)

@@ -2011,11 +2011,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "\n🧾 Earned on markets: <b>{amount} USDC</b>",
         "zh": "\n🧾 市场收益：<b>{amount} USDC</b>",
     },
-    "ai_bot_cmd": {
-        "ru": "Спросить ИИ-ассистента",
-        "en": "Ask AI assistant",
-        "zh": "向 AI 助手提问",
-    },
     "rain_and_more": {
         "ru": " и ещё {n}",
         "en": " and {n} more",

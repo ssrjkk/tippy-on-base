@@ -2,10 +2,11 @@
    Tippy — Base design system
    Tokens taken from base.org production CSS: one brand blue,
    neutral greys, hairline borders, no shadows, no gradients.
-   Type: Schibsted Grotesk (UI) + Geist Mono (numbers, micro-labels)
+   Type: Schibsted Grotesk (UI, latin only) with Golos Text behind it for Cyrillic,
+   + Geist Mono (numbers, micro-labels)
    ================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Golos+Text:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 
 /* ---------- Reset ---------- */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -57,7 +58,7 @@
   --radius-lg: 12px;
   --pill: 9999px;
 
-  --font-ui: "Schibsted Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-ui: "Schibsted Grotesk", "Golos Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
   --nav-bg: rgba(255, 255, 255, 0.92);
