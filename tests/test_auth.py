@@ -78,6 +78,34 @@ def test_telegram_login_creates_user_and_cookie(client, ledger):
     assert ledger.user_exists(3001)
 
 
+def test_telegram_login_blob_is_single_use(client, ledger):
+    """Telegram keeps a signed callback valid for TG_AUTH_DATE_TTL (24h), so a
+    captured URL — browser history, an extension, a shoulder — would mint
+    sessions for that tg_id in the attacker's own browser for a whole day. The
+    (id, auth_date) nonce is what refuses the second browser; a real user whose
+    page re-renders the widget arrives with a new auth_date and is never hit."""
+    params = tg_signed(3001)
+    client.get("/login")
+    first = client.get("/api/auth/telegram", params=params, follow_redirects=False)
+    assert first.status_code == 303
+
+    replay = TestClient(app)
+    replay.get("/login")          # its own, valid login-state cookie
+    again = replay.get("/api/auth/telegram", params=params, follow_redirects=False)
+    assert again.status_code == 403
+    assert "already been used" in again.json()["detail"]
+
+    # A fresh blob for the same user (what a real reload produces) still works.
+    # The auth_date must actually differ — tg_signed() defaults to now(), and two
+    # calls inside one second would build the identical blob this test rejects.
+    client.get("/login")
+    fresh = client.get(
+        "/api/auth/telegram", params=tg_signed(3001, auth_date=int(time.time()) - 5),
+        follow_redirects=False,
+    )
+    assert fresh.status_code == 303
+
+
 def test_telegram_login_requires_login_state(client):
     # No /login-state cookie: cross-site GET cannot forge a session.
     r = client.get(

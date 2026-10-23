@@ -1455,16 +1455,11 @@ def test_history_all_kinds(ledger):
     ledger.ensure_user(BOB, "bob")
     ledger.transfer(ALICE, BOB, 1_000_000)
     bid = ledger.create_bet(ALICE, "Вопрос?", ["А", "Б"])
-    ledger.place_bet(bid, ALICE, 0, 1_000_000)
+    ledger.place_bet(bid, BOB, 0, 1_000_000)
     ledger.resolve_bet(bid, 0, ALICE)
     bid2 = ledger.create_bet(ALICE, "Вопрос2?", ["А", "Б"])
-    ledger.place_bet(bid2, ALICE, 0, 1_000_000)
+    ledger.place_bet(bid2, BOB, 0, 1_000_000)
     ledger.cancel_bet(bid2, ALICE)
-    ledger._conn.execute(
-        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) VALUES "
-        "('mystery', %s, 'x', 1, 'n')",
-        (ALICE,),
-    )
     ledger._conn.execute(
         "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash) VALUES "
         "('withdraw', %s, %s, %s, %s)",
@@ -1472,9 +1467,24 @@ def test_history_all_kinds(ledger):
     )
     ledger._conn.commit()
     txt = run(_history_text(ALICE))
-    assert "операции" in txt
-    assert "mystery" in txt
+    assert "mystery" not in txt
     assert "−0.0001" in txt  # withdraw row rendered
+    # Bob's side of the same tip is now a row of his own, labelled as income.
+    bob_txt = run(_history_text(BOB))
+    assert "+1 ←" in bob_txt
+
+
+def test_history_survives_a_kind_it_has_no_label_for(ledger):
+    """tx_log now refuses unknown kinds at the database, so a row the renderer
+    has never seen arrives only through a hand-fed override. It must render with
+    a generic label and a sign, never with the internal name and never by
+    raising — a KeyError here would take down /history for that user."""
+    txt = run(_history_text(ALICE, rows_override=[
+        {"kind": "mystery", "counterparty": "x", "amount": 1, "note": "n"},
+    ]))
+    assert "mystery" not in txt
+    assert "Операция" in txt
+    assert "−0.000001" in txt
 
 
 def test_index_message_records(ledger):

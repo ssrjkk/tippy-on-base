@@ -1151,6 +1151,28 @@ def test_pages_render_the_session_state_instead_of_a_doomed_probe(client):
     assert 'data-signed-in="1"' in client.get("/app").text
 
 
+def test_mini_app_dictionary_is_complete_across_languages():
+    """`web/static/app.html` keeps its own dictionary (I18N.ru/en/zh) outside
+    `bot/i18n.py`, and `scripts/check_i18n.py` cannot see it. A key added for the
+    Russian UI only renders as the raw identifier for an English or Chinese user,
+    which is the exact drift AGENTS.md warns about — so it is enforced here."""
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[1] / "web" / "static" / "app.html").read_text(
+        encoding="utf-8"
+    )
+    dicts = {}
+    for lang in ("ru", "en", "zh"):
+        block = re.search(rf"\n  {lang}: \{{(.*?)\}},?\n", text, re.S)
+        assert block, f"I18N.{lang} not found in app.html"
+        dicts[lang] = set(re.findall(r'(?:^|[,{\s])([a-z0-9_]+):\s*"', block.group(1), re.M))
+    assert dicts["ru"] == dicts["en"], dicts["ru"] ^ dicts["en"]
+    assert dicts["ru"] == dicts["zh"], dicts["ru"] ^ dicts["zh"]
+
+    used = set(re.findall(r"(?<![A-Za-z0-9_$.])t\(\s*'([a-z0-9_]+)'\s*\)", text))
+    assert not used - dicts["ru"], sorted(used - dicts["ru"])
+
+
 def test_docs_do_not_advertise_a_palette_or_entrypoint_that_does_not_exist():
     """base.org was measured, not assumed, and #0052FF appears zero times on it —
     yet the README still described the design system with that hex for weeks after

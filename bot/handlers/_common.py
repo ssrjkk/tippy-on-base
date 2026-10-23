@@ -187,10 +187,13 @@ def help_text(lang: str = "ru") -> str:
 KIND_EMOJI = {
     "deposit": "⬇️",
     "tip": "💸",
+    "tip_in": "💸",
     "rain_in": "🌧️",
     "withdraw": "⬆️",
+    "withdraw_refund": "⬇️",
     "fee": "🧾",
     "creator_income": "🧾",
+    "dividend": "🧾",
     "bet": "🎲",
     "bet_win": "🏆",
     "bet_cancel": "↩️",
@@ -204,7 +207,6 @@ KIND_EMOJI = {
     "market_sell": "📉",
     "market_win": "🏆",
     "market_cancel": "↩️",
-    "market_refund": "↩️",
 }
 
 _bot_username: str | None = None

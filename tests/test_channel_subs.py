@@ -25,7 +25,7 @@ async def test_active_sub_not_kicked(mock_bot, ledger, monkeypatch):
     chat_id = -100100
     ledger.ensure_user(OWNER, "owner")
     ledger.ensure_user(tg_id, "alice")
-    ledger.credit(tg_id, 10_000_000, "test")
+    ledger.credit(tg_id, 10_000_000, "deposit")
     ledger.set_paywall_channel(chat_id, OWNER, 100)
     ledger.subscribe_channel(chat_id, tg_id)
     monkeypatch.setattr(channel_subs, "ledger", ledger)
@@ -41,7 +41,7 @@ async def test_expired_sub_kicked(mock_bot, ledger, monkeypatch):
     chat_id = -100200
     ledger.ensure_user(OWNER, "owner")
     ledger.ensure_user(tg_id, "bob")
-    ledger.credit(tg_id, 10_000_000, "test")
+    ledger.credit(tg_id, 10_000_000, "deposit")
     ledger.set_paywall_channel(chat_id, OWNER, 100)
     ledger.subscribe_channel(chat_id, tg_id)
     ledger._conn.execute(
@@ -64,7 +64,7 @@ async def test_ban_failure_handled(mock_bot, ledger, monkeypatch):
     chat_id = -100300
     ledger.ensure_user(OWNER, "owner")
     ledger.ensure_user(tg_id, "carol")
-    ledger.credit(tg_id, 10_000_000, "test")
+    ledger.credit(tg_id, 10_000_000, "deposit")
     ledger.set_paywall_channel(chat_id, OWNER, 100)
     ledger.subscribe_channel(chat_id, tg_id)
     ledger._conn.execute(
@@ -107,7 +107,7 @@ async def test_subscribe_extends_instead_of_resetting(ledger, monkeypatch):
     chat_id = -100103
     ledger.ensure_user(OWNER, "owner")
     ledger.ensure_user(tg_id, "alice")
-    ledger.credit(tg_id, 100_000_000, "test")
+    ledger.credit(tg_id, 100_000_000, "deposit")
     ledger.set_paywall_channel(chat_id, OWNER, 100)
 
     ledger.subscribe_channel(chat_id, tg_id)

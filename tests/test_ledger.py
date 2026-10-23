@@ -59,12 +59,14 @@ def test_debit_returns_false_when_short(ledger):
 
 def test_resolve_bet_conservation_with_fee(ledger):
     fund(ledger, ALICE, 700_000_000)
-    fund(ledger, BOB, 100_000_000)
+    fund(ledger, BOB, 500_000_000)
     fund(ledger, CAROL, 100_000_000)
-    before = total_balance(ledger)  # 900 USDC, captured before bets
+    before = total_balance(ledger)  # 1300 USDC, captured before bets
     bid = ledger.create_bet(ALICE, "Кто выиграет?", ["А", "Б"], close_at=None)
-    assert ledger.place_bet(bid, ALICE, 0, 400_000_000) == "ok"
-    assert ledger.place_bet(bid, BOB, 1, 100_000_000) == "ok"
+    # The creator backs the LOSING side: resolve_bet refuses a creator who holds
+    # the outcome they declare, so this is the only shape this market can settle.
+    assert ledger.place_bet(bid, ALICE, 1, 100_000_000) == "ok"
+    assert ledger.place_bet(bid, BOB, 0, 400_000_000) == "ok"
     assert ledger.place_bet(bid, CAROL, 0, 100_000_000) == "ok"
 
     ok, msg = ledger.resolve_bet(bid, 0, ALICE)
@@ -73,12 +75,53 @@ def test_resolve_bet_conservation_with_fee(ledger):
 
     # Option A pool = 500 USDC (400+100), option B = 100 USDC, pot = 600 USDC.
     # Winners share the pot pro-rata; 2% fee on net profit goes to creator.
-    # ALICE (also creator): payout 478.4 + creator fee 2 = 480.4, final 780.4
-    # CAROL: payout 119.6, final 119.6; BOB: 0. Total = 900. Exactly conserved.
-    assert ledger.balance(ALICE) == Decimal("780.400000")
+    # BOB: payout 478.4 + fee 1.6 to ALICE; CAROL: 119.6 (fee 0.4); ALICE keeps
+    # her losing 100 out and earns 2. Total = 1300. Exactly conserved.
+    assert ledger.balance(BOB) == Decimal("578.400000")
     assert ledger.balance(CAROL) == Decimal("119.600000")
-    assert ledger.balance(BOB) == Decimal("0")
+    assert ledger.balance(ALICE) == Decimal("602.000000")
     assert total_balance(ledger) == before
+
+
+def test_resolve_refuses_the_bait_and_steal(ledger):
+    """Parimutuel winners share the WHOLE pot pro-rata, so a 0.01 stake on the
+    declared winner is grossed up by the entire pot. Without the conflict guard
+    the creator bets a cent on «А», lets a victim put 10 into «Б», declares «А»
+    and walks with the victim's 10."""
+    fund(ledger, ALICE, 20_000_000)
+    fund(ledger, BOB, 20_000_000)
+    before = total_balance(ledger)
+    bid = ledger.create_bet(ALICE, "Кто победит?", ["А", "Б"])
+    assert ledger.place_bet(bid, ALICE, 0, 10_000) == "ok"
+    assert ledger.place_bet(bid, BOB, 1, 10_000_000) == "ok"
+
+    ok, msg = ledger.resolve_bet(bid, 0, ALICE)
+    assert not ok and "нельзя" in msg
+    assert ledger.get_bet(bid)["status"] == "open"
+    assert ledger.balance(BOB) == Decimal("10.000000")
+
+    # Declaring the outcome the creator does NOT hold pays the victim the pot:
+    # gross 10.01, 2% on the 0.01 profit = 0.0002, so BOB nets 10.0098 and the
+    # creator's own cent is what the platform took as fee + their loss.
+    assert ledger.resolve_bet(bid, 1, ALICE)[0]
+    assert ledger.balance(BOB) == Decimal("20.009800")
+    assert total_balance(ledger) == before
+
+
+def test_resolve_waits_for_the_deadline(ledger):
+    fund(ledger, ALICE, 20_000_000)
+    fund(ledger, BOB, 20_000_000)
+    now = int(time.time())
+    bid = ledger.create_bet(ALICE, "С дедлайном?", ["А", "Б"], close_at=now + 3600)
+    assert ledger.place_bet(bid, BOB, 0, 5_000_000) == "ok"
+    ok, msg = ledger.resolve_bet(bid, 0, ALICE)
+    assert not ok and "не закрыты" in msg
+    assert ledger.get_bet(bid)["status"] == "open"
+
+    # Clock forward past the deadline: the same call settles the market.
+    ledger._conn.execute("UPDATE bets SET close_at = %s WHERE id = %s", (now - 1, bid))
+    ledger._conn.commit()
+    assert ledger.resolve_bet(bid, 0, ALICE)[0]
 
 
 def test_cancel_bet_refunds(ledger):
@@ -553,11 +596,31 @@ def _records(csv_text):
     return list(csv.reader(io.StringIO(csv_text)))
 
 
+def test_public_transaction_counter_counts_movements_not_journal_lines(ledger):
+    """The landing page labels this number "Транзакций". A tip is one movement
+    written as two rows (the sender's debit and the receiver's copy), and a rain
+    of N shares as 1+N, so counting journal lines would inflate what the visitor
+    reads as activity."""
+    fund(ledger, ALICE, 10_000_000)          # 1 row, 1 movement
+    ledger.ensure_user(BOB, "bob")
+    ledger.transfer(ALICE, BOB, 2_000_000)   # tip + tip_in: 2 rows, 1 movement
+    assert ledger.global_stats()["transactions"] == 2
+
+    ledger.record_message(-1000, BOB, BOB)
+    ledger.record_message(-1000, CAROL, CAROL)
+    ledger.ensure_user(CAROL, "carol")
+    ok, _, chosen = ledger.rain(-1000, ALICE, 2_000_000, 2)  # tip + 2 rain_in
+    assert ok and len(chosen) == 2
+    rows = ledger._conn.execute("SELECT COUNT(*) AS c FROM tx_log").fetchone()["c"]
+    assert rows == 6
+    assert ledger.global_stats()["transactions"] == 3
+
+
 def test_history_csv_header_only_when_no_rows(ledger):
     # stats.py detects an empty export with len(csv.split('\n')) <= 1, so the
     # header must be a single line with no trailing record terminator.
     text = ledger.history_csv(ALICE)
-    assert text.split("\n") == ["id,kind,counterparty,amount,tx_hash,note,created_at"]
+    assert text.split("\n") == ["id,kind,counterparty,amount,tx_hash,note,status,created_at"]
     assert len(text.split("\n")) == 1
 
 
@@ -598,7 +661,8 @@ def test_history_csv_leaves_safe_and_numeric_fields_alone(ledger):
     assert row[2] == "1002"
     assert row[3] == "2000000"
     assert row[5] == "1+1 apples"
-    assert row[6].isdigit()
+    assert row[6] == ""  # a plain tip has no withdraw state to carry
+    assert row[7].isdigit()
 
 
 def test_history_csv_keeps_columns_through_hostile_note(ledger):
@@ -609,7 +673,7 @@ def test_history_csv_keeps_columns_through_hostile_note(ledger):
     rows = _records(ledger.history_csv(ALICE))
     assert len(rows) == 3  # header + two records, even though a note spans lines
     hostile, deposit = rows[1], rows[2]  # newest first
-    assert len(hostile) == 7 and len(deposit) == 7
+    assert len(hostile) == 8 and len(deposit) == 8
     assert hostile[5] == nasty
     assert hostile[4] == "0xdead"
     assert hostile[3] == "4000000"
@@ -676,8 +740,9 @@ def test_resolve_rejects_empty_and_abandoned(ledger):
 
 def test_resolve_rejects_wrong_option_and_closed(ledger):
     fund(ledger, ALICE, 100_000_000)
+    fund(ledger, BOB, 100_000_000)
     bid = ledger.create_bet(ALICE, "Вопрос", ["А", "Б"])
-    ledger.place_bet(bid, ALICE, 0, 1_000_000)
+    ledger.place_bet(bid, BOB, 0, 1_000_000)
     ok, msg = ledger.resolve_bet(bid, 5, ALICE)
     assert not ok and "номер" in msg
     ok, _ = ledger.resolve_bet(bid, 0, ALICE)
@@ -688,8 +753,9 @@ def test_resolve_rejects_wrong_option_and_closed(ledger):
 
 def test_cancel_rejects_when_not_open(ledger):
     fund(ledger, ALICE, 100_000_000)
+    fund(ledger, BOB, 100_000_000)
     bid = ledger.create_bet(ALICE, "Вопрос", ["А", "Б"])
-    ledger.place_bet(bid, ALICE, 0, 1_000_000)
+    ledger.place_bet(bid, BOB, 0, 1_000_000)
     ledger.resolve_bet(bid, 0, ALICE)
     ok, msg = ledger.cancel_bet(bid, ALICE)
     assert not ok and "уже закрыта" in msg
@@ -946,12 +1012,13 @@ def test_open_bets_past_deadline_only_due_unnotified(ledger):
     assert ledger.open_bets_past_deadline() == []
 
     # Resolved markets are never returned, even with a past close_at.
-    b = ledger.create_bet(ALICE, "Решён", ["Да"], close_at=future)
+    b = ledger.create_bet(ALICE, "Решён", ["Да", "Нет"], close_at=future)
     fund(ledger, ALICE, 1_000_000)
-    ledger.place_bet(b, ALICE, 0, 100_000)
-    ledger.resolve_bet(b, 0, ALICE)
+    fund(ledger, BOB, 1_000_000)
+    ledger.place_bet(b, BOB, 0, 100_000)
     ledger._conn.execute("UPDATE bets SET close_at = %s WHERE id = %s", (past, b))
     ledger._conn.commit()
+    ledger.resolve_bet(b, 0, ALICE)
     assert ledger.open_bets_past_deadline() == []
 
 
@@ -1078,20 +1145,20 @@ def test_payouts_for_open_market_empty(ledger):
 
 def test_payouts_for_matches_resolve_math(ledger):
     fund(ledger, ALICE, 700_000_000)
-    fund(ledger, BOB, 100_000_000)
+    fund(ledger, BOB, 500_000_000)
     fund(ledger, CAROL, 100_000_000)
     bid = ledger.create_bet(ALICE, "Кто выиграет?", ["А", "Б"])
-    ledger.place_bet(bid, ALICE, 0, 400_000_000)
-    ledger.place_bet(bid, BOB, 1, 100_000_000)
+    ledger.place_bet(bid, ALICE, 1, 100_000_000)
+    ledger.place_bet(bid, BOB, 0, 400_000_000)
     ledger.place_bet(bid, CAROL, 0, 100_000_000)
     ledger.resolve_bet(bid, 0, ALICE)
     ps = {p["tg_id"]: p for p in ledger.payouts_for(bid)}
-    assert ps[ALICE]["win"] and ps[CAROL]["win"] and not ps[BOB]["win"]
-    assert ps[BOB]["net_micro"] == 0
+    assert ps[BOB]["win"] and ps[CAROL]["win"] and not ps[ALICE]["win"]
+    assert ps[ALICE]["net_micro"] == 0
     # winners share pot minus 2% fee on profit: 480 - 1.6 + 120 - 0.4 = 598
-    assert ps[ALICE]["net_micro"] == 478_400_000
+    assert ps[BOB]["net_micro"] == 478_400_000
     assert ps[CAROL]["net_micro"] == 119_600_000
-    assert ps[ALICE]["net_micro"] + ps[CAROL]["net_micro"] == 598_000_000
+    assert ps[BOB]["net_micro"] + ps[CAROL]["net_micro"] == 598_000_000
 
 
 def test_market_view_backers(ledger):
@@ -1301,7 +1368,7 @@ def test_paywall_shows_up_in_history(ledger):
     alice_log = ledger.history(ALICE, 5)
     bob_log = ledger.history(BOB, 5)
     assert alice_log[0]["kind"] == "paywall"
-    assert alice_log[0]["amount"] == -400_000
+    assert alice_log[0]["amount"] == 400_000
     assert bob_log[0]["kind"] == "paywall_earn"
     assert bob_log[0]["amount"] == 400_000
 
@@ -1437,7 +1504,9 @@ def test_paywall_channel_history_kinds(ledger):
     alice_log = ledger.history(ALICE, 5)
     bob_log = ledger.history(BOB, 5)
     assert alice_log[0]["kind"] == "channel_pay"
-    assert alice_log[0]["amount"] == -400_000
+    # `amount` is positive for every kind: the direction comes from the kind, so
+    # a debit row must not be stored as a negative number (it rendered as −-0.4).
+    assert alice_log[0]["amount"] == 400_000
     assert bob_log[0]["kind"] == "channel_earn"
     assert bob_log[0]["amount"] == 400_000
 
@@ -1479,9 +1548,10 @@ def test_grace_warning_once(ledger):
 
 def test_grace_warning_skips_resolved(ledger):
     fund(ledger, ALICE, 10_000_000)
-    bid = ledger.create_bet(ALICE, "Решён", ["Да"], close_at=None)
-    ledger.place_bet(bid, ALICE, 0, 100_000)
-    ledger.resolve_bet(bid, 0, ALICE)
+    fund(ledger, BOB, 10_000_000)
+    bid = ledger.create_bet(ALICE, "Решён", ["Да", "Нет"], close_at=None)
+    ledger.place_bet(bid, BOB, 0, 100_000)
+    assert ledger.resolve_bet(bid, 0, ALICE)[0]
     # mark the deadline as passed (resolved markets must never be re-warned)
     ledger._conn.execute("UPDATE bets SET close_at = %s WHERE id = %s", (int(time.time()) - 60 * 3600, bid))
     ledger._conn.commit()

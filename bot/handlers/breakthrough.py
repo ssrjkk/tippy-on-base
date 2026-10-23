@@ -275,6 +275,8 @@ async def cmd_claim_dividends(message: types.Message):
         await message.answer(i18n.t(lang, 'no_dividends'))
         return
 
-    await common.ledger.credit(uid, amount_micro, f"Dividends from {token_id}")
+    # `kind` is the accounting primitive (sign, label and counterparty all come
+    # from it), so prose here would render a payout as money leaving the user.
+    await common.ledger.credit(uid, amount_micro, "dividend", note=f"token {token_id}")
 
     await message.answer(i18n.t(lang, 'dividends_claimed', amount=common._fmt(amount_micro)))

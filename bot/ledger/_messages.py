@@ -49,7 +49,16 @@ class LedgerMessagesMixin:
                 # unrelated ledger call or block concurrent DDL.
                 self._conn.rollback()
                 return False, "balance", author
-            self.credit(author, amount_micro, "tip", counterparty=str(reactor_id), note="reaction", commit=False)
+            # One row per side, like transfer(): the old single `tip` row was
+            # written under the AUTHOR's tg_id, so a reaction tip read as money
+            # the receiver had tipped away — /stats counted it into `sent`,
+            # /history showed a debit, and the payer had no row at all.
+            self._conn.execute(
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
+                "VALUES ('tip', %s, %s, %s, 'reaction')",
+                (reactor_id, str(author), amount_micro),
+            )
+            self.credit(author, amount_micro, "tip_in", counterparty=str(reactor_id), note="reaction", commit=False)
             self._conn.execute(
                 "INSERT INTO reaction_tips (chat_id, message_id, tg_id, amount_micro) VALUES (%s, %s, %s, %s)",
                 (chat_id, message_id, reactor_id, amount_micro),

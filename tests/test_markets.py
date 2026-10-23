@@ -347,6 +347,41 @@ def test_cancel_market_refunds_cost_basis(ledger):
     assert ledger.get_market(mid)["status"] == "cancelled"
 
 
+def test_cancel_market_underfunded_escrow_refunds_pro_rata(ledger):
+    """Corruption guard: if the escrow is smaller than the sum of the net cost
+    basis (the funding theorem says it never is), the refund must not be a
+    queue. The old cost-descending loop paid the biggest position everything it
+    was owed and left the small one with zero.
+
+    Here the escrow is forced to half of what is due: both holders are paid,
+    pro-rata, and the creator sweeps nothing."""
+    mid = make_market(ledger)
+    ledger.credit(BOB, 100 * USDC, "deposit")
+    ledger.credit(CAROL, 100 * USDC, "deposit")
+    _, big = ledger.buy_shares(mid, BOB, 0, 30 * USDC)
+    _, small = ledger.buy_shares(mid, CAROL, 1, 5 * USDC)
+    due = int(big["cost"]) + int(small["cost"])
+    half = due // 2
+    ledger._conn.execute("UPDATE markets SET escrow_micro = %s WHERE id = %s", (half, mid))
+    ledger._conn.commit()
+    before = money(ledger)
+    bal_bob, bal_carol, bal_alice = (
+        ledger.balance(BOB), ledger.balance(CAROL), ledger.balance(ALICE)
+    )
+
+    ok, _ = ledger.cancel_market(mid, ALICE)
+    assert ok
+    got_bob = int((ledger.balance(BOB) - bal_bob) * USDC)
+    got_carol = int((ledger.balance(CAROL) - bal_carol) * USDC)
+    assert got_bob > 0 and got_carol > 0
+    for got, cost in ((got_bob, int(big["cost"])), (got_carol, int(small["cost"]))):
+        expected = half * cost // due
+        assert expected <= got <= expected + 1  # exact share, ± the rounding unit
+    assert got_bob + got_carol == half  # every micro of the escrow left the market
+    assert ledger.balance(ALICE) == bal_alice  # nothing swept to the creator
+    assert money(ledger) == before
+
+
 def test_market_deadline_blocks_trades(ledger):
     ledger.credit(ALICE, 1000 * USDC, "deposit")
     import time

@@ -114,28 +114,58 @@ class LedgerCoreMixin:
                 time.sleep(delay)
         raise RuntimeError(f"schema migration failed after {retries} attempts: {last}")
 
-    def reserve_idempotency(self, key_hash: str, user_id: int, action: str) -> bool:
-        """Reserve an idempotency key. Returns True if reserved (first time),
-        False if the key already exists (duplicate request)."""
+    def reserve_idempotency(self, key_hash: str, user_id: int, action: str) -> dict | None:
+        """Reserve an idempotency key for a money POST.
+
+        Returns None when this caller won the reservation. Returns the existing
+        row ({'status', 'result_id', 'response'}) when the key was already taken,
+        so the caller can hand back the first attempt's outcome instead of a
+        permanent 409.
+
+        A reservation older than `expires_at` is reclaimed first: an attempt
+        that died between reserve and commit must not lock the key for its whole
+        TTL. The same sweep bounds the table, which otherwise only ever grew —
+        the DELETE is what the expires_at index exists for.
+        """
         with self._lock:
             try:
-                self._conn.execute(
+                now = int(time.time())
+                self._conn.execute("DELETE FROM idempotency_keys WHERE expires_at < %s", (now,))
+                cur = self._conn.execute(
                     "INSERT INTO idempotency_keys (key_hash, user_id, action, status) "
-                    "VALUES (%s, %s, %s, 'pending')",
+                    "VALUES (%s, %s, %s, 'pending') ON CONFLICT (key_hash) DO NOTHING "
+                    "RETURNING status",
                     (key_hash, user_id, action),
                 )
+                if cur.fetchone() is not None:
+                    self._conn.commit()
+                    return None
+                row = self._conn.execute(
+                    "SELECT status, result_id, response FROM idempotency_keys WHERE key_hash = %s",
+                    (key_hash,),
+                ).fetchone()
                 self._conn.commit()
-                return True
-            except psycopg.errors.UniqueViolation:
-                self._conn.rollback()
-                return False
+                return dict(row) if row else None
+            except Exception:
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+                raise
 
-    def complete_idempotency(self, key_hash: str, result_id: str | None = None) -> None:
+    def complete_idempotency(
+        self, key_hash: str, result_id: str | None = None, response: str | None = None
+    ) -> None:
+        """Mark the reservation used and store what to answer a retry with.
+
+        `response` is the JSON body the first attempt returned; `result_id` is
+        the on-chain/ledger identifier support asks for.
+        """
         with self._lock:
             self._conn.execute(
-                "UPDATE idempotency_keys SET status = 'completed', result_id = %s "
-                "WHERE key_hash = %s",
-                (result_id, key_hash),
+                "UPDATE idempotency_keys SET status = 'completed', result_id = %s, "
+                "response = %s WHERE key_hash = %s",
+                (result_id, response, key_hash),
             )
             self._conn.commit()
 

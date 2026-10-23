@@ -743,18 +743,34 @@ class LedgerMarketsMixin:
                 self._conn.rollback()
                 return False, "Агент не может отменять собственные рынки."
             escrow = int(m["escrow_micro"])
-            rows = sorted(
-                self._market_share_rows(market_id),
-                key=lambda r: int(r["cost_micro"]),
-                reverse=True,
-            )
-            available = escrow
+            rows = self._market_share_rows(market_id)
+            due = [max(int(r["cost_micro"]), 0) for r in rows]
+            total_due = sum(due)
+            if total_due <= escrow:
+                refunds = list(due)
+            else:
+                # Under-funded escrow. The funding theorem says it cannot happen
+                # (escrow == subsidy + Σ net cost and the subsidy is never
+                # negative), so this is a corruption guard — but the queue order
+                # must not decide who loses everything: split pro-rata and hand
+                # the largest remainders out first so the total is exact.
+                refunds = [escrow * c // total_due for c in due]
+                left = escrow - sum(refunds)
+                order = sorted(
+                    range(len(due)),
+                    key=lambda i: (-(escrow * due[i] % total_due), -due[i], i),
+                )
+                for i in order:
+                    if left <= 0:
+                        break
+                    if refunds[i] < due[i]:
+                        refunds[i] += 1
+                        left -= 1
+            available = escrow - sum(refunds)
             refunded_users = set()
-            for r in rows:
-                refund = min(max(int(r["cost_micro"]), 0), available)
+            for r, refund in zip(rows, refunds, strict=True):
                 if refund <= 0:
                     continue
-                available -= refund
                 tg = int(r["tg_id"])
                 if tg not in refunded_users:
                     self.ensure_user(tg, None, commit=False)

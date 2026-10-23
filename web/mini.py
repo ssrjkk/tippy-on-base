@@ -31,7 +31,14 @@ from web.auth import COOKIE_NAME, SESSION_TTL_SECONDS, make_session, parse_sessi
 router = APIRouter()
 log = logging.getLogger('web.mini')
 MICRO = 10 ** config.USDC_DECIMALS
-INIT_DATA_TTL = 24 * 3600
+# How long a signed initData blob may still mint a session. Telegram's own
+# ceiling is a day; a day is also how long a stolen blob stays replayable, and
+# unlike the login widget this flow must stay replayable-by-design — the webview
+# re-POSTs the SAME initData on every reload, so a single-use nonce here would
+# lock a legitimate user out until they reopen the app from the chat. The
+# window is therefore cut to an hour instead: still generous for one app
+# session, 24x shorter for an attacker.
+INIT_DATA_TTL = 3600
 INIT_DATA_FUTURE_SKEW = 300
 
 def verify_init_data(init_data: str) -> int:
@@ -129,40 +136,74 @@ def _idempotency_hash(tg_id: int, action: str, raw_key: str) -> str:
     return hashlib.sha256(f'{tg_id}:{action}:{raw_key}'.encode()).hexdigest()
 
 
-async def _reserve_idempotency(request: Request, action: str, tg_id: int) -> str:
-    """Require an Idempotency-Key header and reserve it. Returns the key hash.
-    Raises 400 if missing, 409 if duplicate."""
+async def _reserve_idempotency(request: Request, action: str, tg_id: int) -> tuple[str, dict | None]:
+    """Require an Idempotency-Key header and reserve it.
+
+    Returns ``(key_hash, None)`` for the first attempt, or ``(key_hash, replay)``
+    when this exact request has already been answered — the stored body of the
+    first one, so a client that retried after a dropped connection gets the
+    outcome instead of a 409 that tells it nothing.
+    """
     raw_key = request.headers.get('Idempotency-Key', '').strip()
     if not raw_key:
         raise HTTPException(400, 'missing Idempotency-Key header')
     key_hash = _idempotency_hash(tg_id, action, raw_key)
-    if not await ledger.reserve_idempotency(key_hash, tg_id, action):
-        raise HTTPException(409, 'duplicate request — reuse the original Idempotency-Key to check status')
-    return key_hash
+    existing = await ledger.reserve_idempotency(key_hash, tg_id, action)
+    if existing is None:
+        return key_hash, None
+    if existing['status'] == 'completed' and existing['response'] is not None:
+        return key_hash, _json.loads(existing['response'])
+    if existing['status'] == 'completed':
+        # The first attempt finished but its body was never stored (an older
+        # build, or a route that forgot to reply). Say so instead of pretending
+        # the key is free: the caller must not spend the action twice either.
+        raise HTTPException(409, 'this request was already completed — check your balance')
+    raise HTTPException(
+        409, 'this request is still being processed — do not retry, check the balance first'
+    )
 
 
 class _IdempotencyContext:
-    """Context manager for idempotent operations: reserves on enter, rolls back
-    on exception, completes on success. Usage:
-        async with _idempotent(request, 'action', tg_id) as key_hash:
-            ... do work ...
+    """Context manager for idempotent money POSTs:
+
+        async with _idempotent(request, 'tip', tg_id) as op:
+            if op.replay is not None:
+                return op.replay
+            ... work ...
+            return await op.reply({'ok': True, 'new_balance': ...})
+
+    The key is reserved on enter, rolled back if the body raises, and completed
+    with the response body when the route calls :meth:`reply` — which is what a
+    later duplicate gets back instead of a 409.
     """
-    __slots__ = ('action', 'key_hash', 'request', 'tg_id')
+    __slots__ = ('_replied', 'action', 'key_hash', 'replay', 'request', 'tg_id')
 
     def __init__(self, request: Request, action: str, tg_id: int):
         self.request = request
         self.action = action
         self.tg_id = tg_id
         self.key_hash = None
+        self.replay = None
+        self._replied = False
 
-    async def __aenter__(self) -> str:
-        self.key_hash = await _reserve_idempotency(self.request, self.action, self.tg_id)
-        return self.key_hash
+    async def __aenter__(self) -> "_IdempotencyContext":
+        self.key_hash, self.replay = await _reserve_idempotency(self.request, self.action, self.tg_id)
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.replay is not None:
+            return False
         if exc_type is not None:
             await ledger.rollback_idempotency(self.key_hash)
+        elif not self._replied:
+            await ledger.complete_idempotency(self.key_hash)
         return False
+
+    async def reply(self, payload: dict, result_id: str | None = None) -> dict:
+        """Store this response under the key and return it for the caller."""
+        self._replied = True
+        await ledger.complete_idempotency(self.key_hash, result_id, _json.dumps(payload))
+        return payload
 
 
 def _idempotent(request: Request, action: str, tg_id: int) -> _IdempotencyContext:
@@ -305,17 +346,23 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
     if balance_micro < max_cost_micro:
         raise HTTPException(400, 'insufficient smart-wallet USDC balance')
 
-    async with _idempotent(request, 'smartbuy', tg_id) as key_hash:
+    async with _idempotent(request, 'smartbuy', tg_id) as op:
+        if op.replay is not None:
+            return op.replay
         tx_hash = await sw.smart_buy(
             tg_id, body.market_id, body.outcome, body.shares, max_cost_micro
         )
-    await ledger.complete_idempotency(key_hash, result_id=tx_hash)
-    return {'ok': True, 'tx_hash': tx_hash}
+        return await op.reply({'ok': True, 'tx_hash': tx_hash}, result_id=tx_hash)
 
 class TipBody(BaseModel):
     to: str = Field(min_length=1, max_length=32)
     amount: Decimal = Field(gt=0, allow_inf_nan=False)
 _ERR_MSG = {'closed': 'market closed', 'deadline': 'deadline passed', 'badopt': 'no such option', 'balance': 'insufficient balance'}
+# create_market's failure words, as the user must act on them.
+_MARKET_FAIL = {
+    'balance': 'insufficient balance to fund the subsidy',
+    'subsidy': 'subsidy too small for this many options',
+}
 
 @router.post('/api/mini/tip', tags=['users'])
 async def mini_tip(body: TipBody, request: Request) -> dict:
@@ -345,13 +392,12 @@ async def mini_tip(body: TipBody, request: Request) -> dict:
         raise HTTPException(404, f'user @{to} not found — they must open the bot first')
     if target == tg_id:
         raise HTTPException(400, 'cannot tip yourself')
-    async with _idempotent(request, 'tip', tg_id) as key_hash:
-        ok = await ledger.transfer(tg_id, target, micro)
-        if not ok:
-            await ledger.rollback_idempotency(key_hash)
+    async with _idempotent(request, 'tip', tg_id) as op:
+        if op.replay is not None:
+            return op.replay
+        if not await ledger.transfer(tg_id, target, micro):
             raise HTTPException(400, 'insufficient balance')
-    await ledger.complete_idempotency(key_hash)
-    return {'ok': True, 'new_balance': float(await ledger.balance(tg_id))}
+        return await op.reply({'ok': True, 'new_balance': float(await ledger.balance(tg_id))})
 
 class TradeBody(BaseModel):
     market_id: int
@@ -368,15 +414,15 @@ async def mini_trade(body: TradeBody, request: Request) -> dict:
     max_micro = _cap_micro(config.MARKET_MAX_TRADE_USDC)
     if micro > max_micro:
         raise HTTPException(400, f'trade exceeds the {_fmt(max_micro)} USDC cap')
-    async with _idempotent(request, 'trade', tg_id) as key_hash:
+    async with _idempotent(request, 'trade', tg_id) as op:
+        if op.replay is not None:
+            return op.replay
         status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro)
         if status != 'ok':
-            await ledger.rollback_idempotency(key_hash)
             raise HTTPException(400, _ERR_MSG.get(status, status))
-    await ledger.complete_idempotency(key_hash)
-    bal = float(await ledger.balance(tg_id))
-    pos = await ledger.user_market_position(body.market_id, tg_id) or {}
-    return {'ok': True, 'info': info, 'new_balance': bal, 'position': pos}
+        bal = float(await ledger.balance(tg_id))
+        pos = await ledger.user_market_position(body.market_id, tg_id) or {}
+        return await op.reply({'ok': True, 'info': info, 'new_balance': bal, 'position': pos})
 
 class BetPlaceBody(BaseModel):
     bet_id: int
@@ -393,13 +439,13 @@ async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
     max_micro = _cap_micro(config.MAX_BET_USDC)
     if micro > max_micro:
         raise HTTPException(400, f'bet exceeds the {_fmt(max_micro)} USDC cap')
-    async with _idempotent(request, 'betplace', tg_id) as key_hash:
+    async with _idempotent(request, 'betplace', tg_id) as op:
+        if op.replay is not None:
+            return op.replay
         res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro)
         if res != 'ok':
-            await ledger.rollback_idempotency(key_hash)
             raise HTTPException(400, _ERR_MSG.get(res, res))
-    await ledger.complete_idempotency(key_hash)
-    return {'ok': True, 'new_balance': float(await ledger.balance(tg_id))}
+        return await op.reply({'ok': True, 'new_balance': float(await ledger.balance(tg_id))})
 
 _ADDR_RE = re.compile(r'^0x[a-fA-F0-9]{40}$')
 
@@ -597,13 +643,21 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
             raise HTTPException(400, f'subsidy below the {_fmt(min_micro)} USDC minimum')
         if subsidy_micro > max_micro:
             raise HTTPException(400, f'subsidy above the {_fmt(max_micro)} USDC maximum')
-        async with _idempotent(request, 'create_market', tg_id) as key_hash:
+        async with _idempotent(request, 'create_market', tg_id) as op:
+            if op.replay is not None:
+                return op.replay
             mid = await ledger.create_market(tg_id, question, options, subsidy_micro, close_at=close_at)
-        await ledger.complete_idempotency(key_hash, str(mid))
-        return {'ok': True, 'id': mid}
+            # create_market answers with the id OR with a failure word — passing
+            # 'balance' through used to report a market that was never created.
+            if isinstance(mid, str):
+                raise HTTPException(400, _MARKET_FAIL.get(mid, mid))
+            return await op.reply({'ok': True, 'id': mid}, result_id=str(mid))
     if body.kind == 'bet':
-        bid = await ledger.create_bet(tg_id, question, options, close_at=close_at)
-        return {'ok': True, 'id': bid}
+        async with _idempotent(request, 'create_bet', tg_id) as op:
+            if op.replay is not None:
+                return op.replay
+            bid = await ledger.create_bet(tg_id, question, options, close_at=close_at)
+            return await op.reply({'ok': True, 'id': bid}, result_id=str(bid))
     raise HTTPException(400, 'kind must be market or bet')
 
 class LangBody(BaseModel):

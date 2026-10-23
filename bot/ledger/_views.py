@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal
 
 from .. import config
-from ._base import MICRO
+from ._base import MICRO, MIRRORED_CREDIT_KINDS
 
 
 class LedgerViewsMixin:
@@ -106,13 +106,16 @@ class LedgerViewsMixin:
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE tg_id = %s AND kind = 'tip'",
                 (tg_id,),
             ).fetchone()["s"]
-            # A rain's sender row names its recipients as a comma list (or a
-            # single id); their shares are counted from their own rain_in rows.
+            # Incoming money has its own row per recipient — `tip_in` for a
+            # direct or reaction tip, `rain_in` for a share of a rain. Reading
+            # the sender's `tip` row instead (counterparty = me) left the
+            # receiver's /history empty while /stats reported the income, and
+            # made a reaction tip, whose row was filed under the receiver, read
+            # as if they had tipped it away.
             received = self._conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log "
-                "WHERE (kind = 'tip' AND counterparty = %s AND note IS DISTINCT FROM 'rain') "
-                "OR (kind IN ('rain_in', 'x402') AND tg_id = %s)",
-                (str(tg_id), tg_id),
+                "WHERE tg_id = %s AND kind IN ('tip_in', 'rain_in', 'x402')",
+                (tg_id,),
             ).fetchone()["s"]
             won = self._conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE tg_id = %s AND kind = 'bet_win'",
@@ -327,7 +330,13 @@ class LedgerViewsMixin:
             x402 = self._conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE kind = 'x402'"
             ).fetchone()["s"]
-            txs = self._conn.execute("SELECT COUNT(*) AS c FROM tx_log").fetchone()["c"]
+            # The landing page labels this "Транзакций", so it must count
+            # movements, not journal lines: the receiver-side copy of a tip or a
+            # rain shares the sender's booking and would be counted twice.
+            txs = self._conn.execute(
+                "SELECT COUNT(*) AS c FROM tx_log WHERE NOT (kind = ANY(%s))",
+                (list(MIRRORED_CREDIT_KINDS),),
+            ).fetchone()["c"]
             since30 = int(time.time()) - 30 * 86400
             vol30 = self._conn.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log "

@@ -1961,6 +1961,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": " (cancel)",
         "zh": "（取消）",
     },
+    "state_queued": {
+        "ru": "в очереди",
+        "en": "queued",
+        "zh": "排队中",
+    },
+    "state_pending": {
+        "ru": "в сети",
+        "en": "on-chain",
+        "zh": "链上确认中",
+    },
+    "state_refunded": {
+        "ru": "возвращено",
+        "en": "refunded",
+        "zh": "已退回",
+    },
     "hist_rain": {
         "ru": "дождь",
         "en": "rain",
@@ -2426,6 +2441,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "kind_tip": {"ru": "Чаевые", "en": "Tip", "zh": "打赏"},
     "kind_rain": {"ru": "Дождь", "en": "Rain", "zh": "红包雨"},
     "kind_rain_in": {"ru": "Получен дождь", "en": "Rain received", "zh": "收到红包雨"},
+    "kind_transaction": {"ru": "Операция", "en": "Transaction", "zh": "交易"},
+    "kind_tip_in": {"ru": "Полученные чаевые", "en": "Tip received", "zh": "收到打赏"},
+    "kind_withdraw_refund": {"ru": "Возврат вывода", "en": "Withdrawal refund", "zh": "提现退款"},
+    "kind_dividend": {"ru": "Дивиденды", "en": "Dividends", "zh": "股息"},
     "kind_bet": {"ru": "Ставка", "en": "Bet", "zh": "投注"},
     "kind_bet_win": {"ru": "Выигрыш ставки", "en": "Bet win", "zh": "投注盈利"},
     "kind_bet_cancel": {"ru": "Возврат ставки", "en": "Bet refund", "zh": "投注退款"},
@@ -2450,3 +2469,10 @@ def norm(lang: str | None) -> str:
 def t(lang: str | None, key: str, **kwargs) -> str:
     table = STRINGS[key]
     return table[norm(lang)].format(**kwargs)
+
+
+def has(key: str) -> bool:
+    """True when the key exists. Only for labels derived from data (a tx_log
+    kind), where a missing translation must degrade to a generic word instead
+    of raising in the middle of rendering someone's history."""
+    return key in STRINGS

@@ -8,7 +8,15 @@ from ._base import MICRO
 
 
 class LedgerBetsMixin:
-    def create_bet(self, creator_tg_id: int, question: str, options: list[str], close_at: int | None = None) -> int:
+    def create_bet(
+        self, creator_tg_id: int, question: str, options: list[str], close_at: int | None = None
+    ) -> int:
+        """Parimutuel market. `close_at` is optional but strongly preferred:
+
+        without a deadline the creator is an oracle who may settle at any
+        moment, so the conflict-of-interest guard in resolve_bet is the only
+        thing standing between them and the pot.
+        """
         with self._lock:
             self.ensure_user(creator_tg_id, None)
             cur = self._conn.execute(
@@ -189,6 +197,16 @@ class LedgerBetsMixin:
 
         Money conservation is exact: winners get net payouts, the market
         creator receives all fees + floor dust, so nothing is created or lost.
+
+        Two guards keep the creator-as-oracle from eating the pot:
+        * trading must have reached `close_at`, so the creator cannot settle the
+          instant another user funds a competing option;
+        * the resolver must hold no stake on the outcome being declared.
+          Without this, betting 0.01 on «A», letting a victim put 10 into «B»
+          and declaring «A» wins pays the creator the whole 10.01 pot (winners
+          share pro-rata, so a 0.01 winning stake is grossed up by total_pot).
+          A creator who wants their own pick to win must exit first — which a
+          parimutuel position does not allow — so they may only cancel.
         """
         with self._lock:
             bet = self.get_bet_for_update(bet_id)
@@ -202,12 +220,30 @@ class LedgerBetsMixin:
             if winning_idx < 0 or winning_idx >= len(options):
                 self._conn.rollback()
                 return False, "Неверный номер варианта."
+            if bet["close_at"] is not None and int(time.time()) < int(bet["close_at"]):
+                self._conn.rollback()
+                return False, (
+                    "Торги ещё не закрыты: резолв доступен после дедлайна рынка."
+                )
 
             positions = self._bet_positions(bet_id)
             total_pot = sum(int(p["amount"]) for p in positions)
             if total_pot <= 0:
                 self._conn.rollback()
                 return False, "В ставке пока нет денег — закрыть нечего."
+
+            mine = sum(
+                int(p["amount"])
+                for p in positions
+                if int(p["tg_id"]) == int(resolver_id) and int(p["option_idx"]) == winning_idx
+            )
+            if mine > 0:
+                self._conn.rollback()
+                return False, (
+                    f"Вы поставили на «{options[winning_idx]}» — объявить свой вариант "
+                    "победителем нельзя. Выберите другой исход или отмените рынок "
+                    f"(/cancel {bet_id}, возврат всем участникам)."
+                )
 
             winners = [p for p in positions if int(p["option_idx"]) == winning_idx]
             if not winners:

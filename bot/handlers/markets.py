@@ -180,7 +180,13 @@ async def cb_market_card(cb: types.CallbackQuery) -> None:
                 if int(pos.get(i, {}).get('shares', 0)) > 0:
                     rows.append([InlineKeyboardButton(text=f"{i18n.t(lang, 'btn_sell')} {i + 1}", callback_data=f'mksell:{mid}:{i}')])
         if user and int(m['creator']) == user.id:
-            rows.append([InlineKeyboardButton(text=i18n.t(lang, 'btn_close_market'), callback_data=f'mkres:{mid}'), InlineKeyboardButton(text=i18n.t(lang, 'btn_cancel_action'), callback_data=f'mkcancel:{mid}')])
+            # resolve_market refuses before close_at, so offering the button
+            # earlier would only produce an error; cancelling stays available.
+            row = []
+            if not m['close_at'] or int(time.time()) >= int(m['close_at']):
+                row.append(InlineKeyboardButton(text=i18n.t(lang, 'btn_close_market'), callback_data=f'mkres:{mid}'))
+            row.append(InlineKeyboardButton(text=i18n.t(lang, 'btn_cancel_action'), callback_data=f'mkcancel:{mid}'))
+            rows.append(row)
     rows.append([InlineKeyboardButton(text=i18n.t(lang, 'btn_all_markets_v2'), callback_data='markets_amm'), InlineKeyboardButton(text=i18n.t(lang, 'btn_bets'), callback_data='bets')])
     await common._edit_menu(cb, await _market_card(m, user.id if user else None), InlineKeyboardMarkup(inline_keyboard=rows))
     await cb.answer()

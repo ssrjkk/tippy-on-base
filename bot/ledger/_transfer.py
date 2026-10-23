@@ -5,8 +5,13 @@ from ._base import audit_log
 
 
 class LedgerTransferMixin:
-    def transfer(self, from_id: int, to_id: int, amount_micro: int) -> bool:
-        """Move funds between users. Returns False if sender lacks balance."""
+    def transfer(self, from_id: int, to_id: int, amount_micro: int, note: str = "") -> bool:
+        """Move funds between users. Returns False if sender lacks balance.
+
+        One row per side. A single `tip` row (tg_id = payer) made the payment
+        invisible in the receiver's /history while /stats counted it as their
+        income, and recurring payments (bot/main.py) have a memo to record.
+        """
         if amount_micro <= 0:
             # A negative amount would invert the direction (the "sender"
             # would GAIN money) and mint it from thin air.
@@ -27,8 +32,14 @@ class LedgerTransferMixin:
                     (amount_micro, to_id),
                 )
                 self._conn.execute(
-                    "INSERT INTO tx_log (kind, tg_id, counterparty, amount) VALUES ('tip', %s, %s, %s)",
-                    (from_id, str(to_id), amount_micro),
+                    "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
+                    "VALUES ('tip', %s, %s, %s, %s)",
+                    (from_id, str(to_id), amount_micro, note),
+                )
+                self._conn.execute(
+                    "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
+                    "VALUES ('tip_in', %s, %s, %s, %s)",
+                    (to_id, str(from_id), amount_micro, note),
                 )
                 self._conn.commit()
                 committed = True

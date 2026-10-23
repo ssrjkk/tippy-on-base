@@ -9,7 +9,7 @@ renders a withdrawal as income.
 
 from decimal import Decimal
 
-from bot.i18n import t
+from bot import i18n
 from bot.ledger import MICRO, is_credit
 
 __all__ = ['label_for', 'row_view', 'rows_view']
@@ -17,18 +17,27 @@ __all__ = ['label_for', 'row_view', 'rows_view']
 # What the `counterparty` column holds for each kind: another Telegram account,
 # an on-chain address, a market id, or nothing.
 KIND_REF = {
-    'tip': 'user', 'rain_in': 'user',
+    'tip': 'user', 'tip_in': 'user', 'rain_in': 'user',
     'deposit': 'address', 'withdraw': 'address', 'fee': 'address', 'x402': 'address',
+    'withdraw_refund': 'address',
     'bet': 'market', 'bet_win': 'market', 'bet_cancel': 'market', 'creator_income': 'market',
     'paywall': 'market', 'paywall_earn': 'market', 'channel_pay': 'market',
     'channel_earn': 'market',
     'market_create': 'market', 'market_buy': 'market', 'market_sell': 'market',
     'market_win': 'market', 'market_cancel': 'market',
+    'dividend': 'market',
 }
+
+# A withdraw row lives through states before the money is really gone; `done`
+# and NULL (legacy rows written before statuses) need no label.
+TX_STATES = frozenset({'queued', 'pending', 'refunded'})
 
 
 def label_for(kind: str, lang: str) -> str:
-    return t(lang, f'kind_{kind}')
+    key = f'kind_{kind}'
+    # A kind with no label is a bug, but it must not take someone's history page
+    # down with it: fall back to the generic word, never to the internal name.
+    return i18n.t(lang, key) if i18n.has(key) else i18n.t(lang, 'kind_transaction')
 
 
 def row_view(row: dict, lang: str, names: dict[int, str] | None = None) -> dict:
@@ -37,6 +46,7 @@ def row_view(row: dict, lang: str, names: dict[int, str] | None = None) -> dict:
     `id<n>`, the same fallback the bot uses."""
     kind = row['kind']
     note = row.get('note') or ''
+    status = str(row.get('status') or '')
     # A rain debits the sender with one `tip` row whose counterparty is the list
     # of everyone it landed on; the recipients get their own `rain_in` rows.
     is_rain_out = kind == 'tip' and note == 'rain'
@@ -50,16 +60,23 @@ def row_view(row: dict, lang: str, names: dict[int, str] | None = None) -> dict:
             ref = f'@{name}' if name else f'id{uid}'
     elif counterparty and not is_rain_out:
         ref = counterparty
+    # Only the states a reader cannot infer from the kind matter: 'done' and the
+    # legacy NULL are the normal case. The state belongs in the label, not in a
+    # field every renderer would have to translate again — 'Withdrawal · queued'
+    # reads correctly on the site, in the Mini App and in a share profile.
+    label = label_for('rain' if is_rain_out else kind, lang)
+    if status in TX_STATES:
+        label = f'{label} · {i18n.t(lang, f"state_{status}")}'
     return {
         'kind': kind,
-        'label': label_for('rain' if is_rain_out else kind, lang),
+        'label': label,
         'incoming': is_credit(kind),
         'ref': ref,
         'note': note,
     }
 
 
-USER_REF_KINDS = ('tip', 'rain_in')
+USER_REF_KINDS = ('tip', 'tip_in', 'rain_in')
 
 
 def _names_a_user(row: dict) -> bool:

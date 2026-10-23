@@ -132,14 +132,18 @@ class LedgerPaywallMixin:
                 "UPDATE users SET balance = balance + %s WHERE tg_id = %s",
                 (price, int(item["owner_tg"])),
             )
+            # `amount` is positive by invariant (the sign comes from `kind`), and
+            # the note stays empty: a prose note here is Russian text shipped into
+            # an English UI, while hist_paywall/hist_paywall_sell already say the
+            # same thing in the reader's language.
             self._conn.execute(
-                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                "VALUES ('paywall', %s, %s, %s, 'платный контент')",
-                (buyer_tg, str(item_id), -price),
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount) "
+                "VALUES ('paywall', %s, %s, %s)",
+                (buyer_tg, str(item_id), price),
             )
             self._conn.execute(
-                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                "VALUES ('paywall_earn', %s, %s, %s, 'продажа контента')",
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount) "
+                "VALUES ('paywall_earn', %s, %s, %s)",
                 (int(item["owner_tg"]), str(item_id), price),
             )
             self._conn.commit()
@@ -181,8 +185,8 @@ class LedgerPaywallMixin:
                 (amount_micro, owner_tg),
             )
             self._conn.execute(
-                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash, note) "
-                "VALUES ('paywall_earn', %s, %s, %s, %s, 'продажа контента')",
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash) "
+                "VALUES ('paywall_earn', %s, %s, %s, %s)",
                 (owner_tg, str(item_id), amount_micro, tx_hash),
             )
             self._conn.commit()
@@ -333,13 +337,13 @@ class LedgerPaywallMixin:
                 (price, int(ch["owner_tg"])),
             )
             self._conn.execute(
-                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                "VALUES ('channel_pay', %s, %s, %s, 'подписка на канал')",
-                (tg_id, str(chat_id), -price),
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount) "
+                "VALUES ('channel_pay', %s, %s, %s)",
+                (tg_id, str(chat_id), price),
             )
             self._conn.execute(
-                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
-                "VALUES ('channel_earn', %s, %s, %s, 'продажа доступа')",
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount) "
+                "VALUES ('channel_earn', %s, %s, %s)",
                 (int(ch["owner_tg"]), str(chat_id), price),
             )
             self._conn.commit()

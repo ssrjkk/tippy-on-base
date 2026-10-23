@@ -107,9 +107,19 @@ chats. Ledger-internal paths stay plain text where no `parse_mode` is set.
   Widget renders its button from. Without that `frame-src` entry the widget
   falls back to `default-src 'self'`, the frame is blocked and the login
   button stays an empty box.
-- Wallet login nonces are stored hashed (SHA-256) in `login_nonces`, are
-  single-use (PK-enforced, atomic claim), and are pruned after
-  `LOGIN_NONCE_TTL_SECONDS` (default 7 days).
+- Login nonces are stored hashed (SHA-256) in `login_nonces`, are single-use
+  (PK-enforced, atomic claim), and are pruned after
+  `LOGIN_NONCE_TTL_SECONDS` (default 7 days). Two signed credentials go through
+  it: the wallet's `(message, signature)` nonce, and the Telegram Login Widget
+  callback keyed by `(tg_id, auth_date)` — Telegram leaves a widget hash valid
+  for `TG_AUTH_DATE_TTL` (24h), so without the claim a captured callback URL
+  would mint sessions for that user for a day. Every real page load re-renders
+  the widget with a fresh `auth_date`, so only a literal replay collides.
+- Mini App `initData` is deliberately **not** single-use: the webview re-POSTs
+  the same blob on every reload, and refusing the second one would lock a
+  legitimate user out until they reopen the app from the chat. The replay window
+  is cut instead — `INIT_DATA_TTL` is 1 hour (`web/mini.py`), not Telegram's
+  day.
 
 ## Withdrawal limits are atomic
 
@@ -155,19 +165,29 @@ webhook UI adds no separate money path.
 
 ## Money endpoints require an Idempotency-Key
 
-`POST /api/mini/{tip,trade,betplace,smartbuy,create_market}` debit or reserve
-funds, so each one requires an `Idempotency-Key` header. The key is hashed
-together with the caller's `tg_id` and the action name (`web/mini.py`,
-`_idempotency_hash`), so the same header value replayed by a different user or
-against a different action is a different reservation.
+`POST /api/mini/{tip,trade,betplace,smartbuy,create}` debit or reserve funds
+(`create` covers both `kind: market` and `kind: bet`), so each one requires an
+`Idempotency-Key` header. The key is hashed together with the caller's `tg_id`
+and the action name (`web/mini.py`, `_idempotency_hash`), so the same header
+value replayed by a different user or against a different action is a different
+reservation.
 
 - **Missing header → 400.** The request never reaches the ledger.
-- **Already reserved → 409.** A retried request cannot spend twice; the client
-  is told to reuse the original key to check status.
+- **Already completed → the first answer, replayed.** The response body is
+  stored under the key (`idempotency_keys.response`), so a client that retried
+  after a dropped connection learns what happened instead of being parked on a
+  409 forever. A completed key whose body was never recorded answers 409 with
+  "already completed — check your balance".
+- **Still running → 409 that says so.** A retry racing the original cannot be
+  answered with a result; the copy tells the user not to retry again.
 - **Failure rolls the reservation back.** `_IdempotencyContext.__aexit__`
   releases the key when the handler raises, so a genuine error (insufficient
   balance, validation) leaves the client free to retry with the same key
   instead of locking it out.
+- **Expired reservations are reclaimed.** `reserve_idempotency` deletes rows
+  past `expires_at` (24h) before inserting, so an attempt that died between the
+  reserve and the ledger write cannot poison the key; the same sweep is what the
+  `idx_idempotency_expires` index exists for, and it keeps the table bounded.
 
 `/api/mini/withdraw` is the exception: it is protected by the staged
 single-use token below rather than by a header.

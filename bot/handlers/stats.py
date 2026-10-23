@@ -6,10 +6,11 @@ from aiogram.filters import Command
 
 from bot import i18n, tip_targets
 from bot.ledger import is_credit
+from bot.tx_view import label_for
 
 from . import _common as common
 
-__all__ = ['_history_text', '_stats_text', '_tip_counterparties', '_top_text', 'cmd_history', 'cmd_stats', 'cmd_top']
+__all__ = ['_history_text', '_stats_text', '_tip_counterparties', '_top_text', '_withdraw_state', 'cmd_history', 'cmd_stats', 'cmd_top']
 
 @common.router.message(Command('stats'))
 async def cmd_stats(message: types.Message) -> None:
@@ -50,8 +51,18 @@ def _tip_counterparties(rows: list[dict]) -> list[int]:
     return [
         int(r['counterparty'])
         for r in rows
-        if r['kind'] in ('tip', 'rain_in') and str(r['counterparty'] or '').isdigit()
+        if r['kind'] in ('tip', 'tip_in', 'rain_in') and str(r['counterparty'] or '').isdigit()
     ]
+
+
+# A withdraw row lives through states before the money is really gone. Without
+# them a queued or refunded payout reads as a completed one.
+_WITHDRAW_STATE_KEYS = {'queued': 'state_queued', 'pending': 'state_pending', 'refunded': 'state_refunded'}
+
+
+def _withdraw_state(lang: str, row: dict) -> str:
+    key = _WITHDRAW_STATE_KEYS.get(str(row.get('status') or ''))
+    return f" ({i18n.t(lang, key)})" if key else ''
 
 
 async def _history_text(tg_id: int, limit: int=15, rows_override: list[dict] | None = None) -> str:
@@ -75,25 +86,32 @@ async def _history_text(tg_id: int, limit: int=15, rows_override: list[dict] | N
                 cname = names.get(cid) if cid else None
                 who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
                 lines.append(f'{emoji} {amt} → {who}')
-        elif r['kind'] == 'rain_in':
+        elif r['kind'] in ('rain_in', 'tip_in'):
             cid = int(r['counterparty']) if str(r['counterparty'] or '').isdigit() else None
             cname = names.get(cid) if cid else None
             who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
             lines.append(f'{emoji} +{amt} ← {who}')
         elif r['kind'] == 'creator_income':
             lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_creator_fee')}")
+        elif r['kind'] == 'dividend':
+            lines.append(f"{emoji} +{amt} {html.escape(r['note'] or '')}")
         elif r['kind'] == 'deposit':
             lines.append(f"{emoji} +{amt} <code>{common._esc(r['counterparty'])}</code>")
         elif r['kind'] == 'withdraw':
-            lines.append(f"{emoji} −{amt} → <code>{common._esc(r['counterparty'])}</code>")
+            lines.append(
+                f"{emoji} −{amt} → <code>{common._esc(r['counterparty'])}</code>"
+                f"{_withdraw_state(lang, r)}"
+            )
+        elif r['kind'] == 'withdraw_refund':
+            lines.append(f"{emoji} +{amt} <code>{common._esc(r['counterparty'])}</code>")
+        elif r['kind'] == 'fee':
+            lines.append(f"{emoji} −{amt}{i18n.t(lang, 'hist_fee')}{_withdraw_state(lang, r)}")
         elif r['kind'] == 'bet':
             lines.append(f"{emoji} −{amt} #{r['counterparty']} ({html.escape(r['note'] or '')})")
         elif r['kind'] == 'bet_win':
             lines.append(f"{emoji} +{amt} #{r['counterparty']}")
         elif r['kind'] == 'bet_cancel':
             lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_bet_cancel')}")
-        elif r['kind'] == 'fee':
-            lines.append(f"{emoji} −{amt}{i18n.t(lang, 'hist_fee')}")
         elif r['kind'] == 'x402':
             sender = r['counterparty'] or '?'
             short = f'{sender[:10]}…{sender[-4:]}' if sender.startswith('0x') else sender
@@ -107,8 +125,10 @@ async def _history_text(tg_id: int, limit: int=15, rows_override: list[dict] | N
         elif r['kind'] == 'channel_earn':
             lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_channel_sell')}")
         else:
+            # Never print the raw kind: it is an internal identifier, and the
+            # label already exists for every kind the ledger writes.
             sign = '+' if is_credit(r['kind']) else '−'
-            lines.append(f"{emoji} {sign}{amt} ({r['kind']})")
+            lines.append(f"{emoji} {sign}{amt} {html.escape(label_for(r['kind'], lang))}")
     return i18n.t(lang, 'history_title') + '\n\n' + '\n'.join(lines)
 
 @common.router.message(Command('top'))
@@ -132,8 +152,8 @@ async def cmd_history(message: types.Message) -> None:
     limit = 15
     kind = None
     valid_kinds = {
-        'tip', 'rain_in', 'bet', 'bet_win', 'bet_cancel', 'deposit', 'withdraw',
-        'fee', 'creator_income', 'x402', 'paywall', 'paywall_earn',
+        'tip', 'tip_in', 'rain_in', 'bet', 'bet_win', 'bet_cancel', 'deposit', 'withdraw',
+        'withdraw_refund', 'fee', 'creator_income', 'dividend', 'x402', 'paywall', 'paywall_earn',
         'channel_pay', 'channel_earn', 'market_create', 'market_buy',
         'market_sell', 'market_win', 'market_cancel',
     }

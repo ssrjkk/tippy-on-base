@@ -237,6 +237,14 @@ async def auth_telegram(request: Request):
         raise HTTPException(403, 'missing or expired login state — reload the page and try again')
     params = dict(request.query_params)
     tg_id = verify_telegram(params)
+    # One-time use per signed blob. Telegram's hash stays valid for
+    # TG_AUTH_DATE_TTL (24h), so a captured callback URL — from a shoulder, an
+    # extension, a leaked history entry — would otherwise mint sessions in the
+    # attacker's browser for a full day. The key is (id, auth_date), not the
+    # hash: Telegram stamps auth_date when it renders the widget, so every real
+    # page load presents a new key and only a literal replay collides.
+    if not await ledger.consume_login_nonce(f'tg-widget:{tg_id}:{params["auth_date"]}'):
+        raise HTTPException(403, 'this Telegram login has already been used — reload the page and sign in again')
     username = params.get('username', '')
     await ledger.ensure_user(tg_id, username or None)
     return _session_response(request, tg_id, redirect='/')

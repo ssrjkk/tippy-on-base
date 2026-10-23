@@ -29,8 +29,14 @@ def _extract_fee(note: str | None) -> int:
 CREDIT_KINDS = frozenset({
     'deposit', 'bet_win', 'bet_cancel', 'market_win', 'market_cancel',
     'market_sell', 'paywall_earn', 'channel_earn', 'x402', 'rain_in',
-    'creator_income',
+    'creator_income', 'tip_in', 'withdraw_refund', 'dividend',
 })
+
+# Rows that are the RECEIVER's copy of a movement already booked as the
+# sender's debit in the same transaction. They belong in a person's history, but
+# not in a public event counter: one tip would be two "transactions" and one
+# rain of N shares would be 1+N.
+MIRRORED_CREDIT_KINDS = frozenset({'tip_in', 'rain_in'})
 
 
 def is_credit(kind: str) -> bool:

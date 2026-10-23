@@ -210,7 +210,10 @@ async def cb_market(cb: types.CallbackQuery) -> None:
         return
     rows = [[InlineKeyboardButton(text=f"{o['index'] + 1}) {o['label'][:22]} — {o['probability']}%", callback_data=f"betq:{bet_id}:{o['index']}")] for o in view['options']]
     user = cb.from_user
-    if user and view['status'] == 'open' and (user.id == view['creator']['id']):
+    # The ledger refuses to settle before close_at, so the button would only
+    # ever answer with an error while trading is still open.
+    closed = view['status'] == 'open' and (not view['close_at'] or int(time.time()) >= int(view['close_at']))
+    if user and closed and (user.id == view['creator']['id']):
         rows.append([InlineKeyboardButton(text='🏁 ' + i18n.t(lang, 'btn_close_market'), callback_data=f'res:{bet_id}')])
     rows.append([InlineKeyboardButton(text=i18n.t(lang, 'btn_all_markets'), callback_data='bets')])
     kb = InlineKeyboardMarkup(inline_keyboard=rows)

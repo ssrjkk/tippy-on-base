@@ -13,8 +13,10 @@ from bot.ledger import is_credit
 from bot.tx_view import KIND_REF, label_for, row_view, rows_view
 
 # Every kind the ledger writes, exercised below. `rain` is not a kind of its
-# own — it is a `tip` row with note='rain' — but it needs its own label.
-ALL_LABELLED_KINDS = set(KIND_REF) | {'rain'}
+# own — it is a `tip` row with note='rain' — and `transaction` is not a kind
+# either: it is the fallback label a kind with no translation gets.
+PSEUDO_LABELS = {'rain', 'transaction'}
+ALL_LABELLED_KINDS = set(KIND_REF) | PSEUDO_LABELS
 
 
 def test_every_kind_renders_a_label_in_every_language():
@@ -27,11 +29,11 @@ def test_no_label_exists_for_a_kind_without_a_reference_rule():
     """A `kind_*` string with no KIND_REF entry means a kind was added to the
     ledger and never told what its counterparty column holds.
 
-    `rain` is the one label that is not a kind of its own: it is the label a
-    `tip` row with note='rain' is shown under.
+    The two exceptions are labels that are not kinds: `rain` is what a `tip` row
+    with note='rain' is shown under, `transaction` is the unknown-kind fallback.
     """
     labelled = {k[len('kind_'):] for k in STRINGS if k.startswith('kind_')}
-    assert labelled - set(KIND_REF) == {'rain'}
+    assert labelled - set(KIND_REF) == PSEUDO_LABELS
 
 
 def test_credit_table_matches_the_signs_the_renderers_print():

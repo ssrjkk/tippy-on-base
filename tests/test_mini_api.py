@@ -1,5 +1,6 @@
 """Tests for the Mini App API endpoints (web/mini.py)."""
 
+import time
 from decimal import Decimal
 
 import pytest
@@ -143,6 +144,105 @@ def test_mini_tip_success(client, ledger):
     data = r.json()
     assert data["ok"] is True
     assert data["new_balance"] == pytest.approx(7.5)
+
+
+def _idem_key(user_id: int, action: str, raw: str) -> str:
+    from web.mini import _idempotency_hash
+
+    return _idempotency_hash(user_id, action, raw)
+
+
+def test_duplicate_money_post_is_answered_with_the_first_outcome(client, ledger):
+    """The whole point of an Idempotency-Key: a client that retried after a
+    dropped connection must learn what happened. A bare 409 tells it nothing
+    (the money may or may not have moved) and 'reuse the key to check status'
+    described an endpoint that does not exist."""
+    ledger.ensure_user(TG_USER, "alice")
+    ledger.ensure_user(TG_OTHER, "bob")
+    ledger.credit(TG_USER, 10_000_000, "deposit")
+    _auth(client, TG_USER)
+    headers = {"Idempotency-Key": "tip-once"}
+
+    first = client.post(
+        "/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5}, headers=headers
+    )
+    assert first.status_code == 200
+    assert ledger.balance(TG_USER) == Decimal("7.500000")
+
+    again = client.post(
+        "/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5}, headers=headers
+    )
+    assert again.status_code == 200
+    assert again.json() == first.json()  # the original body, replayed
+    assert ledger.balance(TG_USER) == Decimal("7.500000")  # and no second debit
+    assert len(ledger.history_filtered(TG_USER, "tip", 10)) == 1
+
+
+def test_duplicate_key_still_in_flight_is_refused_saying_which(client, ledger):
+    """A retry that races the original cannot be answered with a result — it has
+    to be refused, and the message has to say the request is still running."""
+    from web.mini import _idempotency_hash
+
+    ledger.ensure_user(TG_USER, "alice")
+    ledger.ensure_user(TG_OTHER, "bob")
+    ledger.credit(TG_USER, 10_000_000, "deposit")
+    _auth(client, TG_USER)
+    key = "tip-in-flight"
+    ledger._conn.execute(
+        "INSERT INTO idempotency_keys (key_hash, user_id, action, status) "
+        "VALUES (%s, %s, 'tip', 'pending')",
+        (_idempotency_hash(TG_USER, 'tip', key), TG_USER),
+    )
+    ledger._conn.commit()
+
+    r = client.post(
+        "/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5},
+        headers={"Idempotency-Key": key},
+    )
+    assert r.status_code == 409
+    assert "still being processed" in r.json()["detail"]
+    assert ledger.balance(TG_USER) == Decimal("10.000000")
+
+
+def test_expired_reservation_is_reclaimed(client, ledger):
+    """An attempt that died between reserving and committing must not lock the
+    key for its whole TTL — that is how a user ends up unable to pay twice."""
+    ledger.ensure_user(TG_USER, "alice")
+    ledger.ensure_user(TG_OTHER, "bob")
+    ledger.credit(TG_USER, 10_000_000, "deposit")
+    _auth(client, TG_USER)
+    key = "tip-stale"
+    ledger._conn.execute(
+        "INSERT INTO idempotency_keys (key_hash, user_id, action, status, expires_at) "
+        "VALUES (%s, %s, 'tip', 'pending', %s)",
+        (_idem_key(TG_USER, 'tip', key), TG_USER, int(time.time()) - 1),
+    )
+    ledger._conn.commit()
+
+    r = client.post(
+        "/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5},
+        headers={"Idempotency-Key": key},
+    )
+    assert r.status_code == 200
+    assert ledger.balance(TG_USER) == Decimal("7.500000")
+
+
+def test_unfunded_market_is_a_400_not_a_fake_id(client, ledger):
+    """create_market answers with the word 'balance' when the creator cannot fund
+    the subsidy; the route used to wrap it into {'ok': True, 'id': 'balance'} and
+    the app reported a market that was never created."""
+    ledger.ensure_user(TG_USER, None)
+    _auth(client, TG_USER)
+    body = {"kind": "market", "question": "Победит Алиса?", "options": ["Алиса", "Боб"],
+            "subsidy_usdc": 50, "hours": 24}
+    r = client.post("/api/mini/create", json=body, headers={"Idempotency-Key": "mk1"})
+    assert r.status_code == 400
+    assert "balance" in r.json()["detail"]
+    # The failed attempt freed the key, so the same tap works after a deposit.
+    ledger.credit(TG_USER, 100_000_000, "deposit")
+    ok = client.post("/api/mini/create", json=body, headers={"Idempotency-Key": "mk1"})
+    assert ok.status_code == 200
+    assert isinstance(ok.json()["id"], int)
 
 
 def test_mini_trade_invalid_market(client, ledger):

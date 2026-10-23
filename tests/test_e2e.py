@@ -499,7 +499,12 @@ def test_e2e_market_lifecycle_resolve_payouts(e2e, monkeypatch):
     run(cmd_mybets(m))
     assert "250" in m.answers[0][0]  # potential payout of the whole pot
 
-    # resolve: parimutuel payouts are exact
+    # resolve: parimutuel payouts are exact. Trading must close first — a
+    # creator cannot settle a market while its deadline is still in the future.
+    e2e._conn.execute(
+        "UPDATE bets SET close_at = %s WHERE id = %s", (int(time.time()) - 1, bet_id)
+    )
+    e2e._conn.commit()
     m = Message("/resolve 1 1", from_id=ALICE, bot=bot)
     run(cmd_resolve(m))
     assert "закрыта" in m.answers[0][0]
@@ -517,6 +522,28 @@ def test_e2e_market_lifecycle_resolve_payouts(e2e, monkeypatch):
     m = Message("/bet 1 1 5", from_id=BOB, bot=bot)
     run(cmd_bet(m))
     assert "закрыта" in m.answers[0][0]
+
+
+def test_e2e_resolve_refuses_the_creators_own_winning_stake(e2e, monkeypatch):
+    """The bait-and-steal on the command surface: 0.01 on «Да» plus a victim's
+    10 on «Нет» would pay the creator the whole pot if «Да» were declared."""
+    install_rpc(monkeypatch, block=1500)
+    bot = Bot()
+    for tg, name in ((ALICE, "alice"), (BOB, "bob")):
+        start(bot, tg, name)
+        fund(e2e, tg, 100)
+    m = Message("/bet create Кто победит? | Да | Нет", from_id=ALICE, bot=bot)
+    run(cmd_bet(m))
+    assert "Ставка #1 создана" in m.answers[0][0]
+    run(cmd_bet(Message("/bet 1 1 0.01", from_id=ALICE, bot=bot)))
+    run(cmd_bet(Message("/bet 1 2 10", from_id=BOB, bot=bot)))
+
+    m = Message("/resolve 1 1", from_id=ALICE, bot=bot)
+    run(cmd_resolve(m))
+    assert "нельзя" in m.answers[0][0]
+    assert e2e.get_bet(1)["status"] == "open"
+    assert e2e.balance(BOB) == Decimal("90.000000")
+    assert e2e.total_liabilities() == 200 * USDC
 
 
 def test_e2e_market_deadline_watcher_and_grace(e2e, monkeypatch):

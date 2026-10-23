@@ -54,6 +54,7 @@ TABLES = [
     "treasury_proposals", "treasury_votes", "onchain_markets", "onchain_trades", "gas_drips",
     "notification_outbox", "create2_proxies", "x402_invoices",
     "market_subsidies", "login_nonces",
+    "idempotency_keys",
     "creator_tokens", "creator_token_holders", "creator_dividends",
     "withdraw_confirmations",
     "recurring_payments",

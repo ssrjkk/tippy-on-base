@@ -425,7 +425,7 @@ class LedgerWithdrawMixin:
     def history(self, tg_id: int, limit: int = 15) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT id, kind, counterparty, amount, tx_hash, note, created_at "
+                "SELECT id, kind, counterparty, amount, tx_hash, note, status, created_at "
                 "FROM tx_log WHERE tg_id = %s ORDER BY id DESC LIMIT %s",
                 (tg_id, limit),
             ).fetchall()
@@ -440,14 +440,14 @@ class LedgerWithdrawMixin:
         with self._lock:
             if kind:
                 rows = self._conn.execute(
-                    "SELECT id, kind, counterparty, amount, tx_hash, note, created_at "
+                    "SELECT id, kind, counterparty, amount, tx_hash, note, status, created_at "
                     "FROM tx_log WHERE tg_id = %s AND kind = %s "
                     "ORDER BY id DESC LIMIT %s",
                     (tg_id, kind, limit),
                 ).fetchall()
             else:
                 rows = self._conn.execute(
-                    "SELECT id, kind, counterparty, amount, tx_hash, note, created_at "
+                    "SELECT id, kind, counterparty, amount, tx_hash, note, status, created_at "
                     "FROM tx_log WHERE tg_id = %s ORDER BY id DESC LIMIT %s",
                     (tg_id, limit),
                 ).fetchall()
@@ -463,13 +463,13 @@ class LedgerWithdrawMixin:
         """
         with self._lock:
             rows = self._conn.execute(
-                "SELECT id, kind, counterparty, amount, tx_hash, note, created_at "
+                "SELECT id, kind, counterparty, amount, tx_hash, note, status, created_at "
                 "FROM tx_log WHERE tg_id = %s ORDER BY id DESC",
                 (tg_id,),
             ).fetchall()
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
-        writer.writerow(("id", "kind", "counterparty", "amount", "tx_hash", "note", "created_at"))
+        writer.writerow(("id", "kind", "counterparty", "amount", "tx_hash", "note", "status", "created_at"))
         for r in rows:
             writer.writerow((
                 r["id"],
@@ -478,6 +478,7 @@ class LedgerWithdrawMixin:
                 r["amount"],
                 _csv_text(r["tx_hash"]),
                 _csv_text(r["note"]),
+                _csv_text(r["status"]),
                 r["created_at"],
             ))
         # Strip the record terminator: callers count lines to spot an empty export.
@@ -674,13 +675,18 @@ class LedgerWithdrawMixin:
 
 
     def refund_withdraw(self, wd_id: int, tg_id: int, total_micro: int) -> bool:
-        """Full refund of amount + fee; keeps the row as an audit trail.
+        """Full refund of amount + fee; keeps the rows as an audit trail.
 
         Single-credit guarantee: the withdraw row is first flipped to
         'refunded' (guarded against a terminal status) and the balance is
         credited ONLY if that flip was won. Two concurrent refund paths (the
         pending-sweep and a batch fallback) racing on the same row now result
         in exactly one credit, not two.
+
+        The credit is also written as a `withdraw_refund` row. Without it the
+        ledger would not reconcile: /history and the CSV export would show
+        −amount and −fee with no matching entry, so Σ rows ≠ balance change —
+        and a user told their withdrawal failed would still see money leave.
 
         Returns True if the refund was applied, False if the row was already
         'done'/'refunded' (no credit happens in that case).
@@ -701,6 +707,13 @@ class LedgerWithdrawMixin:
             self._conn.execute(
                 "UPDATE tx_log SET status = 'refunded' "
                 "WHERE kind = 'fee' AND note = %s", (f"withdraw_id={wd_id}",)
+            )
+            # counterparty is copied from the withdrawn row itself: the address
+            # the payout was aimed at, so the refund reads as a pair with it.
+            self._conn.execute(
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note, status) "
+                "SELECT 'withdraw_refund', %s, counterparty, %s, %s, 'done' FROM tx_log WHERE id = %s",
+                (tg_id, total_micro, f"withdraw_id={wd_id}", wd_id),
             )
             self._conn.commit()
             return True
