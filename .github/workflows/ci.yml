@@ -55,10 +55,13 @@ jobs:
       SECRET_KEY: "test-secret-key-for-ci-only-32ch!"
       TEST_DATABASE_URL: "postgresql://tipbot:tipbot@localhost:5432/tipbot_test"
       TEST_ADMIN_DATABASE_URL: "postgresql://tipbot:tipbot@localhost:5432/postgres"
-      # bot/ledger/ opens its module-level singleton at import time, so the
-      # pytest job must point DATABASE_URL at the service database (5432) too —
-      # the 5433 default would fail the import before any test runs.
-      DATABASE_URL: "postgresql://tipbot:tipbot@localhost:5432/tipbot"
+      # tests/conftest.py pins DATABASE_URL to TEST_DATABASE_URL before anything
+      # imports bot.* — bot/ledger/ builds a Ledger() at import time and its
+      # constructor runs `alembic upgrade head`, so an unpinned value would make
+      # the suite migrate whatever database the environment happened to point at.
+      # This value is what a bare import outside the suite would use, so it
+      # points at the test database too.
+      DATABASE_URL: "postgresql://tipbot:tipbot@localhost:5432/tipbot_test"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97

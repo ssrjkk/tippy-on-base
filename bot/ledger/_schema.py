@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
                     smart_created_at BIGINT   -- epoch when smart wallet was created
                 );
                 CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
+                CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username));
                 CREATE TABLE IF NOT EXISTS tx_log (
                     id        BIGSERIAL PRIMARY KEY,
                     kind      TEXT NOT NULL,             -- deposit | tip | withdraw

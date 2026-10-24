@@ -75,9 +75,14 @@ class LedgerUsersMixin:
 
     def find_by_username(self, username: str) -> int | None:
         with self._lock:
+            # Telegram usernames are case-insensitive, and `idx_users_username`
+            # cannot serve `LOWER(username) = LOWER(%s)`: it indexes the raw
+            # column, so every "/tip @someone" resolved with a Seq Scan over
+            # `users`. Lowercase the argument here and let the expression index
+            # added in 014 do the lookup.
             row = self._conn.execute(
-                "SELECT tg_id FROM users WHERE LOWER(username) = LOWER(%s)",
-                (username,),
+                "SELECT tg_id FROM users WHERE LOWER(username) = %s LIMIT 1",
+                (username.lower(),),
             ).fetchone()
         return row["tg_id"] if row else None
 

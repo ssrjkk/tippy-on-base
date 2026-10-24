@@ -179,6 +179,34 @@ def test_find_by_username_case_insensitive(ledger):
     assert ledger.find_by_username("nobody") is None
 
 
+def test_the_suite_never_connects_to_the_developer_database():
+    """`bot.ledger` builds a `Ledger()` at import time and `Ledger.__init__`
+    runs `alembic upgrade head`, so the database that variable points at gets
+    migrated — and on a stale table list, truncated — by whatever imported it.
+
+    conftest pins DATABASE_URL to the test database before anything imports
+    `bot.*`; this assertion is the regression guard for the pin. Without it a
+    dropped line silently sends every CI and local test run at the developer's
+    database, which has already happened once in this repository.
+    """
+    assert config.DATABASE_URL == TEST_DB_URL, (
+        f"tests are bound to {config.DATABASE_URL!r}, not the test database"
+    )
+
+
+def test_username_lookup_is_backed_by_an_usable_index(ledger):
+    """`idx_users_username` indexes the raw column, so `LOWER(username) = …`
+    could not use it and resolved every "/tip @name" with a Seq Scan over
+    `users`. Migration 014 adds the expression index the query needs."""
+    indexdefs = {
+        r["indexdef"].lower()
+        for r in ledger._conn.execute(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = 'users'"
+        ).fetchall()
+    }
+    assert any("lower(username)" in d or "lower((username)::text)" in d for d in indexdefs), sorted(indexdefs)
+
+
 def test_set_username(ledger):
     ledger.ensure_user(ALICE, "old")
     ledger.set_username(ALICE, "new")

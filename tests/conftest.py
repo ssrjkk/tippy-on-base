@@ -40,10 +40,49 @@ os.environ["BASE_RPC_FALLBACK_URLS"] = ""
 TEST_DB_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://tipbot:tipbot@localhost:5432/tipbot_test"
 )
+# Same reason as the two RPC variables above, and stronger: `bot.ledger` builds a
+# module-level `Ledger()` at import time and `Ledger.__init__` runs
+# `alembic upgrade head`. Left to itself, `bot.config` would load the dev `.env`
+# and a test session would migrate — and on a fresh table list, truncate — the
+# DEVELOPER database. Pin it so no import can reach anything but the test DB.
+os.environ["DATABASE_URL"] = TEST_DB_URL
 # Where to connect to CREATE/DROP the test database.
 TEST_ADMIN_URL = os.environ.get(
     "TEST_ADMIN_DATABASE_URL", "postgresql://tipbot:tipbot@localhost:5432/postgres"
 )
+
+
+def _create_test_db() -> bool:
+    """Drop and recreate the test database before anything can import `bot.*`.
+
+    Test modules import `bot.ledger` during collection, which runs before any
+    session fixture — so with DATABASE_URL pinned to the test database, a fresh
+    server (CI) would point the import-time singleton at a database that does not
+    exist yet and the collection would fail. Returns False instead of exiting when
+    the server is unreachable: the `-m production` workflow runs against the live
+    site with no Postgres at all, and `_pg_test_db` below still reports an
+    unavailable database loudly for real runs.
+
+    This replaces the drop/create that used to happen at session start: doing it
+    there left the import-time singleton connected to a database that had just
+    been recreated empty, which is the failure `_clean_shared_ledger` papers over.
+    """
+    import time
+
+    import psycopg
+
+    for attempt in range(3):
+        try:
+            with psycopg.connect(TEST_ADMIN_URL, connect_timeout=3, autocommit=True) as admin:
+                admin.execute("DROP DATABASE IF EXISTS tipbot_test WITH (FORCE)")
+                admin.execute("CREATE DATABASE tipbot_test")
+            return True
+        except Exception:
+            time.sleep(2 * (attempt + 1))
+    return False
+
+
+_db_created_at_import = _create_test_db()
 
 TABLES = [
     "users", "tx_log", "pending_deposits", "link_nonces", "wallet_links",
@@ -78,40 +117,30 @@ def _pg_test_db(request):
         yield
         return
 
-    import time
-
-    import psycopg
-
-    # DROP ... WITH (FORCE) kills backends left over from a previous run;
-    # right after a heavy suite those backends can outlive the client for a
-    # moment (and a different-role owner cannot be terminated), so retry.
-    last = None
-    for attempt in range(5):
-        try:
-            with psycopg.connect(TEST_ADMIN_URL, connect_timeout=3, autocommit=True) as admin:
-                admin.execute("DROP DATABASE IF EXISTS tipbot_test WITH (FORCE)")
-                admin.execute("CREATE DATABASE tipbot_test")
-            last = None
-            break
-        except Exception as e:
-            last = e
-            time.sleep(2 * (attempt + 1))
-    if last is not None:
-        pytest.exit(f"PostgreSQL not available: {last}", returncode=1)
+    # The database itself was already dropped and created at conftest import (see
+    # _create_test_db), before any test module could import `bot.ledger` and bind
+    # the module-level singleton to a connection. All that is left is the loud
+    # failure for a server that never answered.
+    if not _db_created_at_import:
+        pytest.exit(
+            f"PostgreSQL not available at {TEST_ADMIN_URL} — the test database "
+            "could not be recreated",
+            returncode=1,
+        )
     yield
 
 
 @pytest.fixture(autouse=True)
 def _clean_shared_ledger():
-    """Reset the shared bot.ledger.ledger singleton before each test.
+    """Roll back any aborted transaction on the shared bot.ledger.ledger singleton.
 
-    Tests that don't request the `ledger` fixture call the import-time
-    singleton directly. `_pg_test_db` drops the database at session start,
-    which kills that connection; on reconnect to the brand-new empty DB a
-    statement can fail ("relation does not exist") and leave the connection
-    in [INERROR], poisoning every later fixture-less test (e.g.
-    test_bet_card_unknown -> InFailedSqlTransaction). Rolling it back here
-    drops that stale transaction so each test starts from a clean state.
+    Tests that don't request the `ledger` fixture call the import-time singleton
+    directly (now bound to the test database, not to whatever `.env` points at).
+    A statement that fails — a missing relation, a constraint — leaves the
+    connection in [INERROR], and every later fixture-less test in the session
+    would then fail with InFailedSqlTransaction (test_bet_card_unknown was the
+    first to show it). Rolling back here drops that stale transaction so each
+    test starts from a clean connection.
     """
     try:
         from bot import ledger as ledger_mod
