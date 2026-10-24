@@ -6,6 +6,7 @@ from ._admin import LedgerAdminMixin
 from ._audit import LedgerAuditMixin
 from ._base import (
     MICRO,
+    IdempotencyDuplicate,
     audit_log,
     is_credit,
     lmsr_buy_shares,
@@ -35,6 +36,7 @@ __all__ = [
     "MICRO",
     "SCHEMA_DDL",
     "AsyncLedger",
+    "IdempotencyDuplicate",
     "Ledger",
     "ReconnectingConn",
     "async_ledger",

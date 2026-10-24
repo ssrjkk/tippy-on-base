@@ -9,21 +9,29 @@ from ._base import MICRO
 
 class LedgerBetsMixin:
     def create_bet(
-        self, creator_tg_id: int, question: str, options: list[str], close_at: int | None = None
+        self, creator_tg_id: int, question: str, options: list[str], close_at: int | None = None,
+        idem: tuple[str, int] | None = None,
     ) -> int:
         """Parimutuel market. `close_at` is optional but strongly preferred:
 
         without a deadline the creator is an oracle who may settle at any
         moment, so the conflict-of-interest guard in resolve_bet is the only
         thing standing between them and the pot.
+
+        `idem` reserves the key inside this transaction: one tap that fails
+        validation or is retried cannot create two pools.
         """
         with self._lock:
-            self.ensure_user(creator_tg_id, None)
+            if idem is not None:
+                self.reserve_idempotency_in_tx(idem[0], idem[1], "create_bet")
+            self.ensure_user(creator_tg_id, None, commit=False)
             cur = self._conn.execute(
                 "INSERT INTO bets (creator, question, options, close_at) "
                 "VALUES (%s, %s, %s, %s) RETURNING id",
                 (creator_tg_id, question, json.dumps(options), close_at),
             )
+            if idem is not None:
+                self.mark_idempotency_applied(idem[0])
             self._conn.commit()
             return int(cur.fetchone()["id"])
 
@@ -149,8 +157,17 @@ class LedgerBetsMixin:
 
 
 
-    def place_bet(self, bet_id: int, tg_id: int, option_idx: int, amount_micro: int) -> str:
-        """Returns 'ok' | 'closed' | 'deadline' | 'badopt' | 'balance' | 'cap'."""
+    def place_bet(
+        self, bet_id: int, tg_id: int, option_idx: int, amount_micro: int,
+        idem: tuple[str, int] | None = None,
+    ) -> str:
+        """Returns 'ok' | 'closed' | 'deadline' | 'badopt' | 'balance' | 'cap'.
+
+        `idem` reserves the caller's Idempotency-Key inside this transaction:
+        every early return below rolls the transaction back, so a rejected or
+        failed bet never consumes the key, and a duplicate cannot stake twice.
+        Raises IdempotencyDuplicate when the key is already spent.
+        """
         if amount_micro <= 0:
             # debit(-X) would INCREASE the balance and record a negative stake
             # that vanishes from the pot at resolution (money creation). Raise
@@ -164,6 +181,8 @@ class LedgerBetsMixin:
             # callback_data must not bypass MAX_BET_USDC).
             return "cap"
         with self._lock:
+            if idem is not None:
+                self.reserve_idempotency_in_tx(idem[0], idem[1], "betplace")
             bet = self.get_bet_for_update(bet_id)
             if not bet or bet["status"] != "open":
                 self._conn.rollback()
@@ -187,6 +206,8 @@ class LedgerBetsMixin:
                 "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) VALUES ('bet', %s, %s, %s, %s)",
                 (tg_id, str(bet_id), amount_micro, options[option_idx]),
             )
+            if idem is not None:
+                self.mark_idempotency_applied(idem[0])
             self._conn.commit()
             return "ok"
 

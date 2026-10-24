@@ -7,6 +7,7 @@ import psycopg
 import psycopg.errors
 
 from .. import config
+from ._base import IdempotencyDuplicate
 from ._conn import ReconnectingConn
 from ._schema import SCHEMA_DDL
 
@@ -114,23 +115,48 @@ class LedgerCoreMixin:
                 time.sleep(delay)
         raise RuntimeError(f"schema migration failed after {retries} attempts: {last}")
 
+    def reserve_idempotency_in_tx(self, key_hash: str, user_id: int, action: str) -> None:
+        """Insert the reservation INTO THE CALLER'S TRANSACTION — no commit.
+
+        This is what makes the key atomic with the money: the row and the
+        balance change land together or not at all, so a `pending` row can only
+        mean "a transaction is open right now". Two concurrent duplicates
+        serialize on the primary key — the second waits for the first to commit
+        or roll back, then gets UniqueViolation, and its own transaction aborts
+        without touching a balance.
+
+        Replaces the old reserve-then-commit-then-spend flow, which left a
+        window where the money had moved and the key still said `pending`: a
+        crash in that window plus the expiry sweep let the same key spend twice.
+        """
+        try:
+            self._conn.execute(
+                "INSERT INTO idempotency_keys (key_hash, user_id, action, status) "
+                "VALUES (%s, %s, %s, 'pending')",
+                (key_hash, user_id, action),
+            )
+        except psycopg.errors.UniqueViolation:
+            self._conn.rollback()
+            row = self._conn.execute(
+                "SELECT status, result_id, response FROM idempotency_keys WHERE key_hash = %s",
+                (key_hash,),
+            ).fetchone()
+            raise IdempotencyDuplicate(action, key_hash, dict(row) if row else None) from None
+
     def reserve_idempotency(self, key_hash: str, user_id: int, action: str) -> dict | None:
-        """Reserve an idempotency key for a money POST.
+        """Pre-commit a reservation for an IRREVERSIBLE action (on-chain buy).
 
-        Returns None when this caller won the reservation. Returns the existing
-        row ({'status', 'result_id', 'response'}) when the key was already taken,
-        so the caller can hand back the first attempt's outcome instead of a
-        permanent 409.
+        Only for work whose effect cannot be rolled back with the transaction:
+        the key has to be durable before the broadcast, so a crash mid-broadcast
+        cannot be answered by a second broadcast. Returns None when this caller
+        won the reservation, or the existing row when the key was taken.
 
-        A reservation older than `expires_at` is reclaimed first: an attempt
-        that died between reserve and commit must not lock the key for its whole
-        TTL. The same sweep bounds the table, which otherwise only ever grew —
-        the DELETE is what the expires_at index exists for.
+        `pending` rows are never deleted here. An abandoned row must be
+        reconciled by a person or a watcher, not silently forgotten so the key
+        becomes spendable again.
         """
         with self._lock:
             try:
-                now = int(time.time())
-                self._conn.execute("DELETE FROM idempotency_keys WHERE expires_at < %s", (now,))
                 cur = self._conn.execute(
                     "INSERT INTO idempotency_keys (key_hash, user_id, action, status) "
                     "VALUES (%s, %s, %s, 'pending') ON CONFLICT (key_hash) DO NOTHING "
@@ -152,6 +178,38 @@ class LedgerCoreMixin:
                 except Exception:
                     pass
                 raise
+
+    def prune_idempotency(self, now: int | None = None) -> int:
+        """Drop COMPLETED reservations past their TTL — the replay cache only.
+
+        Called from the housekeeping watcher rather than from the money path:
+        `pending` rows are never touched, because for a pre-committed
+        irreversible action a pending row is an alarm, not garbage.
+        """
+        cutoff = int(now if now is not None else time.time())
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM idempotency_keys "
+                "WHERE status = 'completed' AND expires_at < %s",
+                (cutoff,),
+            )
+            self._conn.commit()
+            return cur.rowcount
+
+    def mark_idempotency_applied(self, key_hash: str) -> None:
+        """Flip the reservation to 'applied' INSIDE the money transaction.
+
+        The three states are what makes an honest answer possible: `pending`
+        can only mean a transaction is open right now (it disappears on rollback,
+        so a crashed attempt leaves nothing behind), `applied` means the balances
+        moved, and `completed` additionally has the response body to replay.
+        Without 'applied' a duplicate of a committed-but-unstored attempt could
+        not be told apart from one still in flight.
+        """
+        self._conn.execute(
+            "UPDATE idempotency_keys SET status = 'applied' WHERE key_hash = %s",
+            (key_hash,),
+        )
 
     def complete_idempotency(
         self, key_hash: str, result_id: str | None = None, response: str | None = None

@@ -674,6 +674,26 @@ class LedgerWithdrawMixin:
 
 
 
+    def fee_for_withdraw(self, wd_id: int) -> int | None:
+        """The fee actually debited for this withdrawal, or None if unknown.
+
+        `reserve_withdraw` writes the fee as its own `fee` row keyed by
+        `withdraw_id=N`, so that row — not today's `WITHDRAW_FEE_PCT` — is the
+        record of what left the balance. A refund that recomputes the fee can
+        credit more than was taken (rate raised since) or less (rate lowered),
+        and either way the ledger stops matching the balance.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT amount FROM tx_log WHERE kind = 'fee' AND note = %s",
+                (f"withdraw_id={wd_id}",),
+            ).fetchone()
+            # A refunded fee row is still the record of the amount debited.
+            self._conn.rollback()
+        return int(row["amount"]) if row else None
+
+
+
     def refund_withdraw(self, wd_id: int, tg_id: int, total_micro: int) -> bool:
         """Full refund of amount + fee; keeps the rows as an audit trail.
 

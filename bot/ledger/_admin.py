@@ -29,7 +29,8 @@ class LedgerAdminMixin:
           cost of a double credit.
 
         Keep the final tx_log audit trail untouched.
-        Returns {'x402_invoices': n, 'pending_deposits': n, 'x402_payments': n}.
+        Returns {'x402_invoices': n, 'pending_deposits': n, 'x402_payments': n,
+        'idempotency_keys': n}.
         """
         now = int(time.time())
         invoice_cutoff = now - retention_seconds
@@ -44,7 +45,12 @@ class LedgerAdminMixin:
                 (now - retention_seconds,),
             ).rowcount
             self._conn.commit()
-        return {"x402_invoices": x, "pending_deposits": y, "x402_payments": 0}
+        # Completed reservations are a replay cache, so they may age out here.
+        # Never from the money path, and never a 'pending' row: for an
+        # irreversible action that row is the alarm, not the garbage.
+        z = self.prune_idempotency(now)
+        return {"x402_invoices": x, "pending_deposits": y, "x402_payments": 0,
+                "idempotency_keys": z}
 
 
 

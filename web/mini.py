@@ -23,8 +23,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from bot import base, config
+from bot.ledger import IdempotencyDuplicate, blocked_destination
 from bot.ledger import async_ledger as ledger
-from bot.ledger import blocked_destination
 from bot.tx_view import rows_view
 from web.auth import COOKIE_NAME, SESSION_TTL_SECONDS, make_session, parse_session, secure_request
 
@@ -136,73 +136,67 @@ def _idempotency_hash(tg_id: int, action: str, raw_key: str) -> str:
     return hashlib.sha256(f'{tg_id}:{action}:{raw_key}'.encode()).hexdigest()
 
 
-async def _reserve_idempotency(request: Request, action: str, tg_id: int) -> tuple[str, dict | None]:
-    """Require an Idempotency-Key header and reserve it.
-
-    Returns ``(key_hash, None)`` for the first attempt, or ``(key_hash, replay)``
-    when this exact request has already been answered — the stored body of the
-    first one, so a client that retried after a dropped connection gets the
-    outcome instead of a 409 that tells it nothing.
-    """
-    raw_key = request.headers.get('Idempotency-Key', '').strip()
-    if not raw_key:
-        raise HTTPException(400, 'missing Idempotency-Key header')
-    key_hash = _idempotency_hash(tg_id, action, raw_key)
-    existing = await ledger.reserve_idempotency(key_hash, tg_id, action)
-    if existing is None:
-        return key_hash, None
-    if existing['status'] == 'completed' and existing['response'] is not None:
-        return key_hash, _json.loads(existing['response'])
-    if existing['status'] == 'completed':
-        # The first attempt finished but its body was never stored (an older
-        # build, or a route that forgot to reply). Say so instead of pretending
-        # the key is free: the caller must not spend the action twice either.
-        raise HTTPException(409, 'this request was already completed — check your balance')
-    raise HTTPException(
-        409, 'this request is still being processed — do not retry, check the balance first'
-    )
+# Actions whose effect cannot be rolled back with the database transaction (an
+# on-chain buy). Everything else lets the money primitive reserve the key inside
+# its own transaction, which is what makes 'pending' mean 'in flight, right now'.
+_IRREVERSIBLE_ACTIONS = frozenset({'smartbuy'})
 
 
 class _IdempotencyContext:
-    """Context manager for idempotent money POSTs:
+    """Idempotency for money POSTs.
 
         async with _idempotent(request, 'tip', tg_id) as op:
-            if op.replay is not None:
-                return op.replay
-            ... work ...
+            if not await ledger.transfer(..., idem=op.key):
+                raise HTTPException(400, 'insufficient balance')
             return await op.reply({'ok': True, 'new_balance': ...})
 
-    The key is reserved on enter, rolled back if the body raises, and completed
-    with the response body when the route calls :meth:`reply` — which is what a
-    later duplicate gets back instead of a 409.
+    For a ledger action the key is NOT reserved here: the money primitive
+    inserts the reservation inside its own transaction (`idem=op.key`), so
+    balances and reservation commit together. A duplicate therefore raises
+    IdempotencyDuplicate from inside the money call and the handler replays the
+    stored answer — there is no window where the money moved while the key still
+    read `pending`, which is how the old pre-commit flow could spend twice after
+    the key expired.
+
+    `smartbuy` is the exception: its effect is an on-chain transaction that
+    cannot be rolled back with the database, so the key is reserved durably
+    BEFORE the broadcast and a lingering `pending` row stays as an alarm rather
+    than being forgotten by an expiry sweep.
     """
-    __slots__ = ('_replied', 'action', 'key_hash', 'replay', 'request', 'tg_id')
+    __slots__ = ('_replied', 'action', 'key', 'request', 'tg_id')
 
     def __init__(self, request: Request, action: str, tg_id: int):
         self.request = request
         self.action = action
         self.tg_id = tg_id
-        self.key_hash = None
-        self.replay = None
+        raw_key = request.headers.get('Idempotency-Key', '').strip()
+        if not raw_key:
+            raise HTTPException(400, 'missing Idempotency-Key header')
+        self.key = (_idempotency_hash(tg_id, action, raw_key), tg_id)
         self._replied = False
 
     async def __aenter__(self) -> "_IdempotencyContext":
-        self.key_hash, self.replay = await _reserve_idempotency(self.request, self.action, self.tg_id)
+        if self.action in _IRREVERSIBLE_ACTIONS:
+            existing = await ledger.reserve_idempotency(self.key[0], self.tg_id, self.action)
+            if existing is not None:
+                raise IdempotencyDuplicate(self.action, self.key[0], existing)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.replay is not None:
-            return False
-        if exc_type is not None:
-            await ledger.rollback_idempotency(self.key_hash)
-        elif not self._replied:
-            await ledger.complete_idempotency(self.key_hash)
+        if exc_type is not None and self.action in _IRREVERSIBLE_ACTIONS and not self._replied:
+            # The broadcast never happened (validation, balance, crash before
+            # send): free the key so the user can try again with a fresh attempt.
+            await ledger.rollback_idempotency(self.key[0])
         return False
 
     async def reply(self, payload: dict, result_id: str | None = None) -> dict:
-        """Store this response under the key and return it for the caller."""
+        """Record the answer for a later replay. Presentation only: the money has
+        already committed, so a failure here must not fail the request."""
         self._replied = True
-        await ledger.complete_idempotency(self.key_hash, result_id, _json.dumps(payload))
+        try:
+            await ledger.complete_idempotency(self.key[0], result_id, _json.dumps(payload))
+        except Exception:
+            log.warning("idempotency response not stored for %s", self.action, exc_info=True)
         return payload
 
 
@@ -347,8 +341,6 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
         raise HTTPException(400, 'insufficient smart-wallet USDC balance')
 
     async with _idempotent(request, 'smartbuy', tg_id) as op:
-        if op.replay is not None:
-            return op.replay
         tx_hash = await sw.smart_buy(
             tg_id, body.market_id, body.outcome, body.shares, max_cost_micro
         )
@@ -393,9 +385,7 @@ async def mini_tip(body: TipBody, request: Request) -> dict:
     if target == tg_id:
         raise HTTPException(400, 'cannot tip yourself')
     async with _idempotent(request, 'tip', tg_id) as op:
-        if op.replay is not None:
-            return op.replay
-        if not await ledger.transfer(tg_id, target, micro):
+        if not await ledger.transfer(tg_id, target, micro, idem=op.key):
             raise HTTPException(400, 'insufficient balance')
         return await op.reply({'ok': True, 'new_balance': float(await ledger.balance(tg_id))})
 
@@ -415,9 +405,7 @@ async def mini_trade(body: TradeBody, request: Request) -> dict:
     if micro > max_micro:
         raise HTTPException(400, f'trade exceeds the {_fmt(max_micro)} USDC cap')
     async with _idempotent(request, 'trade', tg_id) as op:
-        if op.replay is not None:
-            return op.replay
-        status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro)
+        status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro, idem=op.key)
         if status != 'ok':
             raise HTTPException(400, _ERR_MSG.get(status, status))
         bal = float(await ledger.balance(tg_id))
@@ -440,9 +428,7 @@ async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
     if micro > max_micro:
         raise HTTPException(400, f'bet exceeds the {_fmt(max_micro)} USDC cap')
     async with _idempotent(request, 'betplace', tg_id) as op:
-        if op.replay is not None:
-            return op.replay
-        res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro)
+        res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro, idem=op.key)
         if res != 'ok':
             raise HTTPException(400, _ERR_MSG.get(res, res))
         return await op.reply({'ok': True, 'new_balance': float(await ledger.balance(tg_id))})
@@ -644,9 +630,9 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
         if subsidy_micro > max_micro:
             raise HTTPException(400, f'subsidy above the {_fmt(max_micro)} USDC maximum')
         async with _idempotent(request, 'create_market', tg_id) as op:
-            if op.replay is not None:
-                return op.replay
-            mid = await ledger.create_market(tg_id, question, options, subsidy_micro, close_at=close_at)
+            mid = await ledger.create_market(
+                tg_id, question, options, subsidy_micro, close_at=close_at, idem=op.key
+            )
             # create_market answers with the id OR with a failure word — passing
             # 'balance' through used to report a market that was never created.
             if isinstance(mid, str):
@@ -654,9 +640,7 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
             return await op.reply({'ok': True, 'id': mid}, result_id=str(mid))
     if body.kind == 'bet':
         async with _idempotent(request, 'create_bet', tg_id) as op:
-            if op.replay is not None:
-                return op.replay
-            bid = await ledger.create_bet(tg_id, question, options, close_at=close_at)
+            bid = await ledger.create_bet(tg_id, question, options, close_at=close_at, idem=op.key)
             return await op.reply({'ok': True, 'id': bid}, result_id=str(bid))
     raise HTTPException(400, 'kind must be market or bet')
 

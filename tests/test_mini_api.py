@@ -1,6 +1,5 @@
 """Tests for the Mini App API endpoints (web/mini.py)."""
 
-import time
 from decimal import Decimal
 
 import pytest
@@ -146,12 +145,6 @@ def test_mini_tip_success(client, ledger):
     assert data["new_balance"] == pytest.approx(7.5)
 
 
-def _idem_key(user_id: int, action: str, raw: str) -> str:
-    from web.mini import _idempotency_hash
-
-    return _idempotency_hash(user_id, action, raw)
-
-
 def test_duplicate_money_post_is_answered_with_the_first_outcome(client, ledger):
     """The whole point of an Idempotency-Key: a client that retried after a
     dropped connection must learn what happened. A bare 409 tells it nothing
@@ -204,27 +197,113 @@ def test_duplicate_key_still_in_flight_is_refused_saying_which(client, ledger):
     assert ledger.balance(TG_USER) == Decimal("10.000000")
 
 
-def test_expired_reservation_is_reclaimed(client, ledger):
-    """An attempt that died between reserving and committing must not lock the
-    key for its whole TTL — that is how a user ends up unable to pay twice."""
+def test_committed_tip_without_a_stored_body_cannot_be_spent_again(client, ledger):
+    """The window the old design could not close.
+
+    Money committed, response body not yet stored (crash, or a reply write that
+    failed). The retry must be refused — not answered with 'expired, try again'
+    twenty-four hours later, which is how the same tip used to be paid twice.
+    """
+    from web.mini import _idempotency_hash
+
     ledger.ensure_user(TG_USER, "alice")
     ledger.ensure_user(TG_OTHER, "bob")
     ledger.credit(TG_USER, 10_000_000, "deposit")
     _auth(client, TG_USER)
-    key = "tip-stale"
+    key = "tip-no-body"
+    headers = {"Idempotency-Key": key}
+
+    first = client.post("/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5}, headers=headers)
+    assert first.status_code == 200
+    # Simulate the body never having been recorded, keeping 'applied' truthful.
     ledger._conn.execute(
-        "INSERT INTO idempotency_keys (key_hash, user_id, action, status, expires_at) "
-        "VALUES (%s, %s, 'tip', 'pending', %s)",
-        (_idem_key(TG_USER, 'tip', key), TG_USER, int(time.time()) - 1),
+        "UPDATE idempotency_keys SET response = NULL, status = 'applied' WHERE key_hash = %s",
+        (_idempotency_hash(TG_USER, 'tip', key),),
     )
     ledger._conn.commit()
 
-    r = client.post(
-        "/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5},
-        headers={"Idempotency-Key": key},
-    )
-    assert r.status_code == 200
+    again = client.post("/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5}, headers=headers)
+    assert again.status_code == 409
+    assert "already applied" in again.json()["detail"]
     assert ledger.balance(TG_USER) == Decimal("7.500000")
+
+
+def test_pending_reservation_survives_its_expiry(ledger):
+    """Expiry cleanup may only drop the replay cache, never an open or
+    unreconciled reservation: deleting a pending row is what makes the key
+    spendable a second time."""
+    import time as _t
+
+    key = "hash-pending-stays"
+    assert ledger.reserve_idempotency(key, TG_USER, "smartbuy") is None
+    ledger._conn.execute(
+        "UPDATE idempotency_keys SET expires_at = %s WHERE key_hash = %s",
+        (int(_t.time()) - 1, key),
+    )
+    ledger._conn.commit()
+    assert ledger.prune_idempotency() == 0
+    assert ledger.reserve_idempotency(key, TG_USER, "smartbuy") is not None
+
+
+def test_completed_reservations_age_out_of_the_replay_cache(ledger):
+    import time as _t
+
+    key = "hash-completed-goes"
+    assert ledger.reserve_idempotency(key, TG_USER, "smartbuy") is None
+    ledger.complete_idempotency(key, "0xabc", '{"ok": true}')
+    ledger._conn.execute(
+        "UPDATE idempotency_keys SET expires_at = %s WHERE key_hash = %s",
+        (int(_t.time()) - 1, key),
+    )
+    ledger._conn.commit()
+    assert ledger.prune_idempotency() == 1
+    # And the key is genuinely free afterwards: this is a new request, not a replay.
+    assert ledger.reserve_idempotency(key, TG_USER, "smartbuy") is None
+
+
+def test_transfer_with_a_duplicate_key_moves_money_once(ledger):
+    """Ledger-level guard: the reservation lives in the money transaction, so a
+    second transfer under the same key raises without touching a balance."""
+    from bot.ledger import IdempotencyDuplicate
+
+    ledger.credit(TG_USER, 10_000_000, "deposit")
+    ledger.ensure_user(TG_OTHER, "bob")
+    key = ("a" * 64, TG_USER)
+    assert ledger.transfer(TG_USER, TG_OTHER, 3_000_000, idem=key) is True
+    # The reservation flips to 'applied' in the SAME commit as the balances, so a
+    # row reading 'pending' can only mean an open transaction — which is what
+    # makes it safe to refuse a duplicate instead of expiring the key.
+    assert ledger._conn.execute(
+        "SELECT status FROM idempotency_keys WHERE key_hash = %s", (key[0],)
+    ).fetchone()["status"] == "applied"
+
+    with pytest.raises(IdempotencyDuplicate) as exc:
+        ledger.transfer(TG_USER, TG_OTHER, 3_000_000, idem=key)
+    assert exc.value.replay is None          # body not stored yet
+    assert ledger.balance(TG_USER) == Decimal("7.000000")
+    assert ledger.balance(TG_OTHER) == Decimal("3.000000")
+
+    ledger.complete_idempotency(key[0], None, '{"ok": true}')
+    with pytest.raises(IdempotencyDuplicate) as exc:
+        ledger.transfer(TG_USER, TG_OTHER, 3_000_000, idem=key)
+    assert exc.value.replay == {"ok": True}  # now the original answer replays
+    assert ledger.balance(TG_USER) == Decimal("7.000000")
+
+
+def test_rejected_bet_leaves_the_key_free(ledger):
+    """A rejected attempt must not consume the key — the reservation rolls back
+    with the rest of the transaction, so the user can retry after fixing the
+    reason."""
+    key = ("b" * 64, TG_USER)
+    bid = ledger.create_bet(TG_USER, "Есть дедлайн?", ["А", "Б"], close_at=0)
+    ledger.credit(TG_USER, 10_000_000, "deposit")
+    assert ledger.place_bet(bid, TG_USER, 0, 1_000_000, idem=key) == "deadline"
+    assert ledger._conn.execute(
+        "SELECT 1 FROM idempotency_keys WHERE key_hash = %s", (key[0],)
+    ).fetchone() is None
+
+    live = ledger.create_bet(TG_USER, "Живой?", ["А", "Б"])
+    assert ledger.place_bet(live, TG_USER, 0, 1_000_000, idem=key) == "ok"
 
 
 def test_unfunded_market_is_a_400_not_a_fake_id(client, ledger):

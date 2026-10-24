@@ -36,6 +36,7 @@ from bot import base, config
 from bot import qr as qrlib
 from bot.base import hot_balance, hot_wallet, vault_balance
 from bot.commands_catalog import BOT_COMMAND_SPECS
+from bot.ledger import IdempotencyDuplicate
 from bot.ledger import async_ledger as ledger
 from bot.tx_view import rows_view
 from web.auth import COOKIE_NAME, attach_login_state, parse_session
@@ -68,6 +69,23 @@ app.include_router(tg_webhook)
 app.include_router(frame_router)
 app.include_router(auth_router)
 app.include_router(mini_router)
+
+
+@app.exception_handler(IdempotencyDuplicate)
+async def _idempotency_duplicate_handler(request: Request, exc: IdempotencyDuplicate):
+    """One answer for every money route: replay the original, or say why we cannot.
+
+    The reservation is written inside the money transaction, so a duplicate never
+    re-spends — what it gets back depends only on what the first attempt managed
+    to record: `completed` has the body (200, the client's retry succeeded),
+    `applied` moved the money but lost the body (409, check the balance),
+    `pending` is still in flight (409, do not retry).
+    """
+    replay = exc.replay
+    if replay is not None:
+        return JSONResponse(replay)
+    return JSONResponse({'detail': exc.message}, status_code=409)
+
 STATIC = Path(__file__).resolve().parent / 'static'
 MICRO = 10 ** config.USDC_DECIMALS
 # Only labels we can state as fact for a chain id we recognise; anything else

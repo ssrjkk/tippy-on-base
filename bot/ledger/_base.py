@@ -4,6 +4,7 @@ Tips move instantly inside this ledger (no gas, no 12s wait).
 Deposits credit here; withdrawals debit here and send USDC on-chain.
 """
 
+import json
 import logging
 from decimal import ROUND_FLOOR, Decimal, localcontext
 
@@ -12,6 +13,40 @@ from .. import config
 audit_log = logging.getLogger("tipbot.audit")
 
 MICRO = 10**config.USDC_DECIMALS
+
+
+class IdempotencyDuplicate(Exception):
+    """Raised by a money primitive whose call carried an idempotency key that
+    has already been used.
+
+    The reservation INSERT runs inside the money transaction, so raising this
+    means the transaction was rolled back and nothing moved. `row` is the
+    stored reservation: if the first attempt completed, its response body is
+    replayed; if it is still open, the caller must be told to wait, never to
+    retry — a retry is exactly the second spend this key exists to prevent.
+    """
+
+    def __init__(self, action: str, key_hash: str, row: dict | None) -> None:
+        super().__init__(f"duplicate {action} request")
+        self.action = action
+        self.key_hash = key_hash
+        self.row = row or {}
+
+    @property
+    def replay(self) -> dict | None:
+        """The original response body, when the first attempt recorded one."""
+        body = self.row.get("response")
+        if self.row.get("status") == "completed" and body:
+            return json.loads(body)
+        return None
+
+    @property
+    def message(self) -> str:
+        if self.row.get("status") == "applied":
+            # The balances moved and the body was never stored: honest answer is
+            # "it happened", never "try again" — a retry is the second spend.
+            return "this request was already applied — check your balance"
+        return "this request is still being processed — do not retry, check the balance first"
 
 
 def _extract_fee(note: str | None) -> int:

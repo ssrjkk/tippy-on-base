@@ -783,7 +783,13 @@ def _close_pending_ledgers():
 
 def _reserve_withdraw(ledger_obj, tg_id, amount_micro=5_000_000, tx_hash=None,
                       status="pending", age=0):
-    """Simulate the handler: debit amount+fee, insert a pending withdraw row."""
+    """Simulate the handler: debit amount+fee, insert a pending withdraw row.
+
+    Mirrors what `Ledger.reserve_withdraw` actually writes, including the paired
+    `fee` row keyed by `withdraw_id=N` — that row is the only record of the fee
+    that left the balance, and the refund sweep reads it instead of recomputing
+    a fee under today's rate.
+    """
     fee = base.withdraw_fee(amount_micro)
     ledger_obj._conn.execute(
         "INSERT INTO users (tg_id) VALUES (%s) ON CONFLICT (tg_id) DO NOTHING", (tg_id,)
@@ -801,8 +807,38 @@ def _reserve_withdraw(ledger_obj, tg_id, amount_micro=5_000_000, tx_hash=None,
         "VALUES ('withdraw', %s, %s, %s, %s, %s, %s) RETURNING id",
         (tg_id, "0x" + "a" * 40, amount_micro, tx_hash, status, int(time.time()) - age),
     )
+    wd_id = int(cur.fetchone()["id"])
+    if fee > 0:
+        ledger_obj._conn.execute(
+            "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note, status) "
+            "VALUES ('fee', %s, %s, %s, %s, 'done')",
+            (tg_id, "0x" + "a" * 40, fee, f"withdraw_id={wd_id}"),
+        )
     ledger_obj._conn.commit()
-    return cur.fetchone()["id"]
+    return wd_id
+
+
+def test_refund_restores_the_recorded_fee_not_todays_rate(monkeypatch, tmp_path):
+    """The pending sweep must give back exactly what was taken.
+
+    `withdraw_fee()` reads `WITHDRAW_FEE_PCT` from the environment, so a refund
+    that recomputed the fee after an operator changed the rate would either mint
+    the difference out of the vault or quietly keep part of the user's money.
+    """
+    fresh = _pending_ledger(monkeypatch)
+    wd_id = _reserve_withdraw(fresh, 777, tx_hash="0x" + "ae" * 32)
+
+    class FakeEth:
+        def get_transaction_receipt(self, tx):
+            return {"status": 0}  # reverted → refund
+
+    monkeypatch.setattr(base, "w3", types.SimpleNamespace(eth=FakeEth()))
+    monkeypatch.setattr(base.config, "WITHDRAW_FEE_PCT", Decimal("0.05"))
+    asyncio.run(base.check_pending_withdraws())
+    assert fresh.balance(777) == Decimal("5.050000")  # 5.00 + the 0.05 actually debited
+    assert fresh._conn.execute(
+        "SELECT status FROM tx_log WHERE id = %s", (wd_id,)
+    ).fetchone()["status"] == "refunded"
 
 
 def test_check_pending_withdraws_refunds_reverted(monkeypatch, tmp_path):
@@ -961,6 +997,38 @@ def test_refund_withdraw_credits_once_when_called_twice(monkeypatch, tmp_path):
     assert first is True   # the winner applied the refund
     assert second is False  # the loser found the row already 'refunded'
     assert fresh.balance(777) == Decimal("5.200000")  # credited exactly once
+    assert fresh._conn.execute(
+        "SELECT status FROM tx_log WHERE id = %s", (wd_id,)
+    ).fetchone()["status"] == "refunded"
+
+
+def test_refund_without_any_fee_record_returns_the_principal_only(monkeypatch, tmp_path):
+    """Fail-closed half of the rule: no record means no fee is restored.
+
+    Inventing one with `withdraw_fee()` is what let a rate change mint money out
+    of the vault, so an unrecorded fee costs the platform nothing and the user
+    still gets their principal back — plus a log line to reconcile by hand.
+    """
+    fresh = _pending_ledger(monkeypatch)
+    fresh._conn.execute("INSERT INTO users (tg_id) VALUES (778)")
+    fresh._conn.execute("UPDATE users SET balance = 5_050_000 WHERE tg_id = 778")
+    cur = fresh._conn.execute(
+        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash, status, created_at) "
+        "VALUES ('withdraw', 778, %s, 5_000_000, %s, 'pending', %s) RETURNING id",
+        ("0x" + "a" * 40, "0x" + "af" * 32, int(time.time()) - 10),
+    )
+    wd_id = int(cur.fetchone()["id"])
+    fresh._conn.execute("UPDATE users SET balance = 0 WHERE tg_id = 778")
+    fresh._conn.commit()
+
+    class FakeEth:
+        def get_transaction_receipt(self, tx):
+            return {"status": 0}
+
+    monkeypatch.setattr(base, "w3", types.SimpleNamespace(eth=FakeEth()))
+    monkeypatch.setattr(base.config, "WITHDRAW_FEE_PCT", Decimal("0.05"))
+    asyncio.run(base.check_pending_withdraws())
+    assert fresh.balance(778) == Decimal("5.000000")  # principal only, never a guessed fee
     assert fresh._conn.execute(
         "SELECT status FROM tx_log WHERE id = %s", (wd_id,)
     ).fetchone()["status"] == "refunded"

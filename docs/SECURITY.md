@@ -173,23 +173,36 @@ value replayed by a different user or against a different action is a different
 reservation.
 
 - **Missing header → 400.** The request never reaches the ledger.
-- **Already completed → the first answer, replayed.** The response body is
-  stored under the key (`idempotency_keys.response`), so a client that retried
-  after a dropped connection learns what happened instead of being parked on a
-  409 forever. A completed key whose body was never recorded answers 409 with
-  "already completed — check your balance".
-- **Still running → 409 that says so.** A retry racing the original cannot be
-  answered with a result; the copy tells the user not to retry again.
-- **Failure rolls the reservation back.** `_IdempotencyContext.__aexit__`
-  releases the key when the handler raises, so a genuine error (insufficient
-  balance, validation) leaves the client free to retry with the same key
-  instead of locking it out.
-- **Expired reservations are reclaimed.** `reserve_idempotency` deletes rows
-  past `expires_at` (24h) before inserting, so an attempt that died between the
-  reserve and the ledger write cannot poison the key; the same sweep is what the
-  `idx_idempotency_expires` index exists for, and it keeps the table bounded.
+- **The reservation lives inside the money transaction.** `transfer()`,
+  `buy_shares()`, `place_bet()`, `create_market()` and `create_bet()` take
+  `idem=(key_hash, tg_id)` and insert the reservation before touching a
+  balance, so both land or neither does. Two concurrent duplicates serialize on
+  the primary key: the loser waits for the winner's commit, then aborts its own
+  transaction without moving money.
+- **Three states, each meaning one thing** (`chk_idempotency_status`):
+  `pending` = the transaction is open right now (a rollback removes the row, so
+  a crashed attempt leaves no trace); `applied` = the balances moved;
+  `completed` = and the response body is stored for the next duplicate.
+- **A duplicate gets the first attempt's answer.** `completed` → 200 with the
+  stored body (`idempotency_keys.response`), so a client that retried after a
+  dropped connection learns what happened; `applied` → 409 "already applied,
+  check your balance"; `pending` → 409 "still being processed, do not retry".
+  None of the three ever answers "the key is free", because that is how a retry
+  becomes a second spend.
+- **Rejected attempts leave the key usable.** Validation, insufficient balance
+  and a rejected bet roll the whole transaction back, reservation included, so
+  the user can retry with the same key after fixing the reason.
+- **Only `completed` rows age out.** `prune_idempotency` (from the housekeeping
+  watcher, not the money path) deletes completed rows past `expires_at` (24h).
+  A `pending` row is never deleted: for an irreversible action it is an alarm
+  that needs reconciling, not garbage.
 
-`/api/mini/withdraw` is the exception: it is protected by the staged
+`smartbuy` is the deliberate exception: its effect is an on-chain transaction
+that no database rollback can undo, so its key is reserved durably *before* the
+broadcast (`_IRREVERSIBLE_ACTIONS`) and released only if the broadcast never
+happened.
+
+`/api/mini/withdraw` is the other exception: it is protected by the staged
 single-use token below rather than by a header.
 
 The Mini App keeps one key per unresolved action and replaces it only after

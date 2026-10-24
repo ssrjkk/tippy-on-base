@@ -15,10 +15,14 @@ class LedgerMarketsMixin:
         options: list[str],
         subsidy_micro: int,
         close_at: int | None = None,
+        idem: tuple[str, int] | None = None,
     ) -> int | str:
         """Creator funds the AMM with `subsidy_micro`; b = subsidy / ln(n).
 
-        Returns the market id, or 'balance' if the creator can't fund it.
+        Returns the market id, or 'balance' if the creator can't fund it, or
+        'subsidy' if it is too small for `ln(n)`. `idem` reserves the key inside
+        this transaction, so an unfunded or rejected creation leaves the key
+        free for a real retry while a duplicate cannot create a second market.
         """
         if subsidy_micro < 0:
             raise ValueError(f"market subsidy must be non-negative (got {subsidy_micro})")
@@ -31,6 +35,8 @@ class LedgerMarketsMixin:
         if b <= 0:
             return "subsidy"
         with self._lock:
+            if idem is not None:
+                self.reserve_idempotency_in_tx(idem[0], idem[1], "create_market")
             self.ensure_user(creator_tg_id, None, commit=False)
             if not self.debit(creator_tg_id, subsidy_micro):
                 self._conn.rollback()
@@ -47,6 +53,8 @@ class LedgerMarketsMixin:
                 "VALUES ('market_create', %s, %s, %s, %s)",
                 (creator_tg_id, str(market_id), subsidy_micro, question),
             )
+            if idem is not None:
+                self.mark_idempotency_applied(idem[0])
             self._conn.commit()
             return market_id
 
@@ -389,7 +397,8 @@ class LedgerMarketsMixin:
 
 
     def buy_shares(
-        self, market_id: int, tg_id: int, option_idx: int, spend_micro: int
+        self, market_id: int, tg_id: int, option_idx: int, spend_micro: int,
+        idem: tuple[str, int] | None = None,
     ) -> tuple[str, dict]:
         """Spend up to `spend_micro` USDC on outcome shares at the live price.
 
@@ -398,12 +407,18 @@ class LedgerMarketsMixin:
         user never overpays; the sub-micro remainder stays in the escrow.
         Trades below MARKET_MIN_TRADE_MICRO are rejected before any debit
         (dust orders would move prices by nothing but spam the tx log).
+
+        `idem` reserves the Idempotency-Key inside this transaction: a rejected
+        trade rolls it back with everything else, a duplicate raises
+        IdempotencyDuplicate before the market row is even locked.
         """
         if spend_micro < 10_000:  # 0.01 USDC
             return "toosmall", {}
         with self._lock:
             committed = False
             try:
+                if idem is not None:
+                    self.reserve_idempotency_in_tx(idem[0], idem[1], "trade")
                 self._ensure()
                 m = self.get_market_for_update(market_id)
                 if not m or m["status"] != "open":
@@ -452,6 +467,8 @@ class LedgerMarketsMixin:
                     "VALUES ('market_buy', %s, %s, %s, %s)",
                     (tg_id, str(market_id), spend_micro, options[option_idx]),
                 )
+                if idem is not None:
+                    self.mark_idempotency_applied(idem[0])
                 self._conn.commit()
                 committed = True
                 return "ok", {

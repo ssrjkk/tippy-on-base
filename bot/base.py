@@ -401,15 +401,9 @@ def _check_pending_withdrawn_sync() -> None:
     for row in ledger.pending_withdraws():
         wd_id = int(row["id"])
         amount_micro = int(row["amount"])
-        fee_micro = 0
-        if row.get("note") and row["note"].startswith("fee="):
-            try:
-                fee_micro = int(row["note"].split("=", 1)[1])
-            except (ValueError, IndexError):
-                pass
-        if fee_micro == 0:
-            fee_micro = withdraw_fee(amount_micro)
-        total_micro = amount_micro + fee_micro
+        # One fee source for both refund paths: the debit record, never a
+        # recomputation under today's WITHDRAW_FEE_PCT.
+        total_micro = amount_micro + _row_fee_micro(row)
         status = row["status"]
         tx_hash = row["tx_hash"]
         if status is None:
@@ -536,14 +530,25 @@ async def send_usdc(to_address: str, amount_micro: int) -> str:
 # ---------------------------------------------------------------------------
 
 def _row_fee_micro(row: dict) -> int:
-    """Fee stored in the withdraw row's `note` ('fee=<micro>'), else recompute."""
+    """Fee debited with this withdrawal: `fee=<micro>` in its note, else the
+    paired `fee` row, else nothing.
+
+    Never `withdraw_fee(amount)`: that reads TODAY's rate, so refunding an old
+    row after `WITHDRAW_FEE_PCT` changed would credit money nobody paid (or
+    short-change one who did). A withdrawal with no fee record at all is an
+    anomaly worth a log line, and the principal is still returned in full.
+    """
     note = row.get("note") or ""
     if note.startswith("fee="):
         try:
             return int(note.split("=", 1)[1])
         except (ValueError, IndexError):
             pass
-    return withdraw_fee(int(row["amount"]))
+    paired = ledger.fee_for_withdraw(int(row["id"]))
+    if paired is not None:
+        return int(paired)
+    log.warning("withdraw %s has no fee record; refunding principal only", row["id"])
+    return 0
 
 
 def _refund_rows(rows: list[dict]) -> None:

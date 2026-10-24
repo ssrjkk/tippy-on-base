@@ -987,6 +987,37 @@ def test_e2e_rpc_outage_watchers_survive(e2e, monkeypatch):
     assert any("Депозит зачислен" in text for _, text in bot.sent)
 
 
+def enqueue_withdraw(e2e, tg_id, to_addr, amount_micro, fee_micro, tx_hash=None,
+                     status="pending", age=0):
+    """Insert a withdrawal exactly as `Ledger.reserve_withdraw` does.
+
+    The real path writes the withdraw row carrying `fee=<micro>` in its note
+    plus a paired `fee` row keyed by `withdraw_id=N`, and debits amount+fee.
+    A fixture that skips those records describes a state production cannot
+    reach — and the refund sweep restores the RECORDED total, never a fee it
+    recomputes from today's `WITHDRAW_FEE_PCT`.
+    """
+    cur = e2e._conn.execute(
+        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash, status, note, created_at) "
+        "VALUES ('withdraw', %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        (tg_id, to_addr, amount_micro, tx_hash, status, f"fee={fee_micro}",
+         int(time.time()) - age),
+    )
+    wd_id = int(cur.fetchone()["id"])
+    if fee_micro:
+        e2e._conn.execute(
+            "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note, status) "
+            "VALUES ('fee', %s, %s, %s, %s, 'done')",
+            (tg_id, to_addr, fee_micro, f"withdraw_id={wd_id}"),
+        )
+    e2e._conn.execute(
+        "UPDATE users SET balance = balance - %s WHERE tg_id = %s AND balance >= %s",
+        (amount_micro + fee_micro, tg_id, amount_micro + fee_micro),
+    )
+    e2e._conn.commit()
+    return wd_id
+
+
 def test_e2e_withdraw_refund_paths(e2e, monkeypatch):
     install_rpc(monkeypatch, block=1500)
     bot = Bot()
@@ -1013,45 +1044,24 @@ def test_e2e_withdraw_refund_paths(e2e, monkeypatch):
     assert len(e2e.pending_withdraws()) == 1  # pending with tx hash
 
     # 2) pending with no tx_hash, past the stuck timeout -> refunded by watcher
-    cur = e2e._conn.execute(
-        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, status, created_at) "
-        "VALUES ('withdraw', %s, %s, %s, 'pending', %s) RETURNING id",
-        (ALICE, to_addr, 5 * USDC, int(time.time()) - config.WITHDRAW_STUCK_TIMEOUT_SECONDS - 10),
+    wd_id = enqueue_withdraw(
+        e2e, ALICE, to_addr, 5 * USDC, 50_000,
+        age=config.WITHDRAW_STUCK_TIMEOUT_SECONDS + 10,
     )
-    e2e._conn.commit()
-    wd_id = cur.fetchone()["id"]
-    e2e._conn.execute("UPDATE users SET balance = balance - %s WHERE tg_id = %s", (5 * USDC + 50_000, ALICE))
-    e2e._conn.commit()
     asyncio.run(base.check_pending_withdraws())
     assert e2e.balance(ALICE) == Decimal("89.900000")  # step1 pending still debited; step2 refunded
     assert e2e._conn.execute("SELECT status FROM tx_log WHERE id=%s", (wd_id,)).fetchone()["status"] == "refunded"
 
     # 3) receipt status=0 (reverted) -> refund
     tx3 = "0x" + "ff" * 32
-    cur = e2e._conn.execute(
-        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash, status, created_at) "
-        "VALUES ('withdraw', %s, %s, %s, %s, 'pending', %s) RETURNING id",
-        (ALICE, to_addr, 5 * USDC, tx3, int(time.time()) - 10),
-    )
-    e2e._conn.commit()
-    wd_id3 = cur.fetchone()["id"]
-    e2e._conn.execute("UPDATE users SET balance = balance - %s WHERE tg_id = %s", (5 * USDC + 50_000, ALICE))
-    e2e._conn.commit()
+    wd_id3 = enqueue_withdraw(e2e, ALICE, to_addr, 5 * USDC, 50_000, tx_hash=tx3, age=10)
     install_rpc(monkeypatch, block=1500, receipts={tx3: {"status": 0}})
     asyncio.run(base.check_pending_withdraws())
     assert e2e.balance(ALICE) == Decimal("89.900000")  # step1 pending; step3 reverted->refunded
 
     # 4) receipt status=1 -> done, no refund
     tx4 = "0x" + "11" * 32
-    cur = e2e._conn.execute(
-        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash, status, created_at) "
-        "VALUES ('withdraw', %s, %s, %s, %s, 'pending', %s) RETURNING id",
-        (ALICE, to_addr, 5 * USDC, tx4, int(time.time()) - 10),
-    )
-    e2e._conn.commit()
-    wd_id4 = cur.fetchone()["id"]
-    e2e._conn.execute("UPDATE users SET balance = balance - %s WHERE tg_id = %s", (5 * USDC + 50_000, ALICE))
-    e2e._conn.commit()
+    wd_id4 = enqueue_withdraw(e2e, ALICE, to_addr, 5 * USDC, 50_000, tx_hash=tx4, age=10)
     install_rpc(monkeypatch, block=1500, receipts={tx4: {"status": 1}})
     asyncio.run(base.check_pending_withdraws())
     assert e2e._conn.execute("SELECT status FROM tx_log WHERE id=%s", (wd_id4,)).fetchone()["status"] == "done"
@@ -1059,14 +1069,7 @@ def test_e2e_withdraw_refund_paths(e2e, monkeypatch):
 
     # 5) receipt still missing but not timed out -> still pending
     tx5 = "0x" + "22" * 32
-    cur = e2e._conn.execute(
-        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, tx_hash, status, created_at) "
-        "VALUES ('withdraw', %s, %s, %s, %s, 'pending', %s) RETURNING id",
-        (ALICE, to_addr, 5 * USDC, tx5, int(time.time()) - 10),
-    )
-    e2e._conn.commit()
-    e2e._conn.execute("UPDATE users SET balance = balance - %s WHERE tg_id = %s", (5 * USDC + 50_000, ALICE))
-    e2e._conn.commit()
+    enqueue_withdraw(e2e, ALICE, to_addr, 5 * USDC, 50_000, tx_hash=tx5, age=10)
     install_rpc(monkeypatch, block=1500, receipts={})
     asyncio.run(base.check_pending_withdraws())
     assert e2e.balance(ALICE) == Decimal("79.800000")  # step1 pending; step5 not timed out yet
@@ -1245,14 +1248,10 @@ def test_e2e_all_watchers_run_together(e2e, monkeypatch):
 
     # pending withdraw that will be refunded by the watcher
     to_addr = ACC2.address
-    e2e._conn.execute(
-        "INSERT INTO tx_log (kind, tg_id, counterparty, amount, status, created_at) "
-        "VALUES ('withdraw', %s, %s, %s, 'pending', %s)",
-        (BOB, to_addr, 2 * USDC, int(time.time()) - config.WITHDRAW_STUCK_TIMEOUT_SECONDS - 10),
+    enqueue_withdraw(
+        e2e, BOB, to_addr, 2 * USDC, 20_000,
+        age=config.WITHDRAW_STUCK_TIMEOUT_SECONDS + 10,
     )
-    e2e._conn.commit()
-    e2e._conn.execute("UPDATE users SET balance = balance - %s WHERE tg_id = %s", (2 * USDC + 20_000, BOB))
-    e2e._conn.commit()
 
     # overdue market for the market watcher
     past = int(time.time()) - 3600

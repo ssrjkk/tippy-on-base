@@ -5,12 +5,20 @@ from ._base import audit_log
 
 
 class LedgerTransferMixin:
-    def transfer(self, from_id: int, to_id: int, amount_micro: int, note: str = "") -> bool:
+    def transfer(
+        self, from_id: int, to_id: int, amount_micro: int, note: str = "",
+        idem: tuple[str, int] | None = None,
+    ) -> bool:
         """Move funds between users. Returns False if sender lacks balance.
 
         One row per side. A single `tip` row (tg_id = payer) made the payment
         invisible in the receiver's /history while /stats counted it as their
         income, and recurring payments (bot/main.py) have a memo to record.
+
+        `idem=(key_hash, user_id)` reserves the caller's Idempotency-Key inside
+        THIS transaction, so the reservation and both balance updates land or
+        roll back together: a duplicate can never spend twice, and a key can
+        never read `pending` after the money already moved.
         """
         if amount_micro <= 0:
             # A negative amount would invert the direction (the "sender"
@@ -19,6 +27,8 @@ class LedgerTransferMixin:
         with self._lock:
             committed = False
             try:
+                if idem is not None:
+                    self.reserve_idempotency_in_tx(idem[0], idem[1], "tip")
                 self.ensure_user(to_id, None, commit=False)
                 cur = self._conn.execute(
                     "UPDATE users SET balance = balance - %s WHERE tg_id = %s AND balance >= %s",
@@ -41,6 +51,8 @@ class LedgerTransferMixin:
                     "VALUES ('tip_in', %s, %s, %s, %s)",
                     (to_id, str(from_id), amount_micro, note),
                 )
+                if idem is not None:
+                    self.mark_idempotency_applied(idem[0])
                 self._conn.commit()
                 committed = True
                 audit_log.info(json.dumps({"event": "transfer", "from": from_id, "to": to_id, "amount_micro": amount_micro}))
