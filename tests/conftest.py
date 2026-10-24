@@ -7,6 +7,7 @@ dropped and recreated once per session; every test gets a truncated ledger.
 
 import os
 import sys
+import time
 
 import pytest
 
@@ -100,6 +101,27 @@ TABLES = [
     "paymaster_usage",
     "audit_logs",
 ]
+
+
+def close_bet(ledger, bet_id: int) -> None:
+    """Push a parimutuel market's deadline into the past.
+
+    Every market carries a deadline since migration 015 and `resolve_bet` refuses
+    to settle while trading is open, so a test that wants a settled market has to
+    close it the way the clock would."""
+    _past(ledger, "bets", bet_id)
+
+
+def close_market(ledger, market_id: int) -> None:
+    """Same for an LMSR market: `resolve_market` waits for `close_at`."""
+    _past(ledger, "markets", market_id)
+
+
+def _past(ledger, table: str, row_id: int) -> None:
+    ledger._conn.execute(
+        f"UPDATE {table} SET close_at = %s WHERE id = %s", (int(time.time()) - 1, row_id)
+    )
+    ledger._conn.commit()
 
 
 def _reset_db(ledger) -> None:

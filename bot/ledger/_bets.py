@@ -1,9 +1,10 @@
 """Ledger domain mixin: LedgerBetsMixin (split from bot/ledger.py)."""
 import json
 import time
-from decimal import ROUND_CEILING, Decimal
+from decimal import Decimal
 
 from .. import config
+from ..fees import win_fee_micro
 from ._base import MICRO
 
 
@@ -12,15 +13,16 @@ class LedgerBetsMixin:
         self, creator_tg_id: int, question: str, options: list[str], close_at: int | None = None,
         idem: tuple[str, int] | None = None,
     ) -> int:
-        """Parimutuel market. `close_at` is optional but strongly preferred:
-
-        without a deadline the creator is an oracle who may settle at any
-        moment, so the conflict-of-interest guard in resolve_bet is the only
-        thing standing between them and the pot.
+        """Parimutuel market. A creator who names no deadline gets
+        `now + MARKET_DEFAULT_HOURS`: an open-ended pool makes the creator an
+        oracle who may settle at any moment and leaves the staked money with no
+        way to become spendable, so the deadline is never really optional.
 
         `idem` reserves the key inside this transaction: one tap that fails
         validation or is retried cannot create two pools.
         """
+        if close_at is None:
+            close_at = int(time.time()) + config.MARKET_DEFAULT_SECONDS
         with self._lock:
             if idem is not None:
                 self.reserve_idempotency_in_tx(idem[0], idem[1], "create_bet")
@@ -80,8 +82,7 @@ class LedgerBetsMixin:
         with self._lock:
             return self._conn.execute(
                 "SELECT id, creator, question FROM bets "
-                "WHERE status = 'open' AND close_at IS NOT NULL "
-                "AND close_at <= %s AND deadline_notified = 0",
+                "WHERE status = 'open' AND close_at <= %s AND deadline_notified = 0",
                 (int(time.time()),),
             ).fetchall()
 
@@ -104,7 +105,7 @@ class LedgerBetsMixin:
         with self._lock:
             return self._conn.execute(
                 "SELECT id, creator, question, close_at FROM bets "
-                "WHERE status = 'open' AND close_at IS NOT NULL "
+                "WHERE status = 'open' "
                 "AND deadline_notified = 1 AND grace_warned = 0 "
                 "AND %s >= close_at + %s - %s",
                 (int(time.time()), grace, warn_before),
@@ -187,7 +188,7 @@ class LedgerBetsMixin:
             if not bet or bet["status"] != "open":
                 self._conn.rollback()
                 return "closed"
-            if bet["close_at"] is not None and int(time.time()) > bet["close_at"]:
+            if int(time.time()) > int(bet["close_at"]):
                 self._conn.rollback()
                 return "deadline"
             options = json.loads(bet["options"])
@@ -214,7 +215,8 @@ class LedgerBetsMixin:
 
 
     def resolve_bet(self, bet_id: int, winning_idx: int, resolver_id: int) -> tuple[bool, str]:
-        """Parimutuel: winners share the whole pot; 2% fee on net profit.
+        """Parimutuel: winners share the whole pot; WIN_FEE_PCT of the net profit
+        is the creator's fee (see bot/fees.py — one formula for every preview).
 
         Money conservation is exact: winners get net payouts, the market
         creator receives all fees + floor dust, so nothing is created or lost.
@@ -241,7 +243,7 @@ class LedgerBetsMixin:
             if winning_idx < 0 or winning_idx >= len(options):
                 self._conn.rollback()
                 return False, "Неверный номер варианта."
-            if bet["close_at"] is not None and int(time.time()) < int(bet["close_at"]):
+            if int(time.time()) < int(bet["close_at"]):
                 self._conn.rollback()
                 return False, (
                     "Торги ещё не закрыты: резолв доступен после дедлайна рынка."
@@ -280,10 +282,8 @@ class LedgerBetsMixin:
                 gross = amt * total_pot // win_stake
                 gross_sum += gross
                 profit = gross - amt
-                fee = 0
-                if profit > 0:
-                    fee = (Decimal(profit) * config.WIN_FEE_PCT).to_integral_value(rounding=ROUND_CEILING)
-                payouts.append((int(p["tg_id"]), gross - int(fee)))
+                fee = win_fee_micro(profit)
+                payouts.append((int(p["tg_id"]), gross - fee))
                 fee_sum += int(fee)
 
             remainder = total_pot - gross_sum  # >= 0 floor dust
@@ -328,10 +328,8 @@ class LedgerBetsMixin:
 
     def is_expired(self, bet: dict) -> bool:
         """Deadline passed and grace period elapsed: anyone may refund."""
-        if bet["close_at"] is None:
-            return False
         grace = config.MARKET_GRACE_HOURS * 3600
-        return int(time.time()) > bet["close_at"] + grace
+        return int(time.time()) > int(bet["close_at"]) + grace
 
 
 

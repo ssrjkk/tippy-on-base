@@ -4,6 +4,7 @@ import re
 import types
 
 import pytest
+from conftest import close_bet
 from fastapi.testclient import TestClient
 
 from web.auth import COOKIE_NAME, make_session
@@ -616,6 +617,7 @@ def test_markets_status_filter(client, ledger):
     ledger.credit(2, 100_000_000, "deposit")
     bid = ledger.create_bet(1, "Сыграем?", ["Да", "Нет"])
     ledger.place_bet(bid, 2, 0, 10_000_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, 1)
 
     open_ = client.get("/api/markets").json()
@@ -649,6 +651,7 @@ def test_user_creator_fees_in_api(client, ledger):
     bid = ledger.create_bet(1, "Q", ["А", "Б"])
     ledger.place_bet(bid, 2, 0, 1_000_000)
     ledger.place_bet(bid, 2, 1, 1_000_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, 1)
     _auth(client, 1)
     data = client.get("/api/user/1").json()

@@ -15,6 +15,7 @@ from decimal import Decimal
 import pytest
 from aiogram.filters import CommandObject
 from aiogram.types import ReactionTypeEmoji
+from conftest import close_bet
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from fastapi.testclient import TestClient
@@ -537,6 +538,7 @@ def test_e2e_resolve_refuses_the_creators_own_winning_stake(e2e, monkeypatch):
     assert "Ставка #1 создана" in m.answers[0][0]
     run(cmd_bet(Message("/bet 1 1 0.01", from_id=ALICE, bot=bot)))
     run(cmd_bet(Message("/bet 1 2 10", from_id=BOB, bot=bot)))
+    close_bet(e2e, 1)
 
     m = Message("/resolve 1 1", from_id=ALICE, bot=bot)
     run(cmd_resolve(m))
@@ -1162,12 +1164,14 @@ def test_e2e_insufficient_and_limits(e2e, monkeypatch):
     assert "только создатель" in m.answers[0][0]
 
     # resolve with nobody on the winning option
+    close_bet(e2e, bid)
     m = Message(f"/resolve {bid} 2", from_id=ALICE, bot=bot)
     run(cmd_resolve(m))
     assert "Никто не поставил" in m.answers[0][0]
 
     # resolve empty market
     bid2 = e2e.create_bet(ALICE, "Пустой", ["А", "Б"])
+    close_bet(e2e, bid2)
     m = Message(f"/resolve {bid2} 1", from_id=ALICE, bot=bot)
     run(cmd_resolve(m))
     assert "нет денег" in m.answers[0][0]

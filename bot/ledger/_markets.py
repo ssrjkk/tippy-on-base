@@ -1,9 +1,10 @@
 """Ledger domain mixin: LedgerMarketsMixin (split from bot/ledger.py)."""
 import json
 import time
-from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, localcontext
+from decimal import ROUND_FLOOR, Decimal, localcontext
 
 from .. import config
+from ..fees import win_fee_micro
 from ._base import _LMSR_PREC, _d, lmsr_buy_shares, lmsr_prices, lmsr_sell_value
 
 
@@ -23,9 +24,13 @@ class LedgerMarketsMixin:
         'subsidy' if it is too small for `ln(n)`. `idem` reserves the key inside
         this transaction, so an unfunded or rejected creation leaves the key
         free for a real retry while a duplicate cannot create a second market.
+        A missing `close_at` becomes `now + MARKET_DEFAULT_SECONDS` — see
+        create_bet for why a market is never open-ended.
         """
         if subsidy_micro < 0:
             raise ValueError(f"market subsidy must be non-negative (got {subsidy_micro})")
+        if close_at is None:
+            close_at = int(time.time()) + config.MARKET_DEFAULT_SECONDS
         n = len(options)
         if n < 2:
             raise ValueError(f"market must have at least 2 options (got {n})")
@@ -96,8 +101,7 @@ class LedgerMarketsMixin:
         with self._lock:
             return self._conn.execute(
                 "SELECT id, creator, question FROM markets "
-                "WHERE status = 'open' AND close_at IS NOT NULL "
-                "AND close_at <= %s AND deadline_notified = 0",
+                "WHERE status = 'open' AND close_at <= %s AND deadline_notified = 0",
                 (int(time.time()),),
             ).fetchall()
 
@@ -117,7 +121,7 @@ class LedgerMarketsMixin:
         with self._lock:
             return self._conn.execute(
                 "SELECT id, creator, question, close_at FROM markets "
-                "WHERE status = 'open' AND close_at IS NOT NULL "
+                "WHERE status = 'open' "
                 "AND deadline_notified = 1 AND grace_warned = 0 "
                 "AND %s >= close_at + %s - %s",
                 (int(time.time()), grace, warn_before),
@@ -135,10 +139,8 @@ class LedgerMarketsMixin:
 
 
     def market_is_expired(self, market: dict) -> bool:
-        if market["close_at"] is None:
-            return False
         grace = config.MARKET_GRACE_HOURS * 3600
-        return int(time.time()) > market["close_at"] + grace
+        return int(time.time()) > int(market["close_at"]) + grace
 
 
 
@@ -424,7 +426,7 @@ class LedgerMarketsMixin:
                 if not m or m["status"] != "open":
                     self._conn.rollback()
                     return "closed", {}
-                if m["close_at"] is not None and int(time.time()) > m["close_at"]:
+                if int(time.time()) > int(m["close_at"]):
                     self._conn.rollback()
                     return "deadline", {}
                 options = json.loads(m["options"])
@@ -501,7 +503,7 @@ class LedgerMarketsMixin:
             if not m or m["status"] != "open":
                 self._conn.rollback()
                 return "closed", {}
-            if m["close_at"] is not None and int(time.time()) > m["close_at"]:
+            if int(time.time()) > int(m["close_at"]):
                 self._conn.rollback()
                 return "deadline", {}
             options = json.loads(m["options"])
@@ -590,7 +592,7 @@ class LedgerMarketsMixin:
 
             # Trading closes at `close_at`; resolution must wait until then so a
             # freshly-listed market can't be resolved before others can weigh in.
-            if m["close_at"] is not None and int(time.time()) < int(m["close_at"]):
+            if int(time.time()) < int(m["close_at"]):
                 self._conn.rollback()
                 return False, "Рынок ещё не достиг дедлайна — резолв доступен после закрытия торгов.", []
 
@@ -613,6 +615,15 @@ class LedgerMarketsMixin:
             if held and int(held["s"] or 0) > 0:
                 self._conn.rollback()
                 label = options[winning_idx]
+                # Past the deadline sell_shares refuses as well, so "sell first"
+                # would send the creator to an action that can no longer work;
+                # the only exit left is cancelling, which refunds every holder.
+                if int(time.time()) > int(m["close_at"]):
+                    return False, (
+                        f"У вас есть доли варианта «{label}», а торговля уже закрыта — "
+                        "продажа невозможна. Отмените рынок (кнопка «Отменить» на "
+                        "карточке): участникам вернутся их средства."
+                    ), []
                 return False, (
                     f"У вас есть доли варианта «{label}» — сначала продайте их: "
                     "резолвить рынок со ставкой на исход запрещено."
@@ -672,11 +683,11 @@ class LedgerMarketsMixin:
             if leftover > 0 and weights:
                 # Creator takes the documented fee on winnings; every remaining
                 # micro of escrow goes pro-rata to the winners instead of being
-                # swept to the creator.
-                creator_fee = min(
-                    int((Decimal(distributed) * config.WIN_FEE_PCT).to_integral_value(rounding=ROUND_CEILING)),
-                    leftover,
-                )
+                # swept to the creator. The base here is the whole payout (an AMM
+                # share has its cost inside it), unlike the parimutuel fee, which
+                # is on profit — and it is capped by what the escrow can still
+                # give, so it can never reach money that belongs to a loser.
+                creator_fee = min(win_fee_micro(distributed), leftover)
                 if creator_fee > 0:
                     self.ensure_user(int(m["creator"]), None, commit=False)
                     self._conn.execute(

@@ -5,9 +5,10 @@ import io
 import json
 import os
 import time
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 import pytest
+from conftest import close_bet
 
 from bot import config
 from bot.ledger import Ledger
@@ -25,6 +26,7 @@ def fund(ledger, tg_id, micro):
 
 def total_balance(ledger):
     return sum(int(r["balance"]) for r in ledger._conn.execute("SELECT balance FROM users"))
+
 
 
 def total_tx(ledger, kinds=()):
@@ -68,6 +70,7 @@ def test_resolve_bet_conservation_with_fee(ledger):
     assert ledger.place_bet(bid, ALICE, 1, 100_000_000) == "ok"
     assert ledger.place_bet(bid, BOB, 0, 400_000_000) == "ok"
     assert ledger.place_bet(bid, CAROL, 0, 100_000_000) == "ok"
+    close_bet(ledger, bid)
 
     ok, msg = ledger.resolve_bet(bid, 0, ALICE)
     assert ok
@@ -94,6 +97,7 @@ def test_resolve_refuses_the_bait_and_steal(ledger):
     bid = ledger.create_bet(ALICE, "Кто победит?", ["А", "Б"])
     assert ledger.place_bet(bid, ALICE, 0, 10_000) == "ok"
     assert ledger.place_bet(bid, BOB, 1, 10_000_000) == "ok"
+    close_bet(ledger, bid)
 
     ok, msg = ledger.resolve_bet(bid, 0, ALICE)
     assert not ok and "нельзя" in msg
@@ -757,11 +761,13 @@ def test_place_bet_insufficient_returns_balance(ledger):
 def test_resolve_rejects_empty_and_abandoned(ledger):
     fund(ledger, ALICE, 100_000_000)
     empty = ledger.create_bet(ALICE, "Пустой?", ["А", "Б"])
+    close_bet(ledger, empty)
     ok, msg = ledger.resolve_bet(empty, 0, ALICE)
     assert not ok and "нет денег" in msg
 
     bid = ledger.create_bet(ALICE, "Пустой?", ["А", "Б"])
     ledger.place_bet(bid, ALICE, 0, 1_000_000)
+    close_bet(ledger, bid)
     ok, msg = ledger.resolve_bet(bid, 1, ALICE)  # no one bet on option 2
     assert not ok and "Никто не поставил" in msg
 
@@ -773,6 +779,7 @@ def test_resolve_rejects_wrong_option_and_closed(ledger):
     ledger.place_bet(bid, BOB, 0, 1_000_000)
     ok, msg = ledger.resolve_bet(bid, 5, ALICE)
     assert not ok and "номер" in msg
+    close_bet(ledger, bid)
     ok, _ = ledger.resolve_bet(bid, 0, ALICE)
     assert ok
     ok, msg = ledger.resolve_bet(bid, 0, ALICE)  # already resolved
@@ -784,6 +791,7 @@ def test_cancel_rejects_when_not_open(ledger):
     fund(ledger, BOB, 100_000_000)
     bid = ledger.create_bet(ALICE, "Вопрос", ["А", "Б"])
     ledger.place_bet(bid, BOB, 0, 1_000_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     ok, msg = ledger.cancel_bet(bid, ALICE)
     assert not ok and "уже закрыта" in msg
@@ -890,8 +898,71 @@ def test_user_positions(ledger):
     assert pos[0]["stake_micro"] == 20_000_000
     assert pos[0]["potential_micro"] == 20_000_000 * 30_000_000 // 20_000_000
     # Resolved market drops out of open positions.
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     assert ledger.user_positions(BOB) == []
+
+
+def test_a_market_without_a_stated_deadline_still_expires(ledger):
+    """A NULL `close_at` used to mean "no deadline", and that is how money got
+    parked: both the deadline watcher and the grace warning filtered on
+    `close_at IS NOT NULL`, so an open-ended market was never pinged, never
+    expired and never became refundable by anyone but its creator. Now the
+    ledger fills MARKET_DEFAULT_SECONDS and the column cannot go back to NULL."""
+    fund(ledger, ALICE, 200_000_000)
+    fund(ledger, BOB, 100_000_000)
+
+    bid = ledger.create_bet(ALICE, "Без дедлайна", ["А", "Б"])
+    bet = ledger.get_bet(bid)
+    assert bet["close_at"] is not None
+    assert abs(int(bet["close_at"]) - int(time.time()) - config.MARKET_DEFAULT_SECONDS) <= 5
+
+    # Trading still has to run its course: the creator may not settle at will.
+    ledger.place_bet(bid, BOB, 0, 10_000_000)
+    ok, msg = ledger.resolve_bet(bid, 0, ALICE)
+    assert not ok and "ещё не закрыты" in msg
+
+    mid = ledger.create_market(ALICE, "Рынок без дедлайна", ["А", "Б"], 50_000_000)
+    assert isinstance(mid, int)
+    m = ledger.get_market(mid)
+    assert abs(int(m["close_at"]) - int(time.time()) - config.MARKET_DEFAULT_SECONDS) <= 5
+
+    # Migration 015 made the column NOT NULL on both tables.
+    import psycopg
+
+    for table, row in (("bets", bid), ("markets", mid)):
+        with pytest.raises(psycopg.errors.NotNullViolation):
+            try:
+                ledger._conn.execute(f"UPDATE {table} SET close_at = NULL WHERE id = %s", (row,))
+            finally:
+                ledger._conn.rollback()
+
+
+def test_the_position_preview_credits_exactly_what_it_promises(ledger):
+    """/mybets and the web cabinet used to compute the win fee themselves with
+    `int(profit * WIN_FEE_PCT)`, which truncates, while resolve_bet ceilings it —
+    so the screen promised a net one micro higher than the money that arrived.
+    `user_positions` now returns `net_micro`, and this test resolves the same bet
+    the preview is read from: promise == credit, and the truncated formula is
+    provably not equal to either."""
+    fund(ledger, ALICE, 10_000_000)
+    fund(ledger, BOB, 10_000_000)
+    bid = ledger.create_bet(ALICE, "Игра?", ["А", "Б"])
+    ledger.place_bet(bid, BOB, 0, 1_000_000)
+    ledger.place_bet(bid, ALICE, 1, 1_000_201)
+
+    pos = next(p for p in ledger.user_positions(BOB) if p["bet_id"] == bid)
+    profit = pos["potential_micro"] - pos["stake_micro"]
+    assert profit == 1_000_201  # 2% of it is not a whole micro: the case that split
+    fee = int((Decimal(profit) * config.WIN_FEE_PCT).to_integral_value(rounding=ROUND_CEILING))
+    assert pos["net_micro"] == pos["potential_micro"] - fee
+    assert int(profit * config.WIN_FEE_PCT) == fee - 1
+
+    before = ledger.balance(BOB)  # the stake is already debited: 9 USDC
+    close_bet(ledger, bid)
+    ok, msg = ledger.resolve_bet(bid, 0, ALICE)
+    assert ok, msg
+    assert (ledger.balance(BOB) - before) * 1_000_000 == pos["net_micro"]
 
 
 # ---------- batched reads: /api/markets and /mybets ----------
@@ -991,6 +1062,7 @@ def test_user_positions_covers_every_open_bet_of_the_user(ledger):
     ledger.place_bet(b2, BOB, 2, 6_000_000)
     ledger.place_bet(b2, CAROL, 0, 9_000_000)
     ledger.place_bet(b3, BOB, 1, 7_000_000)
+    close_bet(ledger, b3)
     ledger.resolve_bet(b3, 1, ALICE)  # settled: not an open position
 
     rows = ledger.user_positions(BOB)
@@ -1056,6 +1128,7 @@ def test_creator_fees_only_market_fees(ledger):
     bid = ledger.create_bet(ALICE, "Q", ["А", "Б"])
     ledger.place_bet(bid, BOB, 0, 100_000)
     ledger.place_bet(bid, BOB, 1, 100_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     assert ledger.creator_fees(ALICE) > 0
     # A withdraw fee is NOT creator income (it's what the platform charges).
@@ -1179,6 +1252,7 @@ def test_payouts_for_matches_resolve_math(ledger):
     ledger.place_bet(bid, ALICE, 1, 100_000_000)
     ledger.place_bet(bid, BOB, 0, 400_000_000)
     ledger.place_bet(bid, CAROL, 0, 100_000_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     ps = {p["tg_id"]: p for p in ledger.payouts_for(bid)}
     assert ps[BOB]["win"] and ps[CAROL]["win"] and not ps[ALICE]["win"]
@@ -1579,6 +1653,7 @@ def test_grace_warning_skips_resolved(ledger):
     fund(ledger, BOB, 10_000_000)
     bid = ledger.create_bet(ALICE, "Решён", ["Да", "Нет"], close_at=None)
     ledger.place_bet(bid, BOB, 0, 100_000)
+    close_bet(ledger, bid)
     assert ledger.resolve_bet(bid, 0, ALICE)[0]
     # mark the deadline as passed (resolved markets must never be re-warned)
     ledger._conn.execute("UPDATE bets SET close_at = %s WHERE id = %s", (int(time.time()) - 60 * 3600, bid))

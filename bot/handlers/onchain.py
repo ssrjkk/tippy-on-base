@@ -202,7 +202,7 @@ async def cmd_oc_create(message: types.Message) -> None:
         return
     question = head[1].strip()
     options = segs[1:][:MAX_ONCHAIN_OUTCOMES]
-    close_at = int(time.time()) + 7 * 86400
+    close_at = int(time.time()) + common.config.MARKET_DEFAULT_SECONDS
     if options and common.DEADLINE_RE.match(options[-1].lower()):
         m = common.DEADLINE_RE.match(options[-1].lower())
         secs = int(m.group(1)) * (3600 if m.group(2) == 'h' else 86400)
@@ -253,7 +253,7 @@ async def _buy_core(tg_id: int, mid: int, outcome: int, spend: int, lang: str) -
     m = await common.ledger.get_onchain_market(mid)
     if not m or outcome < 0 or outcome >= len(json.loads(m['options'])):
         return False, i18n.t(lang, 'oc_unknown')
-    if m['close_at'] and int(time.time()) > m['close_at']:
+    if int(time.time()) > int(m['close_at']):
         return False, i18n.t(lang, 'market_trade_deadline')
     wait = await common._throttle(tg_id, 'oc')
     if wait:
@@ -288,7 +288,7 @@ async def _sell_core(tg_id: int, mid: int, outcome: int, pct: int, lang: str) ->
     m = await common.ledger.get_onchain_market(mid)
     if not m or outcome < 0 or outcome >= len(json.loads(m['options'])):
         return False, i18n.t(lang, 'oc_unknown')
-    if m['close_at'] and int(time.time()) > m['close_at']:
+    if int(time.time()) > int(m['close_at']):
         return False, i18n.t(lang, 'market_trade_deadline')
     wait = await common._throttle(tg_id, 'oc')
     if wait:

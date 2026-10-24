@@ -15,6 +15,7 @@ from aiogram.client.session.base import BaseSession
 from aiogram.enums import ParseMode
 from aiogram.methods.base import TelegramType
 from aiogram.types import Update
+from conftest import close_market
 
 from bot import handlers
 
@@ -290,6 +291,7 @@ def test_dispatch_market_full_lifecycle(ledger):
     edits = [p for n, p in s.calls if n == "editMessageText"]
     assert edits and "%" in edits[-1]["text"], "card must show live odds"
 
+    close_market(ledger, mid)  # the creator may settle only once trading closed
     asyncio.run(dp.feed_update(bot, _callback_update(f"mkres:{mid}", user_id=ALICE)))
     asyncio.run(dp.feed_update(bot, _callback_update(f"mkres:{mid}:0", user_id=ALICE)))
     m = ledger.get_market(mid)

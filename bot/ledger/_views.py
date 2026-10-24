@@ -2,9 +2,8 @@
 import json
 import time
 from datetime import UTC, datetime
-from decimal import ROUND_CEILING, Decimal
 
-from .. import config
+from ..fees import win_fee_micro
 from ._base import MICRO, MIRRORED_CREDIT_KINDS
 
 
@@ -92,6 +91,10 @@ class LedgerViewsMixin:
                     "option_idx": opt_idx,
                     "stake_micro": stake,
                     "potential_micro": gross,
+                    # What resolve_bet will actually credit, from the same
+                    # formula — a preview that rounds differently is a promise
+                    # the ledger will break.
+                    "net_micro": gross - win_fee_micro(gross - stake),
                     "close_at": bet["close_at"],
                 }
             )
@@ -278,11 +281,8 @@ class LedgerViewsMixin:
             net = 0
             if is_win:
                 gross = amt * total_pot // win_stake
-                profit = gross - amt
-                fee = 0
-                if profit > 0:
-                    fee = (Decimal(profit) * config.WIN_FEE_PCT).to_integral_value(rounding=ROUND_CEILING)
-                net = gross - int(fee)
+                fee = win_fee_micro(gross - amt)
+                net = gross - fee
             out.append(
                 {
                     "tg_id": int(p["tg_id"]),

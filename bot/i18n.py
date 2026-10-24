@@ -1048,11 +1048,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "\n⏰ Bets accepted until: {time}",
         "zh": "\n⏰ 投注截止时间：{time}",
     },
-    "bet_no_deadline": {
-        "ru": "\n⌛ Закрытие: /resolve (только ты)",
-        "en": "\n⌛ Closing: /resolve (you only)",
-        "zh": "\n⌛ 结算方式：/resolve（仅创建者）",
-    },
     "bet_howto": {
         "ru": "Ставят: /bet {id} &lt;номер&gt; &lt;сумма&gt; или кнопки: /bets",
         "en": "Bet: /bet {id} &lt;option&gt; &lt;amount&gt; or use buttons: /bets",
@@ -1104,9 +1099,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "奖池总额：<b>{pot} USDC</b> · 参与者：{backers}",
     },
     "bet_fee_note": {
-        "ru": "Комиссия на выигрыш: 2% (создателю рынка)",
-        "en": "Win fee: 2% (to market creator)",
-        "zh": "赢利手续费：2%（归创建者）",
+        "ru": "Комиссия на выигрыш: {pct}% (создателю рынка)",
+        "en": "Win fee: {pct}% (to market creator)",
+        "zh": "赢利手续费：{pct}%（归创建者）",
     },
     "bet_empty": {
         "ru": "🎲 Открытых ставок нет.\nСоздай: /bet create <вопрос> | <в1> | <в2>",
@@ -1157,6 +1152,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "📌 <b>Твои открытые позиции</b>",
         "en": "📌 <b>Your open positions</b>",
         "zh": "📌 <b>你的持仓</b>",
+    },
+    "bet_my_net": {
+        "ru": "на руки: <b>{net} USDC</b> после комиссии {pct}%",
+        "en": "net: <b>{net} USDC</b> after the {pct}% fee",
+        "zh": "实际可得：<b>{net} USDC</b>（已扣 {pct}% 手续费）",
+    },
+    "deadline_passed_short": {
+        "ru": "срок вышел",
+        "en": "deadline passed",
+        "zh": "已截止",
     },
     "bet_notify_win": {
         "ru": "🏆 <b>Ты выиграл {amount} USDC!</b>\n🎲 #{id} — «{question}»\nПобедил: <b>{winner}</b>\nБаланс: /balance",
@@ -1277,11 +1282,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "🤖 AI 返回空答案。请换个说法。",
     },
     # ----- menu extra -----
-    "betcreate_hint": {
-        "ru": "🎲 <b>Создание рынка</b>\n\n/bet create <вопрос> | <в1> | <в2> [24h]\n\nДо 4 вариантов, опционально дедлайн. Создатель получает 2% от выигрыша.",
-        "en": "🎲 <b>Create a bet</b>\n\n/bet create <question> | <o1> | <o2> [24h]\n\nUp to 4 options, optional deadline. Creator gets 2% of winnings.",
-        "zh": "🎲 <b>创建投注</b>\n\n/bet create <问题> | <选项1> | <选项2> [24h]\n\n最多 4 个选项，可设截止时间。创建者获得赢家 2% 手续费。",
-    },
     "paywall_empty": {
         "ru": "🔐 Платных постов пока нет. Создай первый: /paywall create 5 Заголовок",
         "en": "🔐 No paid posts yet. Create the first: /paywall create 5 Title",
@@ -1470,11 +1470,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "\n⏰ Дедлайн: {time}",
         "en": "\n⏰ Deadline: {time}",
         "zh": "\n⏰ 截止时间：{time}",
-    },
-    "market_no_deadline_card": {
-        "ru": "\n⌛ Закрытие: /resolve-кнопка на карточке (только ты)",
-        "en": "\n⌛ Closing: /resolve button on card (you only)",
-        "zh": "\n⌛ 结算方式：卡片上的 /resolve 按钮（仅创建者）",
     },
     "market_created_msg": {
         "ru": "📈 Рынок #{id} создан!\n\n<b>{question}</b>\n{options}\n{liquidity}\n{deadline}\n\n{hint}",
@@ -1867,9 +1862,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "💛 支持 <b>@{user}</b>\n\n将 USDC（<b>Base 网络</b>）发送到：\n<code>{addr}</code>\n\n绑定钱包（/link）后自动到账。打赏 @{user}：/tip 5 @{user}。谢谢！🫡",
     },
     "betcreate_hint_v2": {
-        "ru": "🎲 <b>Создание рынка</b>\n\n/bet create <вопрос> | <вариант1> | <вариант2> [24h]\n\nДо 4 вариантов, опционально дедлайн (например <i>24h</i> или <i>7d</i>). Создатель получает 2% от выигрыша победителя.",
-        "en": "🎲 <b>Create a market</b>\n\n/bet create <question> | <option1> | <option2> [24h]\n\nUp to 4 options, optional deadline (e.g. <i>24h</i> or <i>7d</i>). Creator gets 2% of winner's winnings.",
-        "zh": "🎲 <b>创建市场</b>\n\n/bet create <问题> | <选项1> | <选项2> [24h]\n\n最多 4 个选项，可选截止时间（如 <i>24h</i> 或 <i>7d</i>）。创建者获得赢家 2% 手续费。",
+        "ru": "🎲 <b>Создание рынка</b>\n\n/bet create <вопрос> | <вариант1> | <вариант2> [24h]\n\nДо 4 вариантов, дедлайн — например <i>24h</i> или <i>7d</i>, по умолчанию <i>{default}</i>. Создатель получает {pct}% от выигрыша победителя.",
+        "en": "🎲 <b>Create a market</b>\n\n/bet create <question> | <option1> | <option2> [24h]\n\nUp to 4 options, deadline (e.g. <i>24h</i> or <i>7d</i>, default <i>{default}</i>). Creator gets {pct}% of winner's winnings.",
+        "zh": "🎲 <b>创建市场</b>\n\n/bet create <问题> | <选项1> | <选项2> [24h]\n\n最多 4 个选项，截止时间（如 <i>24h</i> 或 <i>7d</i>），默认 <i>{default}</i>。创建者获得赢家 {pct}% 手续费。",
     },
     "hot_wallet_admin": {
         "ru": "🟦 <b>Hot wallet бота</b>\n\nАдрес: <code>{addr}</code>\n\n⚠️ Приватный ключ хранится только в конфигурации сервера. Никогда не выводи его в чат.",

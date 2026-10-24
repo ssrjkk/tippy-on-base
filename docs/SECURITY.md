@@ -40,7 +40,12 @@ credit reporters in the release notes unless anonymity is requested.
 
 - Parimutuel bets and LMSR prediction markets resolve by the market creator;
   deadline + grace-period auto-refund bounds the damage of an absent creator.
-  On-chain trustless resolution is on the roadmap.
+  Every market carries a deadline since migration 015 — `close_at` is NOT NULL,
+  and a creator who names none gets `MARKET_DEFAULT_HOURS` — because a NULL
+  deadline was skipped by both watchers, which left an abandoned pool locked
+  indefinitely with its creator as an oracle on no clock. Past the deadline the
+  creator may settle; anyone may refund once the grace period runs out. On-chain
+  trustless resolution is on the roadmap.
 - The hot wallet is custodial by design; production deployments should use
   TipBotVault with a multisig owner so the relayer key is daily-limit capped.
 

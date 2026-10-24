@@ -87,8 +87,10 @@ AMM, so odds move live with every purchase.
 | `/positions` | Your open positions and P&L |
 
 The optional number at the end of `/market create` is the market duration in
-hours (default 24). When the deadline hits, the market creator resolves it and
-winning shares pay out.
+hours; leave it off and you get `MARKET_DEFAULT_HOURS` (a week by default). A
+market without a deadline is not a thing that exists: the deadline watcher, the
+grace warning and the refund path all key off it, and `resolve` refuses to
+settle while trading is still open.
 
 ---
 

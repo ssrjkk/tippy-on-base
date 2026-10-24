@@ -34,6 +34,7 @@ __all__ = [
     "TX_HASH_RE",
     "USDC_ADDR_RE",
     "_bot_username",
+    "_default_deadline_label",
     "_edit_menu",
     "_esc",
     "_fmt",
@@ -154,6 +155,13 @@ PAYWALL_LINK_RE = re.compile(r"^paywall_(\d{1,20})$")
 DEADLINE_RE = re.compile(r"^(\d{1,3})([hd])$")
 
 QUICK_AMOUNTS = ("5", "10", "25", "50")
+
+
+def _default_deadline_label() -> str:
+    """The window a market gets when the creator states no deadline, spelled the
+    way DEADLINE_RE parses, so help text cannot drift from MARKET_DEFAULT_HOURS."""
+    hours = config.MARKET_DEFAULT_HOURS
+    return f"{hours // 24}d" if hours % 24 == 0 else f"{hours}h"
 
 
 async def user_lang(tg_id: int) -> str:

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 from aiogram.filters import CommandObject
 from aiogram.types import ReactionTypeEmoji
+from conftest import close_bet
 from eth_account import Account
 from eth_account.messages import encode_defunct
 
@@ -874,6 +875,7 @@ def test_cmd_resolve(ledger):
     ledger.credit(BOB, 10_000_000, "deposit")
     bid = ledger.create_bet(ALICE, "Вопрос?", ["А", "Б"])
     ledger.place_bet(bid, BOB, 1, 2_000_000)
+    close_bet(ledger, bid)
     m = Message(f"/resolve {bid} 2", from_id=ALICE)
     run(cmd_resolve(m))
     assert "закрыта" in m.answers[0][0]
@@ -1039,6 +1041,7 @@ def test_cmd_history_reads_tipper_names_once_whatever_the_row_count(ledger):
 def test_market_callback_shows_options(ledger):
     ledger.credit(ALICE, 50_000_000, "deposit")
     bid = ledger.create_bet(ALICE, "Кто победит?", ["Алиса", "Боб"])
+    close_bet(ledger, bid)  # the close button appears only past the deadline
     cb = Callback(f"market:{bid}", ALICE)
     run(cb_market(cb))
     assert "Алиса" in cb.message.text
@@ -1050,6 +1053,7 @@ def test_market_callback_shows_options(ledger):
 def test_market_callback_creator_gets_close_button(ledger):
     ledger.credit(ALICE, 50_000_000, "deposit")
     bid = ledger.create_bet(ALICE, "Вопрос?", ["Да", "Нет"])
+    close_bet(ledger, bid)
     cb = Callback(f"market:{bid}", ALICE)
     run(cb_market(cb))
     rows = cb.message.markup.inline_keyboard
@@ -1354,6 +1358,7 @@ def test_cmd_bet_place_closed(ledger):
     ledger.credit(BOB, 10_000_000, "deposit")
     bid = ledger.create_bet(ALICE, "Вопрос?", ["А", "Б"])
     ledger.place_bet(bid, BOB, 0, 1_000_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     m = Message(f"/bet {bid} 1 5", from_id=ALICE)
     run(cmd_bet(m))
@@ -1416,6 +1421,7 @@ def test_cb_bet_place_closed_alert(ledger):
     ledger.credit(BOB, 10_000_000, "deposit")
     bid = ledger.create_bet(ALICE, "Вопрос?", ["А", "Б"])
     ledger.place_bet(bid, BOB, 0, 1_000_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     cb = Callback(f"bets:{bid}:0:5", ALICE)
     run(cb_bet_place(cb))
@@ -1599,6 +1605,7 @@ def test_notify_bet_result_dedup(ledger):
     bid = ledger.create_bet(ALICE, "Вопрос?", ["А", "Б"])
     ledger.place_bet(bid, BOB, 0, 2_000_000)
     ledger.place_bet(bid, BOB, 1, 2_000_000)  # BOB on both options
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     m = Message(f"/resolve {bid} 1", from_id=ALICE)
     run(_notify_bet_result(m, bid))
@@ -1840,6 +1847,7 @@ def test_cb_res_closed_market_alerted(ledger):
     ledger.credit(BOB, 50_000_000, "deposit")
     bid = ledger.create_bet(ALICE, "Вопрос?", ["Да", "Нет"])
     ledger.place_bet(bid, BOB, 0, 1_000_000)
+    close_bet(ledger, bid)
     ledger.resolve_bet(bid, 0, ALICE)
     cb = Callback(f"res:{bid}", ALICE)
     run(cb_res(cb))
@@ -1851,6 +1859,7 @@ def test_cb_res_choose_resolves_and_dms(ledger):
     ledger.credit(BOB, 100_000_000, "deposit")
     bid = ledger.create_bet(ALICE, "Вопрос?", ["Да", "Нет"])
     ledger.place_bet(bid, BOB, 0, 10_000_000)
+    close_bet(ledger, bid)
     bot = Bot()
     cb = Callback(f"res:{bid}:0", ALICE, bot=bot)
     run(cb_res(cb))

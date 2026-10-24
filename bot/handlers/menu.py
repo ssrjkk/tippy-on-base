@@ -6,6 +6,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from bot import i18n, tip_targets
+from bot.fees import win_fee_pct_label
 
 from . import _common as common
 from .bets import _bets_text, _market_detail_text
@@ -201,7 +202,8 @@ async def on_menu(cb: types.CallbackQuery) -> None:
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='🚀 ' + i18n.t(lang, 'btn_mini_app'), web_app=WebAppInfo(url=url))], [InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data='menu')]])
         await common._edit_menu(cb, i18n.t(lang, 'app_mini_description'), kb)
     elif cb.data == 'betcreate':
-        await common._edit_menu(cb, i18n.t(lang, 'betcreate_hint_v2'))
+        await common._edit_menu(cb, i18n.t(lang, 'betcreate_hint_v2', pct=win_fee_pct_label(),
+                                             default=common._default_deadline_label()))
     elif cb.data == 'paywall_list':
         text = await _paywall_list_text(lang, cb.from_user.id)
         if text is None:

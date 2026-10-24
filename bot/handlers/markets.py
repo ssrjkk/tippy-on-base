@@ -93,7 +93,9 @@ async def _market_create(message: types.Message, parts: list[str]) -> None:
     if result == 'balance':
         await message.answer(i18n.t(lang, 'market_balance'))
         return
-    dl = i18n.t(lang, 'market_deadline_fmt', time=datetime.fromtimestamp(deadline).strftime('%d.%m %H:%M')) if deadline else i18n.t(lang, 'market_no_deadline_card')
+    created = await common.ledger.get_market(result)
+    dl = i18n.t(lang, 'market_deadline_fmt',
+                time=datetime.fromtimestamp(int(created['close_at'])).strftime('%d.%m %H:%M'))
     opts_text = '\n'.join((f'{i + 1}) {o}' for i, o in enumerate(options)))
     await message.answer(i18n.t(lang, 'market_created_msg', id=result, question=common._h(question), options=common._h(opts_text), liquidity=i18n.t(lang, 'market_liquidity', amount=common._fmt(subsidy)), deadline=dl, hint=i18n.t(lang, 'market_trade_hint', id=result)))
 
@@ -110,10 +112,10 @@ async def _market_card(m: dict, tg_id: int | None=None) -> str:
         lines.append(i18n.t(lang, 'market_card_resolved', label=common._h(label)))
     elif m['status'] == 'cancelled':
         lines.append(i18n.t(lang, 'market_card_cancelled'))
-    elif m['close_at'] and int(time.time()) > int(m['close_at']):
+    elif int(time.time()) > int(m['close_at']):
         lines.append(i18n.t(lang, 'market_card_deadline_passed'))
-    elif m['close_at']:
-        lines.append(f"⏰ {_rel_deadline(int(m['close_at']))}")
+    else:
+        lines.append(f"⏰ {_rel_deadline(int(m['close_at']), lang)}")
     pos = await common.ledger.user_market_position(mid, tg_id) if tg_id else {}
     for i, o in enumerate(options):
         p = prices[i]
@@ -183,7 +185,7 @@ async def cb_market_card(cb: types.CallbackQuery) -> None:
             # resolve_market refuses before close_at, so offering the button
             # earlier would only produce an error; cancelling stays available.
             row = []
-            if not m['close_at'] or int(time.time()) >= int(m['close_at']):
+            if int(time.time()) >= int(m['close_at']):
                 row.append(InlineKeyboardButton(text=i18n.t(lang, 'btn_close_market'), callback_data=f'mkres:{mid}'))
             row.append(InlineKeyboardButton(text=i18n.t(lang, 'btn_cancel_action'), callback_data=f'mkcancel:{mid}'))
             rows.append(row)

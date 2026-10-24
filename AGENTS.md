@@ -17,7 +17,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~7 min, 1036 tests. The four `production` tests hit
+- `python -m pytest -q -m "not production"` — ~10 min, 1044 tests. The four `production` tests hit
   the deployed site and belong to `.github/workflows/prod-health-check.yml`, not to this gate. That
   workflow has no skip path: a 503 maintenance card makes all four fail, and only a hand-dispatched
   `expect_down=true` keeps a run green (tests/test_web.py pins this shape).

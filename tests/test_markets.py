@@ -8,6 +8,8 @@ AMM only moves money between them, never creates or loses it.
 import asyncio
 from decimal import Decimal
 
+from conftest import close_market
+
 from bot import ai as ai_mod
 from bot.handlers import (
     cb_market_card,
@@ -103,6 +105,7 @@ def make_market(ledger, subsidy=50 * USDC, options=("Алиса", "Боб")):
     mid = ledger.create_market(ALICE, "Кто победит?", list(options), subsidy)
     assert isinstance(mid, int)
     return mid
+
 
 
 # ---------- LMSR math ----------
@@ -286,6 +289,7 @@ def test_resolve_market_pays_winners_leftover_pro_rata(ledger):
     _, b = ledger.buy_shares(mid, BOB, 0, 20 * USDC)
     _, c = ledger.buy_shares(mid, CAROL, 1, 10 * USDC)
     before = money(ledger)
+    close_market(ledger, mid)
 
     ok, msg, payouts = ledger.resolve_market(mid, 0, ALICE)
     assert ok
@@ -313,22 +317,49 @@ def test_resolve_blocked_while_creator_holds_winning_side(ledger):
     mid = make_market(ledger)
     ledger.credit(ALICE, 100 * USDC, "deposit")
     _, b = ledger.buy_shares(mid, ALICE, 0, 10 * USDC)
+
+    # The deadline is checked first: a freshly listed market cannot be settled
+    # before anyone else had the chance to weigh in.
     ok, msg, _ = ledger.resolve_market(mid, 0, ALICE)
-    assert not ok
-    assert "продайте" in msg or "запрещено" in msg
+    assert not ok and "дедлайна" in msg
     assert ledger.get_market(mid)["status"] == "open"
-    # After exiting the position the market resolves normally — but only when
-    # a non-creator participant actually holds the winning outcome (otherwise
-    # the whole escrow would flow to the creator).
+
     st, _ = ledger.sell_shares(mid, ALICE, 0, b["shares"])
     assert st == "ok"
+    close_market(ledger, mid)
     ok, msg, _ = ledger.resolve_market(mid, 0, ALICE)
     assert not ok and "победителя без держателей" in msg
+
+    # A non-creator has to hold the outcome — and they have to buy before the
+    # deadline, because trading ends with it.
+    mid2 = make_market(ledger)
     ledger.credit(BOB, 100 * USDC, "deposit")
-    assert ledger.buy_shares(mid, BOB, 0, 10 * USDC)[0] == "ok"
+    assert ledger.buy_shares(mid2, BOB, 0, 10 * USDC)[0] == "ok"
+    assert ledger.buy_shares(mid2, ALICE, 1, 5 * USDC)[0] == "ok"
+    close_market(ledger, mid2)
+    ok, msg, _ = ledger.resolve_market(mid2, 0, ALICE)
+    assert ok, msg
+    assert ledger.get_market(mid2)["status"] == "resolved"
+
+
+def test_creator_still_holding_at_the_deadline_is_told_to_cancel(ledger):
+    """Past close_at sell_shares refuses too, so the guard that says "sell your
+    side first" would send the creator into an action that can no longer work.
+    The advice has to be the exit that is still real: cancel, which refunds
+    every holder."""
+    mid = make_market(ledger)
+    _, b = ledger.buy_shares(mid, ALICE, 0, 10 * USDC)
+    close_market(ledger, mid)
+
     ok, msg, _ = ledger.resolve_market(mid, 0, ALICE)
-    assert ok
-    assert ledger.get_market(mid)["status"] == "resolved"
+    assert not ok and "Отмените рынок" in msg
+    assert ledger.sell_shares(mid, ALICE, 0, b["shares"])[0] == "deadline"
+    assert ledger.get_market(mid)["status"] == "open"
+
+    ok, msg = ledger.cancel_market(mid, ALICE)
+    assert ok, msg
+    assert ledger.get_market(mid)["status"] == "cancelled"
+    assert ledger.balance(ALICE) == Decimal("1000")  # subsidy and buy both back
 
 
 def test_cancel_market_refunds_cost_basis(ledger):
@@ -417,6 +448,7 @@ def test_resolve_blocked_without_non_creator_winners(ledger):
     ledger.credit(CAROL, 100 * USDC, "deposit")
     assert ledger.buy_shares(mid, BOB, 0, 20 * USDC)[0] == "ok"
     assert ledger.buy_shares(mid, CAROL, 1, 10 * USDC)[0] == "ok"
+    close_market(ledger, mid)
     ok, msg, _ = ledger.resolve_market(mid, 2, ALICE)
     assert not ok
     assert "держателей" in msg
@@ -564,6 +596,7 @@ def test_user_market_positions_drops_closed_markets(ledger):
     ledger.buy_shares(mid, BOB, 0, 10 * USDC)
     ledger.buy_shares(other, BOB, 0, 10 * USDC)
     assert len(ledger.user_market_positions(BOB)) == 2
+    close_market(ledger, mid)
     ok, _, _ = ledger.resolve_market(mid, 0, ALICE)
     assert ok
     assert [r["market_id"] for r in ledger.user_market_positions(BOB)] == [other]
@@ -662,6 +695,7 @@ def test_cb_mk_resolve_notifies_traders(ledger):
     mid = make_market(ledger)
     ledger.credit(BOB, 100 * USDC, "deposit")
     _, b = ledger.buy_shares(mid, BOB, 0, 10 * USDC)
+    close_market(ledger, mid)
     bot = Bot()
     cb = Callback(f"mkres:{mid}:0", ALICE, bot=bot)
     run(cb_mk_resolve(cb))

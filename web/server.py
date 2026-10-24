@@ -430,7 +430,17 @@ async def api_user(tg_id: int, request: Request) -> dict:
     # to that same user or the owner; a stranger enumerating tg_ids gets the
     # public aggregate only (no per-tx amounts, no live balance, no positions).
     if is_owner:
-        positions = [{**p, 'stake_usdc': _usdc(p['stake_micro']), 'potential_usdc': _usdc(p['potential_micro'])} for p in await ledger.user_positions(tg_id)]
+        positions = [
+            {
+                **p,
+                'stake_usdc': _usdc(p['stake_micro']),
+                # The cabinet shows what resolve_bet will credit, not the gross
+                # pot share — a preview that rounds differently is a promise the
+                # ledger breaks.
+                'net_usdc': _usdc(p['net_micro']),
+            }
+            for p in await ledger.user_positions(tg_id)
+        ]
         lang = (await ledger.get_settings(tg_id)).get('lang', 'ru')
         history = await rows_view(await ledger.history(tg_id, 12), lang, ledger)
         return {
@@ -830,6 +840,7 @@ async def mini_app(request: Request):
     html = html.replace('__PUBLIC_URL__', base_url)
     html = html.replace('__PUBLIC_HOST__', base_url.split('//')[-1])
     html = html.replace('__CHAIN_NAME__', chain_label())
+    html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
     return Response(content=html.encode('utf-8'), media_type='text/html')
 

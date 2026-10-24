@@ -161,6 +161,11 @@ WITHDRAW_BATCH_FALLBACK_DIRECT: bool = os.environ.get("WITHDRAW_BATCH_FALLBACK_D
 # Dead-market protection: after close_at + grace, anyone can refund a market.
 MARKET_GRACE_HOURS: int = int(os.environ.get("MARKET_GRACE_HOURS", "72"))
 GRACE_WARN_BEFORE_HOURS: int = int(os.environ.get("GRACE_WARN_BEFORE_HOURS", "12"))
+# Every market carries a deadline: without one the creator is an oracle with no
+# clock and the locked money has no way to become spendable. A creator who
+# names no deadline gets this window (on-chain markets already did).
+MARKET_DEFAULT_HOURS: int = int(os.environ.get("MARKET_DEFAULT_HOURS", "168"))
+MARKET_DEFAULT_SECONDS: int = MARKET_DEFAULT_HOURS * 3600
 
 # Prediction markets v2 (Polymarket-style LMSR AMM, see bot/ledger/).
 # The creator deposits a subsidy; b = subsidy / ln(n_options) guarantees the
