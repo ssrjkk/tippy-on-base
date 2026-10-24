@@ -310,50 +310,44 @@ class LedgerViewsMixin:
 
 
     def global_stats(self) -> dict:
+        """Site-wide counters in one pass over the journal.
+
+        This used to be nine queries — five of them `SUM(amount) FROM tx_log
+        WHERE kind = …` — each scanning the same growing table while holding the
+        ledger lock, and the landing page and /metrics asked for it constantly.
+        One SELECT with a FILTER clause per kind reads tx_log once and answers
+        every counter from that pass.
+        """
+        since30 = int(time.time()) - 30 * 86400
         with self._lock:
-            users = self._conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
-            markets = self._conn.execute(
-                "SELECT COUNT(*) AS c FROM bets WHERE status = 'open'"
-            ).fetchone()["c"]
-            tips = self._conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE kind = 'tip'"
-            ).fetchone()["s"]
-            deposits = self._conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE kind = 'deposit'"
-            ).fetchone()["s"]
-            bets_volume = self._conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE kind = 'bet'"
-            ).fetchone()["s"]
-            fees = self._conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE kind = 'fee'"
-            ).fetchone()["s"]
-            x402 = self._conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE kind = 'x402'"
-            ).fetchone()["s"]
-            # The landing page labels this "Транзакций", so it must count
-            # movements, not journal lines: the receiver-side copy of a tip or a
-            # rain shares the sender's booking and would be counted twice.
-            txs = self._conn.execute(
-                "SELECT COUNT(*) AS c FROM tx_log WHERE NOT (kind = ANY(%s))",
-                (list(MIRRORED_CREDIT_KINDS),),
-            ).fetchone()["c"]
-            since30 = int(time.time()) - 30 * 86400
-            vol30 = self._conn.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log "
-                "WHERE kind IN ('tip', 'deposit', 'bet', 'x402') AND created_at >= %s",
-                (since30,),
-            ).fetchone()["s"]
+            row = self._conn.execute(
+                "SELECT (SELECT COUNT(*) FROM users) AS users,"
+                " (SELECT COUNT(*) FROM bets WHERE status = 'open') AS markets,"
+                " COALESCE(SUM(amount) FILTER (WHERE kind = 'tip'), 0) AS tips,"
+                " COALESCE(SUM(amount) FILTER (WHERE kind = 'deposit'), 0) AS deposits,"
+                " COALESCE(SUM(amount) FILTER (WHERE kind = 'bet'), 0) AS bets_volume,"
+                " COALESCE(SUM(amount) FILTER (WHERE kind = 'fee'), 0) AS fees,"
+                " COALESCE(SUM(amount) FILTER (WHERE kind = 'x402'), 0) AS x402,"
+                " COALESCE(SUM(amount) FILTER (WHERE kind IN ('tip', 'deposit', 'bet', 'x402')"
+                "                             AND created_at >= %s), 0) AS vol30,"
+                # The landing page labels this "Транзакций", so it counts
+                # movements, not journal lines: the receiver-side copy of a tip
+                # or a rain shares the sender's booking.
+                " COUNT(*) FILTER (WHERE NOT (kind = ANY(%s))) AS txs"
+                " FROM tx_log",
+                (since30, list(MIRRORED_CREDIT_KINDS)),
+            ).fetchone()
         return {
-            "users": int(users),
-            "open_markets": int(markets),
-            "tips_micro": int(tips),
-            "deposits_micro": int(deposits),
-            "bets_micro": int(bets_volume),
-            "x402_micro": int(x402),
-            "fees_micro": int(fees),
-            "volume_micro": int(tips + deposits + bets_volume + x402),
-            "volume_30d_micro": int(vol30),
-            "transactions": int(txs),
+            "users": int(row["users"]),
+            "open_markets": int(row["markets"]),
+            "tips_micro": int(row["tips"]),
+            "deposits_micro": int(row["deposits"]),
+            "bets_micro": int(row["bets_volume"]),
+            "x402_micro": int(row["x402"]),
+            "fees_micro": int(row["fees"]),
+            "volume_micro": int(row["tips"] + row["deposits"] + row["bets_volume"] + row["x402"]),
+            "volume_30d_micro": int(row["vol30"]),
+            "transactions": int(row["txs"]),
         }
 
 
@@ -363,7 +357,12 @@ class LedgerViewsMixin:
         names = self.usernames_bulk([r["tg_id"] for r in rows])
         return [
             {
-                "username": names[int(r["tg_id"])] or f"id{r['tg_id']}",
+                # tg_id travels along: a caller that has to fall back to a
+                # Basename needs it, and without it the fallback never ran.
+                # `username` is the Telegram username or None — a page that
+                # shows the row must resolve the name, not assume one exists.
+                "tg_id": int(r["tg_id"]),
+                "username": names[int(r["tg_id"])],
                 "total_micro": int(r["total"]),
             }
             for r in rows

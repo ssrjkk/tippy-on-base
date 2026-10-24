@@ -244,15 +244,15 @@ async def mini_state(request: Request) -> dict:
     history = await rows_view(await ledger.history(tg_id, 10), lang, ledger)
     from bot import tip_targets
     top_rows = await ledger.leaderboard(5)
-    top = []
-    for r in top_rows:
-        name = r.get('username')
-        if not name:
-            try:
-                name = await tip_targets.display_name_for(int(r['tg_id']))
-            except Exception:
-                name = None
-        top.append({'username': name or f"id{r['tg_id']}", 'total_usdc': _fmt(r['total_micro'])})
+    nameless = [int(r['tg_id']) for r in top_rows if not r['username']]
+    basenames = await tip_targets.display_names_for(nameless)
+    top = [
+        {
+            'username': r['username'] or basenames.get(int(r['tg_id'])) or f"id{r['tg_id']}",
+            'total_usdc': _fmt(r['total_micro']),
+        }
+        for r in top_rows
+    ]
     from bot import onchain_market as om
     onchain = await om.market_views(8)
     return {'tg_id': tg_id, 'username': await ledger.username_of(tg_id), 'balance_usdc': float(await ledger.balance(tg_id)), 'deposit_address': str(base.hot_wallet()), 'linked_address': await ledger.linked_address(tg_id), 'lang': lang, 'markets': markets, 'bets': bets, 'onchain_markets': onchain, 'history': history, 'top': top}

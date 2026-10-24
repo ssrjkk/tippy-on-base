@@ -331,14 +331,12 @@ async def api_markets(status: str='open') -> list[dict]:
     bets = await ledger.bets_by_status(status, 20)
     bet_ids = [int(b['id']) for b in bets]
     views = await ledger.bulk_market_views(bet_ids)
+    nameless = [int(v['creator']['id']) for v in views if not v['creator'].get('username')]
+    basenames = await tip_targets.display_names_for(nameless)
     for view in views:
-        if not view['creator'].get('username'):
-            try:
-                bn = await tip_targets.display_name_for(view['creator']['id'])
-            except Exception:
-                bn = None
-            if bn:
-                view['creator']['username'] = bn
+        bn = basenames.get(int(view['creator']['id']))
+        if bn and not view['creator'].get('username'):
+            view['creator']['username'] = bn
         view['pot_usdc'] = _usdc(view['pot'])
         for o in view['options']:
             o['pool_usdc'] = _usdc(o['pool'])
@@ -392,17 +390,20 @@ async def api_prediction(market_id: int) -> dict:
 @app.get('/api/leaderboard', tags=['users'])
 async def api_leaderboard() -> list[dict]:
     from bot import tip_targets
+    rows = await ledger.leaderboard(10)
+    # No Telegram username — surface the user's primary Basename. One call for
+    # the whole list: this used to resolve per row, and read a `tg_id` the row
+    # did not have, so the except swallowed a KeyError and no leader ever got a
+    # name back.
+    nameless = [int(r['tg_id']) for r in rows if not r['username']]
+    basenames = await tip_targets.display_names_for(nameless)
     out = []
-    for r in await ledger.leaderboard(10):
+    for r in rows:
         row = {**r, 'total_usdc': _usdc(r['total_micro'])}
-        if not row.get('username'):
-            # No Telegram username — surface the user's primary Basename.
-            try:
-                basename = await tip_targets.display_name_for(int(r['tg_id']))
-            except Exception:
-                basename = None
-            if basename:
-                row['username'] = basename
+        # `username` stays the name the page shows: Telegram username, else
+        # Basename, else the id.
+        row['username'] = r['username'] or basenames.get(int(r['tg_id'])) or f"id{r['tg_id']}"
+        del row['tg_id']
         out.append(row)
     return out
 

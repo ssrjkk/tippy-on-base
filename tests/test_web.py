@@ -237,6 +237,30 @@ def test_market_and_leaderboard(client, ledger):
     assert lb[0]["total_usdc"] == 5.0  # user 2 tipped 5 USDC
 
 
+def test_leaderboard_names_a_nameless_leader_by_basename(client, ledger, monkeypatch):
+    """`/api/leaderboard` read a `tg_id` the leaderboard row did not carry, so the
+    reverse-Basename fallback raised KeyError straight into a blanket
+    `except Exception` — and no leader without a Telegram username ever got a
+    name. The row carries the id, the fallback runs once for the whole page."""
+    from bot import tip_targets
+
+    ledger.credit(1, 100_000_000, "deposit")
+    ledger.ensure_user(2, None)
+    ledger.credit(2, 100_000_000, "deposit")
+    ledger.transfer(2, 1, 40_000_000)  # user 2 is the top tipper, and nameless
+    ledger._conn.execute(
+        "INSERT INTO wallet_links (tg_id, address) VALUES (%s, %s)", (2, "0x" + "b2" * 20)
+    )
+    ledger._conn.commit()
+    tip_targets._reverse_cache.clear()
+    monkeypatch.setattr(tip_targets, "reverse_basename_sync", lambda addr: "anon.base.eth")
+
+    lb = client.get("/api/leaderboard").json()
+    assert lb[0]["username"] == "anon.base.eth", "the name a page shows lives here"
+    assert "tg_id" not in lb[0], "the internal id is not part of the public row"
+    assert lb[0]["total_usdc"] == 40.0
+
+
 def test_unknown_market_404(client):
     assert client.get("/api/market/99999").status_code == 404
 

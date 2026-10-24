@@ -134,12 +134,10 @@ async def test_display_name_reverse_resolution(db, resolver, monkeypatch):
     tip_targets._reverse_cache.clear()
 
     class FakeLedger:
-        async def linked_address(self, tg_id):
-            # matches Ledger.linked_address: a plain address string
-            return ALICE_ADDR
-
-        async def get_active_wallet(self, tg_id):
-            return None
+        async def addresses_for(self, tg_ids):
+            # matches Ledger.addresses_for: tg_id -> the address a reverse
+            # lookup would use (linked wins over the active custodial wallet)
+            return {i: (ALICE_ADDR if i == ALICE else None) for i in tg_ids}
 
     monkeypatch.setattr(tt, "ledger", FakeLedger())
     monkeypatch.setattr(tt, "reverse_basename_sync", lambda addr: "alice.base.eth")
@@ -160,11 +158,85 @@ async def test_display_name_none_without_addresses(db, monkeypatch):
     tip_targets._reverse_cache.clear()
 
     class NoWalletLedger:
-        async def linked_address(self, tg_id):
-            return None
-
-        async def get_active_wallet(self, tg_id):
-            return None
+        async def addresses_for(self, tg_ids):
+            return dict.fromkeys(tg_ids)
 
     monkeypatch.setattr(tt, "ledger", NoWalletLedger())
     assert await tt.display_name_for(BOB) is None
+
+
+@pytest.mark.asyncio
+async def test_display_names_for_pays_one_rpc_per_address(db, resolver, monkeypatch):
+    """A top list resolves each wallet once, in one address query, and answers
+    None for a user with no wallet at all — the old code walked two queries and
+    one sequential ENS call per row."""
+    _setup_users(db)
+    tip_targets._cache.clear()
+    tip_targets._reverse_cache.clear()
+    carol = 3103
+    db.ensure_user(carol, "carol")  # no linked and no custodial wallet
+    db._conn.execute("UPDATE users SET username = NULL")
+    db._conn.commit()
+
+    calls = []
+
+    def fake_reverse(addr):
+        calls.append(addr.lower())
+        return f"n{len(calls)}.base.eth"
+
+    monkeypatch.setattr(tip_targets, "reverse_basename_sync", fake_reverse)
+    names = await tip_targets.display_names_for([ALICE, ALICE, BOB, carol])
+    assert set(names) == {ALICE, BOB, carol}, "every id asked for gets an answer"
+    assert names[ALICE] and names[BOB] and names[BOB] != names[ALICE]
+    assert names[carol] is None, "no wallet is not a failed lookup"
+    assert len(calls) == 2, f"one reverse call per distinct address, got {calls}"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_reverse_lookups_share_one_call(monkeypatch):
+    """Two awaits of the same cold address must not open two RPCs."""
+    import asyncio
+    import threading
+
+    tip_targets._reverse_cache.clear()
+    tip_targets._inflight.clear()
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    def blocking_reverse(addr):
+        calls.append(addr)
+        started.set()
+        release.wait(5)
+        return "shared.base.eth"
+
+    monkeypatch.setattr(tip_targets, "reverse_basename_sync", blocking_reverse)
+    try:
+        first = asyncio.create_task(tip_targets.reverse_name_for(ALICE_ADDR))
+        await asyncio.to_thread(started.wait, 5)  # the RPC thread is inside
+        second = asyncio.create_task(tip_targets.reverse_name_for(ALICE_ADDR))
+        release.set()
+        assert await first == "shared.base.eth"
+        assert await second == "shared.base.eth"
+    finally:
+        release.set()
+    assert len(calls) == 1, calls
+    assert tip_targets._inflight == {}, "the in-flight entry is dropped when it finishes"
+
+
+@pytest.mark.asyncio
+async def test_full_cache_drops_the_oldest_quarter_not_everything(monkeypatch):
+    """`cache.clear()` at the cap threw away every answer the process had paid
+    for; eviction must cost a slice, not the whole cache."""
+    import time
+
+    monkeypatch.setattr(tip_targets, "_CACHE_MAX", 8)
+    # n6 is the oldest entry (stamped 6 seconds back), n0 the freshest.
+    cache = {f"n{i}": (f"tg{i}", time.time() - i) for i in range(7)}
+    tip_targets._make_room(cache)
+    assert len(cache) == 7, "a cache under the cap is left alone"
+    cache["n7"] = ("tg7", time.time())
+    tip_targets._make_room(cache)
+    assert len(cache) == 6, sorted(cache)
+    assert "n6" not in cache and "n5" not in cache, "the oldest entries go first"
+    assert "n7" in cache and "n0" in cache, "the fresh answers survive"

@@ -262,19 +262,92 @@ def test_leaderboard_reads_names_once_whatever_the_limit(ledger):
     big, n_big = statements(10)
     assert [len(small), len(big)] == [2, 3]
     assert n_big == n_small, f"top-10 cost {n_big - n_small} more statements than top-2"
-    # Parity with the row-by-row answer, idN fallback included.
+    # Parity with the row-by-row answer. `username` stays the Telegram username
+    # or None, `display` is what a page shows when nothing resolves, and `tg_id`
+    # travels along because a caller that has to fall back to a Basename needs it.
     assert big == [
         {
-            "username": ledger.username_of(r["tg_id"]) or f"id{r['tg_id']}",
+            "tg_id": int(r["tg_id"]),
+            "username": ledger.username_of(r["tg_id"]),
             "total_micro": int(r["total"]),
         }
         for r in ledger.top_tippers(10)
     ]
     assert big == [
-        {"username": "alice", "total_micro": 3_000_000},
-        {"username": f"id{BOB}", "total_micro": 2_000_000},
-        {"username": "carol", "total_micro": 1_000_000},
+        {"tg_id": ALICE, "username": "alice", "total_micro": 3_000_000},
+        {"tg_id": BOB, "username": None, "total_micro": 2_000_000},
+        {"tg_id": CAROL, "username": "carol", "total_micro": 1_000_000},
     ]
+
+
+def test_addresses_for_batches_and_prefers_the_linked_wallet(ledger):
+    """`display_names_for()` needs one address per visible user. Read row by row
+    it was two statements per user (linked wallet, then custodial) before the
+    first ENS call; this is two statements for the whole page, with the externally
+    linked wallet winning over the active custodial one, exactly as the single-id
+    path did."""
+    linked = "0x" + "a1" * 20
+    custodial = "0x" + "b2" * 20
+    for tg, name in ((ALICE, "alice"), (BOB, "bob"), (CAROL, "carol")):
+        ledger.ensure_user(tg, name)
+    ledger._conn.execute("INSERT INTO user_wallets (tg_id, address, key_enc, seed_enc, slot) "
+                         "VALUES (%s, %s, '', '', 1)", (ALICE, custodial))
+    ledger._conn.execute("INSERT INTO wallet_links (tg_id, address) VALUES (%s, %s)", (ALICE, linked))
+    ledger._conn.execute("INSERT INTO user_wallets (tg_id, address, key_enc, seed_enc, slot) "
+                         "VALUES (%s, %s, '', '', 1)", (BOB, custodial.replace("b2", "c3")))
+    ledger._conn.commit()
+
+    seen = []
+    real = ledger._conn.execute
+    ledger._conn.execute = lambda q, *a, **kw: (seen.append(q), real(q, *a, **kw))[1]
+    try:
+        got = ledger.addresses_for([ALICE, BOB, CAROL, ALICE])
+    finally:
+        del ledger._conn.execute
+
+    assert len(seen) == 2, f"one query per source, not per user: {seen}"
+    assert list(got) == [ALICE, BOB, CAROL], "every id asked for, in the order asked"
+    assert got[ALICE] == linked, "an externally linked wallet outranks the in-bot one"
+    assert got[BOB] == custodial.replace("b2", "c3")
+    assert got[CAROL] is None, "no wallet is an answer, not a missing key"
+    assert ledger.addresses_for([]) == {}
+
+
+def test_global_stats_is_one_statement_and_one_snapshot(ledger):
+    """The counters used to be nine statements over tx_log, each its own snapshot:
+    the ledger RLock only serializes this process, so the bot or the agent could
+    book money between two of them and the landing page would add up a moment that
+    never existed. One statement is one snapshot, one round trip, one pass."""
+    fund(ledger, ALICE, 100_000_000)
+    fund(ledger, BOB, 100_000_000)
+    ledger.transfer(ALICE, BOB, 5_000_000)  # tip + tip_in
+    ledger.credit(ALICE, 7_000_000, "deposit")
+
+    seen = []
+    real = ledger._conn.execute
+    ledger._conn.execute = lambda q, *a, **kw: (seen.append(q), real(q, *a, **kw))[1]
+    try:
+        s = ledger.global_stats()
+    finally:
+        del ledger._conn.execute
+
+    assert len(seen) == 1, f"global_stats costs {len(seen)} statements on the lock"
+    assert seen[0].count("FROM tx_log") == 1, "tx_log is read once, not once per kind"
+
+    def sum_for(kind: str) -> int:
+        return int(real(
+            "SELECT COALESCE(SUM(amount), 0) AS s FROM tx_log WHERE kind = %s", (kind,)
+        ).fetchone()["s"])
+
+    assert s["tips_micro"] == sum_for("tip")
+    assert s["deposits_micro"] == sum_for("deposit")
+    assert s["fees_micro"] == sum_for("fee")
+    assert s["volume_micro"] == sum_for("tip") + sum_for("deposit") + sum_for("bet") + sum_for("x402")
+    assert s["users"] >= 2
+    assert s["transactions"] == int(real(
+        "SELECT COUNT(*) AS c FROM tx_log WHERE NOT (kind = ANY(%s))",
+        (["tip_in", "rain_in"],),
+    ).fetchone()["c"]), "mirrored credit rows are not separate movements"
 
 
 def test_link_nonce_and_confirm(ledger):

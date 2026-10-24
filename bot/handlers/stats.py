@@ -33,14 +33,16 @@ async def _top_text(tg_id: int | None = None) -> str:
     rows = await common.ledger.top_tippers(10)
     if not rows:
         return i18n.t(lang, 'top_empty')
-    names = await common.ledger.usernames_bulk([int(r['tg_id']) for r in rows])
+    ids = [int(r['tg_id']) for r in rows]
+    names = await common.ledger.usernames_bulk(ids)
+    # No Telegram username — show the user's PRIMARY basename (Base identity)
+    # instead of a bare id. Batched: one address query and a few ENS calls, not
+    # ten of each walked one after another.
+    basenames = await tip_targets.display_names_for([i for i in ids if not names[i]])
     lines = []
     for i, row in enumerate(rows, 1):
-        uname = names[int(row['tg_id'])]
-        if not uname:
-            # No Telegram username — show the user's PRIMARY basename
-            # (Base identity) instead of a bare id.
-            uname = await tip_targets.display_name_for(int(row['tg_id'])) or f"id{row['tg_id']}"
+        tg_id = int(row['tg_id'])
+        uname = names[tg_id] or basenames.get(tg_id) or f"id{tg_id}"
         medal = '🥇' if i == 1 else '🥈' if i == 2 else '🥉' if i == 3 else '▫️'
         lines.append(f"{medal} <b>@{common._h(uname)}</b> — {common._fmt(row['total'])} USDC")
     return i18n.t(lang, 'top_title') + '\n\n' + '\n'.join(lines)

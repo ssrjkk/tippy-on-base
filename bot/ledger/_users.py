@@ -118,6 +118,36 @@ class LedgerUsersMixin:
 
 
 
+    def addresses_for(self, tg_ids: list[int]) -> dict[int, str | None]:
+        """tg_id -> the address a reverse Basename lookup would use.
+
+        The externally linked wallet wins over the active custodial one, which is
+        the same order `display_name_for` used to walk with two queries per user.
+        Batched because a top-ten list turned that into twenty round trips before
+        it even started asking ENS.
+        """
+        ids = list(dict.fromkeys(int(i) for i in tg_ids))
+        if not ids:
+            return {}
+        placeholders = ",".join(["%s"] * len(ids))
+        with self._lock:
+            wallets = self._conn.execute(
+                f"SELECT tg_id, address FROM user_wallets "
+                f"WHERE active = true AND tg_id IN ({placeholders}) ORDER BY tg_id, slot",
+                ids,
+            ).fetchall()
+            linked = self._conn.execute(
+                f"SELECT tg_id, address FROM wallet_links WHERE tg_id IN ({placeholders})", ids
+            ).fetchall()
+        found: dict[int, str] = {}
+        for r in wallets:  # weaker source first: linked rows override
+            found.setdefault(int(r["tg_id"]), r["address"])
+        for r in linked:
+            found[int(r["tg_id"])] = r["address"]
+        return {i: found.get(i) for i in ids}
+
+
+
     def balance(self, tg_id: int) -> Decimal:
         with self._lock:
             row = self._conn.execute(
