@@ -7,7 +7,13 @@ on:
   schedule:
     # Запуск каждые 6 часов для мониторинга прода
     - cron: '0 */6 * * *'
-  workflow_dispatch: # Возможность ручного запуска
+  workflow_dispatch:
+    inputs:
+      expect_down:
+        type: boolean
+        required: false
+        default: false
+        description: "Known outage — skip the live checks"
 
 permissions:
   contents: read
@@ -35,35 +41,41 @@ jobs:
           pip install pytest-playwright
           playwright install chromium
 
-      - name: Check if production site is reachable
-        id: check_site
+      - name: Record what the edge serves
+        env:
+          PROD_URL: https://tippy-egi.pages.dev
         run: |
-          if curl -sf --max-time 10 https://tippy-egi.pages.dev > /dev/null 2>&1; then
-            echo "reachable=true" >> $GITHUB_OUTPUT
-            echo "Production site is reachable"
-          else
-            echo "reachable=false" >> $GITHUB_OUTPUT
-            echo "::warning::Production site at https://tippy-egi.pages.dev is not reachable. Skipping validation."
-          fi
-
-      - name: Check if backend is configured
-        id: check_backend
-        run: |
-          status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://tippy-egi.pages.dev/api/health)
-          if [ "$status" != "200" ]; then
-            echo "configured=false" >> $GITHUB_OUTPUT
-            echo "::warning::Origin does not serve /api/health (HTTP $status): BACKEND_URL is unset or the backend is down. Skipping validation."
-          else
-            echo "configured=true" >> $GITHUB_OUTPUT
-            echo "Backend is configured"
-          fi
+          {
+            echo "## Live edge (both paths must answer 200)"
+            echo ""
+            echo "| Path | HTTP |"
+            echo "| --- | --- |"
+            for path in / /api/health; do
+              if ! code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${PROD_URL}${path}"); then
+                code="unreachable"
+              fi
+              echo "| \`${path}\` | ${code} |"
+            done
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Production Validation Tests
-        if: steps.check_site.outputs.reachable == 'true' && steps.check_backend.outputs.configured == 'true'
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.expect_down != 'true'
         env:
           PYTEST_ADDOPTS: "-v --tb=short"
         run: |
           pytest tests/test_production_health.py -m production
+
+      - name: Note the suppressed run
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_down == 'true'
+        run: |
+          echo "::notice::The live checks did not run: dispatched with expect_down=true."
+          {
+            echo "### Validation skipped by hand"
+            echo ""
+            echo "Dispatched with \`expect_down=true\`, so no request reached the live site."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report failure
         if: failure()

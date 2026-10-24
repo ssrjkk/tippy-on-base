@@ -1188,3 +1188,36 @@ def test_docs_do_not_advertise_a_palette_or_entrypoint_that_does_not_exist():
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert "python main.py" not in readme
     assert "deploy/run.py" in readme
+
+
+def test_prod_health_workflow_fails_instead_of_skipping():
+    """`Prod Health Check & Validation` ran on a cron and reported *green* while
+    the origin answered 503: two curl steps turned "site is down" into a
+    `::warning::` plus `reachable=false`, and the pytest step was gated on both
+    outputs, so the only test of the live site never executed. A monitoring gate
+    has to be able to fail, so the shape that allowed that stays banned here.
+    The single allowed suppression is a human typing `expect_down` by hand."""
+    from pathlib import Path
+
+    text = (
+        Path(__file__).resolve().parents[1]
+        / ".github"
+        / "workflows"
+        / "prod-health-check.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "pytest tests/test_production_health.py -m production" in text
+    assert "::warning::" not in text
+    assert "reachable=false" not in text
+
+    # No step may be gated on a probe output: that is the escape hatch.
+    gated = re.findall(r"^\s+if: (.+)$", text, re.M)
+    assert gated, "the workflow lost every `if:` and this test needs re-reading"
+    for condition in gated:
+        assert "steps." not in condition, condition
+    assert sum("expect_down" in c for c in gated) == 2, gated
+
+    # `expect_down` only exists as a manual, default-off input.
+    assert "workflow_dispatch" in text
+    assert re.search(r"expect_down:\n\s+type: boolean\n\s+required: false\n\s+default: false", text)
+    assert "schedule:" in text

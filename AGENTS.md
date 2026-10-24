@@ -17,8 +17,10 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~7 min, 1015 tests. The four `production` tests hit
-  the deployed site and belong to `.github/workflows/prod-health-check.yml`, not to this gate.
+- `python -m pytest -q -m "not production"` — ~7 min, 1036 tests. The four `production` tests hit
+  the deployed site and belong to `.github/workflows/prod-health-check.yml`, not to this gate. That
+  workflow has no skip path: a 503 maintenance card makes all four fail, and only a hand-dispatched
+  `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
 - Run targeted files first (`pytest tests/test_web.py -q --timeout=60`), the whole suite last.
   `--timeout=60 --timeout-method=thread` makes a hung test print its stack instead of freezing.
 - `python scripts/check_i18n.py` checks that every key in `bot/i18n.py` exists in ru/en/zh. The Mini

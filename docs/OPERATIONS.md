@@ -60,6 +60,19 @@ Set up alerts for:
 3. **Database down**: `db == "down"` → CRITICAL
 4. **High error rate**: 5xx responses > 1% → WARNING
 
+### Synthetic check from CI
+
+`.github/workflows/prod-health-check.yml` runs `tests/test_production_health.py`
+against `https://tippy-egi.pages.dev` on every push to `main` and every 6 hours.
+It loads the landing page in headless Chromium and reads CSP, JS MIME types and
+cookie flags, then probes `/api/health` directly.
+
+A dead origin is a failing run, not a warning: when the Pages function answers
+with the 503 maintenance card, all four tests fail and the workflow turns red.
+The only way to keep a run green while the site is down is to dispatch it by
+hand with `expect_down=true` — the run then says so in its summary, so the
+suppression has an author.
+
 ## Backup
 
 ### Manual Backup

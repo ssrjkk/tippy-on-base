@@ -34,26 +34,33 @@ def test_prod_js_mime_type(page):
 
     page.goto(PROD_URL)
 
+    # Пустой список означал бы, что страница вообще не загрузила ни одного
+    # скрипта — тогда цикл ниже не проверяет ничего и тест проходит впустую.
+    shipped = [r for r in js_responses if r.url.endswith(".js")]
+    assert shipped, "Лендинг не отдал ни одного .js — проверять MIME больше нечего"
+
     # Фильтруем именно те, что должны быть JS (например, основной бандл или chain.js)
-    for r in js_responses:
-        if r.url.endswith(".js"):
-            content_type = r.headers.get("content-type", "").split(";")[0].strip().lower()
-            assert content_type in ["application/javascript", "text/javascript"], \
-                f"Неверный MIME-тип для {r.url}: {content_type}"
+    for r in shipped:
+        content_type = r.headers.get("content-type", "").split(";")[0].strip().lower()
+        assert content_type in ["application/javascript", "text/javascript"], \
+            f"Неверный MIME-тип для {r.url}: {content_type}"
 
 def test_prod_cookie_security(page):
-    """Проверка атрибутов безопасности кук (Secure, SameSite)"""
+    """Проверка атрибутов безопасности кук (Secure, HttpOnly, SameSite)"""
     page.goto(PROD_URL)
 
-    # Триггерим действие, которое должно установить куку (например, попытка загрузки или наличие уже установленной куки)
-    # Если кука еще не установлена, тест проверит те, что есть, или можно эмулировать клик по логину
+    # Белый список имён оставлял тест пустым: страница выдаёт tippy_login_state
+    # (и tippy_session после входа), а проверяла "session", "auth",
+    # "tippy_session" — совпадений не было ни разу. Проверяем каждую куку,
+    # которую сайт действительно выставил.
     cookies = page.context.cookies()
+    assert cookies, "Сайт не выставил ни одной куки — проверять атрибуты негде"
 
     for cookie in cookies:
-        if cookie["name"] in ["session", "auth", "tippy_session"]: # замени на реальное имя твоей куки
-            assert cookie.get("secure") is True, f"Кука {cookie['name']} не имеет флага Secure"
-            assert cookie.get("sameSite") in ["None", "Lax", "Strict"], \
-                f"Кука {cookie['name']} имеет небезопасный SameSite: {cookie.get('sameSite')}"
+        assert cookie.get("secure") is True, f"Кука {cookie['name']} не имеет флага Secure"
+        assert cookie.get("httpOnly") is True, f"Кука {cookie['name']} читается из JS"
+        assert cookie.get("sameSite") in ["None", "Lax", "Strict"], \
+            f"Кука {cookie['name']} имеет небезопасный SameSite: {cookie.get('sameSite')}"
 
 def test_prod_health_endpoint():
     """Прямая проверка /api/health без браузера
