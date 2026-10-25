@@ -114,7 +114,6 @@ from .onchain import (
 )
 from .paywall import (
     PAYWALL_DRAFT_TTL,
-    PAYWALL_HELP,
     _index_message,
     _paywall_channel_cmd,
     _paywall_channels_cmd,
@@ -131,7 +130,7 @@ from .stats import (
     cmd_stats,
     cmd_top,
 )
-from .tips import _notify_tip_received, _resolve_in_chat, cmd_rain, cmd_tip
+from .tips import _notify_tip_received, _resolve_in_chat, cb_tip_pick, cmd_rain, cmd_tip
 from .wallet import (
     _balance_text,
     _deposit_text,
@@ -178,7 +177,6 @@ __all__ = [
     "DONATE_LINK_RE",
     "KIND_EMOJI",
     "PAYWALL_DRAFT_TTL",
-    "PAYWALL_HELP",
     "PAYWALL_LINK_RE",
     "QUICK_AMOUNTS",
     "SIG_RE",
@@ -244,6 +242,7 @@ __all__ = [
     "cb_paywall_buy",
     "cb_res",
     "cb_settings",
+    "cb_tip_pick",
     "cb_wallet_new",
     "cb_wallet_sel",
     "cb_withdraw_confirm",

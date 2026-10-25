@@ -1200,6 +1200,47 @@ def test_mini_app_dictionary_is_complete_across_languages():
     assert not used - dicts["ru"], sorted(used - dicts["ru"])
 
 
+def test_every_class_in_the_page_templates_is_defined_in_style_css():
+    """AGENTS.md requires class parity in the direction a rename breaks: markup
+    carrying a class no rule defines renders unstyled and looks intentional until
+    someone compares two screens. The unused direction is not machine-checkable
+    without a long exception list (the Mini App keeps its own stylesheet, and
+    several classes arrive through f-strings), so this pins the one that can be
+    checked without guessing — and it covers the JS renderers, because that is
+    where the templates actually live: `cmd-group` was emitted from app.js and no
+    HTML file mentioned it."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "web" / "static"
+    css = (root / "style.css").read_text(encoding="utf-8-sig")
+    defined = set(re.findall(r"\.([a-zA-Z][\w-]*)", css))
+    for name in ("index.html", "market.html", "oc.html", "user.html", "agent.html",
+                 "app.js", "site.js"):
+        text = (root / name).read_text(encoding="utf-8-sig")
+        used = {c for m in re.finditer(r'class="([^"]+)"', text) for c in m.group(1).split()
+                if re.fullmatch(r"[a-zA-Z][\w-]*", c)}
+        used |= set(re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)['\"]", text))
+        assert used <= defined, f"{name}: {sorted(used - defined)}"
+
+
+def test_command_groups_match_the_website_renderer():
+    """bot/commands_catalog.py owns the group, web/static/app.js owns the heading
+    and its order. A group that exists in one and not the other means commands
+    silently fall into «Прочее» (or a heading renders over nothing)."""
+    from pathlib import Path
+
+    from bot.commands_catalog import BOT_COMMAND_SPECS
+
+    js = (Path(__file__).resolve().parents[1] / "web" / "static" / "app.js").read_text(
+        encoding="utf-8-sig")
+    block = re.search(r"const CMD_GROUPS = \[(.*?)\n\];", js, re.S)
+    assert block, "CMD_GROUPS not found in app.js"
+    declared = set(re.findall(r'\[\s*"([a-z]+)",', block.group(1)))
+    used = {group for _cmd, _desc, group in BOT_COMMAND_SPECS}
+    assert used == declared, used ^ declared
+    assert all(desc.strip() for _cmd, desc, _group in BOT_COMMAND_SPECS)
+
+
 def test_docs_do_not_advertise_a_palette_or_entrypoint_that_does_not_exist():
     """base.org was measured, not assumed, and #0052FF appears zero times on it —
     yet the README still described the design system with that hex for weeks after

@@ -11,13 +11,12 @@ from aiogram.filters import Command, CommandObject
 
 from . import _common as common
 
-__all__ = ['PAYWALL_DRAFT_TTL', 'PAYWALL_HELP', 'TG_MESSAGE_MAX', '_index_message', '_paywall_channel_cmd', '_paywall_channels_cmd', '_paywall_draft', '_paywall_list_text', '_paywall_subscribe_cmd', 'cmd_paywall', 'on_reaction']
+__all__ = ['PAYWALL_DRAFT_TTL', 'TG_MESSAGE_MAX', '_index_message', '_paywall_channel_cmd', '_paywall_channels_cmd', '_paywall_draft', '_paywall_list_text', '_paywall_subscribe_cmd', 'cmd_paywall', 'on_reaction']
 PAYWALL_DRAFT_TTL = 300
 # Hard limit Telegram imposes on one text message; a longer send is rejected and
 # the user receives nothing at all.
 TG_MESSAGE_MAX = 4096
 _paywall_draft: dict[int, tuple[int, str, float]] = {}
-PAYWALL_HELP = '🔐 <b>Платный контент</b>\n• /paywall create 5 Мой отчёт — создать пост за 5 USDC\n  (после этого пришли контент одним сообщением)\n• /paywall list — все платные посты\n• /paywall buy &lt;id&gt; — купить и открыть контент\n• /paywall cancel — отменить создание\n\n📡 <b>Платные каналы</b>\n• /paywall channel 5 — в канале: доступ за 5 USDC / 30 дней\n• /paywall channel off — выключить продажу доступа\n• /paywall subscribe @канал — купить/продлить доступ\n• /paywall channels — платные каналы и мои подписки\n\nПродавец получает USDC на баланс сразу после покупки.\nПокупка идёт с баланса (/deposit). AI-агенты платят через API:\nPOST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt; (x402-протокол).'
 
 async def _paywall_list_text(lang: str, uid: int) -> str | None:
     """Formatted paid-post list for a user, or None when there are none."""
@@ -63,7 +62,7 @@ async def cmd_paywall(message: types.Message, command: CommandObject) -> None:
     await common.ledger.ensure_user(message.from_user.id, message.from_user.username)
     args = (command.args or '').strip()
     if not args:
-        await message.answer(PAYWALL_HELP)
+        await message.answer(i18n.t(await common.user_lang(message.from_user.id), 'paywall_help'))
         return
     parts = args.split(maxsplit=1)
     sub = parts[0]
@@ -126,7 +125,7 @@ async def cmd_paywall(message: types.Message, command: CommandObject) -> None:
     if sub == 'channels':
         await _paywall_channels_cmd(message, lang)
         return
-    await message.answer(PAYWALL_HELP)
+    await message.answer(i18n.t(lang, 'paywall_help'))
 
 async def _paywall_channel_cmd(message: types.Message, args: list[str]) -> None:
     """/paywall channel <price> | off — must run inside the channel (bot admin)."""

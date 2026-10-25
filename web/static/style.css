@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    Tippy — Base design system
    Tokens taken from base.org production CSS: one brand blue,
    neutral greys, hairline borders, no shadows, no gradients.
@@ -29,8 +29,9 @@
   --ink: #111111;
   --ink-2: #3a3a3a;
   --muted: #6f6f6f;
-  --muted-2: #9a9a9a;
-  --faint: #b8b8b8;
+  /* Was #9a9a9a: 2.81:1 on white, and it is the colour of the 11px chart day
+     labels and the 13px leaderboard ranks — text a visitor has to read. */
+  --muted-2: #767676;
 
   --success: #10693f;
   --success-bg: rgba(16, 105, 63, 0.08);
@@ -48,6 +49,9 @@
   --text-secondary: var(--ink-2);
   --white: var(--ink);
   --accent: var(--blue);
+  /* --accent paints surfaces, --accent-text paints type: the dark theme's fill
+     blue (#224bff) is a button, not a readable 11px label. */
+  --accent-text: var(--blue-text);
   --accent-2: var(--blue-hover);
   --accent-soft: var(--blue-text);
   --accent-bg: var(--blue-soft);
@@ -86,8 +90,9 @@
   --ink: #ededed;
   --ink-2: #c8c8c8;
   --muted: #9a9a9a;
+  /* Dark keeps the pair one step apart: muted-2 was #8b8b8b (5.36:1), still
+     above 4.5 with the light token lifted. */
   --muted-2: #8b8b8b;
-  --faint: #6f6f6f;
 
   --success: #4bd09b;
   --success-bg: rgba(75, 208, 155, 0.14);
@@ -98,7 +103,9 @@
   --nav-bg: rgba(17, 17, 17, 0.92);
   --skeleton-shine: rgba(255, 255, 255, 0.06);
   --code-bg: #1a1a1a;
-  --dot: rgba(255, 255, 255, 0.08);
+  /* The band texture has to recede in dark: white dots at 8% lift the pixel
+     behind an 11px label to #2f2f2f and cost 1.5 points of contrast. */
+  --dot: rgba(0, 0, 0, 0.35);
   --chart-bar: var(--blue-text);
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a9a9a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
@@ -232,7 +239,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 /* ---------- Hero ---------- */
 .hero { text-align: center; padding: 92px 24px 56px; animation: fadeUp 0.5s var(--ease) both; }
 .hero h1 { animation: fadeUp 0.5s var(--ease) 0.05s both; }
-.hero h1 .accent { color: var(--accent); }
+.hero h1 .accent { color: var(--accent-text); }
 .hero-badge {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 6px 14px; border-radius: var(--pill);
@@ -241,7 +248,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   text-decoration: none;
   transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
 }
-.hero-badge:hover { border-color: var(--accent); color: var(--accent); }
+.hero-badge:hover { border-color: var(--accent); color: var(--accent-text); }
 .hero-badge .base-mark { width: 16px; height: 16px; font-size: 10px; border-radius: 4px; }
 .hero h1 {
   font-size: clamp(38px, 6.4vw, 68px); font-weight: 500; letter-spacing: -0.04em;
@@ -346,11 +353,15 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .bar-fill-warn { background: var(--warning); }
 .bar-fill-over { background: var(--danger); }
 .market-footer {
-  display: flex; justify-content: space-between; align-items: center; margin-top: 14px;
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
+  gap: 2px 14px; margin-top: 14px;
   font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
+/* At 360px the two halves of the row are what should break, not the number
+   inside them: "ПУЛ: 2,6 USDC · 4 ЧЕЛ." wrapped mid-phrase before this. */
+.market-footer > .pot:first-child { white-space: nowrap; }
 .pot { color: var(--muted); }
-.status-open { color: var(--accent); font-weight: 500; }
+.status-open { color: var(--accent-text); font-weight: 500; }
 .status-closed { color: var(--muted-2); }
 .status-resolved { color: var(--success); }
 
@@ -361,7 +372,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   font-size: 11px; font-weight: 500;
   font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
 }
-.chip-open { background: var(--blue-soft); color: var(--accent); }
+.chip-open { background: var(--blue-soft); color: var(--accent-text); }
 .chip-open::before {
   content: ""; width: 5px; height: 5px; border-radius: 50%;
   background: var(--accent);
@@ -394,7 +405,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 }
 
 /* ---------- Winner Highlight ---------- */
-.option-winner .option-label { color: var(--accent); font-weight: 600; }
+.option-winner .option-label { color: var(--accent-text); font-weight: 600; }
 .option-winner .option-label::after {
   content: "— исход";
   margin-left: 8px; font-family: var(--font-mono);
@@ -456,7 +467,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   color: var(--muted); text-decoration: none; font-weight: 500;
   transition: color 0.2s;
 }
-.powered:hover { color: var(--accent); }
+.powered:hover { color: var(--accent-text); }
 .powered .base-mark { width: 14px; height: 14px; font-size: 9px; border-radius: 4px; }
 
 .footer {
@@ -481,7 +492,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
   transition: border-color 0.2s, color 0.2s;
 }
-.chain-chip:hover { border-color: var(--accent); color: var(--accent); }
+.chain-chip:hover { border-color: var(--accent); color: var(--accent-text); }
 
 .author-links {
   display: flex; align-items: center; justify-content: flex-end;
@@ -492,11 +503,11 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   color: var(--muted); text-decoration: none; font-weight: 500;
   transition: color 0.2s;
 }
-.author-links a:hover { color: var(--accent); }
+.author-links a:hover { color: var(--accent-text); }
 
 .footer-legal { font-size: 12px; }
 .footer-legal a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
-.footer-legal a:hover { color: var(--accent); }
+.footer-legal a:hover { color: var(--accent-text); }
 
 .empty {
   color: var(--muted); padding: 28px 20px; text-align: center;
@@ -507,8 +518,10 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   animation: fadeIn 0.3s both;
 }
 
-.m-link { color: var(--accent); text-decoration: none; font-weight: 500; transition: color 0.2s; }
-.m-link:hover { text-decoration: underline; color: var(--accent-2); }
+.m-link { color: var(--accent-text); text-decoration: none; font-weight: 500; transition: color 0.2s; }
+/* The underline is the hover affordance; the dark theme's hover blue (#3d61ff,
+   3.9:1) made a link dimmer exactly when the pointer was on it. */
+.m-link:hover { text-decoration: underline; color: var(--accent-text); }
 
 /* ---------- How It Works ---------- */
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
@@ -522,10 +535,13 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 }
 .step:nth-child(2) { animation-delay: 0.06s; }
 .step:nth-child(3) { animation-delay: 0.12s; }
+/* Outlined, not filled: a blue-soft disc under #7575ff type is 4.28:1 once the
+   step sits inside a tinted band, and the band is one of the two places the
+   "how it works" numbers actually render. */
 .step-num {
   width: 26px; height: 26px; border-radius: var(--pill);
-  background: var(--blue-soft);
-  color: var(--accent); font-weight: 500; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--blue-line);
+  color: var(--accent-text); font-weight: 500; display: flex; align-items: center; justify-content: center;
   margin-bottom: 14px; font-size: 12px; font-family: var(--font-mono);
 }
 .step h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
@@ -639,7 +655,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 }
 
 /* ---------- Atoms ---------- */
-.accent { color: var(--accent); }
+.accent { color: var(--accent-text); }
 .mono {
   font-family: var(--font-mono);
   letter-spacing: -0.02em;
@@ -660,14 +676,31 @@ code {
 .btn-full { width: 100%; justify-content: center; margin-top: 12px; }
 .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 
-/* ---------- Banded section ---------- */
-.band {
+/* ---------- Banded section ----------
+   Thirteen sections stacked in one white column read as a data dump, so every
+   other block gets a tinted band. The band has to reach both viewport edges
+   while `main` caps its children at 1120px: the negative margin cancels the
+   gutter (50% is half the content box, 50vw half the viewport) and the padding
+   puts the text back where it was. Below 1120px the same maths collapses to the
+   24px `main` padding, so nothing overflows on a phone. */
+.section--band {
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  margin-bottom: 0;
+  padding-left: calc(50vw - 50%);
+  padding-right: calc(50vw - 50%);
+  padding-top: 40px;
+  padding-bottom: 40px;
   background: var(--surface);
   background-image: radial-gradient(var(--dot) 1px, transparent 1px);
   background-size: 18px 18px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
+/* Two bands in a row are one block: the hairline between them would cut the
+   texture in half, and the gap below has to come from the next plain section. */
+.section--band + .section--band { border-top: 0; padding-top: 0; }
+.section--band + .section { margin-top: 56px; }
 
 /* ---------- Connect cards ---------- */
 .connect {
@@ -755,7 +788,7 @@ select.input {
   transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background-color 0.2s var(--ease);
 }
 .amount-chip:hover { border-color: var(--ink); color: var(--ink); }
-.amount-chip.active { background: var(--blue-soft); border-color: var(--accent); color: var(--accent); }
+.amount-chip.active { background: var(--blue-soft); border-color: var(--accent); color: var(--accent-text); }
 
 /* ---------- Option pickers ---------- */
 .opt-list { display: grid; gap: 8px; }
@@ -770,7 +803,7 @@ select.input {
 .opt-btn.selected { background: var(--blue-soft); border-color: var(--accent); }
 .opt-label { font-weight: 500; }
 .opt-price { color: var(--muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.opt-btn.selected .opt-price { color: var(--accent); }
+.opt-btn.selected .opt-price { color: var(--accent-text); }
 .opt-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 
 /* ---------- Review rows ---------- */
@@ -841,20 +874,33 @@ select.input {
 .legal hr { border: 0; border-top: 1px solid var(--border); margin: 28px 0; }
 
 /* ---------- Bot command menu ---------- */
+/* The command table is grouped by what a visitor came to do; each group is one
+   hairline table with a micro-label, and the groups stack with real air. */
+.cmd-groups { display: grid; gap: 26px; }
+.cmd-group { break-inside: avoid; }
+.cmd-group-title {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 10px;
+}
+/* Hairlines come from the cells, not from the container showing through a 1px
+   gap: a grouped table has a short last row in most groups, and gap-coloured
+   background painted those empty cells grey. */
 .cmd-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1px;
-  background: var(--border);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 0;
+  background: var(--canvas);
   border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
 }
 .cmd {
   display: flex; align-items: baseline; gap: 10px;
   background: var(--canvas); padding: 10px 14px; font-size: 14px;
   border: none; font-family: inherit; text-align: left; cursor: pointer;
+  box-shadow: inset -1px -1px 0 var(--border);
   transition: background 0.2s var(--ease);
 }
 .cmd:hover { background: var(--surface); }
 .cmd:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.cmd b { color: var(--accent); font-size: 12.5px; white-space: nowrap; font-family: var(--font-mono); font-weight: 500; }
+.cmd b { color: var(--accent-text); font-size: 12.5px; white-space: nowrap; font-family: var(--font-mono); font-weight: 500; }
 .cmd span { color: var(--muted); }
 
 /* ================================================================

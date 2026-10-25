@@ -137,9 +137,15 @@ async def _send_paywall_deep_link(message: types.Message, item_id: int) -> None:
     if item is None:
         await message.answer(i18n.t(await _lang(message.from_user.id), 'deep_link_paywall_not_found'))
         return
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🔓 Купить за {common._fmt(int(item['price_micro']))} USDC", callback_data=f'paywall_buy:{item_id}')], [InlineKeyboardButton(text='🔐 Все посты', callback_data='paywall_list')]])
     lang = await _lang(message.from_user.id)
-    await message.answer(i18n.t(lang, 'deep_link_paywall') + f"\n\n<b>{html.escape(item['title'])}</b>\nЦена: <b>{common._fmt(int(item['price_micro']))} USDC</b>", reply_markup=kb)
+    price = common._fmt(int(item['price_micro']))
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=i18n.t(lang, 'paywall_buy_btn', price=price),
+                              callback_data=f'paywall_buy:{item_id}')],
+        [InlineKeyboardButton(text=i18n.t(lang, 'paywall_all_btn'), callback_data='paywall_list')]])
+    await message.answer(i18n.t(lang, 'deep_link_paywall') + '\n\n'
+                         + i18n.t(lang, 'paywall_card', title=html.escape(item['title']), price=price),
+                         reply_markup=kb)
 
 @common.router.callback_query(F.data.startswith('paywall_buy:'))
 async def cb_paywall_buy(cb: types.CallbackQuery) -> None:

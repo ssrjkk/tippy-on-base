@@ -132,6 +132,30 @@ class LedgerViewsMixin:
 
 
 
+    def recent_tip_targets(self, tg_id: int, limit: int = 6) -> list[int]:
+        """The users this sender tipped most recently, newest first.
+
+        The tip screen offers these as buttons: tipping the same person again is
+        the common case, and recalling an @username from memory is not. Numeric
+        counterparties only — a tip filed against a basename or an x402 payer is
+        not a tg_id. Self-tips exist in the journal (nothing forbids them), but a
+        «tip yourself» chip is a suggestion no user asked for, so own id is out.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT counterparty FROM tx_log"
+                " WHERE tg_id = %s AND kind = 'tip' AND counterparty ~ '^[0-9]+$'"
+                "   AND counterparty <> %s"
+                # created_at is a whole second, so two tips in the same second
+                # would order arbitrarily; the row id breaks the tie by insertion.
+                " GROUP BY counterparty"
+                " ORDER BY MAX(created_at) DESC, MAX(id) DESC LIMIT %s",
+                (tg_id, str(tg_id), limit),
+            ).fetchall()
+        return [int(r["counterparty"]) for r in rows]
+
+
+
     def creator_fees(self, tg_id: int) -> int:
         """Total 2% win-fee income this user earned as a market creator."""
         with self._lock:

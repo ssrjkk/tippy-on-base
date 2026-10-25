@@ -5,6 +5,7 @@ message/bot objects; signatures use real local crypto (eth_account).
 """
 
 import asyncio
+import re
 import time
 from decimal import Decimal
 from types import SimpleNamespace
@@ -33,6 +34,7 @@ from bot.handlers import (
     cb_menu,
     cb_res,
     cb_settings,
+    cb_tip_pick,
     cb_withdraw_confirm,
     cmd_balance,
     cmd_bet,
@@ -497,14 +499,6 @@ def test_cmd_tip_by_username(ledger):
     m = Message("/tip 2 @Bob", from_id=ALICE, username="alice")
     run(cmd_tip(m))
     assert ledger.balance(BOB) == Decimal("2.000000")
-
-
-def test_cmd_tip_default_amount(ledger):
-    ledger.credit(ALICE, 10_000_000, "deposit")
-    ledger.ensure_user(BOB, "bob")
-    m = Message("/tip", from_id=ALICE, username="alice")
-    run(cmd_tip(m))
-    assert "Формат" in m.answers[0][0] or "Кому кидаем" in m.answers[0][0]
 
 
 def test_cmd_tip_self_rejected(ledger):
@@ -1293,9 +1287,94 @@ def test_cmd_tip_self(ledger):
     assert "Себе" in m.answers[0][0]
 
 
+def _kb_buttons(kb):
+    return [(b.text, b.callback_data) for row in kb.inline_keyboard for b in row]
+
+
+def test_cmd_tip_without_amount_offers_amount_chips(ledger):
+    """/tip used to answer a sentence about syntax. The chips are the syntax."""
+    ledger.ensure_user(ALICE, "alice")
+    m = Message("/tip", from_id=ALICE)
+    run(cmd_tip(m))
+    text, kb = m.answers[0]
+    assert "Сколько" in text
+    assert [cd for _, cd in _kb_buttons(kb)] == ["tip:a:5", "tip:a:10", "tip:a:25", "tip:a:50"]
+
+
+def test_cmd_tip_with_amount_offers_the_people_already_tipped(ledger):
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    ledger.ensure_user(BOB, "bob")
+    run(cmd_tip(Message("/tip 1 @bob", from_id=ALICE)))
+    m = Message("/tip 5", from_id=ALICE)
+    run(cmd_tip(m))
+    text, kb = m.answers[0]
+    assert "5 USDC" in text
+    assert _kb_buttons(kb) == [("@bob", f"tip:r:5:{BOB}")]
+
+
+def test_cmd_tip_without_history_explains_the_text_form(ledger):
+    """No history to offer: then, and only then, the answer is a sentence."""
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    m = Message("/tip 5", from_id=ALICE)
+    run(cmd_tip(m))
+    text, kb = m.answers[0]
+    assert kb is None
+    assert "/tip 5 @" in text
+
+
+def test_tip_chip_flow_moves_the_money_and_notifies(ledger, monkeypatch):
+    monkeypatch.setattr(handlers.config, "MONEY_CMD_COOLDOWN_SECONDS", 0)
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    ledger.ensure_user(BOB, "bob")
+    run(cmd_tip(Message("/tip 1 @bob", from_id=ALICE)))
+
+    bot = Bot()
+    pick = Callback("tip:a:10", ALICE, bot=bot)
+    run(cb_tip_pick(pick))
+    assert pick.message.markup is not None
+    assert [cd for _, cd in _kb_buttons(pick.message.markup)] == [f"tip:r:10:{BOB}"]
+
+    go = Callback(f"tip:r:10:{BOB}", ALICE, bot=bot)
+    run(cb_tip_pick(go))
+    assert "10" in go.message.text and "Чаевые" not in go.message.text
+    assert ledger.balance(BOB) == Decimal("11.000000")
+    assert ledger.balance(ALICE) == Decimal("39.000000")
+    assert any(chat_id == BOB and "10" in text for chat_id, text in bot.sent)
+
+
+def test_tip_chip_to_yourself_is_refused_without_moving_money(ledger):
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    ledger.ensure_user(BOB, "bob")
+    run(cmd_tip(Message("/tip 1 @bob", from_id=ALICE)))
+    cb = Callback(f"tip:r:10:{ALICE}", ALICE)
+    run(cb_tip_pick(cb))
+    assert cb.answers and "Себе" in cb.answers[0][0] and cb.answers[0][1] is True
+    assert ledger.balance(ALICE) == Decimal("49.000000")
+
+
+def test_tip_chip_rejects_malformed_callback_data(ledger):
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    for data in ("tip:r:abc:2", "tip:r:5:not-an-id", "tip:z:1", "tip:r:5:123456789012345678901"):
+        cb = Callback(data, ALICE)
+        run(cb_tip_pick(cb))
+        assert cb.answers and cb.answers[-1][1] is True, data
+    assert ledger.balance(ALICE) == Decimal("50.000000")
+
+
+def test_tip_chip_respects_the_throttle(ledger):
+    """A chip is not a bypass around the money cooldown the typed command obeys."""
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    ledger.ensure_user(BOB, "bob")
+    run(cmd_tip(Message("/tip 1 @bob", from_id=ALICE)))
+    cb = Callback(f"tip:r:10:{BOB}", ALICE)
+    run(cb_tip_pick(cb))
+    assert "Подожди" in cb.message.text
+    assert ledger.balance(BOB) == Decimal("1.000000")
+
+
 def test_notify_tip_received_self_is_noop():
     m = Message("/tip 1 @alice", from_id=ALICE)
-    run(_notify_tip_received(m, ALICE, 5, "alice"))
+    run(_notify_tip_received(m.bot, ALICE, ALICE, 5, "alice"))
     assert m.bot.sent == []
 
 
@@ -1999,6 +2078,35 @@ def test_cmd_paywall_help(ledger):
     assert "/paywall create" in m.answers[0][0]
 
 
+@pytest.mark.parametrize("lang,needle", [("en", "Paid content"), ("zh", "付费内容")])
+def test_paywall_help_follows_the_users_language(ledger, lang, needle):
+    """The screen was one hardcoded Russian constant for as long as it existed,
+    so a user who had switched the bot to English or Chinese still got a wall of
+    Cyrillic back. `check_i18n.py` cannot catch this: the key was never in the
+    dictionary to begin with."""
+    ledger.set_setting(ALICE, "lang", lang)
+    m = Message("/paywall")
+    run(cmd_paywall(m, CommandObject(command="paywall", args=None)))
+    text = m.answers[0][0]
+    assert needle in text
+    assert not re.search(r"[а-яА-ЯёЁ]", text), text
+
+
+def test_paywall_deep_link_card_is_localized(ledger):
+    """The buy button and the price label are the first thing a shared Frame
+    shows, and they were Russian whatever the buyer's language."""
+    ledger.ensure_user(BOB, "bob")
+    item_id = ledger.create_paywall(BOB, "Signal", 1_000_000, "content")
+    ledger.set_setting(ALICE, "lang", "en")
+    m = Message("/start", from_id=ALICE, username="alice")
+    run(cmd_start(m, CommandObject(command="start", args=f"paywall_{item_id}")))
+    text, kb = m.answers[0]
+    assert "Price: <b>1 USDC</b>" in text
+    assert not re.search(r"[а-яА-ЯёЁ]", text), text
+    labels = [btn.text for row in kb.inline_keyboard for btn in row]
+    assert any("Buy for 1 USDC" in label for label in labels), labels
+
+
 def test_cmd_paywall_create_asks_for_content(ledger):
     m = Message("/paywall create 5 Мой отчёт")
     run(cmd_paywall(m, CommandObject(command="paywall", args="create 5 Мой отчёт")))
@@ -2491,6 +2599,33 @@ def test_wallet_creates_and_shows_address(ledger):
     assert addr and addr.startswith("0x") and len(addr) == 42
 
 
+def test_wallet_list_slots_and_create_button_are_localized(ledger):
+    """/wallet and the post-switch refresh each built this screen from their own
+    copy of the same twenty lines, and both copies hardcoded «Слот» and
+    «Создать» — so the two screens could (and did) drift, and neither followed
+    the user's language."""
+    from bot.handlers.wallet import _wallet_list_view
+
+    ledger.set_setting(ALICE, "lang", "en")
+    wallets = ledger.get_wallets(ALICE)
+    assert not wallets
+    run(cmd_wallet(Message("/wallet", from_id=ALICE)))
+    wallets = ledger.get_wallets(ALICE)
+    text, kb = _wallet_list_view(wallets, "en")
+    assert "Slot 1:" in text
+    assert not re.search(r"[а-яА-ЯёЁ]", text), text
+    labels = [btn.text for row in kb for btn in row]
+    assert any(label.startswith("➕ Create (") for label in labels), labels
+
+    # The command renders through the same helper, so the list and the
+    # post-switch refresh cannot disagree: same lines, same language.
+    m = Message("/wallet", from_id=ALICE)
+    run(cmd_wallet(m))
+    answer = m.answers[-1][0]
+    for line in text.splitlines():
+        assert line in answer, line
+
+
 def test_wallet_export_returns_key_and_seed(ledger):
     m = Message("/wallet export", from_id=ALICE)
     run(cmd_wallet(m))
@@ -2607,7 +2742,7 @@ def test_every_user_command_is_in_the_menu():
                     (c.command if hasattr(c, "command") else str(c)).lstrip("/")
                     for c in cb.commands
                 )
-    menu = {name for name, _ in BOT_COMMAND_SPECS}
+    menu = {name for name, _, _group in BOT_COMMAND_SPECS}
     assert handled - OPERATOR_COMMANDS <= menu
     assert menu <= handled
 
@@ -2623,7 +2758,7 @@ def test_readme_documents_every_menu_command():
 
     readme = Path(__file__).resolve().parents[1].joinpath("README.md").read_text(encoding="utf-8")
     documented = set(re.findall(r"`/([a-z_]+)", readme))
-    missing = sorted(name for name, _ in BOT_COMMAND_SPECS if name not in documented)
+    missing = sorted(name for name, _, _group in BOT_COMMAND_SPECS if name not in documented)
     assert not missing, f"README never mentions: {missing}"
 
 

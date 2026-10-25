@@ -47,6 +47,79 @@ def test_mini_state_returns_balance(client, ledger):
     assert data["tg_id"] == TG_USER
 
 
+def test_mini_state_offers_recent_tip_recipients(client, ledger):
+    """The tip sheet's recipient chips come from here: `label` is what the chip
+    shows, `to` is the exact string /api/mini/tip accepts — so tapping a chip can
+    never address a person the endpoint would not find."""
+    ledger.ensure_user(TG_USER, "tipper")
+    ledger.ensure_user(TG_OTHER, "tipped")
+    ledger.credit(TG_USER, 20_000_000, "deposit")
+    _auth(client, TG_USER)
+    assert client.post("/api/mini/tip", json={"to": "tipped", "amount": 1},
+                       headers={"Idempotency-Key": "state-chips-1"}).status_code == 200
+
+    data = client.get("/api/mini/state").json()
+    assert data["recent_tips"] == [{"label": "tipped", "to": "tipped"}]
+
+    # A user with no username is still addressable — by tg_id, and the chip says
+    # so instead of showing an empty handle.
+    nameless = 1003
+    ledger.ensure_user(nameless, None)
+    ledger.credit(TG_USER, 5_000_000, "deposit")
+    assert client.post("/api/mini/tip", json={"to": str(nameless), "amount": 1},
+                       headers={"Idempotency-Key": "state-chips-2"}).status_code == 200
+    chips = client.get("/api/mini/state").json()["recent_tips"]
+    assert chips[0] == {"label": f"id{nameless}", "to": str(nameless)}, chips
+    assert {"label": "tipped", "to": "tipped"} in chips
+
+
+def test_mini_state_says_whether_the_history_is_truncated(client, ledger):
+    """The wallet tab lists what /state returns and, when the ledger stopped at
+    the cap, one line saying so. A user with exactly ten operations and a user
+    with two hundred look identical otherwise, and the second one is being told
+    their history is short."""
+    from web.mini import HISTORY_ROWS
+
+    ledger.ensure_user(TG_USER, "tipper")
+    ledger.ensure_user(TG_OTHER, "tipped")
+    ledger.credit(TG_USER, 20_000_000, "deposit")
+    _auth(client, TG_USER)
+    assert client.get("/api/mini/state").json()["history_truncated"] is False
+
+    for n in range(HISTORY_ROWS):
+        assert client.post("/api/mini/tip", json={"to": "tipped", "amount": 1},
+                           headers={"Idempotency-Key": f"hist-{n}"}).status_code == 200
+    data = client.get("/api/mini/state").json()
+    assert len(data["history"]) == HISTORY_ROWS
+    assert data["history_truncated"] is True
+
+
+def test_mini_state_top_rows_carry_a_printable_handle(client, ledger):
+    """The app's leaderboard rendered `u.volume` — a field this payload never had
+    — so every row read 0,00 USDC for the whole life of the feature, and it
+    prefixed '@' to whatever name it got, including the `id4242` fallback and
+    Basenames. The row shape is pinned here so a rename on either side fails."""
+    ledger.ensure_user(TG_USER, "tipper")
+    ledger.ensure_user(TG_OTHER, None)
+    ledger.credit(TG_USER, 20_000_000, "deposit")
+    ledger.credit(TG_OTHER, 20_000_000, "deposit")
+    # The nameless user's own tip goes through the ledger, not the endpoint: the
+    # session is TG_USER's, and asking it to tip "tipper" is a self-tip, which the
+    # API refuses with 400.
+    ledger.transfer(TG_OTHER, TG_USER, 2_000_000)
+    _auth(client, TG_USER)
+    assert client.post("/api/mini/tip", json={"to": str(TG_OTHER), "amount": 5},
+                       headers={"Idempotency-Key": "top-shape-1"}).status_code == 200
+
+    rows = {r["username"]: r for r in client.get("/api/mini/state").json()["top"]}
+    assert rows["tipper"]["handle"] == "@tipper"
+    assert rows["tipper"]["total_usdc"] == 5.0
+    nameless = rows[f"id{TG_OTHER}"]
+    assert nameless["handle"] == f"id{TG_OTHER}"
+    assert not nameless["handle"].startswith("@")
+    assert nameless["total_usdc"] == 2.0
+
+
 def test_mini_state_no_auth(client, ledger):
     ledger.ensure_user(TG_USER, None)
 

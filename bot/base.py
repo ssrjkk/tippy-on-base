@@ -16,7 +16,7 @@ from eth_account.messages import encode_defunct
 from eth_typing import ChecksumAddress
 from web3 import Web3
 
-from . import config
+from . import config, i18n
 from .chain import (  # noqa: F401  (re-exported below as facade surface)
     basenames,
     core,
@@ -734,11 +734,8 @@ async def kick_expired_channel_subscriptions(bot) -> int:
         kicked += 1
         ledger.expire_channel_subscription(chat_id, tg_id)
         try:
-            await bot.send_message(
-                tg_id,
-                "🔑 Подписка на канал истекла, доступ закрыт.\n"
-                "Продлить: /paywall channels",
-            )
+            lang = (ledger.get_settings(tg_id)).get('lang', i18n.DEFAULT_LANG)
+            await bot.send_message(tg_id, i18n.t(lang, 'paywall_sub_expired'))
         except Exception:
             pass
     return kicked

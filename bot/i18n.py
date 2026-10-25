@@ -615,10 +615,26 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Can't find @{user}. They need to message the bot first (/start).",
         "zh": "找不到 @{user}。他需要先给机器人发消息（/start）。",
     },
-    "tip_who": {
-        "ru": "Кому кидаем? /tip 5 @nick — или ответь на сообщение и напиши /tip 5",
-        "en": "Who to tip? /tip 5 @nick — or reply to a message and write /tip 5",
-        "zh": "打赏谁？/tip 5 @昵称——或回复消息后写 /tip 5",
+    "tip_pick_amount": {
+        "ru": "💸 Сколько кидаем?",
+        "en": "💸 How much are you sending?",
+        "zh": "💸 打赏多少？",
+    },
+    "tip_pick_recipient": {
+        "ru": "Кому отправить <b>{amt} USDC</b> — ты уже кидал этим:",
+        "en": "Send <b>{amt} USDC</b> to whom — you have tipped these already:",
+        "zh": "把 <b>{amt} USDC</b> 发给谁——你之前打赏过：",
+    },
+    "tip_pick_recipient_first": {
+        "ru": "Кому отправить <b>{amt} USDC</b>?\n"
+             "Напиши <code>/tip {amt} @ник</code> — или ответь боту сообщением человека "
+             "и напиши <code>/tip {amt}</code>.",
+        "en": "Send <b>{amt} USDC</b> to whom?\n"
+             "Type <code>/tip {amt} @username</code> — or reply to a person's message "
+             "and write <code>/tip {amt}</code>.",
+        "zh": "把 <b>{amt} USDC</b> 发给谁？\n"
+             "输入 <code>/tip {amt} @用户名</code>——或回复某人的消息后输入 "
+             "<code>/tip {amt}</code>。",
     },
     "tip_self": {
         "ru": "Себе кидать нельзя 😅",
@@ -817,6 +833,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "👛 <b>Твои кошельки</b> ({count}/{max})\n\n{slots}\n\nАктивный: слот {active_slot} · <code>{active_addr}</code>\n\n➕ Создать новый: /wallet new",
         "en": "👛 <b>Your wallets</b> ({count}/{max})\n\n{slots}\n\nActive: slot {active_slot} · <code>{active_addr}</code>\n\n➕ Create new: /wallet new",
         "zh": "👛 <b>你的钱包</b> ({count}/{max})\n\n{slots}\n\n当前活跃：槽位 {active_slot} · <code>{active_addr}</code>\n\n➕ 创建新钱包：/wallet new",
+    },
+    "wallet_slot_line": {
+        "ru": "{marker} Слот {slot}: <code>{addr}</code>",
+        "en": "{marker} Slot {slot}: <code>{addr}</code>",
+        "zh": "{marker} 槽位 {slot}：<code>{addr}</code>",
+    },
+    "wallet_new_btn": {
+        "ru": "➕ Создать ({count}/{max})",
+        "en": "➕ Create ({count}/{max})",
+        "zh": "➕ 新建（{count}/{max}）",
+    },
+    "dep_personal_note": {
+        "ru": "\n\n🔑 Твой личный адрес — средства автоматически на баланс.",
+        "en": "\n\n🔑 This is your personal address — deposits land on your balance automatically.",
+        "zh": "\n\n🔑 这是你的专属地址——存款会自动到账余额。",
     },
     "wallet_new_ok": {
         "ru": "✅ Новый кошелёк создан!\n\nАдрес: <code>{addr}</code>\nСлот: {slot}\n\nОн стал активным. Выбери другой: тапни на кнопку ниже.",
@@ -1336,6 +1367,72 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "🔐 Пост не найден. Все посты: /paywall list",
         "en": "🔐 Post not found. All posts: /paywall list",
         "zh": "🔐 内容未找到。全部内容：/paywall list",
+    },
+    # The whole /paywall screen used to be one Russian constant, so an English
+    # or Chinese user who typed /paywall got a wall of Cyrillic back.
+    "paywall_help": {
+        "ru": ("🔐 <b>Платный контент</b>\n"
+               "• /paywall create 5 Мой отчёт — создать пост за 5 USDC\n"
+               "  (после этого пришли контент одним сообщением)\n"
+               "• /paywall list — все платные посты\n"
+               "• /paywall buy &lt;id&gt; — купить и открыть контент\n"
+               "• /paywall cancel — отменить создание\n\n"
+               "📡 <b>Платные каналы</b>\n"
+               "• /paywall channel 5 — в канале: доступ за 5 USDC / 30 дней\n"
+               "• /paywall channel off — выключить продажу доступа\n"
+               "• /paywall subscribe @канал — купить/продлить доступ\n"
+               "• /paywall channels — платные каналы и мои подписки\n\n"
+               "Продавец получает USDC на баланс сразу после покупки.\n"
+               "Покупка идёт с баланса (/deposit). AI-агенты платят через API:\n"
+               "POST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt; (x402-протокол)."),
+        "en": ("🔐 <b>Paid content</b>\n"
+               "• /paywall create 5 My report — publish a post for 5 USDC\n"
+               "  (then send the content as one message)\n"
+               "• /paywall list — all paid posts\n"
+               "• /paywall buy &lt;id&gt; — buy and unlock the content\n"
+               "• /paywall cancel — abandon the creation\n\n"
+               "📡 <b>Paid channels</b>\n"
+               "• /paywall channel 5 — inside a channel: access for 5 USDC / 30 days\n"
+               "• /paywall channel off — stop selling access\n"
+               "• /paywall subscribe @channel — buy or renew access\n"
+               "• /paywall channels — paid channels and my subscriptions\n\n"
+               "The seller receives the USDC on balance as soon as the post is bought.\n"
+               "Purchases are taken from your balance (/deposit). AI agents pay via API:\n"
+               "POST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt; (x402 protocol)."),
+        "zh": ("🔐 <b>付费内容</b>\n"
+               "• /paywall create 5 我的报告 —— 以 5 USDC 发布帖子\n"
+               "  （随后用一条消息发送正文）\n"
+               "• /paywall list —— 全部付费帖子\n"
+               "• /paywall buy &lt;id&gt; —— 购买并解锁内容\n"
+               "• /paywall cancel —— 取消创建\n\n"
+               "📡 <b>付费频道</b>\n"
+               "• /paywall channel 5 —— 在频道内：5 USDC / 30 天访问\n"
+               "• /paywall channel off —— 关闭访问出售\n"
+               "• /paywall subscribe @频道 —— 购买或续期访问\n"
+               "• /paywall channels —— 付费频道与我的订阅\n\n"
+               "帖子被购买后，卖家立即到账 USDC。\n"
+               "购买从你的余额扣除（/deposit）。AI 代理通过 API 支付：\n"
+               "POST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt;（x402 协议）。"),
+    },
+    "paywall_buy_btn": {
+        "ru": "🔓 Купить за {price} USDC",
+        "en": "🔓 Buy for {price} USDC",
+        "zh": "🔓 以 {price} USDC 购买",
+    },
+    "paywall_all_btn": {
+        "ru": "🔐 Все посты",
+        "en": "🔐 All posts",
+        "zh": "🔐 全部内容",
+    },
+    "paywall_card": {
+        "ru": "<b>{title}</b>\nЦена: <b>{price} USDC</b>",
+        "en": "<b>{title}</b>\nPrice: <b>{price} USDC</b>",
+        "zh": "<b>{title}</b>\n价格：<b>{price} USDC</b>",
+    },
+    "paywall_sub_expired": {
+        "ru": "🔑 Подписка на канал истекла, доступ закрыт.\nПродлить: /paywall channels",
+        "en": "🔑 Your channel subscription expired, access is closed.\nRenew: /paywall channels",
+        "zh": "🔑 频道订阅已到期，访问已关闭。\n续期：/paywall channels",
     },
     "broadcast_format": {
         "ru": "Формат: /broadcast <текст>",

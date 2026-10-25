@@ -612,7 +612,8 @@ def api_info() -> dict:
         'chain_name': chain_label(),
         'explorer': config.BASESCAN_URL,
         'usdc_address': config.USDC_ADDRESS,
-        'commands': [{'command': c, 'description': d} for c, d in BOT_COMMAND_SPECS],
+        'commands': [{'command': c, 'description': d, 'group': g}
+                     for c, d, g in BOT_COMMAND_SPECS],
         'fees': {
             'withdraw_pct': float(config.WITHDRAW_FEE_PCT * 100),
             'win_pct': float(config.WIN_FEE_PCT * 100),

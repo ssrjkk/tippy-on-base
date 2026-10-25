@@ -56,7 +56,7 @@ async def _deposit_text(tg_id: int) -> str:
     c2_addr = get_deposit_address(tg_id)
     if is_create2_enabled() and c2_addr:
         addr = c2_addr
-        source_note = "\n\n🔑 Твой личный адрес — средства автоматически на баланс."
+        source_note = i18n.t(lang, 'dep_personal_note')
     else:
         addr = common.base.hot_wallet()
         source_note = ""
@@ -220,39 +220,8 @@ async def cmd_wallet(message: types.Message) -> None:
         row = await _ensure_wallet(message.from_user.id)
         wallets = await common.ledger.get_wallets(message.from_user.id)
 
-    active = next((w for w in wallets if w['active']), wallets[0])
-    slot_lines = []
-    for w in wallets:
-        marker = '🟢' if w['active'] else '⚪'
-        addr_short = w['address'][:6] + '…' + w['address'][-4:]
-        slot_lines.append(f"{marker} Слот {w['slot']}: <code>{addr_short}</code>")
+    text, kb = _wallet_list_view(wallets, lang)
 
-    kb = []
-    row_btns = []
-    for w in wallets:
-        marker = '🟢' if w['active'] else '⚪'
-        row_btns.append(InlineKeyboardButton(
-            text=f"{marker}{w['slot']}",
-            callback_data=f"wallet_sel:{w['id']}"
-        ))
-        if len(row_btns) == 5:
-            kb.append(row_btns)
-            row_btns = []
-    if row_btns:
-        kb.append(row_btns)
-    # Add "create new" button if under limit
-    if len(wallets) < common.config.MAX_WALLETS_PER_USER:
-        kb.append([InlineKeyboardButton(
-            text=f"➕ Создать ({len(wallets)}/{common.config.MAX_WALLETS_PER_USER})",
-            callback_data="wallet_new"
-        )])
-
-    text = i18n.t(lang, 'wallet_list',
-                  count=len(wallets),
-                  max=common.config.MAX_WALLETS_PER_USER,
-                  slots='\n'.join(slot_lines),
-                  active_slot=active['slot'],
-                  active_addr=active['address'])
     # On-chain identity: show the active wallet's Basename, if it has one.
     try:
         from bot.tip_targets import display_name_for
@@ -299,42 +268,51 @@ async def cb_wallet_sel(cb: types.CallbackQuery) -> None:
         await cb.answer(i18n.t(lang, 'wallet_active_switched', slot=active['slot'], addr=active['address']), show_alert=True)
     await _refresh_wallet_list(cb, cb.from_user.id, lang)
 
+def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[InlineKeyboardButton]]]:
+    """The wallet screen as (text, keyboard rows).
+
+    The /wallet command and the post-switch refresh rendered this from two
+    copies of the same 20 lines, so a change to one left the other behind.
+    """
+    slot_lines = [
+        i18n.t(lang, 'wallet_slot_line',
+               marker='🟢' if w['active'] else '⚪', slot=w['slot'],
+               addr=w['address'][:6] + '…' + w['address'][-4:])
+        for w in wallets
+    ]
+    kb: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for w in wallets:
+        row.append(InlineKeyboardButton(
+            text=f"{'🟢' if w['active'] else '⚪'}{w['slot']}",
+            callback_data=f"wallet_sel:{w['id']}"))
+        if len(row) == 5:
+            kb.append(row)
+            row = []
+    if row:
+        kb.append(row)
+    if len(wallets) < common.config.MAX_WALLETS_PER_USER:
+        kb.append([InlineKeyboardButton(
+            text=i18n.t(lang, 'wallet_new_btn',
+                        count=len(wallets), max=common.config.MAX_WALLETS_PER_USER),
+            callback_data="wallet_new")])
+    active = next((w for w in wallets if w['active']), wallets[0])
+    text = i18n.t(lang, 'wallet_list',
+                  count=len(wallets),
+                  max=common.config.MAX_WALLETS_PER_USER,
+                  slots='\n'.join(slot_lines),
+                  active_slot=active['slot'],
+                  active_addr=active['address'])
+    return text, kb
+
+
 async def _refresh_wallet_list(cb: types.CallbackQuery, tg_id: int, lang: str) -> None:
     """Edit the message to show updated wallet list."""
     wallets = await common.ledger.get_wallets(tg_id)
-    active = next((w for w in wallets if w['active']), wallets[0])
-    slot_lines = []
-    for w in wallets:
-        marker = '🟢' if w['active'] else '⚪'
-        addr_short = w['address'][:6] + '…' + w['address'][-4:]
-        slot_lines.append(f"{marker} Слот {w['slot']}: <code>{addr_short}</code>")
-    kb = []
-    row_btns = []
-    for w in wallets:
-        marker = '🟢' if w['active'] else '⚪'
-        row_btns.append(InlineKeyboardButton(
-            text=f"{marker}{w['slot']}",
-            callback_data=f"wallet_sel:{w['id']}"
-        ))
-        if len(row_btns) == 5:
-            kb.append(row_btns)
-            row_btns = []
-    if row_btns:
-        kb.append(row_btns)
-    if len(wallets) < common.config.MAX_WALLETS_PER_USER:
-        kb.append([InlineKeyboardButton(
-            text=f"➕ Создать ({len(wallets)}/{common.config.MAX_WALLETS_PER_USER})",
-            callback_data="wallet_new"
-        )])
+    text, kb = _wallet_list_view(wallets, lang)
     try:
         await cb.message.edit_text(
-            i18n.t(lang, 'wallet_list',
-                   count=len(wallets),
-                   max=common.config.MAX_WALLETS_PER_USER,
-                   slots='\n'.join(slot_lines),
-                   active_slot=active['slot'],
-                   active_addr=active['address']),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb) if kb else None
+            text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb) if kb else None
         )
     except Exception:
         pass  # message not modified

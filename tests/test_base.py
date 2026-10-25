@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import re
 import time
 import types
 from decimal import Decimal
@@ -1082,6 +1083,27 @@ def test_kick_expired_subscriptions(monkeypatch, tmp_path):
     assert bot.banned == [777]
     assert fresh.active_channel_subscriptions() == []
     assert any("истекла" in t for _, t in bot.sent)
+
+
+def test_kick_notice_follows_the_subscribers_language(monkeypatch):
+    """The expiry notice was a Russian literal inside the sweep, so an English
+    subscriber got Cyrillic at exactly the moment they were losing access."""
+    fresh = _pending_ledger(monkeypatch)
+    fresh.credit(777, 1_000_000, "deposit")
+    fresh.set_setting(777, "lang", "en")
+    fresh.ensure_user(888, "owner")
+    fresh.set_paywall_channel(-100123, 888, 400_000)
+    fresh.subscribe_channel(-100123, 777)
+    fresh._conn.execute(
+        "UPDATE paywall_subscriptions SET expires_at = %s WHERE chat_id = -100123 AND tg_id = 777",
+        (int(time.time()) - 10,),
+    )
+    fresh._conn.commit()
+    bot = _KickBot(members={777: "member"})
+    assert asyncio.run(base.kick_expired_channel_subscriptions(bot)) == 1
+    text = bot.sent[0][1]
+    assert "subscription expired" in text, text
+    assert not re.search(r"[а-яА-ЯёЁ]", text), text
 
 
 def test_kick_skips_active_and_admins(monkeypatch, tmp_path):

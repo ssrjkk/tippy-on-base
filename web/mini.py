@@ -40,6 +40,10 @@ MICRO = 10 ** config.USDC_DECIMALS
 # session, 24x shorter for an attacker.
 INIT_DATA_TTL = 3600
 INIT_DATA_FUTURE_SKEW = 300
+# Rows the Mini App's wallet tab carries. The client cannot tell a short history
+# from a truncated one, so /state answers history_truncated alongside them and
+# the cap lives in exactly one place.
+HISTORY_ROWS = 10
 
 def verify_init_data(init_data: str) -> int:
     """Validate Telegram Mini App initData, return tg_id."""
@@ -241,7 +245,7 @@ async def mini_state(request: Request) -> dict:
         pot = view['pot']
         bets.append({'id': view['id'], 'question': view['question'], 'creator': int(view['creator']['id']), 'pot_usdc': _fmt(pot), 'options': [{'index': o['index'], 'label': o['label'], 'pool_usdc': _fmt(o['pool']), 'chance_pct': round(100 * o['pool'] / pot, 1) if pot else 0.0} for o in view['options']]})
     lang = (await ledger.get_settings(tg_id)).get('lang', 'ru')
-    history = await rows_view(await ledger.history(tg_id, 10), lang, ledger)
+    history = await rows_view(await ledger.history(tg_id, HISTORY_ROWS), lang, ledger)
     from bot import tip_targets
     top_rows = await ledger.leaderboard(5)
     nameless = [int(r['tg_id']) for r in top_rows if not r['username']]
@@ -249,13 +253,25 @@ async def mini_state(request: Request) -> dict:
     top = [
         {
             'username': r['username'] or basenames.get(int(r['tg_id'])) or f"id{r['tg_id']}",
+            # '@' belongs to a Telegram username and to nothing else: the same
+            # slot can hold a Basename or an `id<n>` fallback, and the Mini App
+            # used to prefix '@' to whichever of the three it got.
+            'handle': f"@{r['username']}" if r['username']
+                      else (basenames.get(int(r['tg_id'])) or f"id{r['tg_id']}"),
             'total_usdc': _fmt(r['total_micro']),
         }
         for r in top_rows
     ]
     from bot import onchain_market as om
     onchain = await om.market_views(8)
-    return {'tg_id': tg_id, 'username': await ledger.username_of(tg_id), 'balance_usdc': float(await ledger.balance(tg_id)), 'deposit_address': str(base.hot_wallet()), 'linked_address': await ledger.linked_address(tg_id), 'lang': lang, 'markets': markets, 'bets': bets, 'onchain_markets': onchain, 'history': history, 'top': top}
+    # Who this user tips most often, as chips in the tip sheet. `to` is the exact
+    # string /api/mini/tip accepts, so a chip can never address nobody.
+    recent_ids = await ledger.recent_tip_targets(tg_id, 6)
+    recent_names = await ledger.usernames_bulk(recent_ids)
+    recent_tips = [{'label': recent_names[i] or f'id{i}', 'to': recent_names[i] or str(i)}
+                   for i in recent_ids]
+    return {'recent_tips': recent_tips,
+            'tg_id': tg_id, 'username': await ledger.username_of(tg_id), 'balance_usdc': float(await ledger.balance(tg_id)), 'deposit_address': str(base.hot_wallet()), 'linked_address': await ledger.linked_address(tg_id), 'lang': lang, 'markets': markets, 'bets': bets, 'onchain_markets': onchain, 'history': history, 'history_truncated': len(history) >= HISTORY_ROWS, 'top': top}
 
 def _smart_wallet_enabled() -> bool:
     """True when the ERC-4337 stack is fully configured (factory + paymaster)."""

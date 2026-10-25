@@ -280,6 +280,32 @@ def test_leaderboard_reads_names_once_whatever_the_limit(ledger):
     ]
 
 
+def test_recent_tip_targets_are_newest_first_and_numeric_only(ledger):
+    """The tip screen's recipient chips come from this. A tip resolved through a
+    Basename is filed with a text counterparty, and that string is not a tg_id —
+    handing it to a button would tip nobody or the wrong somebody."""
+    fund(ledger, ALICE, 100_000_000)
+    for tg, name in ((BOB, "bob"), (CAROL, "carol")):
+        ledger.ensure_user(tg, name)
+    ledger.transfer(ALICE, BOB, 1_000_000)
+    ledger.transfer(ALICE, CAROL, 2_000_000)
+    ledger.transfer(ALICE, BOB, 1_000_000)  # BOB again: he is the most recent
+    assert ledger.recent_tip_targets(ALICE) == [BOB, CAROL]
+
+    ledger._conn.execute(
+        "INSERT INTO tx_log (kind, tg_id, counterparty, amount) "
+        "VALUES ('tip', %s, 'someone.base.eth', 3)", (ALICE,)
+    )
+    ledger._conn.commit()
+    assert ledger.recent_tip_targets(ALICE) == [BOB, CAROL]
+    assert ledger.recent_tip_targets(ALICE, limit=1) == [BOB]
+    # A self-tip is nothing the ledger forbids, and the demo data has one; a
+    # «tip yourself» chip is a suggestion nobody asked for.
+    ledger.transfer(ALICE, ALICE, 500_000)
+    assert ledger.recent_tip_targets(ALICE) == [BOB, CAROL]
+    assert ledger.recent_tip_targets(4242) == []
+
+
 def test_addresses_for_batches_and_prefers_the_linked_wallet(ledger):
     """`display_names_for()` needs one address per visible user. Read row by row
     it was two statements per user (linked wallet, then custodial) before the

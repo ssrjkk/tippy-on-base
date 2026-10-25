@@ -109,7 +109,22 @@ function renderTelegramWidget(username) {
 
 /* Command menu comes from bot/commands_catalog.py through /api/info, so it is
  * the list the bot actually installs with set_my_commands — not a written-out
- * copy that can drift away from the handlers. */
+ * copy that can drift away from the handlers.
+ *
+ * The catalogue is 48 rows; as one grid it reads as a wall. The `group` field
+ * splits it into the seven things a visitor actually came to do. Commands with
+ * no group (an older /api/info) land in «Прочее» rather than being dropped — a
+ * missing label is a reason to show a command, not to hide it. */
+const CMD_GROUPS = [
+  ["wallet", "Кошелёк и сеть"],
+  ["tips", "Чаевые и подписки"],
+  ["markets", "Рынки на LMSR"],
+  ["bets", "Ставки-пулы"],
+  ["onchain", "Ончейн-доли Cally"],
+  ["creator", "Создателям"],
+  ["account", "Аккаунт и справки"],
+];
+
 function renderCommands(info) {
   const el = $("commands-grid");
   if (!el) return;
@@ -118,12 +133,21 @@ function renderCommands(info) {
     el.innerHTML = '<div class="empty">Список команд сейчас недоступен</div>';
     return;
   }
-  el.innerHTML = cmds
-    .map((c) => {
-      const cmd = escapeHtml(c.command);
-      return `<button class="cmd" type="button" data-cmd="${cmd}" title="Скопировать /${cmd}">`
-        + `<b>/${cmd}</b><span>${escapeHtml(c.description)}</span></button>`;
-    })
+  const cell = (c) => {
+    const cmd = escapeHtml(c.command);
+    return `<button class="cmd" type="button" data-cmd="${cmd}" title="Скопировать /${cmd}">`
+      + `<b>/${cmd}</b><span>${escapeHtml(c.description)}</span></button>`;
+  };
+  const buckets = new Map(CMD_GROUPS.map(([key, title]) => [key, { title, rows: [] }]));
+  const other = { title: "Прочее", rows: [] };
+  for (const c of cmds) {
+    (buckets.get(c.group) || other).rows.push(c);
+  }
+  el.innerHTML = [...buckets.values(), other]
+    .filter((g) => g.rows.length)
+    .map((g) => `<div class="cmd-group">`
+      + `<h3 class="cmd-group-title">${escapeHtml(g.title)}</h3>`
+      + `<div class="cmd-grid">${g.rows.map(cell).join("")}</div></div>`)
     .join("");
 }
 

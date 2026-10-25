@@ -2,16 +2,110 @@
 import logging
 from decimal import Decimal
 
-from aiogram import types
+from aiogram import Bot, F, types
 from aiogram.filters import Command
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import i18n, tip_targets
 
 from . import _common as common
 
-__all__ = ['_notify_tip_received', '_resolve_in_chat', 'cmd_rain', 'cmd_tip']
+__all__ = ['_notify_tip_received', '_resolve_in_chat', 'cb_tip_pick', 'cmd_rain', 'cmd_tip']
 
 log = logging.getLogger("tipbot.tips")
+
+
+def _amount_kb() -> InlineKeyboardMarkup:
+    """Quick amounts, the same set the bet and trade cards use."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f'{a} USDC', callback_data=f'tip:a:{a}') for a in common.QUICK_AMOUNTS]
+    ])
+
+
+async def _recipient_kb(tg_id: int, amount: str, lang: str) -> InlineKeyboardMarkup | None:
+    """Buttons for the people this user tips most often; None when there is no
+    history to offer, which is the only case where a typed @username is the
+    shortest path."""
+    ids = await common.ledger.recent_tip_targets(tg_id, 6)
+    if not ids:
+        return None
+    names = await common.ledger.usernames_bulk(ids)
+    rows = [[InlineKeyboardButton(text=f'@{names[i] or f"id{i}"}', callback_data=f'tip:r:{amount}:{i}')]
+            for i in ids]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _ask_tip_target(message: types.Message, lang: str, amount: Decimal) -> None:
+    """Ask for the missing half of the command with buttons instead of a hint."""
+    amt = common._fmt(common._to_micro(amount))
+    kb = await _recipient_kb(message.from_user.id, f'{amount}', lang)
+    if kb is None:
+        await message.answer(i18n.t(lang, 'tip_pick_recipient_first', amt=amt))
+        return
+    await message.answer(i18n.t(lang, 'tip_pick_recipient', amt=amt), reply_markup=kb)
+
+
+async def _send_tip(bot: Bot, lang: str, from_id: int, from_name: str | None,
+                    to_id: int, to_name: str, amount_micro: int) -> str:
+    """Move the money and write the receipt — one path for a typed /tip and for
+    a tap on a chip, so a button can never be a weaker operation than typing.
+
+    The payer is passed in, not read off a message: on the callback path the
+    message's author is the bot, and a receipt naming the bot as the sender is
+    exactly what this would have produced.
+    """
+    wait = await common._throttle(from_id, 'tip')
+    if wait:
+        return wait
+    if not await common.ledger.transfer(from_id, to_id, amount_micro):
+        return i18n.t(lang, 'tip_no_balance')
+    sender_name = from_name or f'id{from_id}'
+    safe_to = common._h(to_name or str(to_id))
+    mention = f"<a href='tg://user?id={to_id}'>@{safe_to}</a>"
+    bal = await common.ledger.balance(from_id)
+    bal_str = f'{bal:.4f}'.rstrip('0').rstrip('.')
+    await _notify_tip_received(bot, from_id, to_id, amount_micro, sender_name)
+    return i18n.t(lang, 'tip_sent', sender=common._h(sender_name), mention=mention,
+                  amount=common._fmt(amount_micro), bal=bal_str)
+
+
+@common.router.callback_query(F.data.startswith('tip:'))
+async def cb_tip_pick(cb: types.CallbackQuery) -> None:
+    user = cb.from_user
+    if not user:
+        return
+    lang = await common.user_lang(user.id)
+    parts = cb.data.split(':')
+    if len(parts) == 3 and parts[1] == 'a':
+        amount = parts[2]
+        if not common.AMOUNT_RE.match(amount):
+            await cb.answer(i18n.t(lang, 'bad_amount'), show_alert=True)
+            return
+        kb = await _recipient_kb(user.id, amount, lang)
+        text = i18n.t(lang, 'tip_pick_recipient', amt=amount) if kb else \
+            i18n.t(lang, 'tip_pick_recipient_first', amt=amount)
+        if kb is None:
+            await cb.message.answer(text)
+        else:
+            await common._edit_menu(cb, text, kb)
+        await cb.answer()
+        return
+    if len(parts) == 4 and parts[1] == 'r':
+        _, _, amount, to_raw = parts
+        if not common.AMOUNT_RE.match(amount) or not to_raw.isdigit() or len(to_raw) > 20:
+            await cb.answer(i18n.t(lang, 'bad_amount'), show_alert=True)
+            return
+        to_id = int(to_raw)
+        if to_id == user.id:
+            await cb.answer(i18n.t(lang, 'tip_self'), show_alert=True)
+            return
+        to_name = (await common.ledger.usernames_bulk([to_id])).get(to_id) or str(to_id)
+        text = await _send_tip(cb.message.bot, lang, user.id, user.username, to_id, to_name,
+                               common._to_micro(Decimal(amount)))
+        await common._edit_menu(cb, text)
+        await cb.answer()
+        return
+    await cb.answer(i18n.t(lang, 'market_not_found'), show_alert=True)
 
 @common.router.message(Command('rain'))
 async def cmd_rain(message: types.Message) -> None:
@@ -63,12 +157,14 @@ async def cmd_rain(message: types.Message) -> None:
 async def cmd_tip(message: types.Message) -> None:
     lang = await common.user_lang(message.from_user.id)
     parts = message.text.strip().split()
-    if len(parts) >= 2 and common.AMOUNT_RE.match(parts[1]):
+    if len(parts) == 1:
+        # No amount at all: chips first, recipients next. The old answer was a
+        # sentence describing a command nobody types from memory.
+        await message.answer(i18n.t(lang, 'tip_pick_amount'), reply_markup=_amount_kb())
+        return
+    if common.AMOUNT_RE.match(parts[1]):
         amount = Decimal(parts[1])
         rest = parts[2:]
-    elif len(parts) == 1:
-        amount = Decimal('1')
-        rest = []
     else:
         await message.answer(i18n.t(lang, 'tip_need_amount'))
         return
@@ -107,32 +203,22 @@ async def cmd_tip(message: types.Message) -> None:
                 return
             to_name = username
     else:
-        await message.answer(i18n.t(lang, 'tip_who'))
+        # Amount known, recipient missing: offer the people they already tip.
+        await _ask_tip_target(message, lang, amount)
         return
     if to_id == message.from_user.id:
         await message.answer(i18n.t(lang, 'tip_self'))
         return
-    wait = await common._throttle(message.from_user.id, 'tip')
-    if wait:
-        await message.answer(wait)
-        return
-    if not await common.ledger.transfer(message.from_user.id, to_id, amount_micro):
-        await message.answer(i18n.t(lang, 'tip_no_balance'))
-        return
-    sender_name = message.from_user.username or f'id{message.from_user.id}'
-    safe_to = common._h(to_name or str(to_id))
-    mention = f"<a href='tg://user?id={to_id}'>@{safe_to}</a>"
-    bal = await common.ledger.balance(message.from_user.id)
-    bal_str = f'{bal:.4f}'.rstrip('0').rstrip('.')
-    await message.answer(i18n.t(lang, 'tip_sent', sender=common._h(sender_name), mention=mention, amount=common._fmt(amount_micro), bal=bal_str))
-    await _notify_tip_received(message, to_id, amount_micro, sender_name)
+    await message.answer(await _send_tip(message.bot, lang, message.from_user.id,
+                                         message.from_user.username, to_id, to_name, amount_micro))
 
-async def _notify_tip_received(message: types.Message, to_id: int, amount_micro: int, sender: str) -> None:
-    if to_id == message.from_user.id:
+async def _notify_tip_received(bot: Bot, from_id: int, to_id: int,
+                               amount_micro: int, sender: str) -> None:
+    if to_id == from_id:
         return
     try:
         lang = await common.user_lang(to_id)
-        await message.bot.send_message(to_id, i18n.t(lang, 'tip_received', amount=common._fmt(amount_micro), sender=common._h(sender)))
+        await bot.send_message(to_id, i18n.t(lang, 'tip_received', amount=common._fmt(amount_micro), sender=common._h(sender)))
     except Exception:
         log.warning("tip notification to user %d failed", to_id, exc_info=True)
 

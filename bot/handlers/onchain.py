@@ -9,7 +9,7 @@ human-readable labels in a Postgres registry (the contract stores numbers
 only) and builds/signs from the user's encrypted custodial wallet key.
 
 Prerequisites: OUTCOME_MARKET_ADDRESS set + deployed OutcomeMarket.sol; the
-user funds their personal wallet with USDC (`/withdraw <адрес> <сумма>`).
+user funds their personal wallet with USDC (`/withdraw <addr> <amount>`).
 """
 import asyncio
 import html

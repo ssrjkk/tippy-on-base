@@ -345,7 +345,7 @@ RETRY_SECONDS = 15
 # Canonical Telegram command menu. deploy/run.py reuses this list so the menu
 # cannot diverge between entrypoints, and web/server.py publishes the same
 # descriptions through /api/info — bot/commands_catalog.py holds the data.
-BOT_COMMANDS = [BotCommand(command=c, description=d) for c, d in BOT_COMMAND_SPECS]
+BOT_COMMANDS = [BotCommand(command=c, description=d) for c, d, _group in BOT_COMMAND_SPECS]
 
 async def main() -> None:
     config.validate()
