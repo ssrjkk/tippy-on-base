@@ -1,4 +1,4 @@
-﻿"""Shared state and helpers for the bot.handlers package.
+"""Shared state and helpers for the bot.handlers package.
 
 All mutating state that tests patch (ledger, _now, _qr_bytes, _money_cmd_last)
 lives here so a single monkeypatch on bot.handlers._common works everywhere.
@@ -33,6 +33,7 @@ __all__ = [
     "SIG_RE",
     "TX_HASH_RE",
     "USDC_ADDR_RE",
+    "_back_row",
     "_bot_username",
     "_default_deadline_label",
     "_edit_menu",
@@ -41,6 +42,7 @@ __all__ = [
     "_get_bot_username",
     "_menu_kb",
     "_money_cmd_last",
+    "_more_kb",
     "_now",
     "_qr_bytes",
     "_throttle",
@@ -279,24 +281,45 @@ async def _get_bot_username(bot) -> str:
     return _bot_username
 
 
-def _menu_kb(lang: str = "ru") -> InlineKeyboardMarkup:
-    def b(key: str, cb: str | None = None) -> InlineKeyboardButton:
-        if key == "about":
-            return InlineKeyboardButton(text=i18n.t(lang, "btn_about"), callback_data="about")
-        return InlineKeyboardButton(text=i18n.t(lang, f"btn_{key}"), callback_data=cb or key)
+def _back_row(lang: str) -> InlineKeyboardButton:
+    """Every screen the menu opens has to hand the menu back. Until now ten of
+    the fourteen buttons edited the message with `reply_markup=None`, which
+    deletes the keyboard: one tap on «Баланс» and the only way back was typing
+    /menu again."""
+    return InlineKeyboardButton(text=i18n.t(lang, 'btn_back'), callback_data='menu')
 
+
+def _menu_button(lang: str, key: str, cb: str | None = None) -> InlineKeyboardButton:
+    if key == "about":
+        return InlineKeyboardButton(text=i18n.t(lang, "btn_about"), callback_data="about")
+    return InlineKeyboardButton(text=i18n.t(lang, f"btn_{key}"), callback_data=cb or key)
+
+
+def _menu_kb(lang: str = "ru") -> InlineKeyboardMarkup:
+    """The main screen. Sixteen buttons in ten flat rows buried the Mini App
+    under «Мой Basename»; the pairs are now the four things a user came for, and
+    everything else is one tap away behind «Ещё»."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [b("bal"), b("dep")],
-            [b("tip"), b("ask")],
-            [b("markets", "markets_amm"), b("bets")],
-            [b("donate"), b("top")],
-            [b("hist"), b("stats")],
-            [b("wallet"), b("paywall", "paywall_list")],
-            [b("basename")],
-            [b("settings")],
-            [b("about")],
-            [InlineKeyboardButton(text=i18n.t(lang, "btn_mini_app"), callback_data="miniapp")],
+            [_menu_button(lang, "bal"), _menu_button(lang, "dep")],
+            [_menu_button(lang, "tip"), _menu_button(lang, "markets", "markets_amm")],
+            [_menu_button(lang, "bets"), _menu_button(lang, "ask")],
+            [_menu_button(lang, "top"), _menu_button(lang, "hist")],
+            [_menu_button(lang, "settings"), _menu_button(lang, "more", "menu_more")],
+            [_menu_button(lang, "mini_app", "miniapp")],
+        ]
+    )
+
+
+def _more_kb(lang: str = "ru") -> InlineKeyboardMarkup:
+    """The second level: account plumbing and the creator features, none of
+    which is the reason a new user opens the bot."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [_menu_button(lang, "wallet"), _menu_button(lang, "stats")],
+            [_menu_button(lang, "donate"), _menu_button(lang, "paywall", "paywall_list")],
+            [_menu_button(lang, "basename")],
+            [_menu_button(lang, "about"), _back_row(lang)],
         ]
     )
 

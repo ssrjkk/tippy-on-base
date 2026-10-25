@@ -53,9 +53,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "🧾 历史记录",
     },
     "btn_stats": {
-        "ru": "📊 Статы",
+        "ru": "📊 Статистика",
         "en": "📊 Stats",
         "zh": "📊 统计",
+    },
+    "btn_more": {
+        "ru": "🧭 Ещё",
+        "en": "🧭 More",
+        "zh": "🧭 更多",
     },
     "btn_wallet": {
         "ru": "👛 Кошелёк",
@@ -206,20 +211,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "试试这些：\n• <b>/deposit</b> —— 充值（二维码）\n• <b>/bets</b> —— 参与投注\n• <b>/tip 1 @昵称</b> —— 发送打赏\n• <b>/help</b> —— 全部命令",
     },
     # ----- hints (menu buttons) -----
-    "hint_tip": {
-        "ru": "💸 <b>Чаевые</b>\n\n/tip 5 @ник — кинуть 5 USDC\n/tip 5 ответом на сообщение — автору.\n\nВ группах работают реакции-чаевые ⚡ — ставь 🔥/❤️/⚡ на сообщение, и автор получает USDC (вкл/выкл: /settings).",
-        "en": "💸 <b>Tips</b>\n\n/tip 5 @nick — send 5 USDC\n/tip 5 as a reply — tips the author.\n\nIn groups, reaction tips ⚡ work too: react 🔥/❤️/⚡ to a message and its author gets USDC (toggle: /settings).",
-        "zh": "💸 <b>打赏</b>\n\n/tip 5 @昵称 —— 发送 5 USDC\n/tip 5 回复消息 —— 打赏作者。\n\n群聊中支持表情打赏 ⚡：给消息添加 🔥/❤️/⚡，作者即可获得 USDC（开关见 /settings）。",
-    },
     "hint_ask": {
         "ru": "🧠 <b>ИИ-ассистент</b>\n\n/ask &lt;вопрос&gt; — например: /ask Что такое Base?\nМожно задать вопрос ответом на сообщение — ИИ увидит его контекст.",
         "en": "🧠 <b>AI assistant</b>\n\n/ask &lt;question&gt; — e.g. /ask What is Base?\nReply to any message with your question and the AI will see its context.",
         "zh": "🧠 <b>AI 助手</b>\n\n/ask &lt;问题&gt; —— 例如：/ask 什么是 Base？\n也可以回复某条消息提问，AI 会看到该消息的上下文。",
-    },
-    "hint_wallet": {
-        "ru": "👛 <b>Кошелёк</b>\n\n/wallet — адрес и ключи\n/deposit — пополнить · /withdraw &lt;адрес&gt; &lt;сумма&gt; — вывести\n/link &lt;адрес&gt; — привязать внешний кошелёк (авто-зачисление)\n/import — вход по сид-фразе · /export — выгрузка ключа",
-        "en": "👛 <b>Wallet</b>\n\n/wallet — address and keys\n/deposit — top up · /withdraw &lt;address&gt; &lt;amount&gt; — withdraw\n/link &lt;address&gt; — link an external wallet (auto-credits)\n/import — sign in with a seed phrase · /export — export keys",
-        "zh": "👛 <b>钱包</b>\n\n/wallet —— 地址与密钥\n/deposit —— 充值 · /withdraw &lt;地址&gt; &lt;金额&gt; —— 提现\n/link &lt;地址&gt; —— 绑定外部钱包（自动到账）\n/import —— 用助记词登录 · /export —— 导出密钥",
     },
     # ----- balance -----
     "bal_linked": {

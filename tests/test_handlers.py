@@ -1229,6 +1229,25 @@ def test_on_menu_bets_with_markets(ledger):
     assert "Открытые ставки" in cb.message.text
 
 
+MENU_SCREEN_CALLBACKS = ['bal', 'dep', 'top', 'hist', 'bets', 'donate', 'stats', 'settings',
+                        'betcreate', 'paywall_list', 'tip', 'ask', 'wallet', 'miniapp', 'menu_more']
+
+
+@pytest.mark.parametrize("data", MENU_SCREEN_CALLBACKS)
+def test_every_menu_screen_leaves_a_way_back(ledger, data):
+    """`_edit_menu(cb, text)` with no keyboard deletes the buttons from the
+    message it replaces, and ten of the fourteen menu buttons did exactly that:
+    one tap on «Баланс» and the menu was gone until the user retyped /menu.
+    Every screen therefore has to answer with a keyboard that routes to 'menu'."""
+    ledger.credit(ALICE, 10_000_000, "deposit")
+    cb = Callback(data, ALICE)
+    run(on_menu(cb))
+    assert cb.message.markup is not None, f"{data} left the user with no keyboard"
+    routes = {btn.callback_data
+              for row in cb.message.markup.inline_keyboard for btn in row}
+    assert 'menu' in routes, f"{data} offers {sorted(r for r in routes if r)}"
+
+
 def test_cmd_deposit_linked(ledger):
     m = Message("/link " + ACC.address)
     run(cmd_link(m))
@@ -1978,14 +1997,18 @@ def test_cmd_bets_compact_listing(ledger):
     assert "Комиссия на выигрыш" not in text  # no full cards, just the listing
     rows = m.answers[0][1].inline_keyboard
     assert rows[0][0].callback_data == f"market:{bid}"
-    assert rows[-1][0].callback_data == "betcreate"
+    # The create button is still there; the way back is now the last row, which
+    # is what keeps the listing from eating the menu when it opens over it.
+    assert [r[0].callback_data for r in rows[:-1]][-1] == "betcreate"
+    assert rows[-1][0].callback_data == "menu"
 
 
 def test_cmd_bets_no_markets_still_has_create_button(ledger):
     m = Message("/bets", from_id=ALICE)
     run(cmd_bets(m))
     rows = m.answers[0][1].inline_keyboard
-    assert rows[-1][0].callback_data == "betcreate"
+    assert rows[0][0].callback_data == "betcreate"
+    assert rows[-1][0].callback_data == "menu"
 
 
 def test_cmd_bets_keeps_the_newest_first_order_of_open_bets(ledger):
@@ -2772,7 +2795,7 @@ def test_every_menu_button_has_a_handler():
 
     from bot import i18n
     from bot.handlers import router
-    from bot.handlers._common import _menu_kb
+    from bot.handlers._common import _menu_kb, _more_kb
 
     def matches(flt, data):
         try:
@@ -2785,7 +2808,11 @@ def test_every_menu_button_has_a_handler():
                    for h in router.callback_query.handlers)
 
     for lang in i18n.LANGS:
-        for row in _menu_kb(lang).inline_keyboard:
-            for btn in row:
-                if btn.callback_data:
-                    assert handled(btn.callback_data), f"{lang}: {btn.callback_data} has no handler"
+        buttons = [btn
+                   for keyboard in (_menu_kb(lang), _more_kb(lang))
+                   for row in keyboard.inline_keyboard
+                   for btn in row]
+        assert buttons, lang
+        for btn in buttons:
+            if btn.callback_data:
+                assert handled(btn.callback_data), f"{lang}: {btn.callback_data} has no handler"

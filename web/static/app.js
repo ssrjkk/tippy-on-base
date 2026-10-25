@@ -1,4 +1,4 @@
-const $ = (id) => document.getElementById(id);
+﻿const $ = (id) => document.getElementById(id);
 document.body.classList.add("js");
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -400,6 +400,36 @@ function predictionCard(m, i) {
     </div>`;
 }
 
+/* The hero needs one live number rather than a slogan: the deepest market and
+ * its real odds. /api/predictions already answers for the section below, so this
+ * costs no extra request — it is the same rows, re-picked by liquidity, because
+ * the endpoint answers by recency. */
+function renderHeroSpot(markets) {
+  const box = $("heroSpot");
+  const body = $("hero-spot-body");
+  if (!box || !body) return;
+  const top = markets.reduce((best, m) => (m.liquidity_usdc > best.liquidity_usdc ? m : best), markets[0]);
+  if (!top) { box.hidden = true; return; }
+  body.innerHTML = `
+    <div class="spot-question">#${top.id} ${escapeHtml(top.question)}</div>
+    <div class="spot-meta">${metaLine(top.close_at
+      ? '<span data-close-at="' + parseInt(top.close_at) + '">' + relDeadline(top.close_at) + '</span>'
+      : "", statusBadge(top.status))}</div>
+    ${top.options.slice(0, 3).map(o => `
+      <div class="option">
+        <div class="option-top">
+          <span class="option-label">${escapeHtml(o.label)}</span>
+          <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
+        </div>
+        <div class="bar"><div class="bar-fill" style="width:${Math.max(o.price_pct, 2)}%"></div></div>
+      </div>`).join("")}
+    <div class="spot-foot">
+      <span class="pot">Ликвидность: <b>${fmtUSDC(top.liquidity_usdc)} USDC</b> · ${escapeHtml(String(top.traders))} чел.</span>
+      <a class="m-link" href="#predictions">Все рынки →</a>
+    </div>`;
+  box.hidden = false;
+}
+
 async function loadPredictions() {
   try {
     const r = await fetch("/api/predictions");
@@ -410,6 +440,7 @@ async function loadPredictions() {
       return;
     }
     el.innerHTML = markets.map(predictionCard).join("");
+    renderHeroSpot(markets);
   } catch (e) {
     $("predictions-list").innerHTML = '<div class="empty">Не удалось загрузить рынки</div>';
   }

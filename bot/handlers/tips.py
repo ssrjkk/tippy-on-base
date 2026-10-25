@@ -1,4 +1,4 @@
-﻿"""/tip  handlers."""
+"""/tip  handlers."""
 import logging
 from decimal import Decimal
 
@@ -15,7 +15,7 @@ __all__ = ['_notify_tip_received', '_resolve_in_chat', 'cb_tip_pick', 'cmd_rain'
 log = logging.getLogger("tipbot.tips")
 
 
-def _amount_kb() -> InlineKeyboardMarkup:
+def amount_kb() -> InlineKeyboardMarkup:
     """Quick amounts, the same set the bet and trade cards use."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f'{a} USDC', callback_data=f'tip:a:{a}') for a in common.QUICK_AMOUNTS]
@@ -160,7 +160,7 @@ async def cmd_tip(message: types.Message) -> None:
     if len(parts) == 1:
         # No amount at all: chips first, recipients next. The old answer was a
         # sentence describing a command nobody types from memory.
-        await message.answer(i18n.t(lang, 'tip_pick_amount'), reply_markup=_amount_kb())
+        await message.answer(i18n.t(lang, 'tip_pick_amount'), reply_markup=amount_kb())
         return
     if common.AMOUNT_RE.match(parts[1]):
         amount = Decimal(parts[1])

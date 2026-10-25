@@ -31,20 +31,28 @@
 
   <main>
     <section class="hero">
-      <a class="hero-badge" data-net-explorer>
-        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
-        <span data-net="chain">Base</span> · USDC
-      </a>
-      <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
-      <p class="hero-sub">
-        Чаевые в один тап, ставки-пулы по парамутюэльной схеме, рынки предсказаний
-        на LMSR-маркмейкере и ончейн-доли ERC-1155. Без газа на переводы между
-        пользователями, с публичной сверкой резервов.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="#workspace-section">Открыть кабинет</a>
-        <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__" data-tg-link>Начать в Telegram</a>
+      <div class="hero-copy">
+        <a class="hero-badge" data-net-explorer>
+          <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+          <span data-net="chain">Base</span> · USDC
+        </a>
+        <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
+        <p class="hero-sub">
+          Чаевые в один тап, ставки-пулы по парамутюэльной схеме, рынки предсказаний
+          на LMSR-маркмейкере и ончейн-доли ERC-1155. Без газа на переводы между
+          пользователями, с публичной сверкой резервов.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#workspace-section">Открыть кабинет</a>
+          <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__" data-tg-link>Начать в Telegram</a>
+        </div>
       </div>
+      <!-- The product is a price on a question, so the hero shows one: real odds
+           off /api/predictions, not a mock-up. Hidden until the data arrives. -->
+      <aside class="hero-spot" id="heroSpot" aria-label="Текущий рынок" hidden>
+        <span class="eyebrow">Самый ликвидный рынок</span>
+        <div id="hero-spot-body"></div>
+      </aside>
     </section>
 
     <section class="section reveal" id="workspace-section">

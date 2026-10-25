@@ -1,4 +1,4 @@
-﻿"""Bets / prediction-market handlers."""
+"""Bets / prediction-market handlers."""
 import json
 import time
 from datetime import datetime
@@ -176,7 +176,9 @@ async def _bets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMarkup]
     # queries (bet, totals, backers, creator name), so eight markets meant 32.
     views = await common.ledger.bulk_market_views([b['id'] for b in bets])
     if not views:
-        return (i18n.t(lang, 'bet_empty'), InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')]]))
+        rows = [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')],
+                [common._back_row(lang)]]
+        return (i18n.t(lang, 'bet_empty'), InlineKeyboardMarkup(inline_keyboard=rows))
     lines = [i18n.t(lang, 'bet_list_header'), '']
     for view in views:
         if view['expired']:
@@ -187,7 +189,8 @@ async def _bets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMarkup]
     lines.append(i18n.t(lang, 'bet_list_hint'))
     # Buttons follow `views`, not `bets`: a market that has no view has no line
     # above it either, and a button that opens nothing is a dead end.
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🎯 #{v['id']}: {v['question'][:38]}", callback_data=f"market:{v['id']}")] for v in views] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🎯 #{v['id']}: {v['question'][:38]}", callback_data=f"market:{v['id']}")] for v in views] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')],
+                              [common._back_row(lang)]])
     return ('\n'.join(lines), kb)
 
 @common.router.message(Command('bets'))

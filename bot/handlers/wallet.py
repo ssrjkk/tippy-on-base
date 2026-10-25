@@ -1,4 +1,4 @@
-﻿"""Wallet handlers: balance, deposit, link, confirm, import/export, withdraw."""
+"""Wallet handlers: balance, deposit, link, confirm, import/export, withdraw."""
 import html
 import logging
 import time
@@ -215,12 +215,7 @@ async def cmd_wallet(message: types.Message) -> None:
         return
 
     # /wallet — show all slots
-    wallets = await common.ledger.get_wallets(message.from_user.id)
-    if not wallets:
-        row = await _ensure_wallet(message.from_user.id)
-        wallets = await common.ledger.get_wallets(message.from_user.id)
-
-    text, kb = _wallet_list_view(wallets, lang)
+    text, kb = await wallet_screen(message.from_user.id, lang)
 
     # On-chain identity: show the active wallet's Basename, if it has one.
     try:
@@ -304,6 +299,16 @@ def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[In
                   active_slot=active['slot'],
                   active_addr=active['address'])
     return text, kb
+
+
+async def wallet_screen(tg_id: int, lang: str) -> tuple[str, list[list[InlineKeyboardButton]]]:
+    """/wallet and the menu's «Кошелёк» button open the same screen: a user with
+    no slot yet gets one, because the alternative is an empty message."""
+    wallets = await common.ledger.get_wallets(tg_id)
+    if not wallets:
+        await _ensure_wallet(tg_id)
+        wallets = await common.ledger.get_wallets(tg_id)
+    return _wallet_list_view(wallets, lang)
 
 
 async def _refresh_wallet_list(cb: types.CallbackQuery, tg_id: int, lang: str) -> None:

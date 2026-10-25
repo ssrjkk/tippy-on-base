@@ -1,4 +1,4 @@
-﻿"""Menu / onboarding / settings handlers."""
+"""Menu / onboarding / settings handlers."""
 import html
 
 from aiogram import F, types
@@ -172,49 +172,67 @@ async def cb_paywall_buy(cb: types.CallbackQuery) -> None:
         await common._edit_menu(cb, i18n.t(lang, 'paywall_insufficient', amount=common._fmt(int(item['price_micro']))))
     await cb.answer()
 
-@common.router.callback_query(F.data.in_({'bal', 'dep', 'top', 'hist', 'bets', 'donate', 'stats', 'settings', 'betcreate', 'paywall_list', 'tip', 'ask', 'wallet', 'miniapp'}))
+@common.router.callback_query(F.data.in_({'bal', 'dep', 'top', 'hist', 'bets', 'donate', 'stats',
+                                          'settings', 'betcreate', 'paywall_list', 'tip', 'ask',
+                                          'wallet', 'miniapp', 'menu_more'}))
 async def on_menu(cb: types.CallbackQuery) -> None:
     user = cb.from_user
     if not user:
         return
     lang = await _lang(user.id)
+    # A screen edited over the menu without a keyboard of its own has to carry
+    # the way back, or the menu is gone until the user retypes /menu.
+    back = InlineKeyboardMarkup(inline_keyboard=[[common._back_row(lang)]])
     if cb.data == 'bal':
-        await common._edit_menu(cb, await _balance_text(user.id))
+        await common._edit_menu(cb, await _balance_text(user.id), back)
     elif cb.data == 'dep':
-        await common._edit_menu(cb, await _deposit_text(user.id))
+        await common._edit_menu(cb, await _deposit_text(user.id), back)
     elif cb.data == 'top':
-        await common._edit_menu(cb, await _top_text())
+        await common._edit_menu(cb, await _top_text(), back)
     elif cb.data == 'hist':
-        await common._edit_menu(cb, await _history_text(user.id))
+        await common._edit_menu(cb, await _history_text(user.id), back)
     elif cb.data == 'bets':
         text, kb = await _bets_text(user.id)
         await common._edit_menu(cb, text, kb)
     elif cb.data == 'donate':
-        await common._edit_menu(cb, await _donate_text(cb.message.bot, user.id))
+        await common._edit_menu(cb, await _donate_text(cb.message.bot, user.id), back)
     elif cb.data == 'stats':
-        await common._edit_menu(cb, await _stats_text(user.id))
+        await common._edit_menu(cb, await _stats_text(user.id), back)
     elif cb.data == 'settings':
         text, kb = await _settings_kb_text(user.id)
         await common._edit_menu(cb, text, kb)
+    elif cb.data == 'menu_more':
+        await common._edit_menu(cb, i18n.t(lang, 'menu_balance', bal=await _fmt_balance(user.id)),
+                                common._more_kb(lang))
     elif cb.data == 'tip':
-        await common._edit_menu(cb, i18n.t(lang, 'hint_tip'))
+        # The button used to answer a paragraph about /tip; the chips flow is the
+        # same one /tip with no arguments opens.
+        from .tips import amount_kb
+        rows = [*amount_kb().inline_keyboard, [common._back_row(lang)]]
+        await common._edit_menu(cb, i18n.t(lang, 'tip_pick_amount'),
+                                InlineKeyboardMarkup(inline_keyboard=rows))
     elif cb.data == 'ask':
-        await common._edit_menu(cb, i18n.t(lang, 'hint_ask'))
+        await common._edit_menu(cb, i18n.t(lang, 'hint_ask'), back)
     elif cb.data == 'wallet':
-        await common._edit_menu(cb, i18n.t(lang, 'hint_wallet'))
+        from .wallet import wallet_screen
+        text, rows = await wallet_screen(user.id, lang)
+        await common._edit_menu(cb, text,
+                                InlineKeyboardMarkup(inline_keyboard=[*rows, [common._back_row(lang)]]))
     elif cb.data == 'miniapp':
         from web.mini import public_base_url
         url = public_base_url() + '/app'
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='🚀 ' + i18n.t(lang, 'btn_mini_app'), web_app=WebAppInfo(url=url))], [InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data='menu')]])
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text='🚀 ' + i18n.t(lang, 'btn_mini_app'), web_app=WebAppInfo(url=url))],
+            [common._back_row(lang)]])
         await common._edit_menu(cb, i18n.t(lang, 'app_mini_description'), kb)
     elif cb.data == 'betcreate':
         await common._edit_menu(cb, i18n.t(lang, 'betcreate_hint_v2', pct=win_fee_pct_label(),
-                                             default=common._default_deadline_label()))
+                                             default=common._default_deadline_label()), back)
     elif cb.data == 'paywall_list':
         text = await _paywall_list_text(lang, cb.from_user.id)
         if text is None:
             text = i18n.t(lang, 'paywall_empty')
-        await common._edit_menu(cb, text)
+        await common._edit_menu(cb, text, back)
     await cb.answer()
 
 async def _settings_kb_text(tg_id: int) -> tuple[str, InlineKeyboardMarkup]:

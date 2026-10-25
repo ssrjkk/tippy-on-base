@@ -237,7 +237,15 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 }
 
 /* ---------- Hero ---------- */
-.hero { text-align: center; padding: 92px 24px 56px; animation: fadeUp 0.5s var(--ease) both; }
+/* Two columns: the promise on the left, one real market on the right. A landing
+   for a pricing product opens with a price, not with an illustration. */
+.hero {
+  display: grid; grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 24px 64px; align-items: center;
+  text-align: left; padding: 84px 24px 56px;
+  animation: fadeUp 0.5s var(--ease) both;
+}
+.hero-copy { min-width: 0; }
 .hero h1 { animation: fadeUp 0.5s var(--ease) 0.05s both; }
 .hero h1 .accent { color: var(--accent-text); }
 .hero-badge {
@@ -254,8 +262,33 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   font-size: clamp(38px, 6.4vw, 68px); font-weight: 500; letter-spacing: -0.04em;
   line-height: 1.04; margin-bottom: 20px; color: var(--ink);
 }
-.hero-sub { max-width: 620px; margin: 0 auto 32px; color: var(--muted); font-size: 18px; line-height: 1.6; animation: fadeUp 0.5s var(--ease) 0.1s both; }
-.hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; animation: fadeUp 0.5s var(--ease) 0.15s both; }
+.hero-sub { max-width: 560px; margin: 0 0 32px; color: var(--muted); font-size: 18px; line-height: 1.6; animation: fadeUp 0.5s var(--ease) 0.1s both; }
+.hero-cta { display: flex; gap: 12px; justify-content: flex-start; flex-wrap: wrap; animation: fadeUp 0.5s var(--ease) 0.15s both; }
+
+/* The spotlight reuses .option/.bar from the market cards; only the chrome and
+   the closing line are its own. */
+.hero-spot {
+  background: var(--canvas); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 22px 22px 16px;
+  animation: fadeUp 0.5s var(--ease) 0.2s both;
+}
+.hero-spot .eyebrow { margin-bottom: 10px; }
+.spot-question {
+  font-size: 17px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.35;
+  color: var(--ink); margin-bottom: 6px;
+}
+.spot-meta {
+  color: var(--muted); font-size: 11px; font-family: var(--font-mono);
+  letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 16px;
+}
+.spot-foot {
+  display: flex; justify-content: space-between; align-items: baseline;
+  flex-wrap: wrap; gap: 6px 12px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  font-size: 11px; font-family: var(--font-mono);
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.spot-foot > .pot:first-child { white-space: nowrap; }
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -911,6 +944,11 @@ select.input {
   .stats, .steps { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; gap: 20px; }
   .connect-grid { grid-template-columns: 1fr; }
+  /* One column, and the copy goes back to centred; the card keeps its own
+     left-aligned rows because odds read as a table, not as a caption. */
+  .hero { grid-template-columns: 1fr; gap: 36px; text-align: center; padding-top: 56px; }
+  .hero-sub { margin-left: auto; margin-right: auto; }
+  .hero-cta { justify-content: center; }
 }
 
 @media (max-width: 640px) {
