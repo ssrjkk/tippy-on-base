@@ -944,11 +944,14 @@ select.input {
   .stats, .steps { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; gap: 20px; }
   .connect-grid { grid-template-columns: 1fr; }
-  /* One column, and the copy goes back to centred; the card keeps its own
-     left-aligned rows because odds read as a table, not as a caption. */
+  /* One column, and the copy goes back to centred — but the card keeps its own
+     left alignment, because a question and an odds table read as a table, not
+     as a caption. Without this the card inherited the centring and every line
+     inside it sat under a centered eyebrow. */
   .hero { grid-template-columns: 1fr; gap: 36px; text-align: center; padding-top: 56px; }
   .hero-sub { margin-left: auto; margin-right: auto; }
   .hero-cta { justify-content: center; }
+  .hero-spot { text-align: left; }
 }
 
 @media (max-width: 640px) {
