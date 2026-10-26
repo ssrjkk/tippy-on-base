@@ -714,11 +714,18 @@ def test_cb_mk_resolve_rejects_non_creator(ledger):
 # ---------- AI assistant ----------
 
 
-def test_ai_disabled_hint(ledger, monkeypatch):
-    monkeypatch.setattr(ai_mod.config, "AI_API_KEY", None)
-    m = Message("/ask что такое base?")
+def test_ask_without_a_key_answers_from_the_ledger(ledger, monkeypatch):
+    """/ask used to be one empty env var away from being useless. With no
+    provider configured it now reads the answer out of the ledger instead."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setattr(ai_mod.config, "AI_PROVIDER_CHAIN", "")
+    mid = make_market(ledger)
+    m = Message("/ask какие рынки открыты?")
     run(cmd_ask(m))
-    assert "не подключён" in m.answers[0][0]
+    text = m.answers[0][0]
+    assert "не подключён" not in text
+    assert f"#{mid}" in text
+    assert "Ответ по данным бота" in text
 
 
 def test_ai_no_question_shows_usage(ledger):
@@ -728,7 +735,6 @@ def test_ai_no_question_shows_usage(ledger):
 
 
 def test_ask_success(ledger, monkeypatch):
-    monkeypatch.setattr(ai_mod.config, "AI_API_KEY", "sk-test")
 
     async def _ask(q):
         return "Base — это L2 от Coinbase."
@@ -740,21 +746,22 @@ def test_ask_success(ledger, monkeypatch):
     assert "L2 от Coinbase" in m.answers[0][0]
 
 
-def test_ask_error_is_friendly(ledger, monkeypatch):
-    monkeypatch.setattr(ai_mod.config, "AI_API_KEY", "sk-test")
+def test_ask_falls_back_to_data_when_no_provider_answers(ledger, monkeypatch):
+    """A 429 from the model is not a reason to show the user an error: the
+    provider chain parks it and the ledger answers."""
 
-    async def boom(q):
-        raise RuntimeError("AI HTTP 429: rate limited")
+    async def boom(q, max_rounds=4):
+        raise RuntimeError("primary HTTP 429")
 
     monkeypatch.setattr(ai_mod, "ask_about_markets", boom)
-    m = Message("/ask привет")
+    make_market(ledger)
+    m = Message("/ask какие рынки открыты?")
     run(cmd_ask(m))
-    assert "недоступен" in m.answers[0][0]
-    assert "429" in m.answers[0][0]
+    assert "HTTP 429" not in m.answers[0][0]
+    assert "Ответ по данным бота" in m.answers[0][0]
 
 
 def test_ask_with_reply_context(ledger, monkeypatch):
-    monkeypatch.setattr(ai_mod.config, "AI_API_KEY", "sk-test")
     captured = {}
     async def _ask(q):
         captured.update(q=q)

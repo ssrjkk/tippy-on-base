@@ -102,6 +102,11 @@ class TestE2EAgentCycle:
 
         # Mock ledger
         mock_ledger = AsyncMock()
+        # bot/ai.py records provider health with synchronous ledger calls; on an
+        # AsyncMock each one would return a coroutine nobody awaits.
+        mock_ledger.ai_provider_rows = lambda *a, **k: []
+        mock_ledger.ai_provider_ok = lambda *a, **k: None
+        mock_ledger.ai_provider_fail = lambda *a, **k: None
         mock_ledger.create_market.return_value = 42
         mock_ledger.buy_shares.return_value = ("ok", {"cost": 5_000_000})
         mock_ledger.balance.return_value = 95_000_000

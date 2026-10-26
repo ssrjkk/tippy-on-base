@@ -16,7 +16,7 @@ async def cmd_gasless(message: types.Message):
     lang = await _lang(message.from_user.id)
     addr = await common.wallets.get_address(message.from_user.id)
     if not addr:
-        await message.answer(i18n.t(lang, 'no_wallet'))
+        await message.answer(i18n.t(lang, 'bal_nolink'))
         return
 
     info = await common.paymaster.check_eligibility(addr)
@@ -53,7 +53,7 @@ async def cmd_subscribe(message: types.Message):
             await message.answer(i18n.t(lang, 'amount_positive'))
             return
         if amount > common.config.MAX_TIP_USDC:
-            await message.answer(i18n.t(lang, 'subscribe_amount_too_large', max=common.config.MAX_TIP_USDC))
+            await message.answer(i18n.t(lang, 'tip_max', n=common.config.MAX_TIP_USDC))
             return
 
         from ..recurring import RecurrenceInterval
@@ -73,7 +73,7 @@ async def cmd_subscribe(message: types.Message):
 
         to_user = await common.ledger.get_user_by_username(to_username)
         if not to_user:
-            await message.answer(i18n.t(lang, 'user_not_found'))
+            await message.answer(i18n.t(lang, 'tip_user_not_found'))
             return
 
         to_tg_id = to_user['tg_id']

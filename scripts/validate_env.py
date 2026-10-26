@@ -128,7 +128,7 @@ else:
 # --- AI agent ---
 ai_key = os.environ.get("AI_API_KEY", "").strip()
 if not ai_key:
-    WARNINGS.append("AI_API_KEY is not set — AI agent features will be disabled")
+    WARNINGS.append("AI_API_KEY is not set — /ask answers from ledger data only, no model")
 elif len(ai_key) < 8:
     ERRORS.append("AI_API_KEY looks too short (must be >= 8 chars)")
 

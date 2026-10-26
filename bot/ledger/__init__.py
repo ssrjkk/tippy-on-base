@@ -3,6 +3,7 @@
 import asyncio
 
 from ._admin import LedgerAdminMixin
+from ._ai import LedgerAiMixin
 from ._audit import LedgerAuditMixin
 from ._base import (
     MICRO,
@@ -50,7 +51,7 @@ __all__ = [
     "lmsr_sell_value",
 ]
 
-class Ledger(LedgerCoreMixin, LedgerUsersMixin, LedgerPayMixin, LedgerPaywallMixin, LedgerTransferMixin, LedgerWithdrawMixin, LedgerBetsMixin, LedgerMarketsMixin, LedgerOnchainMixin, LedgerMessagesMixin, LedgerAdminMixin, LedgerNotifyMixin, LedgerViewsMixin, LedgerCreatorMixin, LedgerRecurringMixin, LedgerPaymasterMixin, LedgerAuditMixin):
+class Ledger(LedgerCoreMixin, LedgerUsersMixin, LedgerPayMixin, LedgerPaywallMixin, LedgerTransferMixin, LedgerWithdrawMixin, LedgerBetsMixin, LedgerMarketsMixin, LedgerOnchainMixin, LedgerMessagesMixin, LedgerAdminMixin, LedgerNotifyMixin, LedgerViewsMixin, LedgerCreatorMixin, LedgerRecurringMixin, LedgerPaymasterMixin, LedgerAuditMixin, LedgerAiMixin):
     'Full ledger facade combining all domain mixins.'
     pass
 

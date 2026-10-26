@@ -175,14 +175,31 @@ MARKET_MAX_SUBSIDY_USDC: Decimal = Decimal(os.environ.get("MARKET_MAX_SUBSIDY_US
 MARKET_MAX_TRADE_USDC: Decimal = Decimal(os.environ.get("MARKET_MAX_TRADE_USDC", "500"))
 
 # AI assistant (/ask): any OpenAI-compatible chat-completions endpoint works
-# (OpenAI, OpenRouter, local llama/vLLM server, ...). Empty key disables /ask.
+# (OpenAI, OpenRouter, Groq, local vLLM/llama.cpp server, ...). With no usable
+# key at all /ask still answers — from ledger data, without a model (bot/ai_data.py).
+# The key itself is read from os.environ by name (see bot/ai.py:chain), never
+# kept here: provider health is persisted in the DB and a secret must not be
+# reachable from a module that logging or a dashboard can dump.
 AI_API_URL: str = os.environ.get("AI_API_URL", "https://api.groq.com/openai/v1").rstrip("/")
-AI_API_KEY: str | None = os.environ.get("AI_API_KEY", "").strip() or None
 AI_MODEL: str = os.environ.get("AI_MODEL", "openai/gpt-oss-120b")
+# Providers tried in order, so one dead key or one rate-limited endpoint no
+# longer kills the assistant. Format: name|url|KEY_ENV_VAR|model, comma-separated.
+# The third field NAMES an environment variable and never holds the secret:
+# provider health is persisted in the DB, and a key must not land in a row.
+# Empty means the AI_API_URL / AI_API_KEY / AI_MODEL triple above is the chain.
+AI_PROVIDER_CHAIN: str = os.environ.get("AI_PROVIDERS", "").strip()
 AI_TIMEOUT_SECONDS: int = int(os.environ.get("AI_TIMEOUT_SECONDS", "45"))
 AI_COOLDOWN_SECONDS: int = int(os.environ.get("AI_COOLDOWN_SECONDS", "15"))
 AI_MAX_QUESTION_LEN: int = int(os.environ.get("AI_MAX_QUESTION_LEN", "1000"))
-# Global budget for web /api/ask answers per UTC day (LLM token spend guard).
+# How long a provider stays parked after a 429 / 5xx / network error, before it
+# is probed again on the next real question.
+AI_PROVIDER_RETRY_SECONDS: int = int(os.environ.get("AI_PROVIDER_RETRY_SECONDS", "120"))
+# A rejected credential does not fix itself, so re-probing every two minutes
+# would just keep burning the request budget of an account that says no again.
+AI_PROVIDER_AUTH_PARK_SECONDS: int = int(os.environ.get("AI_PROVIDER_AUTH_PARK_SECONDS", "3600"))
+# Global budget for answers per UTC day (LLM token spend guard). Counted in the
+# DB, not per process: uvicorn, the bot and the agent are separate processes and
+# a process-local counter let each of them spend the full budget on its own.
 AI_DAILY_ANSWERS: int = int(os.environ.get("AI_DAILY_ANSWERS", "300"))
 AI_MAX_ANSWER_CHARS: int = int(os.environ.get("AI_MAX_ANSWER_CHARS", "3500"))
 

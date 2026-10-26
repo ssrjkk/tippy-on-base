@@ -13,7 +13,6 @@ import os
 import re
 import secrets
 import sys
-import threading
 import time
 from html import escape as _esc
 from pathlib import Path
@@ -102,14 +101,15 @@ _RL_DISABLED: bool = os.environ.get('TESTING', '') == '1'
 _rl_last_sweep: float = 0.0
 _auth_rl_last_sweep: float = 0.0
 _ask_cooldown: dict[str, float] = {}
-_ask_day: str = ''
-_ask_served_today: int = 0
+# Per-IP ask cooldown only. The daily answer budget is NOT kept here: it used
+# to be a module counter, which each of the three processes (uvicorn, the bot,
+# the agent) spent on its own and reset on every deploy. It lives in
+# ai_usage_day now — see bot/ai.py:charge_answer().
 # /api/stats runs 8 full-table aggregates against the shared DB connection —
 # cache the result briefly so dashboards/pagers don't re-run them per hit.
 _stats_cache: dict | None = None
 _stats_ts: float = 0.0
 _STATS_TTL = 10  # seconds
-_ask_lock = threading.Lock()
 
 
 def _peer_trusted(peers: frozenset, peer: str) -> bool:
@@ -596,6 +596,14 @@ async def api_onchain_market(market_id: int) -> dict:
         ],
     }
 
+def _ai_has_llm() -> bool:
+    """Whether a provider is configured. Reads config and the environment only
+    — no DB, no request — because /api/info is public and answers per page view."""
+    from bot import ai
+
+    return ai.has_llm()
+
+
 @app.get('/api/info', tags=['stats'])
 def api_info() -> dict:
     """Bot identity plus the limits, fees and command menu the bot registers.
@@ -633,7 +641,21 @@ def api_info() -> dict:
             and config.SMART_WALLET_PAYMASTER_ADDRESS
         ),
         'onchain_markets_enabled': bool(config.OUTCOME_MARKET_ADDRESS),
+        # 'llm' when a provider is configured, 'data' when /ask answers from the
+        # ledger. The Mini App labels its answer bubbles with it, so it stops
+        # offering a panel that can only fail.
+        'ai_mode': 'llm' if _ai_has_llm() else 'data',
     }
+
+@app.get('/api/ai/status', tags=['stats'])
+async def api_ai_status(request: Request) -> dict:
+    """Provider chain and today's answer budget — owner-only: it names the
+    environment variables the keys live in and quotes provider error bodies."""
+    _require_admin(request)
+
+    from bot import ai
+
+    return ai.status()
 
 @app.get('/api/health', tags=['stats'])
 async def api_health() -> dict:
@@ -721,16 +743,23 @@ async def api_qr(data: str, size: int=220) -> Response:
 
 class AskRequest(BaseModel):
     question: str = Field(max_length=2000)
+    # The Mini App already knows which language it is showing; the no-model
+    # answers are built server-side, so it has to say which to build. Optional:
+    # a client that omits it gets the default language, not an error.
+    lang: str | None = Field(default=None, max_length=8)
 
 
 @app.post('/api/ask', tags=['markets'])
 async def api_ask(body: AskRequest, request: Request) -> dict:
     """Same assistant as Telegram's /ask — tool-calling, so answers about
     specific markets are grounded in real current odds, not guessed. Shares
-    the global per-IP rate limiter above; no separate throttle here."""
-    from bot import ai
-    if not ai.ai_enabled():
-        raise HTTPException(status_code=503, detail='AI is not configured')
+    the global per-IP rate limiter above; no separate throttle here.
+
+    `mode` says what answered: 'llm' or 'data' (the ledger, without a model).
+    A client labels the bubble with it, because a data answer is a lookup and
+    the user should not read it as prose written by an AI.
+    """
+    from bot import ai, ai_data, i18n
     question = (body.question or '').strip()
     if not question:
         raise HTTPException(status_code=400, detail='question must not be empty')
@@ -749,27 +778,20 @@ async def api_ask(body: AskRequest, request: Request) -> dict:
             if now - ts >= config.AI_COOLDOWN_SECONDS:
                 del _ask_cooldown[ip]
     _ask_cooldown[_ip] = now
-    # Global daily quota: /api/ask burns LLM tokens, and a fleet of rotating
-    # IPs (or forged XFF from an untrusted peer) cannot be fenced per-IP.
-    # Bounded after the cooldown so a single legit burst still counts.
-    today_key = time.strftime('%Y-%m-%d', time.gmtime())
-    global _ask_day, _ask_served_today
-    with _ask_lock:
-        if _ask_day != today_key:
-            _ask_day = today_key
-            _ask_served_today = 0
-        if _ask_served_today >= config.AI_DAILY_ANSWERS:
-            raise HTTPException(status_code=429, detail='daily answer budget exhausted')
+    mode = 'llm'
     try:
         answer = await ai.ask_about_markets(question)
-    except RuntimeError:
-        log.warning("ask_about_markets failed", exc_info=True)
-        raise HTTPException(status_code=502, detail='AI service unavailable') from None
+    except RuntimeError as e:
+        # No provider configured, all of them failed, or the daily token
+        # budget is spent — none of which is the user's problem. The daily
+        # budget lives in the DB (ai_usage_day) so the bot process, the web
+        # process and the agent share one limit.
+        log.debug('ask: no model answered (%s), serving ledger data', e)
+        mode = 'data'
+        answer = await ai_data.answer(question, i18n.norm(body.lang))
     if len(answer) > config.AI_MAX_ANSWER_CHARS:
         answer = answer[:config.AI_MAX_ANSWER_CHARS - 1] + '…'
-    with _ask_lock:
-        _ask_served_today += 1
-    return {'answer': answer}
+    return {'answer': answer, 'mode': mode}
 
 @app.get('/api/wallet', tags=['treasury'])
 async def api_wallet() -> dict:

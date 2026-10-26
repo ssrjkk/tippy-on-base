@@ -35,8 +35,12 @@ def _reset_rate_limit():
     from web import server
 
     server._rl_state.clear()
+    # /api/ask keeps its own per-IP cooldown; without this the second AI test
+    # in a row is refused by the first one's timestamp.
+    server._ask_cooldown.clear()
     yield
     server._rl_state.clear()
+    server._ask_cooldown.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -1289,3 +1293,124 @@ def test_prod_health_workflow_fails_instead_of_skipping():
     assert "workflow_dispatch" in text
     assert re.search(r"expect_down:\n\s+type: boolean\n\s+required: false\n\s+default: false", text)
     assert "schedule:" in text
+
+
+# ---------- /api/ask and the assistant's availability ----------
+
+
+def _no_provider(monkeypatch):
+    """Pretend the machine has no AI keys at all — the state the demo site is
+    actually in, and the state the no-model answer path exists for."""
+    from bot import ai
+    from web import server
+
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setattr(ai.config, "AI_PROVIDER_CHAIN", "")
+    monkeypatch.setattr(server.config, "AI_COOLDOWN_SECONDS", 0)
+
+
+def _one_market(ledger):
+    ledger.credit(4101, 200 * 10**6, "deposit")
+    return ledger.create_market(4101, "Перепишет ли Tippy 1000 чаевых?", ["Да", "Нет"], 20 * 10**6)
+
+
+def test_api_ask_answers_from_the_ledger_with_no_model(client, ledger, monkeypatch):
+    """A public endpoint that 503s because an env var is empty is a broken
+    feature; it now answers with the numbers the bot itself shows."""
+    _no_provider(monkeypatch)
+    mid = _one_market(ledger)
+
+    r = client.post("/api/ask", json={"question": "какие рынки открыты?", "lang": "ru"})
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "data"
+    assert f"#{mid}" in body["answer"]
+
+
+def test_api_ask_says_which_language_to_answer_in(client, ledger, monkeypatch):
+    _no_provider(monkeypatch)
+    _one_market(ledger)
+
+    zh = client.post("/api/ask", json={"question": "有哪些市场", "lang": "zh"}).json()["answer"]
+    en = client.post("/api/ask", json={"question": "what markets are open", "lang": "en"}).json()["answer"]
+
+    assert "未调用模型" in zh and "no model involved" in en
+
+
+def test_api_ask_marks_a_model_answer_as_such(client, ledger, monkeypatch):
+    from bot import ai as ai_mod
+
+    async def answered(q):
+        return "Model prose."
+
+    monkeypatch.setattr(ai_mod, "ask_about_markets", answered)
+    r = client.post("/api/ask", json={"question": "что такое base?"})
+    assert r.json()["mode"] == "llm"
+    assert r.json()["answer"] == "Model prose."
+
+
+def test_api_ask_still_throttles_per_ip(client, ledger, monkeypatch):
+    """The cooldown is what keeps the free-data path from being a free DB
+    hammer; the no-model answer must not have dissolved it."""
+    from bot import ai as ai_mod
+    from web import server
+
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setattr(ai_mod.config, "AI_PROVIDER_CHAIN", "")
+    monkeypatch.setattr(server.config, "AI_COOLDOWN_SECONDS", 600)
+    _one_market(ledger)
+
+    first = client.post("/api/ask", json={"question": "какие рынки открыты?", "lang": "ru"})
+    second = client.post("/api/ask", json={"question": "какие рынки открыты?", "lang": "ru"})
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+
+
+def test_api_info_advertises_what_the_assistant_runs_on(client, ledger, monkeypatch):
+    _no_provider(monkeypatch)
+    info = client.get("/api/info").json()
+
+    assert info["ai_mode"] == "data"
+    monkeypatch.setenv("AI_API_KEY", "k1")
+    assert client.get("/api/info").json()["ai_mode"] == "llm"
+
+
+def test_api_ai_status_is_owner_only(client, ledger, monkeypatch):
+    """The row names the env vars the keys live in and quotes provider error
+    bodies, so it cannot be public."""
+    anon = client.get("/api/ai/status")
+    assert anon.status_code == 403
+
+    _auth(client, 111)
+    body = client.get("/api/ai/status").json()
+    assert body["mode"] in ("llm", "data")
+    assert {"name", "model", "key_env", "key_present", "parked", "last_error"} <= set(body["providers"][0])
+    assert "key" not in body["providers"][0]
+
+
+def test_every_mini_app_translation_key_exists_in_all_three_languages():
+    """`web/static/app.html` keeps its own dictionary inline (ru/en/zh), apart
+    from bot/i18n.py, so `scripts/check_i18n.py` cannot see it: a key used in
+    the UI and added to two of the three languages silently renders English or
+    the raw key for the third one."""
+    from pathlib import Path
+
+    page = (
+        Path(__file__).resolve().parents[1] / "web" / "static" / "app.html"
+    ).read_text(encoding="utf-8-sig")
+
+    used = set(re.findall(r"""\bt\(\s*['"]([a-z0-9_]+)['"]""", page))
+    used |= set(re.findall(r'data-i18n(?:-ph|-title)?="([a-z0-9_]+)"', page))
+    assert used, "the Mini App stopped using t() — this test needs re-reading"
+
+    for lang in ("ru", "en", "zh"):
+        line = next(
+            (l for l in page.splitlines()
+             if re.match(rf"\s*{lang}: \{{.*\}},?\s*$", l, re.S)),
+            None,
+        )
+        assert line, f"the {lang} dictionary is no longer a single block"
+        defined = set(re.findall(r"""['"]?([a-z0-9_]+)['"]?\s*:""", line))
+        assert used <= defined, f"{lang} is missing {sorted(used - defined)}"

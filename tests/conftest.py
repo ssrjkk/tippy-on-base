@@ -100,6 +100,9 @@ TABLES = [
     "recurring_payments",
     "paymaster_usage",
     "audit_logs",
+    # AI provider health and the daily answer budget: left uncleaned, one test
+    # would inherit another's parked provider and never see the call it expects.
+    "ai_provider", "ai_usage_day",
 ]
 
 
@@ -259,6 +262,8 @@ def ledger(monkeypatch):
     # rebind it too, or basename resolution would hit the DEV database.
     import bot.tip_targets
     monkeypatch.setattr(bot.tip_targets, "ledger", async_fresh)
+    import bot.ai_data
+    monkeypatch.setattr(bot.ai_data, "ledger", async_fresh)
     # Same story for the agent, which binds the proxy at import time.
     import agent.pnl
     import agent.tools

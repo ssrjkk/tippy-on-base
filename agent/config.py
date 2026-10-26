@@ -62,7 +62,10 @@ AGENT_TG_ID = int(os.environ.get("AGENT_TG_ID", "0"))  # 0 = unauthenticated dem
 NEWS_CHECK_INTERVAL = int(os.environ.get("AGENT_NEWS_INTERVAL", "300"))  # seconds
 
 # --- LLM ---------------------------------------------------------------------------
-LLM_MODEL = os.environ.get("AGENT_LLM_MODEL", "gpt-4o-mini")
+# Model ids are provider-specific, so the default is "none": each provider of
+# the chain (bot/ai.py) is asked with its own AI_MODEL / AI_PROVIDERS model.
+# Set this only when the whole chain is known to speak the same id.
+LLM_MODEL = os.environ.get("AGENT_LLM_MODEL", "").strip()
 LLM_BUDGET_DAILY = float(os.environ.get("AGENT_LLM_BUDGET", "5.00"))  # USD/day
 
 # --- Chain --------------------------------------------------------------------------

@@ -80,8 +80,12 @@ accounting backed by public proof-of-reserves.
 
 ### AI assistant
 - `/ask <question>` — ask about crypto, Base, market strategy, bot usage
-- Works with **any OpenAI-compatible API** (OpenAI, OpenRouter, local vLLM/llama.cpp)
-  via `AI_API_URL` / `AI_API_KEY` / `AI_MODEL`
+- Works with **any OpenAI-compatible API** (OpenAI, Groq, OpenRouter, local
+  vLLM/llama.cpp) via `AI_API_URL` / `AI_API_KEY` / `AI_MODEL`; `AI_PROVIDERS`
+  lists fallbacks, a 429 or a revoked key parks that endpoint and the next one
+  answers
+- With no model reachable, `/ask` still answers from the ledger — open markets
+  and pools with live odds, or the command list — and says that it did
 - Reply to a message with `/ask` to use it as context; rate-limited, typing indicator
 
 ### Donations & wallets
@@ -339,7 +343,8 @@ bot/
 │  ├─ prices.py         quote helpers
 │  ├─ basenames.py      ENSIP-19 reverse resolution
 │  └─ network.py        chain labels, explorer URLs
-├─ ai.py                OpenAI-compatible client (stdlib urllib, no new deps)
+├─ ai.py                provider chain: failover, parks, shared daily budget
+├─ ai_data.py           /ask without a model, answered from the ledger
 ├─ qr.py                local QR generation
 ├─ smart_wallet.py      ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
 ├─ paymaster.py         Base Paymaster integration: gasless onboarding (10 free txs)
@@ -384,7 +389,7 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts
-python -m pytest -q -m "not production"   # 1077 passed
+python -m pytest -q -m "not production"   # 1112 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password

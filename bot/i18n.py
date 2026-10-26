@@ -1282,11 +1282,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "只有创建者才能关闭",
     },
     # ----- ai handler -----
-    "ai_disabled": {
-        "ru": "🧠 ИИ-ассистент пока не подключён.\n\nБесплатно: создай ключ на <a href=\"https://console.groq.com\">console.groq.com</a> (100K запросов/день) и добавь в .env:\n<code>AI_API_KEY=gsk_...</code>",
-        "en": "🧠 AI assistant is not configured yet.\n\nFree: get a key at <a href=\"https://console.groq.com\">console.groq.com</a> (100K req/day) and add to .env:\n<code>AI_API_KEY=gsk_...</code>",
-        "zh": "🧠 AI 助手尚未配置。\n\n免费：在 <a href=\"https://console.groq.com\">console.groq.com</a> 获取密钥（每天 10 万次请求），添加到 .env：\n<code>AI_API_KEY=gsk_...</code>",
-    },
     "ai_question_empty": {
         "ru": "🧠 Спроси меня о чём угодно.\nФормат: <code>/ask вопрос</code>\nМожно ответом на сообщение — возьму контекст.",
         "en": "🧠 Ask me anything.\nFormat: <code>/ask question</code>\nReply to a message for context.",
@@ -1297,15 +1292,67 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Question too long (max {n} chars).",
         "zh": "问题太长（最多 {n} 个字符）。",
     },
-    "ai_error": {
-        "ru": "🤖 ИИ недоступен: <i>{error}</i>\nПопробуй позже.",
-        "en": "🤖 AI unavailable: <i>{error}</i>\nTry again later.",
-        "zh": "🤖 AI 不可用：<i>{error}</i>\n请稍后重试。",
-    },
     "ai_empty_answer": {
         "ru": "🤖 Пустой ответ от ИИ. Попробуй переформулировать.",
         "en": "🤖 Empty response from AI. Try rephrasing.",
         "zh": "🤖 AI 返回空答案。请换个说法。",
+    },
+    # ----- /ask without a model (bot/ai_data.py): every string here is a label
+    # over numbers that come from the ledger, never a number itself -----
+    "ai_data_markets_head": {
+        "ru": "📈 Открытые рынки ({n}):",
+        "en": "📈 Open markets ({n}):",
+        "zh": "📈 当前市场（{n} 个）：",
+    },
+    "ai_data_bets_head": {
+        "ru": "🎯 Открытые ставки ({n}):",
+        "en": "🎯 Open pool bets ({n}):",
+        "zh": "🎯 当前奖池投注（{n} 个）：",
+    },
+    "ai_data_market_meta": {
+        "ru": "   💧 {liquidity} USDC · 👥 {traders}",
+        "en": "   💧 {liquidity} USDC · 👥 {traders}",
+        "zh": "   💧 {liquidity} USDC · 👥 {traders}",
+    },
+    "ai_data_bet_meta": {
+        "ru": "   💰 Пот {amount} USDC",
+        "en": "   💰 Pot {amount} USDC",
+        "zh": "   💰 奖池 {amount} USDC",
+    },
+    "ai_data_market_hint": {
+        "ru": "Полная карточка: /market <id>. Торгует: /trade <id> <вариант> <сумма>.",
+        "en": "Full card: /market <id>. Trading: /trade <id> <option> <amount>.",
+        "zh": "完整卡片：/market <id>。交易：/trade <id> <选项> <金额>。",
+    },
+    "ai_data_no_bets": {
+        "ru": "🎯 Открытых ставок пока нет. Создай первую: /bet create <вопрос> | <в1> | <в2>",
+        "en": "🎯 No open pool bets yet. Create one: /bet create <question> | <o1> | <o2>",
+        "zh": "🎯 暂无奖池投注。创建第一个：/bet create <问题> | <选项1> | <选项2>",
+    },
+    "ai_data_not_found": {
+        "ru": "Ничего не нашёл по этому id — открытые списки: /markets и /bets.",
+        "en": "Nothing with that id — the open lists are /markets and /bets.",
+        "zh": "没有找到该 id，开放列表见 /markets 和 /bets。",
+    },
+    "ai_data_none": {
+        "ru": "Могу перечислить рынки и ставки, показать котировки по id («рынок 5») или список команд. Напиши, что посмотреть.",
+        "en": "I can list markets and pool bets, show odds for an id (\"market 5\"), or the command list. Tell me what to look up.",
+        "zh": "我可以列出市场和奖池投注、按 id 显示赔率（“market 5”）或命令清单。请说明要查什么。",
+    },
+    "ai_data_unavailable": {
+        "ru": "База данных сейчас недоступна — попробуй чуть позже.",
+        "en": "The database is unavailable right now — try again in a moment.",
+        "zh": "数据库暂时不可用，请稍后再试。",
+    },
+    "ai_data_cmd_head": {
+        "ru": "Похоже, тебе нужна эта команда:",
+        "en": "Looks like you want this command:",
+        "zh": "你可能需要这条命令：",
+    },
+    "ai_data_footer": {
+        "ru": "🤖 Ответ по данным бота, без модели.",
+        "en": "🤖 Answered from the bot's own data, no model involved.",
+        "zh": "🤖 根据机器人自身数据回答，未调用模型。",
     },
     # ----- menu extra -----
     "paywall_empty": {

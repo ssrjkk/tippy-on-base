@@ -4,14 +4,14 @@ All LLM output is JSON-validated. No free-text parsing into actions.
 External news content is wrapped in delimiters and marked untrusted.
 
 Model routing:
-  1. Cheap model (gpt-4o-mini / llama-3.1-8b) — filters noise, rejects irrelevant news
-  2. Strong model (gpt-4o / llama-3.3-70b) — decides market params + bet size
+  1. Cheap model — filters noise, rejects irrelevant news (AGENT_FILTER_MODEL)
+  2. Strong model — decides market params + bet size (AGENT_LLM_MODEL)
   This cuts LLM costs by ~90% (cheap model handles 90% of cycles).
+  Both are optional: unset, every stage asks the provider chain's own model.
 """
 
 import json
 import os
-import urllib.request
 from dataclasses import dataclass
 
 from . import config
@@ -67,52 +67,36 @@ Do NOT include markdown, backticks, or any text outside the JSON object.
 
 
 def _call_llm(messages: list[dict], model: str | None = None, temperature: float = 0.3) -> dict:
-    """Call LLM via Groq/OpenAI-compatible API. Returns parsed JSON."""
-    api_key = os.environ.get("AI_API_KEY", "")
-    if not api_key:
-        return {"create_market": False, "reasoning": "No AI_API_KEY set"}
+    """One LLM round trip through the provider chain, parsed as JSON.
 
-    api_url = os.environ.get(
-        "AI_API_URL", "https://api.groq.com/openai/v1/chat/completions"
-    )
-
-    payload = json.dumps({
-        "model": model or config.LLM_MODEL,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": 500,
-    }).encode()
-
-    req = urllib.request.Request(
-        api_url,
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    The chain rather than one key (see bot/ai.py): the agent runs unattended,
+    and a revoked or rate-limited key used to look exactly like "this news is
+    irrelevant", which silently stopped market creation. Model names differ per
+    provider, so one is only passed when the operator named it explicitly.
+    """
+    from bot import ai
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read())
-        content = result["choices"][0]["message"]["content"]
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1]
-        if content.endswith("```"):
-            content = content.rsplit("```", 1)[0]
-        parsed = json.loads(content.strip())
-        if not isinstance(parsed, dict):
-            return {"error": "LLM returned non-object JSON"}
-        return parsed
-    except Exception as e:
+        reply = ai.call(messages, model=model or None, temperature=temperature, max_tokens=500)
+    except RuntimeError as e:
         return {"error": str(e)}
+    content = (reply.get("content") or "").strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+    if content.endswith("```"):
+        content = content.rsplit("```", 1)[0]
+    try:
+        parsed = json.loads(content.strip())
+    except json.JSONDecodeError as e:
+        return {"error": f"LLM returned invalid JSON: {e}"}
+    if not isinstance(parsed, dict):
+        return {"error": "LLM returned non-object JSON"}
+    return parsed
 
 
 def _filter_news(news_items: list[str]) -> tuple[list[str], list[str]]:
     """Stage 1: cheap model filters irrelevant news. Returns (relevant, rejected)."""
-    cheap_model = os.environ.get("AGENT_FILTER_MODEL", "llama-3.1-8b-instant")
+    cheap_model = os.environ.get("AGENT_FILTER_MODEL", "").strip()
     relevant = []
     rejected = []
 

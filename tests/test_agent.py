@@ -249,11 +249,17 @@ class TestSignals:
 # ---------------------------------------------------------------------------
 
 class TestDecision:
-    def test_decide_returns_none_when_no_create(self):
+    def test_decide_fails_closed_without_a_provider(self):
+        """No model reachable must not read as "create this market": the agent
+        spends real USDC on whatever the LLM answers with. The old version of
+        this test read the key straight out of os.environ; the chain lives in
+        bot/ai.py now, so that is what gets stubbed."""
         from agent.decision import _call_llm
-        with patch("agent.decision.os.environ.get", return_value=""):
-            result = _call_llm(["test news"], 100.0)
-            assert result.get("create_market") is False
+
+        with patch("bot.ai.configured", return_value=[]):
+            result = _call_llm([{"role": "user", "content": "test news"}])
+        assert "error" in result
+        assert not result.get("create_market")
 
     def test_decide_validates_output(self):
         from agent.decision import decide

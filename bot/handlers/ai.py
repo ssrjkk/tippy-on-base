@@ -1,10 +1,10 @@
-﻿"""/ask — AI assistant handler (OpenAI-compatible backend, see bot/ai.py)."""
+﻿"""/ask — the assistant: an LLM provider when one answers, ledger data when none does."""
 import html
 
 from aiogram import types
 from aiogram.filters import Command
 
-from .. import ai, i18n
+from .. import ai, ai_data, i18n
 from . import _common as common
 
 __all__ = ['cmd_ask']
@@ -23,9 +23,6 @@ async def cmd_ask(message: types.Message) -> None:
     if not question:
         await message.answer(i18n.t(lang, 'ai_question_empty'))
         return
-    if not ai.ai_enabled():
-        await message.answer(i18n.t(lang, 'ai_disabled'))
-        return
     if len(question) > common.config.AI_MAX_QUESTION_LEN:
         await message.answer(i18n.t(lang, 'ai_question_long', n=common.config.AI_MAX_QUESTION_LEN))
         return
@@ -40,9 +37,11 @@ async def cmd_ask(message: types.Message) -> None:
         pass
     try:
         answer = await ai.ask_about_markets(full_question)
-    except RuntimeError as e:
-        await message.answer(i18n.t(lang, 'ai_error', error=html.escape(str(e))))
-        return
+    except RuntimeError:
+        # No provider configured, every one of them failed, or today's token
+        # budget is spent. The question still gets an answer: markets, pools
+        # and commands are read from the ledger instead of from a model.
+        answer = await ai_data.answer(full_question, lang)
     if not answer:
         await message.answer(i18n.t(lang, 'ai_empty_answer'))
         return

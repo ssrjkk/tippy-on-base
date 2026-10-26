@@ -301,14 +301,19 @@ def test_dispatch_market_full_lifecycle(ledger):
     assert BOB in sent_to, "winner must be notified"
 
 
-def test_dispatch_ask_disabled_hint(ledger, monkeypatch):
+def test_dispatch_ask_without_a_key_still_answers(ledger, monkeypatch):
+    """The dispatcher must reach the no-model answer path, not a refusal."""
     from bot import ai as ai_mod
 
-    monkeypatch.setattr(ai_mod.config, "AI_API_KEY", None)
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setattr(ai_mod.config, "AI_PROVIDER_CHAIN", "")
+    ledger.credit(4001, 1000 * 10**6, "deposit")
+    ledger.create_market(4001, "Кто победит?", ["Алиса", "Боб"], 50 * 10**6)
     s = RecorderSession()
-    asyncio.run(_mk_dp().feed_update(_mk_bot(s), _message_update("/ask что такое base?")))
+    asyncio.run(_mk_dp().feed_update(_mk_bot(s), _message_update("/ask какие рынки открыты?")))
     text = next(p["text"] for n, p in s.calls if n == "sendMessage")
-    assert "не подключён" in text
+    assert "не подключён" not in text
+    assert "Ответ по данным бота" in text
 
 
 def test_dispatch_tx_lookup(ledger, monkeypatch):

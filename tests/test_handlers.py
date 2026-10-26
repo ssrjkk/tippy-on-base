@@ -2816,3 +2816,31 @@ def test_every_menu_button_has_a_handler():
         for btn in buttons:
             if btn.callback_data:
                 assert handled(btn.callback_data), f"{lang}: {btn.callback_data} has no handler"
+
+
+def test_every_i18n_key_the_python_code_references_exists():
+    """`i18n.t()` raises on a missing key, so a typo is a crash in whichever
+    screen hits it — and in the no-model answer path the KeyError was caught by
+    a broad `except` and shown to the user as "database unavailable", which is
+    how this class of bug hides.
+
+    Three references in bot/handlers/breakthrough.py were dead this way and are
+    now pointed at the keys that do exist.
+    """
+    import re
+    from pathlib import Path
+
+    from bot.i18n import STRINGS
+
+    root = Path(__file__).resolve().parents[1]
+    pattern = re.compile(r"""i18n\.t\(\s*[^,]+,\s*['"]([a-z0-9_]+)['"]""")
+    missing: dict[str, list[str]] = {}
+    for package in ("bot", "web", "agent"):
+        for source in (root / package).rglob("*.py"):
+            if source.name == "i18n.py":
+                continue
+            keys = set(pattern.findall(source.read_text(encoding="utf-8-sig")))
+            dead = sorted(keys - STRINGS.keys())
+            if dead:
+                missing[source.relative_to(root).as_posix()] = dead
+    assert not missing, missing

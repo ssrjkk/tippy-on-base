@@ -1,19 +1,35 @@
 """AI assistant backend: any OpenAI-compatible chat-completions endpoint.
 
-Works with OpenAI, OpenRouter, Together, local vLLM/llama.cpp servers —
-anything speaking POST {base}/chat/completions. Uses only the stdlib
-(urllib) so no new dependency lands in requirements.txt.
+Works with OpenAI, Groq, OpenRouter, Together, local vLLM/llama.cpp servers —
+anything speaking POST {base}/chat/completions. Uses only the stdlib (urllib)
+so no new dependency lands in requirements.txt.
 
-Disabled state: AI_API_KEY unset -> ai_enabled() is False and /ask explains
-how to enable it instead of erroring mid-chat.
+One provider is a single point of failure: an empty key, a revoked token or a
+free tier that says 429 all take the assistant away from every user at once.
+So this module holds a CHAIN (config.AI_PROVIDER_CHAIN, with the legacy
+AI_API_URL/AI_API_KEY/AI_MODEL triple as its first entry), asks the ledger which
+members are currently healthy, tries them in order, and parks the one that
+failed for a while. Parked providers are retried on a later question, so a
+provider that recovers comes back without a restart and without anyone
+re-configuring anything.
+
+No usable provider is not a dead end either: /ask falls through to
+bot/ai_data.py, which answers from ledger data without a model.
 """
 
 import asyncio
+import hashlib
 import json
+import logging
+import os
+import re
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 
 from . import config
+
+log = logging.getLogger("tipbot.ai")
 
 SYSTEM_PROMPT = (
     "You are Tippy, the assistant of a Telegram bot that runs a community "
@@ -28,37 +44,162 @@ SYSTEM_PROMPT = (
 )
 
 
-def ai_enabled() -> bool:
-    return bool(config.AI_API_KEY)
+_SECRET_RE = re.compile(r"\b(?:sk|gsk|pk|or|api|key)[_-][A-Za-z0-9_-]{6,}")
 
 
-def _ask_sync(question: str) -> str:
-    """One-shot question -> answer text. Raises RuntimeError with a short,
-    user-presentable message on any failure (network, HTTP, bad payload)."""
-    if not config.AI_API_KEY:
-        raise RuntimeError("AI is not configured")
-    url = f"{config.AI_API_URL}/chat/completions"
-    payload = {
-        "model": config.AI_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": question[: config.AI_MAX_QUESTION_LEN]},
-        ],
-        "max_tokens": 1024,
-        "temperature": 0.4,
-    }
+@dataclass(frozen=True)
+class Provider:
+    """One chat-completions endpoint of the chain. `key` is resolved from the
+    environment on every read and is never stored anywhere."""
+
+    pid: str
+    name: str
+    url: str
+    model: str
+    key_env: str
+    key: str
+
+    def persist(self) -> dict:
+        """The fields that go into ai_provider — deliberately without `key`."""
+        return {
+            "pid": self.pid,
+            "name": self.name,
+            "url": self.url,
+            "model": self.model,
+            "key_env": self.key_env,
+        }
+
+
+class ProviderError(RuntimeError):
+    """One provider failed. `park_seconds` says how long to stay away from it:
+    0 means the failure says nothing about the provider (a client-side bug) and
+    the same provider should be retried rather than rotated away from.
+
+    `message` is what a user may see, so it carries only the provider name and
+    the status; `detail` is that provider's own words, redacted, for the log and
+    for the operator-visible row."""
+
+    def __init__(self, message: str, *, park_seconds: int, detail: str = "") -> None:
+        super().__init__(message)
+        self.park_seconds = park_seconds
+        self.detail = detail or message
+
+
+def _provider_id(name: str, url: str, model: str, key_env: str) -> str:
+    return hashlib.sha256(f"{name}|{url}|{model}|{key_env}".encode()).hexdigest()[:16]
+
+
+def _normalize_url(raw: str) -> str:
+    """Accept both spellings of an endpoint: the base (`…/openai/v1`) and the
+    full chat-completions path, which is what `AI_API_URL` meant in agent/."""
+    url = raw.strip().rstrip("/")
+    if url.endswith("/chat/completions"):
+        url = url[: -len("/chat/completions")]
+    return url
+
+
+def _entry(name: str, url: str, key_env: str, model: str) -> Provider:
+    return Provider(
+        pid=_provider_id(name, url, model, key_env),
+        name=name,
+        url=url,
+        model=model,
+        key_env=key_env,
+        key=(os.environ.get(key_env, "") or "").strip(),
+    )
+
+
+def chain() -> list[Provider]:
+    """Every configured provider, key present or not, in the order to try them.
+
+    Malformed entries are skipped rather than raising: a typo in a fallback
+    provider must not take the working primary one with it.
+    """
+    out = [_entry("primary", _normalize_url(config.AI_API_URL), "AI_API_KEY", config.AI_MODEL)]
+    for raw_entry in config.AI_PROVIDER_CHAIN.split(","):
+        raw_entry = raw_entry.strip()
+        if not raw_entry:
+            continue
+        parts = [p.strip() for p in raw_entry.split("|")]
+        if len(parts) != 4 or not parts[0] or not parts[1] or not parts[3]:
+            continue
+        name, url, key_env, model = parts
+        out.append(_entry(name, _normalize_url(url), key_env, model))
+    seen: set[str] = set()
+    unique = []
+    for p in out:
+        if p.pid not in seen:
+            seen.add(p.pid)
+            unique.append(p)
+    return unique
+
+
+def configured() -> list[Provider]:
+    """Providers that could be called right now — a name, a URL and a key in hand."""
+    return [p for p in chain() if p.key]
+
+
+def candidates() -> list[Provider]:
+    """`configured()` minus the ones the ledger says are parked."""
+    usable = configured()
+    if not usable:
+        return []
+    from .ledger import ledger
+
+    try:
+        parked = {r["id"] for r in ledger.ai_provider_rows() if r["parked"]}
+    except Exception:
+        # A ledger we cannot read must not become a reason to stop answering:
+        # the chain degrades to "try everybody in order".
+        parked = set()
+    # A park expires, so a provider nobody probes is not lost: dropping the
+    # whole chain here is what keeps a dead endpoint from making every user
+    # wait out AI_TIMEOUT_SECONDS before getting the no-model answer.
+    return [p for p in usable if p.pid not in parked]
+
+
+def has_llm() -> bool:
+    return bool(configured())
+
+
+def _redact(text: str) -> str:
+    """Strip anything shaped like a credential out of a provider's error body.
+
+    Echoing `Authorization` mistakes is a thing OpenAI-compatible endpoints do,
+    and these strings end up in the database and in an operator's browser.
+    """
+    return _SECRET_RE.sub("[redacted]", text)
+
+
+def _park_seconds(status: int) -> int:
+    """How long to stay away from a provider after an HTTP status.
+
+    401/403/404 are 'this credential or this model name is wrong' — they do not
+    fix themselves in two minutes, so re-probing them burns the free request
+    quota of an account that is going to say no again.
+    """
+    if status in (401, 403, 404):
+        return config.AI_PROVIDER_AUTH_PARK_SECONDS
+    if status == 429 or status >= 500:
+        return config.AI_PROVIDER_RETRY_SECONDS
+    return 0
+
+
+def _post(provider: Provider, payload: dict) -> dict:
+    """One chat-completions call. Raises ProviderError on anything the caller
+    should not retry against the same endpoint."""
     req = urllib.request.Request(
-        url,
+        f"{provider.url}/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {config.AI_API_KEY}",
+            "Authorization": f"Bearer {provider.key}",
         },
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=config.AI_TIMEOUT_SECONDS) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = ""
         try:
@@ -66,21 +207,110 @@ def _ask_sync(question: str) -> str:
             detail = str(body.get("error", {}).get("message", ""))[:200]
         except Exception:
             pass
-        raise RuntimeError(f"AI HTTP {e.code}: {detail or 'request failed'}") from e
+        log.debug("provider %s HTTP %s: %s", provider.name, e.code, _redact(detail))
+        raise ProviderError(
+            f"{provider.name} HTTP {e.code}",
+            park_seconds=_park_seconds(e.code),
+            detail=_redact(detail),
+        ) from e
     except Exception as e:
-        raise RuntimeError(f"AI unavailable: {e}") from e
+        # Timeout / DNS / TLS / truncated body: all of them say "this endpoint
+        # was not reachable just now", which is exactly what a park is for.
+        raise ProviderError(
+            f"{provider.name} unreachable: {type(e).__name__}",
+            park_seconds=config.AI_PROVIDER_RETRY_SECONDS,
+        ) from e
+
+
+def _record_failure(
+    provider: Provider, error: str, park_seconds: int, detail: str = ""
+) -> None:
+    if park_seconds <= 0:
+        return
+    from .ledger import ledger
+
     try:
-        text = data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as e:
-        raise RuntimeError("AI returned an unexpected response") from e
-    return (text or "").strip()
+        ledger.ai_provider_fail(
+            error=_redact(detail or error), park_seconds=park_seconds, **provider.persist()
+        )
+    except Exception:
+        pass  # health bookkeeping never outranks the answer itself
 
 
-async def ask(question: str) -> str:
-    """Async wrapper: runs the blocking urllib request off the event loop so
-    the aiogram event loop is never frozen while the AI endpoint answers
-    (can take many seconds)."""
-    return await asyncio.to_thread(_ask_sync, question)
+def _record_success(provider: Provider) -> None:
+    from .ledger import ledger
+
+    try:
+        ledger.ai_provider_ok(**provider.persist())
+    except Exception:
+        pass
+
+
+def call(messages: list[dict], *, model: str | None = None, tools: list[dict] | None = None,
+         temperature: float = 0.3, max_tokens: int = 1024) -> dict:
+    """The assistant message from the first provider of the chain that answers.
+
+    Runs the chain in order and parks each member that fails, so a question
+    still gets answered while one endpoint is rate-limited and the next one
+    picks up where the broken one left off. Raises RuntimeError when nobody
+    answered — the message is safe to show to a user.
+    """
+    tried = candidates()
+    if not tried:
+        if configured():
+            raise RuntimeError("every AI provider is parked after failures")
+        raise RuntimeError("AI is not configured")
+    last: Exception | None = None
+    for provider in tried:
+        payload = {
+            "model": model or provider.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        try:
+            data = _post(provider, payload)
+            message = data["choices"][0]["message"]
+        except (ProviderError, KeyError, IndexError, TypeError) as e:
+            last = e
+            if isinstance(e, ProviderError) and e.park_seconds:
+                _record_failure(provider, str(e), e.park_seconds, e.detail)
+            continue
+        _record_success(provider)
+        return message
+    raise RuntimeError(str(last) if last else "AI service unavailable")
+
+
+async def call_async(messages: list[dict], **kwargs) -> dict:
+    """`call()` off the event loop: a provider can take many seconds and the
+    aiogram loop must not freeze while it thinks."""
+    return await asyncio.to_thread(call, messages, **kwargs)
+
+
+def budget_spent() -> bool:
+    """True when today's LLM budget is already gone. Checked before the call:
+    the guard exists to stop a token drain, so answering first and counting
+    afterwards would let a burst spend the whole budget many times over."""
+    from .ledger import ledger
+
+    return ledger.ai_usage_today() >= config.AI_DAILY_ANSWERS
+
+
+def charge_answer() -> None:
+    """Count one served answer against the daily budget.
+
+    Charged after the provider answered, not before: a question that fails on
+    every provider costs no tokens, and counting it would let a provider
+    outage eat the budget and leave users with a refusal instead of the
+    no-model answer. The counter lives in the DB because uvicorn, the bot and
+    the agent all serve questions, each in its own process.
+    """
+    from .ledger import ledger
+
+    ledger.ai_reserve_answer(config.AI_DAILY_ANSWERS)
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +384,7 @@ async def _fetch_open_markets(limit: int = 10) -> list[dict]:
 
     rows = await ledger.open_markets(limit)
     views = await ledger.bulk_amm_market_views([int(r["id"]) for r in rows])
-    return [v for r in rows if (v := views.get(int(r["id"]))) is not None]
+    return [v for v in (views.get(int(r["id"])) for r in rows) if v is not None]
 
 
 async def _fetch_market_odds(market_id: int, onchain: bool = False) -> dict:
@@ -195,68 +425,39 @@ async def _dispatch_tool(name: str, args: dict) -> object:
     return {"error": f"unknown tool {name}"}
 
 
-def _call_llm_with_tools_sync(messages: list[dict]) -> dict:
-    """One call to chat/completions with MARKET_TOOLS attached. Returns the
-    raw assistant message dict (may contain tool_calls, may contain content,
-    OpenAI-compatible APIs allow either or both)."""
-    if not config.AI_API_KEY:
-        raise RuntimeError("AI is not configured")
-    url = f"{config.AI_API_URL}/chat/completions"
-    payload = {
-        "model": config.AI_MODEL,
-        "messages": messages,
-        "tools": MARKET_TOOLS,
-        "tool_choice": "auto",
-        "max_tokens": 1024,
-        "temperature": 0.3,
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config.AI_API_KEY}",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=config.AI_TIMEOUT_SECONDS) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        detail = ""
-        try:
-            body = json.loads(e.read().decode("utf-8", "replace"))
-            detail = str(body.get("error", {}).get("message", ""))[:200]
-        except Exception:
-            pass
-        raise RuntimeError(f"AI HTTP {e.code}: {detail or 'request failed'}") from e
-    except Exception as e:
-        raise RuntimeError(f"AI unavailable: {e}") from e
-    try:
-        return data["choices"][0]["message"]
-    except (KeyError, IndexError, TypeError) as e:
-        raise RuntimeError("AI returned an unexpected response") from e
-
-
 async def ask_about_markets(question: str, max_rounds: int = 4) -> str:
-    """Like ask(), but the model can call read-only tools to fetch real
-    market data before answering. Tool set is deliberately read-only — never
-    wire a fund-moving function (bet, create, resolve) into MARKET_TOOLS."""
-    if not config.AI_API_KEY:
-        raise RuntimeError("AI is not configured")
+    """The assistant's main entry point: the model may call read-only tools to
+    fetch real market data before answering. Tool set is deliberately read-only
+    — never wire a fund-moving function (bet, create, resolve) into
+    MARKET_TOOLS.
+
+    Raises RuntimeError when no provider is configured, when every one of them
+    failed, or when today's budget is already spent. Every caller turns that
+    into the no-model answer from bot/ai_data.py instead of an error.
+    """
+    if not configured():
+        raise RuntimeError("no AI provider is configured")
+    if budget_spent():
+        raise RuntimeError(f"daily answer budget ({config.AI_DAILY_ANSWERS}) exhausted")
+    answer = await _ask_llm(question, max_rounds)
+    charge_answer()
+    return answer
+
+
+async def _ask_llm(question: str, max_rounds: int) -> str:
     messages = [
         {"role": "system", "content": MARKET_SYSTEM_PROMPT},
         {"role": "user", "content": question[: config.AI_MAX_QUESTION_LEN]},
     ]
     for _ in range(max_rounds):
-        message = await asyncio.to_thread(_call_llm_with_tools_sync, messages)
+        message = await call_async(messages, tools=MARKET_TOOLS, temperature=0.3)
         tool_calls = message.get("tool_calls") or []
         if not tool_calls:
             return (message.get("content") or "").strip()
 
         messages.append(message)
-        for call in tool_calls:
-            fn = call.get("function", {})
+        for call_ in tool_calls:
+            fn = call_.get("function", {})
             name = fn.get("name", "")
             try:
                 args = json.loads(fn.get("arguments") or "{}")
@@ -269,11 +470,41 @@ async def ask_about_markets(question: str, max_rounds: int = 4) -> str:
             messages.append(
                 {
                     "role": "tool",
-                    "tool_call_id": call.get("id", ""),
+                    "tool_call_id": call_.get("id", ""),
                     "content": json.dumps(result, default=str),
                 }
             )
 
     messages.append({"role": "user", "content": "Please answer now with what you have."})
-    final = await asyncio.to_thread(_call_llm_with_tools_sync, messages)
+    final = await call_async(messages, tools=MARKET_TOOLS, temperature=0.3)
     return (final.get("content") or "").strip()
+
+
+def status() -> dict:
+    """What an operator needs from /api/info: is there a model behind the
+    assistant, which providers are parked and why, and how much of today's
+    answer budget is gone."""
+    from .ledger import ledger
+
+    live = {p.pid for p in configured()}
+    try:
+        rows = ledger.ai_provider_rows()
+    except Exception:
+        rows = []
+    by_id = {r["id"]: r for r in rows}
+    return {
+        "mode": "llm" if live else "data",
+        "providers": [
+            {
+                "name": p.name,
+                "model": p.model,
+                "key_env": p.key_env,
+                "key_present": bool(p.key),
+                "parked": bool(by_id.get(p.pid, {}).get("parked")),
+                "last_error": by_id.get(p.pid, {}).get("last_error"),
+            }
+            for p in chain()
+        ],
+        "answers_today": ledger.ai_usage_today(),
+        "daily_limit": config.AI_DAILY_ANSWERS,
+    }

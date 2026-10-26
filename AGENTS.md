@@ -17,7 +17,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~10 min, 1077 tests. The four `production` tests hit
+- `python -m pytest -q -m "not production"` — ~12 min, 1112 tests. The four `production` tests hit
   the deployed site and belong to `.github/workflows/prod-health-check.yml`, not to this gate. That
   workflow has no skip path: a 503 maintenance card makes all four fail, and only a hand-dispatched
   `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -40,6 +40,11 @@
   `bot/tx_view.py` — never from the amount, and never re-derived per page.
 - Money-moving `POST /api/mini/*` requires an `Idempotency-Key` header (see `docs/SECURITY.md`);
   withdraw is the exception and uses the staged single-use token.
+- The AI daily answer budget and provider health are DB rows (`ai_usage_day`, `ai_provider` in
+  `bot/ledger/_ai.py`), never module dicts: uvicorn, the bot and the agent spend **one** limit. A key
+  is read from `os.environ` by name (`AI_PROVIDERS=name|url|KEY_ENV|model`) — `ai_provider` stores the
+  variable's name, not the secret. `/ask` has no "AI disabled" state: when no model answers it serves
+  ledger data (`bot/ai_data.py`) and says so.
 - No new module, mixin or migration lands unless it is called from the live runtime path in the same
   change; verify with a repository-wide grep that excludes its own definition and its tests.
 

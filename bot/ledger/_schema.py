@@ -378,6 +378,42 @@ CREATE TABLE IF NOT EXISTS paymaster_usage (
     last_used   BIGINT NOT NULL DEFAULT 0
 );
 
+-- AI provider health. A dead key or a rate-limited endpoint parks that provider
+-- for a while and the next question goes to the next one, so the assistant
+-- degrades instead of disappearing. `key_env` NAMES the environment variable
+-- that holds the secret — the secret itself never enters a row.
+CREATE TABLE IF NOT EXISTS ai_provider (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    url           TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    key_env       TEXT NOT NULL,
+    fail_count    INT NOT NULL DEFAULT 0 CHECK (fail_count >= 0),
+    parked_until  TIMESTAMPTZ,
+    last_error    TEXT,
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Answers served per UTC day. The budget guard for /ask has to live here rather
+-- than in a module dict: uvicorn, the bot and the agent are separate processes
+-- and each process-local counter let its owner spend the whole daily budget.
+CREATE TABLE IF NOT EXISTS ai_usage_day (
+    day       DATE PRIMARY KEY,
+    answers   INT NOT NULL DEFAULT 0 CHECK (answers >= 0)
+);
+
+-- The ai_usage_day guard lives here rather than only in the INSERT that bumps
+-- the counter, because ALTER TABLE is the only way an existing database gets it:
+-- CREATE TABLE IF NOT EXISTS skips a table that is already there.
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_ai_usage_day_nn') THEN
+        ALTER TABLE ai_usage_day ADD CONSTRAINT chk_ai_usage_day_nn CHECK (answers >= 0);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_ai_provider_fails_nn') THEN
+        ALTER TABLE ai_provider ADD CONSTRAINT chk_ai_provider_fails_nn CHECK (fail_count >= 0);
+    END IF;
+END $$;
+
 -- Defense-in-depth: DB-level guard against negative balances / shares.
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_balance_nn') THEN

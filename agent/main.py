@@ -173,7 +173,7 @@ async def run_loop(stop: asyncio.Event | None = None) -> None:
     log.info("  Daily cap: $%s", config.DAILY_SPEND_CAP_USDC)
     log.info("  Per-tx cap: $%s", config.PER_TX_CAP_USDC)
     log.info("  Max actions/hour: %s", config.MAX_ACTIONS_PER_HOUR)
-    log.info("  Model: %s", config.LLM_MODEL)
+    log.info("  Model: %s", config.LLM_MODEL or "the provider chain's own")
 
     cycle = 0
     while True:
