@@ -4,8 +4,8 @@
 py-solc-x==2.0.5
 eth-tester==0.14.0b1
 py-evm==0.12.1b1
-ruff==0.17.1
-coverage==7.16.2
+ruff==0.17.2
+coverage==7.17.0
 pytest==9.1.1
 pytest-asyncio==1.4.0
 httpx==0.28.1
