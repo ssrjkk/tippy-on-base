@@ -17,15 +17,26 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~8 min, 1085 tests. The four `production` tests hit
-  the deployed site and belong to `.github/workflows/prod-health-check.yml`, not to this gate. That
-  workflow has no skip path: a 503 maintenance card makes all four fail, and only a hand-dispatched
-  `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
+- `python -m pytest -q -m "not production"` — ~12 min, 1121 tests (18 more, marked `production`, run
+  against the deployed site in `.github/workflows/prod-health-check.yml`). That
+  workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
+  hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
 - Run targeted files first (`pytest tests/test_web.py -q --timeout=60`), the whole suite last.
   `--timeout=60 --timeout-method=thread` makes a hung test print its stack instead of freezing.
 - `python scripts/check_i18n.py` checks that every key in `bot/i18n.py` exists in ru/en/zh. The Mini
   App keeps a separate dictionary inline in `web/static/app.html` (`I18N.ru/en/zh`) — a new `t('key')`
   has to be added to all three, and a key whose last reference is removed has to be removed too.
+  `tests/test_web.py::test_mini_app_dictionaries_have_identical_key_sets` is that rule as a gate.
+- `tests/test_design_system.py` is the design contract, measured from the files: contrast of every
+  declared `color`/`background` pair **and** of every text colour against both canvases, "mono implies
+  tabular digits", no raw hex outside the token blocks, the site and Mini App palettes equal value for
+  value, inline styles limited to clamped geometry, no unsubstituted `__PLACEHOLDER__`. It reads files
+  only — no browser, no database, so it runs in ordinary CI.
+- `tests/test_production_design.py` measures the **rendered** page (Playwright, marked
+  `production`, runs in `prod-health-check.yml`): painted contrast, horizontal overflow at 390/1440,
+  44 px touch targets, bar width against the percentage the same row prints and against the API, page
+  errors and same-origin 4xx. Point it at a local origin with
+  `DESIGN_GATE_URL=http://127.0.0.1:8000` to check a change before publishing it.
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
   unused by any page.
 - Never push without an explicit word from the maintainer. Commit locally, report, wait.

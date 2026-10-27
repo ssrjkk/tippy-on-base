@@ -1,4 +1,4 @@
-﻿const $ = (id) => document.getElementById(id);
+const $ = (id) => document.getElementById(id);
 document.body.classList.add("js");
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -228,7 +228,7 @@ async function loadVolumeChart() {
     const max = Math.max(...days.map((d) => d.volume_usdc), 1);
     el.innerHTML = days.map((d, i) => `
       <div class="chart-col" title="${fmtDay(d.day)}: ${fmtUSDC(d.volume_usdc)} USDC">
-        <div class="chart-plot"><div class="chart-bar" style="height:${Math.max(d.volume_usdc / max * 100, 2)}%;animation-delay:${Math.min(i * 60, 600)}ms"></div></div>
+        <div class="chart-plot"><div class="chart-bar" aria-hidden="true" style="height:${Math.max(d.volume_usdc / max * 100, 2)}%;animation-delay:${Math.min(i * 60, 600)}ms"></div></div>
         <div class="chart-day">${fmtDay(d.day)}</div>
       </div>`).join("");
   } catch (e) {
@@ -318,7 +318,7 @@ function marketCard(m, i) {
         <span class="option-label">${escapeHtml(o.label)}</span>
         <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${escapeHtml(String(o.probability))}% · ${escapeHtml(String(o.backers))} чел.</span>
       </div>
-      <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
+      <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
   }).join("");
 
@@ -382,7 +382,7 @@ function predictionCard(m, i) {
         <span class="option-label">${escapeHtml(o.label)}</span>
         <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
       </div>
-      <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
+      <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
   }).join("");
 
@@ -421,7 +421,7 @@ function renderHeroSpot(markets) {
           <span class="option-label">${escapeHtml(o.label)}</span>
           <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
         </div>
-        <div class="bar"><div class="bar-fill" style="width:${Math.max(o.price_pct, 2)}%"></div></div>
+        <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%"></div></div>
       </div>`).join("")}
     <div class="spot-foot">
       <span class="pot">Ликвидность: <b>${fmtUSDC(top.liquidity_usdc)} USDC</b> · ${escapeHtml(String(top.traders))} чел.</span>
@@ -511,7 +511,7 @@ async function loadOnchainMarkets() {
             <span class="option-label">${escapeHtml(o.label)}</span>
             <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
           </div>
-          <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
+          <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
         </div>`;
       }).join("");
       return `

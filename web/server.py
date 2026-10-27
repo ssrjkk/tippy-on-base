@@ -862,7 +862,6 @@ async def mini_app(request: Request):
     html = (STATIC / 'app.html').read_text(encoding='utf-8')
     base_url = public_base_url()
     html = html.replace('__PUBLIC_URL__', base_url)
-    html = html.replace('__PUBLIC_HOST__', base_url.split('//')[-1])
     html = html.replace('__CHAIN_NAME__', chain_label())
     html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')

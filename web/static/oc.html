@@ -154,7 +154,7 @@
             <span class="option-label">${esc(o.label)}</span>
             <span class="option-val">${esc(String(pct))}%</span>
           </div>
-          <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" style="width:${Math.max(pct, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
+          <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(pct, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
         </div>`;
       }).join("");
 

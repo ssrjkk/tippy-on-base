@@ -51,8 +51,8 @@
 /* Tokens copied from /style.css — base.org values: one brand blue, neutral greys,
  * hairline borders, no shadows. --accent paints surfaces, --accent-text paints type,
  * because #224bff is a fill colour and is not readable as text on the dark canvas. */
-:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#6f6f6f;--text4:#767676;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
-[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#9a9a9a;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65)}
+:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
+[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65)}
 html,body{height:100%;font-family:var(--font-ui);font-size:15px;line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
 a{color:var(--accent-text);text-decoration:none}
 button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit;outline:none}
@@ -762,7 +762,7 @@ function probBars(opts, pctKey, winnerIdx) {
     const win = winnerIdx != null && o.index === winnerIdx;
     return `<div>
       <div class="prob-bar-label"><span${win ? ' class="win"' : ''}>${esc(o.label || o.name || '—')}</span><span class="num${win ? ' win' : ''}">${pct.toFixed(1)}%</span></div>
-      <div class="prob-bar"><div class="prob-bar-fill" style="width:${Math.max(pct, 1)}%"></div></div>
+      <div class="prob-bar"><div class="prob-bar-fill" aria-hidden="true" style="width:${Math.max(pct, 1)}%"></div></div>
     </div>`;
   }).join('');
   return `<div class="prob-bars">${rows}</div>`;
@@ -862,7 +862,7 @@ async function openOcDetail(id) {
           <div class="detail-opt-name${win ? ' win' : ''}">${esc(o.label || '—')}</div>
           <div class="detail-opt-pct">${pct.toFixed(1)}%</div>
         </div>
-        <div class="detail-opt-bar"><div class="detail-opt-bar-fill" style="width:${Math.max(pct, 1)}%"></div></div>
+        <div class="detail-opt-bar"><div class="detail-opt-bar-fill" aria-hidden="true" style="width:${Math.max(pct, 1)}%"></div></div>
         ${mine}
       </div>`;
     }).join('');
@@ -1115,7 +1115,7 @@ function optRows(opts, pctKey) {
         <div class="detail-opt-name">${esc(optionLabel(o, i))}</div>
         <div class="detail-opt-pct">${pct.toFixed(1)}%</div>
       </div>
-      <div class="detail-opt-bar"><div class="detail-opt-bar-fill" style="width:${Math.max(pct, 1)}%"></div></div>
+      <div class="detail-opt-bar"><div class="detail-opt-bar-fill" aria-hidden="true" style="width:${Math.max(pct, 1)}%"></div></div>
     </button>`;
   }).join('');
 }

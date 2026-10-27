@@ -1278,7 +1278,7 @@ def test_prod_health_workflow_fails_instead_of_skipping():
         / "prod-health-check.yml"
     ).read_text(encoding="utf-8")
 
-    assert "pytest tests/test_production_health.py -m production" in text
+    assert "pytest tests/test_production_health.py tests/test_production_design.py -m production" in text
     assert "::warning::" not in text
     assert "reachable=false" not in text
 
@@ -1414,3 +1414,22 @@ def test_every_mini_app_translation_key_exists_in_all_three_languages():
         assert line, f"the {lang} dictionary is no longer a single block"
         defined = set(re.findall(r"""['"]?([a-z0-9_]+)['"]?\s*:""", line))
         assert used <= defined, f"{lang} is missing {sorted(used - defined)}"
+
+
+def test_no_substitution_marker_survives_into_any_served_page(client):
+    """Individual `assert "__X__" not in html` checks only remember the
+    placeholders someone thought of. This one scans for the shape: a new
+    `__SOMETHING__` that `_static_page()` does not replace reaches the visitor as
+    literal text on the page."""
+    import re
+
+    marker = re.compile(r"__[A-Z][A-Z0-9_]*__")
+    leaked = []
+    for url in ("/", "/app", "/market/1", "/oc", "/u/someone", "/agent", "/tos"):
+        response = client.get(url)
+        if response.status_code >= 400:
+            continue
+        found = sorted(set(marker.findall(response.text)))
+        if found:
+            leaked.append((url, found))
+    assert not leaked, leaked

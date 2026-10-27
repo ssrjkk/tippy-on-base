@@ -64,7 +64,7 @@ jobs:
         env:
           PYTEST_ADDOPTS: "-v --tb=short"
         run: |
-          pytest tests/test_production_health.py -m production
+          pytest tests/test_production_health.py tests/test_production_design.py -m production
 
       - name: Note the suppressed run
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.expect_down == 'true'

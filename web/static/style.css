@@ -28,10 +28,11 @@
 
   --ink: #111111;
   --ink-2: #3a3a3a;
-  --muted: #6f6f6f;
-  /* Was #9a9a9a: 2.81:1 on white, and it is the colour of the 11px chart day
-     labels and the 13px leaderboard ranks — text a visitor has to read. */
-  --muted-2: #767676;
+  /* #6f6f6f was 4.43:1 on the chip background it was moved onto, and #767676
+     was 4.28:1 on the grey band. These two are the quietest text the site is
+     allowed to show, so both now clear AA on canvas, surface and surface-hover. */
+  --muted: #666666;
+  --muted-2: #707070;
 
   --success: #10693f;
   --success-bg: rgba(16, 105, 63, 0.08);
@@ -40,21 +41,20 @@
 
   /* legacy aliases still referenced by page CSS/JS */
   --bg: var(--canvas);
-  --bg2: var(--surface);
-  --surface2: var(--surface);
   --card: var(--canvas);
-  --card-hover: var(--surface);
-  --border-soft: var(--border);
   --text: var(--ink);
   --text-secondary: var(--ink-2);
-  --white: var(--ink);
   --accent: var(--blue);
   /* --accent paints surfaces, --accent-text paints type: the dark theme's fill
      blue (#224bff) is a button, not a readable 11px label. */
   --accent-text: var(--blue-text);
-  --accent-2: var(--blue-hover);
-  --accent-soft: var(--blue-text);
-  --accent-bg: var(--blue-soft);
+  /* The two colours allowed to sit on a filled surface, as tokens rather than a
+     literal #fff: white clears every accent fill in both themes (5.97:1 on the
+     dark #224bff, 4.83:1 on its #3d61ff hover), while the ink-filled active tab
+     needs the page colour, which is dark in the dark theme and light in the
+     light one. Two fills, two text colours, neither of them hardcoded. */
+  --on-accent: #ffffff;
+  --on-ink: var(--canvas);
   --warning: #8a5a00;
 
   --radius: 8px;
@@ -177,7 +177,7 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 7px;
   background: var(--blue);
   display: inline-flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 17px; font-weight: 700; line-height: 1;
+  color: var(--on-accent); font-size: 17px; font-weight: 700; line-height: 1;
 }
 .base-mark svg { width: 60%; height: 60%; display: block; }
 
@@ -227,6 +227,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 /* ---------- Eyebrow: the Base micro-label ---------- */
 .eyebrow {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -279,6 +280,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 }
 .spot-meta {
   color: var(--muted); font-size: 11px; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 16px;
 }
 .spot-foot {
@@ -286,6 +288,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   flex-wrap: wrap; gap: 6px 12px;
   margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
   font-size: 11px; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
 .spot-foot > .pot:first-child { white-space: nowrap; }
@@ -299,7 +302,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   transition: background-color 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
 }
 .btn:active { opacity: 0.8; }
-.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary { background: var(--blue); color: var(--on-accent); }
 .btn-primary:hover { background: var(--blue-hover); }
 .btn-ghost {
   border: 1px solid var(--border-strong); color: var(--ink); background: transparent;
@@ -338,6 +341,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .stat-label {
   color: var(--muted); font-size: 11px; margin-top: 6px;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   font-weight: 500;
@@ -368,12 +372,14 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .market-card:hover { background: var(--surface); }
 .market-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .market-question { font-size: 16px; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; }
-.market-meta { color: var(--muted); font-size: 12px; white-space: nowrap; font-family: var(--font-mono); }
+.market-meta { color: var(--muted); font-size: 12px; white-space: nowrap; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; }
 
 .option { margin-bottom: 12px; }
 .option-top { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; }
 .option-label { font-weight: 500; color: var(--ink); }
-.option-val { color: var(--muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+.option-val { color: var(--muted); font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-size: 13px; }
 .bar { height: 4px; border-radius: var(--pill); background: var(--surface-hover); overflow: hidden; }
 .bar-fill {
   height: 100%; border-radius: var(--pill);
@@ -388,7 +394,9 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .market-footer {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
   gap: 2px 14px; margin-top: 14px;
-  font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  font-size: 11px; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
 /* At 360px the two halves of the row are what should break, not the number
    inside them: "ПУЛ: 2,6 USDC · 4 ЧЕЛ." wrapped mid-phrase before this. */
@@ -403,7 +411,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   display: inline-flex; align-items: center; gap: 6px;
   padding: 3px 10px; border-radius: var(--pill);
   font-size: 11px; font-weight: 500;
-  font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.06em; text-transform: uppercase;
 }
 .chip-open { background: var(--blue-soft); color: var(--accent-text); }
 .chip-open::before {
@@ -434,7 +443,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .chart-col:hover .chart-bar { opacity: 1; }
 .chart-day {
   font-size: 11px; color: var(--muted-2); white-space: nowrap;
-  font-family: var(--font-mono); text-align: center; padding-top: 8px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; text-align: center; padding-top: 8px;
 }
 
 /* ---------- Winner Highlight ---------- */
@@ -442,6 +452,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .option-winner .option-label::after {
   content: "— исход";
   margin-left: 8px; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--muted-2); font-weight: 400;
 }
@@ -467,10 +478,12 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .lb-row:hover { background: var(--surface); }
 .lb-place {
   font-weight: 500; width: 26px; color: var(--muted-2);
-  font-family: var(--font-mono); font-size: 13px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-size: 13px;
 }
 .lb-name { font-weight: 500; flex: 1; color: var(--ink); }
-.lb-amt { color: var(--ink); font-weight: 500; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.lb-amt { color: var(--ink); font-weight: 500; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; }
 
 /* ---------- Wallet Panel ---------- */
 .wallet {
@@ -480,7 +493,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 }
 .wallet + .wallet { margin-top: 14px; }
 .wallet-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; color: var(--ink-2); }
-.wallet-row b { color: var(--ink); font-weight: 600; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.wallet-row b { color: var(--ink); font-weight: 600; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; }
 .wallet-row .eyebrow { margin: 0; }
 .wallet-row b.pos { color: var(--success); }
 .wallet-row b.neg { color: var(--danger); }
@@ -488,6 +502,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .market-author { margin-left: 10px; }
 .wallet-addr {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 12px; color: var(--muted); word-break: break-all;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 12px 14px; margin: 8px 0 16px;
@@ -522,7 +537,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   padding: 4px 12px; border-radius: var(--pill);
   border: 1px solid var(--border); background: transparent;
   color: var(--muted); font-size: 11px; font-weight: 500;
-  font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.06em; text-transform: uppercase;
   transition: border-color 0.2s, color 0.2s;
 }
 .chain-chip:hover { border-color: var(--accent); color: var(--accent-text); }
@@ -576,6 +592,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   border: 1px solid var(--blue-line);
   color: var(--accent-text); font-weight: 500; display: flex; align-items: center; justify-content: center;
   margin-bottom: 14px; font-size: 12px; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 .step h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
 .step p { font-size: 14px; color: var(--muted); margin: 0; line-height: 1.55; }
@@ -583,7 +600,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 /* ---------- User / Donate Page ---------- */
 .avatar {
   width: 56px; height: 56px; border-radius: var(--radius-lg);
-  background: var(--blue); color: #fff;
+  background: var(--blue); color: var(--on-accent);
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 24px; font-weight: 600; margin-bottom: 20px;
 }
@@ -594,7 +611,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .qr img { width: 100%; height: 100%; display: block; }
 
 /* ---------- Urgent Countdown ---------- */
-.countdown-urgent { color: var(--danger); font-weight: 600; font-family: var(--font-mono); }
+.countdown-urgent { color: var(--danger); font-weight: 600; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; }
 
 /* ---------- Loading Skeletons ---------- */
 .skeleton {
@@ -644,10 +662,12 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
   font-size: clamp(30px, 4.6vw, 44px); font-weight: 500; letter-spacing: -0.035em;
   line-height: 1.08; margin-bottom: 14px; overflow-wrap: anywhere;
 }
-.page-id { color: var(--muted-2); font-family: var(--font-mono); font-weight: 400; letter-spacing: -0.02em; }
+.page-id { color: var(--muted-2); font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-weight: 400; letter-spacing: -0.02em; }
 .page-meta {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 28px;
   color: var(--muted); font-size: 12px; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 .page .market-card { animation: none; }
 .page .market-card:hover { background: var(--canvas); }
@@ -658,7 +678,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .cta-row .btn-ghost { flex: 1; justify-content: center; }
 .lb-amt.pos { color: var(--success); }
 .lb-amt.neg { color: var(--danger); }
-.lb-date { width: 46px; color: var(--muted-2); font-family: var(--font-mono); font-size: 12px; }
+.lb-date { width: 46px; color: var(--muted-2); font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-size: 12px; }
 
 /* ---------- Theme Transition ---------- */
 .theme-transitioning * {
@@ -691,6 +712,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .accent { color: var(--accent-text); }
 .mono {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 .num {
@@ -700,6 +722,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 24px; }
 .icon { width: 16px; height: 16px; display: block; flex: none; }
 code {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 0.86em;
   background: var(--code-bg); color: var(--text-secondary);
   padding: 1px 6px; border-radius: var(--radius-sm);
@@ -767,9 +790,11 @@ code {
 .ws-user { font-size: 14.5px; font-weight: 600; }
 .ws-bal {
   font-size: 30px; font-weight: 500; letter-spacing: -0.03em; color: var(--ink);
-  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
-.ws-cur { font-size: 12px; font-weight: 500; color: var(--muted); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.ws-cur { font-size: 12px; font-weight: 500; color: var(--muted); font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.08em; text-transform: uppercase; }
 .ws-actions { display: flex; gap: 8px; }
 
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; }
@@ -780,7 +805,7 @@ code {
   transition: color 0.2s var(--ease), border-color 0.2s var(--ease), background-color 0.2s var(--ease);
 }
 .tab:hover { color: var(--ink); border-color: var(--ink); }
-.tab.active { background: var(--ink); border-color: var(--ink); color: var(--canvas); }
+.tab.active { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
 .panel { animation: fadeUp 0.3s var(--ease) both; }
 
 /* ---------- Form fields ---------- */
@@ -789,7 +814,8 @@ code {
 .label {
   display: block; font-size: 11px; font-weight: 500; color: var(--muted);
   margin-bottom: 8px;
-  font-family: var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.1em; text-transform: uppercase;
 }
 .input {
   width: 100%; padding: 12px 14px;
@@ -818,6 +844,7 @@ select.input {
   color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 500;
   padding: 6px 13px; border-radius: var(--pill); cursor: pointer;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background-color 0.2s var(--ease);
 }
 .amount-chip:hover { border-color: var(--ink); color: var(--ink); }
@@ -835,7 +862,8 @@ select.input {
 .opt-btn:hover { border-color: var(--ink); }
 .opt-btn.selected { background: var(--blue-soft); border-color: var(--accent); }
 .opt-label { font-weight: 500; }
-.opt-price { color: var(--muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.opt-price { color: var(--muted); font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; }
 .opt-btn.selected .opt-price { color: var(--accent-text); }
 .opt-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 
@@ -851,7 +879,8 @@ select.input {
   background: var(--canvas); padding: 11px 14px; font-size: 14px;
 }
 .row-k { color: var(--muted); }
-.row-v { font-weight: 500; text-align: right; word-break: break-all; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.row-v { font-weight: 500; text-align: right; word-break: break-all; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; }
 .row-v.pos { color: var(--success); }
 .row-v.neg { color: var(--danger); }
 /* Amounts read as one token — unlike an address they must not break mid-word. */
@@ -882,12 +911,14 @@ select.input {
 .terms-table th {
   background: var(--surface); color: var(--muted);
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
-  font-family: var(--font-mono); font-weight: 500;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-weight: 500;
 }
 .terms-table tr:last-child td { border-bottom: none; }
 .terms-table td:last-child {
   font-weight: 500; color: var(--ink); white-space: normal; word-break: break-word;
-  font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; text-align: right;
 }
 
 /* ---------- Legal document (/tos) ---------- */
@@ -900,7 +931,8 @@ select.input {
 .legal ul { list-style: disc; padding-left: 22px; margin-bottom: 16px; }
 .legal li { color: var(--ink-2); font-size: 15.5px; line-height: 1.7; margin-bottom: 4px; }
 .legal code {
-  font-family: var(--font-mono); font-size: 0.9em;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-size: 0.9em;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 4px; padding: 1px 5px;
 }
@@ -912,7 +944,8 @@ select.input {
 .cmd-groups { display: grid; gap: 26px; }
 .cmd-group { break-inside: avoid; }
 .cmd-group-title {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 500;
   letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--muted); margin-bottom: 10px;
 }
@@ -933,7 +966,8 @@ select.input {
 }
 .cmd:hover { background: var(--surface); }
 .cmd:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.cmd b { color: var(--accent-text); font-size: 12.5px; white-space: nowrap; font-family: var(--font-mono); font-weight: 500; }
+.cmd b { color: var(--accent-text); font-size: 12.5px; white-space: nowrap; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums; font-weight: 500; }
 .cmd span { color: var(--muted); }
 
 /* ================================================================

@@ -46,7 +46,7 @@
     return '<div class="option">' +
       '<div class="option-top"><span class="option-label">' + esc(label) + '</span>' +
       '<span class="option-val">' + fmt(used) + ' / ' + fmt(total, 0) + ' ' + esc(unit) + '</span></div>' +
-      '<div class="bar"><div class="bar-fill' + cls + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+      '<div class="bar"><div class="bar-fill' + cls + '" aria-hidden="true" style="width:' + Math.max(pct, 2).toFixed(1) + '%"></div></div>' +
       '</div>';
   }
 
