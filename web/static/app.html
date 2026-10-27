@@ -310,6 +310,11 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
   .balance-chip,.chip,.action-card{min-height:44px}
   .detail-back,.create-opt-rm{width:44px;height:44px}
   .lang-item{min-height:48px}
+  /* .btn and .input were the two families the floor missed: "Create market" and
+     "Create bet" landed at 42px and the AI row at 40px, on the surface where the
+     thumb actually taps. min-height only, so the compact rows keep their density. */
+  .btn{min-height:44px}
+  .input{min-height:44px}
 }
 
 @media (prefers-reduced-motion: reduce){

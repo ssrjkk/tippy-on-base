@@ -39,13 +39,17 @@
   replaces it. It reads files only — no browser, no database, so it runs in ordinary CI.
 - `tests/test_production_design.py` measures the **rendered** page (Playwright, marked
   `production`, runs in `prod-health-check.yml`) across five surfaces — landing dark/light, a market
-  page, `/app` on a phone with touch, and `/agent`: painted contrast, horizontal overflow at 390/1440,
-  44 px touch targets, bar width against the percentage the same row prints and against the API, page
+  page, `/app` on a phone with touch, and `/agent` — and taps **all four Mini App tabs** in one load,
+  because a screen behind `display: none` is a screen no gate used to see. It asserts painted contrast,
+  horizontal overflow at 390/1440, 44 px touch targets (inline links sharing a text line are the
+  measured exception), bar width against the percentage the same row prints and against the API, page
   errors and same-origin 4xx (401/403 excluded — an anonymous probe is meant to be refused), no
   skeleton still shimmering after load, no text clipped without an ellipsis, one `<h1>` and two
   `theme-color` metas in the DOM, a ring on every element a real Tab key stops on, and nothing hidden
   when `prefers-reduced-motion` is set. Point it at a local origin with
-  `DESIGN_GATE_URL=http://127.0.0.1:8000` to check a change before publishing it.
+  `DESIGN_GATE_URL=http://127.0.0.1:8000`, and add `DESIGN_GATE_SESSION=<signed tippy_session>`
+  (`web.auth.make_session(user_id)`) to measure the Mini App's real lists instead of its empty states —
+  without it the bar-vs-number gate skips with that reason printed.
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
   unused by any page.
 - Never push without an explicit word from the maintainer. Commit locally, report, wait.

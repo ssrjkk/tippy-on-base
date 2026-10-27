@@ -16,8 +16,10 @@ means the site really is broken or the design broke with it.
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -147,7 +149,11 @@ async ({tokens}) => {
     const track = fill.parentElement.getBoundingClientRect();
     const painted = fill.getBoundingClientRect();
     const label = (row.querySelector('.option-label, .detail-opt-label, h3, .m-question') || {}).textContent || '';
-    const match = /(\\d+(?:[.,]\\d+)?)\\s*%/.exec(row.textContent || '');
+    // Same rule as probBars: read the percentage from the element that prints it.
+    // A row's own text can carry another number — a threshold in the question, an
+    // amount — and comparing that against the bar calls agreement a bug.
+    const value = row.querySelector('.option-val, .detail-opt-val, .num') || row;
+    const match = /(\\d+(?:[.,]\\d+)?)\\s*%/.exec(value.textContent || '');
     optionRows.push({
       label: label.trim().slice(0, 24),
       textPct: match ? Number(match[1].replace(',', '.')) : null,
@@ -156,8 +162,18 @@ async ({tokens}) => {
   }
 
   const controls = [];
+  // WCAG 2.5.5 exempts a target whose size is set by the line it sits in. That is
+  // a property of the rendering, not of a class name, so it is measured here:
+  // an inline link sharing its line with other text or links is sized by the copy.
+  const inlineInText = (el) => {
+    if (el.tagName !== 'A' || getComputedStyle(el).display !== 'inline') return false;
+    const parent = el.parentElement;
+    if (!parent) return false;
+    return [...parent.childNodes].some((node) => node !== el && (
+      (node.nodeType === 3 && node.textContent.trim()) || node.nodeType === 1));
+  };
   for (const el of document.querySelectorAll('a, button, input, select, summary, [data-act]')) {
-    if (el.closest('[disabled]') || el.classList.contains('m-link')) continue;
+    if (el.closest('[disabled]') || el.classList.contains('m-link') || inlineInText(el)) continue;
     const rect = el.getBoundingClientRect();
     if (!rect.width || !rect.height) continue;
     if (getComputedStyle(el).display === 'none') continue;
@@ -208,6 +224,28 @@ async ({tokens}) => {
   const themeColors = [...document.querySelectorAll('meta[name="theme-color"]')].map(
     (m) => m.media || 'any');
 
+  // A probability row in the Mini App is a label with a number and, under it, a
+  // bar: the two are the same fact drawn twice, so they are compared pair by pair.
+  const probBars = [];
+  for (const group of document.querySelectorAll('.prob-bars')) {
+    const labels = [...group.querySelectorAll('.prob-bar-label')];
+    const bars = [...group.querySelectorAll('.prob-bar')];
+    for (let i = 0; i < Math.min(labels.length, bars.length); i++) {
+      // The price is the .num span. The label next to it can carry a number of
+      // its own ("Under 60%"), and reading the row's text would compare that
+      // threshold against the bar and call the disagreement a bug.
+      const num = labels[i].querySelector('.num') || labels[i];
+      const match = /(\\d+(?:[.,]\\d+)?)\\s*%/.exec(num.textContent || '');
+      const track = bars[i].getBoundingClientRect();
+      const fill = bars[i].firstElementChild.getBoundingClientRect();
+      probBars.push({
+        label: (labels[i].textContent || '').trim().slice(0, 24),
+        textPct: match ? Number(match[1].replace(',', '.')) : null,
+        barPct: track.width ? Number((fill.width / track.width * 100).toFixed(2)) : null,
+      });
+    }
+  }
+
   const endpoints = ['/api/volume_history?days=14', '/api/predictions'];
   const marketId = (location.pathname.match(/^\\/m\\/(\\d+)/) || [])[1];
   if (marketId) endpoints.push('/api/market/' + marketId);
@@ -222,7 +260,7 @@ async ({tokens}) => {
 
   const body = document.body.innerText || '';
   return {
-    contrast, numeric, controls, bars, optionRows, api,
+    contrast, numeric, controls, bars, optionRows, probBars, api,
     skeletons, clipped, headings, images, themeColors,
     marketId: marketId ? Number(marketId) : null,
     title: document.title,
@@ -417,6 +455,58 @@ def under_reduced_motion(browser, path, *, theme, viewport, xff):
         context.close()
 
 
+MINI_TABS = (0, 1, 2, 3)
+
+# The Mini App loads its lists from /api/mini/state, which is session-only, so an
+# anonymous probe sees empty tabs. Set DESIGN_GATE_SESSION to a signed
+# `tippy_session` value (web.auth.make_session(user_id)) and the walk runs against
+# the real screens: markets with their bars, bets, history, the stats grid.
+SESSION_COOKIE = os.environ.get("DESIGN_GATE_SESSION", "")
+
+
+def session_cookie_name() -> str:
+    """Read out of web/auth.py instead of importing it: this module is collected on
+    a CI runner that has no app config, and a literal copied here would drift."""
+    source = (Path(__file__).resolve().parents[1] / "web" / "auth.py").read_text(encoding="utf-8-sig")
+    return re.search(r"COOKIE_NAME\s*=\s*[\"']([^\"']+)[\"']", source).group(1)
+
+
+def walk_mini_app(browser, *, theme, viewport, xff):
+    """Every screen of the Mini App, from one page load.
+
+    A tab is `display: none` until a thumb taps it, so measuring /app once looks
+    only at the wallet card. The market rows, the bet list and the stats grid —
+    where the bars, the money columns and the empty states live — were rendered by
+    no gate at all.
+    """
+    context = open_context(browser, theme=theme, viewport=viewport, xff=xff, touch=True)
+    try:
+        if SESSION_COOKIE:
+            context.add_cookies([{"name": session_cookie_name(), "value": SESSION_COOKIE, "url": PROD_URL}])
+        page = context.new_page()
+        page.goto(f"{PROD_URL}/app", wait_until="load")
+        page.wait_for_timeout(2500)
+        screens = {}
+        for tab in MINI_TABS:
+            try:
+                page.click(f'.tab-item[data-tab="{tab}"]', timeout=4000)
+            except PlaywrightTimeoutError:
+                # The tab button is gone or renamed. Recorded, not raised: the gate
+                # below names the screen the walk could not reach, which is a better
+                # failure than a stack from a click.
+                pass
+            page.wait_for_timeout(1200)
+            screens[tab] = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/app")})
+            # Without this the walk could tap a dead selector, measure the wallet
+            # card four times, and every gate below would pass over one screen.
+            screens[tab]["active"] = page.evaluate(
+                "() => (document.querySelector('.tab-page.active') || {}).id || '(none)'"
+            )
+        return screens
+    finally:
+        context.close()
+
+
 # Landing, both themes, phone and desktop: four page loads shared by all below.
 @pytest.fixture(scope="module")
 def landing_phone(browser):
@@ -456,6 +546,12 @@ def mini_app(browser):
     hold.
     """
     return cached(browser, "/app", "dark", MOBILE, 4, touch=True)
+
+
+@pytest.fixture(scope="module")
+def mini_screens(browser):
+    """All four Mini App screens, tapped through in one page load."""
+    return walk_mini_app(browser, theme="dark", viewport=MOBILE, xff=XFF_POOL[5])
 
 
 @pytest.fixture(scope="module")
@@ -713,3 +809,85 @@ def test_reduced_motion_leaves_nothing_invisible(browser):
     state = under_reduced_motion(browser, "/", theme="dark", viewport=MOBILE, xff=XFF_POOL[7])
     assert state["hidden"] == [], f"sections stay hidden without motion: {state['hidden']}"
     assert state["runningCount"] == 0, json.dumps(state["running"], ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# every Mini App screen, not only the one that opens
+# ---------------------------------------------------------------------------
+
+
+def findings(screens, facet):
+    """One facet collected per screen, keyed by tab so a failure says where it was."""
+    return {f"tab{tab}": value for tab, value in screens.items() if value[facet]}
+
+
+def test_the_mini_app_walk_actually_changed_screens(mini_screens):
+    """Four taps that all landed on the same page would make every gate below green
+    over one screen. The walk is only evidence if the active page moved."""
+    active = [data["active"] for data in mini_screens.values()]
+    assert active == [f"tab{tab}" for tab in MINI_TABS], active
+
+
+def test_every_mini_app_screen_paints_readable_text(mini_screens):
+    bad = findings(mini_screens, "contrast")
+    assert not bad, json.dumps(bad, ensure_ascii=False)
+
+
+def test_every_mini_app_screen_fits_the_phone(mini_screens):
+    for tab, data in mini_screens.items():
+        assert data["scrollWidth"] <= data["innerWidth"] + 1, (
+            f"tab{tab}: документ {data['scrollWidth']}px шире окна {data['innerWidth']}px"
+        )
+
+
+def test_every_mini_app_screen_keeps_its_controls_thumb_sized(mini_screens):
+    bad = findings(mini_screens, "controls")
+    assert not bad, json.dumps(bad, ensure_ascii=False)
+
+
+def test_every_mini_app_screen_sets_its_numbers_in_tabular_digits(mini_screens):
+    bad = findings(mini_screens, "numeric")
+    assert not bad, json.dumps(bad, ensure_ascii=False)
+
+
+def test_no_mini_app_screen_is_still_loading(mini_screens):
+    bad = findings(mini_screens, "skeletons")
+    assert not bad, json.dumps(bad, ensure_ascii=False)
+
+
+def test_no_mini_app_screen_cuts_its_text_without_a_mark(mini_screens):
+    bad = findings(mini_screens, "clipped")
+    assert not bad, json.dumps(bad, ensure_ascii=False)
+
+
+def test_mini_app_bars_are_the_percentages_they_print(mini_screens):
+    """A probability row is a number and a bar. The bar is decoration the moment
+    the two disagree, and a user reads the bar first."""
+    if not SESSION_COOKIE:
+        pytest.skip(
+            "the lists are session data (/api/mini/state): without DESIGN_GATE_SESSION "
+            "the tabs render empty and there is no bar to compare with a number"
+        )
+    checked = 0
+    for tab, data in mini_screens.items():
+        for index, row in enumerate(data["probBars"]):
+            if row["textPct"] is None or row["barPct"] is None:
+                continue
+            checked += 1
+            want = max(row["textPct"], 1.0)  # the template clamps a zero to 1%
+            assert abs(row["barPct"] - want) <= 1.5, (
+                f"tab{tab} row {index} ({row['label']}): полоса {row['barPct']}%, "
+                f"написано {row['textPct']}%"
+            )
+    assert checked >= 4, (
+        f"only {checked} probability rows were measured — the screens are empty, "
+        "so this gate proves nothing"
+    )
+
+
+def test_no_mini_app_bar_paints_an_impossible_number(mini_screens):
+    for tab, data in mini_screens.items():
+        for row in data["probBars"]:
+            assert row["barPct"] is None or 0.0 <= row["barPct"] <= 100.0, (
+                f"tab{tab}: полоса вне 0..100% — {row}"
+            )
