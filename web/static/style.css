@@ -6,7 +6,9 @@
    + Geist Mono (numbers, micro-labels)
    ================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Golos+Text:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* The webfonts are requested from each page's <head>, not from here: an @import
+   inside a stylesheet is only discovered after that stylesheet has arrived, so
+   the visitor pays for two serial round-trips before the first glyph. */
 
 /* ---------- Reset ---------- */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }

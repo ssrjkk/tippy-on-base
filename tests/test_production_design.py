@@ -20,7 +20,8 @@ import urllib.error
 import urllib.request
 
 import pytest
-from test_design_system import mono_class_tokens
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from test_design_system import APP_HTML, CSS, mono_class_tokens
 
 pytestmark = pytest.mark.production
 
@@ -37,12 +38,15 @@ XFF_POOL = ["203.0.113.201", "203.0.113.202", "203.0.113.203", "203.0.113.204",
 MOBILE = (390, 844)
 DESKTOP = (1440, 900)
 
+# Every surface one page load each, shared by all the facet gates below.
+FACETS = ["landing_phone", "landing_desktop", "market_page", "mini_app", "agent_dashboard"]
+
 MEASURE_JS = """
-async () => {
-  /* Class names the stylesheet draws in the mono face, injected by
-     measure(): the law is "whatever the CSS calls monospaced computes as
-     monospaced with tabular digits", so the list cannot drift from the source. */
-  const MONO_TOKENS = %TOKENS%;
+async ({tokens}) => {
+  /* Class names the stylesheet draws in the mono face, passed in per surface:
+     the law is "whatever the CSS calls monospaced computes as monospaced with
+     tabular digits", and /app has its own stylesheet, so it has its own list. */
+  const MONO_TOKENS = tokens;
   const parse = (s) => {
     const m = String(s).match(/rgba?\\(([^)]+)\\)/);
     if (!m) return null;
@@ -168,6 +172,42 @@ async () => {
     const bar = b.getBoundingClientRect();
     return plot.height ? Number((bar.height / plot.height * 100).toFixed(2)) : null;
   });
+
+  const visible = (el) => {
+    const rect = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden';
+  };
+
+  // A shimmer is a promise that code will replace it. networkidle has already
+  // passed, so a placeholder still on the screen is a container nothing wrote to.
+  const skeletons = [...document.querySelectorAll('.skeleton, .skeleton-bar, .skeleton-card')]
+    .filter(visible)
+    .map((el) => ({where: path(el), text: (el.textContent || '').trim().slice(0, 20)}));
+
+  // Text that runs out of its box and is not marked as running out is a silent
+  // truncation: the number on the screen is not the number the ledger holds.
+  const clipped = [];
+  for (const el of document.querySelectorAll('body *')) {
+    if (!visible(el)) continue;
+    const cs = getComputedStyle(el);
+    if (cs.overflowX === 'visible' || el.scrollWidth <= el.clientWidth + 1) continue;
+    const text = (el.textContent || '').trim();
+    if (text.length < 3) continue;
+    if (cs.textOverflow === 'ellipsis') continue;
+    clipped.push({where: path(el), text: text.slice(0, 30), over: el.scrollWidth - el.clientWidth});
+  }
+
+  const headings = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map((el) => el.tagName);
+  const images = [...document.querySelectorAll('img')].map((im) => ({
+    alt: im.getAttribute('alt'),
+    width: im.getAttribute('width'),
+    height: im.getAttribute('height'),
+    visible: visible(im),
+  }));
+  const themeColors = [...document.querySelectorAll('meta[name="theme-color"]')].map(
+    (m) => m.media || 'any');
+
   const endpoints = ['/api/volume_history?days=14', '/api/predictions'];
   const marketId = (location.pathname.match(/^\\/m\\/(\\d+)/) || [])[1];
   if (marketId) endpoints.push('/api/market/' + marketId);
@@ -183,6 +223,7 @@ async () => {
   const body = document.body.innerText || '';
   return {
     contrast, numeric, controls, bars, optionRows, api,
+    skeletons, clipped, headings, images, themeColors,
     marketId: marketId ? Number(marketId) : null,
     title: document.title,
     theme: document.documentElement.dataset.theme || getComputedStyle(document.body).backgroundColor,
@@ -192,16 +233,35 @@ async () => {
     placeholders: (body.match(/__[A-Z][A-Z0-9_]*__/g) || []).slice(0, 5),
   };
 }
-""".replace("%TOKENS%", json.dumps(mono_class_tokens()))
+"""
+
+# Two documents, two stylesheets: /app never loads style.css, so judging its
+# numbers by the site's class list would check names that do not exist there and
+# ignore every class the Mini App actually defines.
+MONO_TOKENS = {"site": mono_class_tokens(CSS), "mini": mono_class_tokens(APP_HTML)}
 
 
-def open_context(browser, *, theme, viewport, xff, touch=False):
-    context = browser.new_context(
-        viewport={"width": viewport[0], "height": viewport[1]},
-        color_scheme=theme,
-        extra_http_headers={"user-agent": USER_AGENT, "x-forwarded-for": xff},
-        has_touch=touch,
-        is_mobile=touch,
+def mono_tokens_for(path: str) -> list[str]:
+    return MONO_TOKENS["mini"] if path == "/app" else MONO_TOKENS["site"]
+
+
+def open_context(browser, *, theme, viewport, xff, touch=False, reduced_motion=None):
+    options = {
+        "viewport": {"width": viewport[0], "height": viewport[1]},
+        "color_scheme": theme,
+        "extra_http_headers": {"user-agent": USER_AGENT, "x-forwarded-for": xff},
+        "has_touch": touch,
+        "is_mobile": touch,
+    }
+    if reduced_motion:
+        options["reduced_motion"] = reduced_motion
+    context = browser.new_context(**options)
+    # `color_scheme` alone is not enough: the Mini App takes its theme from
+    # Telegram's SDK, and outside Telegram that SDK answers "light" whatever the
+    # browser prefers. Measured that way, every dark palette in the product was
+    # silently tested in light. localStorage is what both surfaces actually read.
+    context.add_init_script(
+        f"try {{ localStorage.setItem('theme', '{theme}'); }} catch (e) {{}}"
     )
     return context
 
@@ -226,7 +286,13 @@ def measure(browser, path, theme, viewport, xff, touch=False):
             broken.append(f"{request.url} {request.failure}")
 
     def note_bad_response(response):
-        if response.url.startswith(PROD_URL) and response.status >= 400:
+        # A refused request is not a broken one: /api/agent/* answers 403 to an
+        # anonymous probe by design, and tests/test_production_health.py pins that.
+        if (
+            response.url.startswith(PROD_URL)
+            and response.status >= 400
+            and response.status not in (401, 403)
+        ):
             broken.append(f"{response.url} HTTP {response.status}")
 
     context = open_context(browser, theme=theme, viewport=viewport, xff=xff, touch=touch)
@@ -235,11 +301,18 @@ def measure(browser, path, theme, viewport, xff, touch=False):
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.on("requestfailed", note_request_failure)
         page.on("response", note_bad_response)
-        response = page.goto(f"{PROD_URL}{path}", wait_until="networkidle")
+        response = page.goto(f"{PROD_URL}{path}", wait_until="load")
+        try:
+            page.wait_for_load_state("networkidle", timeout=15000)
+        except PlaywrightTimeoutError:
+            # A page that polls — the workspace refetches every 10 s, the Mini App
+            # keeps a handshake open — never goes quiet, and waiting forever for it
+            # would measure nothing. The document and its first data have landed.
+            pass
         assert response is not None and response.status == 200, (
             f"{path} не отдал 200 в {theme}/{viewport[0]}px: {response.status if response else 'нет ответа'}"
         )
-        data = page.evaluate(MEASURE_JS)
+        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for(path)})
         data["pageerrors"] = page_errors
         data["brokenrequests"] = broken
         data["status"] = response.status
@@ -256,6 +329,92 @@ def cached(browser, path, theme, viewport, index, touch=False):
     if key not in CACHE:
         CACHE[key] = measure(browser, path, theme, viewport, XFF_POOL[index % len(XFF_POOL)], touch)
     return CACHE[key]
+
+
+# A mouse never shows a focus ring, so this is measured with real Tab presses:
+# element.focus() from script does not match :focus-visible in Chromium, and a
+# probe built that way would report a ring wherever there is none.
+RING_JS = """
+() => {
+  const el = document.activeElement;
+  if (!el || el === document.body) return null;
+  const cs = getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  return {
+    where: el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\\s+/)[0],
+    width: parseFloat(cs.outlineWidth) || 0,
+    style: cs.outlineStyle,
+    color: cs.outlineColor,
+    shadow: cs.boxShadow || 'none',
+    offscreen: rect.width === 0 || rect.height === 0,
+  };
+}
+"""
+
+
+def paints_a_ring(ring) -> bool:
+    """A ring is something a keyboard visitor can see: a style, a width, and a
+    colour that is not transparent. `outline: 2px solid transparent` satisfies the
+    first two and shows nothing, which is why all three are checked."""
+    if ring["style"] in ("none", "hidden"):
+        return False
+    if ring["shadow"] not in ("", "none"):
+        return True
+    transparent = ring["color"].startswith("rgba(0, 0, 0, 0)") or ring["color"] == "transparent"
+    return ring["width"] >= 2.0 and not transparent
+
+MOTION_JS = """
+() => {
+  const running = [];
+  for (const el of document.querySelectorAll('body *')) {
+    const cs = getComputedStyle(el);
+    if (cs.animationName === 'none') continue;
+    const seconds = parseFloat(cs.animationDuration) * (cs.animationDuration.includes('ms') ? 0.001 : 1);
+    if (seconds > 0.002) {
+      running.push({where: el.tagName.toLowerCase() + '.' +
+                    (el.className || '').toString().trim().split(/\\s+/)[0],
+                    name: cs.animationName, duration: cs.animationDuration});
+    }
+  }
+  const hidden = [...document.querySelectorAll('.reveal')].filter((el) => {
+    const cs = getComputedStyle(el);
+    return parseFloat(cs.opacity) < 0.99 || cs.transform !== 'none';
+  }).map((el) => (el.className || '').toString());
+  return {running: running.slice(0, 12), runningCount: running.length, hidden: hidden.slice(0, 12)};
+}
+"""
+
+
+def walk_keyboard(browser, path, *, theme, viewport, xff, stops=24):
+    """Every distinct element a keyboard visitor can land on, with its ring."""
+    context = open_context(browser, theme=theme, viewport=viewport, xff=xff)
+    try:
+        page = context.new_page()
+        page.goto(f"{PROD_URL}{path}", wait_until="load")
+        page.wait_for_timeout(1500)
+        seen, rings = set(), []
+        for _ in range(stops):
+            page.keyboard.press("Tab")
+            ring = page.evaluate(RING_JS)
+            if ring is None or ring["where"] in seen or ring["offscreen"]:
+                continue
+            seen.add(ring["where"])
+            rings.append(ring)
+        return rings
+    finally:
+        context.close()
+
+
+def under_reduced_motion(browser, path, *, theme, viewport, xff):
+    context = open_context(browser, theme=theme, viewport=viewport, xff=xff,
+                           reduced_motion="reduce")
+    try:
+        page = context.new_page()
+        page.goto(f"{PROD_URL}{path}", wait_until="load")
+        page.wait_for_timeout(1500)
+        return page.evaluate(MOTION_JS)
+    finally:
+        context.close()
 
 
 # Landing, both themes, phone and desktop: four page loads shared by all below.
@@ -287,10 +446,26 @@ def market_page(browser):
     return cached(browser, f"/m/{first}", "dark", MOBILE, 2)
 
 
+@pytest.fixture(scope="module")
+def mini_app(browser):
+    """/app — the surface AGENTS.md calls primary, measured as such.
+
+    It is opened on a phone with touch on, in the theme the app itself picks, and
+    every facet below is asserted on it: the Mini App is where the money is
+    actually spent, so a design rule that only holds on the landing page does not
+    hold.
+    """
+    return cached(browser, "/app", "dark", MOBILE, 4, touch=True)
+
+
+@pytest.fixture(scope="module")
+def agent_dashboard(browser):
+    return cached(browser, "/agent", "dark", DESKTOP, 5)
+
+
 # ---------------------------------------------------------------------------
 # contrast
 # ---------------------------------------------------------------------------
-
 
 def test_painted_text_clears_aa_on_the_landing_phone(landing_phone):
     assert landing_phone["contrast"] == [], json.dumps(
@@ -317,7 +492,7 @@ def test_the_contrast_pass_actually_measured_something(landing_phone):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("facet", ["landing_phone", "landing_desktop", "market_page"])
+@pytest.mark.parametrize("facet", FACETS)
 def test_no_horizontal_overflow(request, facet):
     data = request.getfixturevalue(facet)
     assert data["scrollWidth"] <= data["innerWidth"] + 1, (
@@ -411,11 +586,15 @@ def test_a_bar_never_paints_an_impossible_number(landing_phone, market_page):
 # ---------------------------------------------------------------------------
 
 
-def test_no_placeholder_or_nan_reaches_the_rendered_text(landing_phone, landing_desktop, market_page):
+def test_no_placeholder_or_nan_reaches_the_rendered_text(
+    landing_phone, landing_desktop, market_page, mini_app, agent_dashboard
+):
     for name, data in (
         ("phone", landing_phone),
         ("desktop", landing_desktop),
         ("market", market_page),
+        ("app", mini_app),
+        ("agent", agent_dashboard),
     ):
         assert not data["placeholders"], f"{name}: подстановка не сработала — {data['placeholders']}"
         assert not data["leaked"], f"{name}: в тексте виден {data['leaked']}"
@@ -430,3 +609,107 @@ def test_the_page_broke_nothing_while_loading(landing_phone, landing_desktop):
 def test_the_landing_paints_a_real_title_not_a_placeholder(landing_phone):
     title = landing_phone["title"]
     assert title and "__" not in title and "undefined" not in title.lower()
+
+
+# ---------------------------------------------------------------------------
+# the other two surfaces: the Mini App and the operator dashboard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("facet", ["mini_app", "agent_dashboard"])
+def test_painted_text_clears_aa_on_every_surface(request, facet):
+    """The landing page is not the product. AGENTS.md calls the Mini App the
+    primary surface, and it is the one page the earlier gates never opened."""
+    data = request.getfixturevalue(facet)
+    assert data["contrast"] == [], json.dumps(data["contrast"], ensure_ascii=False)
+
+
+def test_every_mini_app_control_is_big_enough(mini_app):
+    """The 44 px floor was set for thumbs, and a thumb lives on /app, not on /."""
+    assert mini_app["controls"] == [], json.dumps(mini_app["controls"], ensure_ascii=False)
+
+
+def test_mini_app_numbers_are_mono_and_tabular(mini_app):
+    assert mini_app["numeric"] == [], json.dumps(mini_app["numeric"], ensure_ascii=False)
+
+
+def test_the_mini_app_broke_nothing_of_its_own(mini_app, agent_dashboard):
+    """Third-party scripts (the Telegram bridge, the Base App SDK) are the
+    network's business; a 404 on this origin or a broken request to it is ours."""
+    for name, data in (("app", mini_app), ("agent", agent_dashboard)):
+        assert not data["brokenrequests"], f"{name}: {data['brokenrequests'][:3]}"
+        assert data["status"] == 200
+
+
+# ---------------------------------------------------------------------------
+# loading states, truncation, document outline
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_nothing_still_shimmers_when_the_data_has_arrived(request, facet):
+    """A skeleton is a promise. If the page has loaded and something is still
+    animating a placeholder, that region is code nobody writes into — the visitor
+    watches a fake loading state forever and the number is never shown."""
+    data = request.getfixturevalue(facet)
+    assert data["skeletons"] == [], json.dumps(data["skeletons"], ensure_ascii=False)
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_painted_text_is_never_cut_without_a_mark(request, facet):
+    """`overflow: hidden` on a money value with no ellipsis deletes digits the
+    user has no way to notice are gone."""
+    data = request.getfixturevalue(facet)
+    assert data["clipped"] == [], json.dumps(data["clipped"], ensure_ascii=False)
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_the_document_names_its_own_heading_and_chrome(request, facet):
+    data = request.getfixturevalue(facet)
+    assert data["headings"].count("H1") == 1, f"{facet}: h1 in {data['headings']}"
+    assert set(data["themeColors"]) == {
+        "(prefers-color-scheme: light)",
+        "(prefers-color-scheme: dark)",
+    }, f"{facet}: theme-color metas are {data['themeColors']}"
+
+
+def test_a_painted_image_has_a_name_and_a_box(landing_phone, mini_app):
+    """An image with no dimensions makes the layout jump under a thumb that has
+    already aimed at it, and one with no alt is a hole in the screen reader."""
+    offenders = []
+    for name, data in (("landing", landing_phone), ("app", mini_app)):
+        for image in data["images"]:
+            if not image["visible"]:
+                continue
+            alt = (image["alt"] or "").strip()
+            if len(alt) < 4 or not image["width"] or not image["height"]:
+                offenders.append((name, image))
+    assert not offenders, offenders
+
+
+# ---------------------------------------------------------------------------
+# keyboard and motion, measured in the browser
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ["/", "/app"])
+def test_every_keyboard_stop_paints_a_ring(browser, path):
+    """A focus ring that exists in CSS but is overridden by a component is the
+    most common way a keyboard user gets lost, and no source scan can see it."""
+    rings = walk_keyboard(browser, path, theme="dark", viewport=MOBILE, xff=XFF_POOL[6])
+    ours = [ring for ring in rings if not ring["where"].startswith("iframe.")]
+    # An embedded Telegram login widget is the only stop on this list that is not
+    # our document: its focus rendering belongs to the widget and no rule here can
+    # reach into it.
+    assert len(ours) >= 3, f"{path}: the keyboard found {len(ours)} of our stops — nothing to measure"
+    invisible = [ring for ring in ours if not paints_a_ring(ring)]
+    assert not invisible, json.dumps(invisible, ensure_ascii=False)
+
+
+def test_reduced_motion_leaves_nothing_invisible(browser):
+    """`opacity: 0` until a transition reveals it is how the landing animates in.
+    Ask for no motion and a sloppy block leaves the sections blank forever: the
+    page looks empty and nothing in the console says why."""
+    state = under_reduced_motion(browser, "/", theme="dark", viewport=MOBILE, xff=XFF_POOL[7])
+    assert state["hidden"] == [], f"sections stay hidden without motion: {state['hidden']}"
+    assert state["runningCount"] == 0, json.dumps(state["running"], ensure_ascii=False)

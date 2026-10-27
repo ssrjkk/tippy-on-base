@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=Golos+Text:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" />
   <title>Профиль — Tippy</title>
   <meta property="og:title" content="Профиль в Tippy" />
   <meta property="og:description" content="Донат-страница: как поддержать этого пользователя USDC в Telegram и что он уже получил через Tippy." />
@@ -67,7 +72,7 @@
           <div class="wallet-row"><span class="eyebrow">Адрес пополнения (<span data-net="usdc">USDC</span> / <span data-net="chain">Base</span>)</span></div>
           <div class="wallet-addr" id="u-address">загрузка…</div>
           <div class="cta-row">
-            <div class="qr-wrap"><div class="qr"><img id="u-qr" alt="QR-код адреса пополнения" /></div></div>
+            <div class="qr-wrap"><div class="qr"><img id="u-qr" alt="QR-код адреса пополнения" width="220" height="220" /></div></div>
             <button class="btn btn-ghost" id="u-copy" type="button">Скопировать адрес</button>
           </div>
         </div>

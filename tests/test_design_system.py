@@ -19,6 +19,7 @@ Three deliberate choices:
 """
 
 import re
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -473,28 +474,32 @@ def test_mono_implies_tabular_digits():
     carries fixed-width digits. A rule that forgets it looks right until a column
     gets a 1 and a 7 in the same place, and the `font:` shorthand resets the
     longhand — so a block that uses the shorthand has to name the variant after it.
+
+    Both documents are measured: the Mini App keeps its own stylesheet, and a law
+    asserted only on style.css leaves every timestamp column in /app jittering.
     """
-    offenders = []
-    for selector, body in rule_selector_and_body(CSS):
-        if "var(--font-mono)" not in body:
-            continue
-        if "tabular-nums" not in body:
-            offenders.append(f"{selector.strip().splitlines()[-1][:70]} — mono without tabular")
-    resets = []
-    for selector, body in rule_selector_and_body(CSS):
-        if "var(--font-mono)" not in body:
-            continue
-        shorthand = re.search(r"(?:^|;)\s*font\s*:[^;]+", body)
-        if not shorthand:
-            continue
-        variant = re.search(r"font-variant-numeric[^;]*", body)
-        if variant is None or variant.start() < shorthand.start():
-            resets.append(
-                f"{selector.strip().splitlines()[-1][:70]} — `font:` at {shorthand.start()} "
-                f"resets the variant declared at {variant.start() if variant else 'nowhere'}"
-            )
-    assert not offenders, offenders
-    assert not resets, f"the font: shorthand wipes the numeric variant after it: {resets}"
+    for surface, css in (("style.css", CSS), ("app.html", APP_HTML)):
+        offenders = []
+        for selector, body in rule_selector_and_body(css):
+            if "var(--font-mono)" not in body:
+                continue
+            if "tabular-nums" not in body:
+                offenders.append(f"{selector.strip().splitlines()[-1][:70]} — mono without tabular")
+        resets = []
+        for selector, body in rule_selector_and_body(css):
+            if "var(--font-mono)" not in body:
+                continue
+            shorthand = re.search(r"(?:^|;)\s*font\s*:[^;]+", body)
+            if not shorthand:
+                continue
+            variant = re.search(r"font-variant-numeric[^;]*", body)
+            if variant is None or variant.start() < shorthand.start():
+                resets.append(
+                    f"{selector.strip().splitlines()[-1][:70]} — `font:` at {shorthand.start()} "
+                    f"resets the variant declared at {variant.start() if variant else 'nowhere'}"
+                )
+        assert not offenders, f"{surface}: {offenders}"
+        assert not resets, f"{surface}: the font: shorthand wipes the variant after it: {resets}"
 
 
 def test_no_font_family_bypasses_the_tokens():
@@ -751,7 +756,336 @@ def test_no_substitution_key_is_dead():
     assert not unused, f"web/server.py replaces {unused} and no template asks for it"
 
 
-def mono_class_tokens() -> list[str]:
+# ---------------------------------------------------------------------------
+# the document: what the browser is told before it paints
+# ---------------------------------------------------------------------------
+
+VIEWPORT_RE = re.compile(r'<meta name="viewport" content="([^"]*)"')
+ZOOM_BLOCKERS = ("user-scalable=no", "user-scalable=0", "maximum-scale", "minimum-scale")
+THEME_COLOR_RE = re.compile(
+    r'<meta\s+name="theme-color"\s+media="\(prefers-color-scheme: (light|dark)\)"\s+content="([^"]+)"'
+)
+FONT_LINK_RE = re.compile(r'<link rel="stylesheet" href="(https://fonts\.googleapis\.com/[^"]*)"')
+FONT_IMPORT_RE = re.compile(r"@import\s+url\(['\"]?(https?://[^'\")\s]+)")
+OUTLINE_OFF_RE = re.compile(r"outline:\s*(?:none|0)\b", re.I)
+
+
+def test_no_page_locks_the_visitor_out_of_pinch_zoom():
+    """A Mini App is read on a phone, and a small number is the one thing a user
+    has to be able to make bigger. `user-scalable=no` fails WCAG 1.4.4 and buys
+    nothing a layout rule needs."""
+    offenders = []
+    for name in PAGES:
+        for content in VIEWPORT_RE.findall(read(name)):
+            blocked = [token for token in ZOOM_BLOCKERS if token in content]
+            if blocked:
+                offenders.append((name, content, blocked))
+    assert not offenders, offenders
+
+
+def test_every_page_paints_the_browser_chrome_in_its_own_canvas():
+    """Without theme-color a phone shows a white status bar over a #111111 page:
+    the first square centimetre of the dark theme, drawn by the browser in the
+    wrong colours. The values have to be the canvas tokens, not a new grey."""
+    want = {
+        "light": normalized(resolve(LIGHT, "--canvas")),
+        "dark": normalized(resolve(DARK, "--canvas")),
+    }
+    offenders = []
+    for name in PAGES:
+        found = {scheme: content.strip().lower() for scheme, content in THEME_COLOR_RE.findall(read(name))}
+        if set(found) != {"light", "dark"}:
+            offenders.append((name, "declared schemes", sorted(found)))
+            continue
+        mismatched = {scheme: value for scheme, value in found.items() if value != want[scheme]}
+        if mismatched:
+            offenders.append((name, "off-canvas", mismatched))
+    assert not offenders, offenders
+
+
+def test_a_webfont_is_linked_by_the_document_not_imported_by_the_stylesheet():
+    """`@import` is discovered only after the importing stylesheet has arrived, so
+    the visitor waits for three serial round-trips before the first glyph. In the
+    head the font CSS and style.css download in parallel."""
+    imported = [
+        (name, match.group(1))
+        for name in (*PAGES, "style.css")
+        for match in FONT_IMPORT_RE.finditer(read(name))
+    ]
+    assert not imported, f"a render-blocking @import: {imported}"
+    urls = {name: set(FONT_LINK_RE.findall(read(name))) for name in PAGES}
+    off_shape = {name: sorted(found) for name, found in urls.items() if len(found) != 1}
+    assert not off_shape, f"a page links the fonts {off_shape} times"
+    reference = next(iter(urls["index.html"]))
+    drifted = {name: sorted(found) for name, found in urls.items() if found != {reference}}
+    assert not drifted, f"pages request different faces: {drifted}"
+
+
+def test_the_document_preconnects_to_the_hosts_the_fonts_live_on():
+    for name in PAGES:
+        text = read(name)
+        assert '<link rel="preconnect" href="https://fonts.googleapis.com"' in text, name
+        assert '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin' in text, name
+
+
+def faces_from_url(href: str) -> dict[str, set[int]]:
+    """`family=Geist+Mono:wght@400;500` → {"Geist Mono": {400, 500}}."""
+    query = href.replace("&amp;", "&").split("?", 1)[1]
+    weights: dict[str, set[int]] = {}
+    for param in query.split("&"):
+        if not param.startswith("family="):
+            continue
+        name, _, rest = param[len("family="):].partition(":")
+        if rest.startswith("wght@"):
+            weights[name.replace("+", " ")] = {int(weight) for weight in rest[5:].split(";")}
+    return weights
+
+
+def quoted_families(value: str) -> list[str]:
+    return re.findall(r'"([^"]+)"', value)
+
+
+def weights_with_stack(css: str, token: str) -> set[int]:
+    """Numeric weights declared on an element that explicitly takes `token`.
+
+    Only explicit declarations are counted: inheritance cannot be resolved from a
+    stylesheet by regex, and a rule that sets no family is not claiming a face.
+    """
+    used: set[int] = set()
+    for _selector, body in rule_selector_and_body(css):
+        if f"var({token})" not in body:
+            continue
+        used |= {int(weight) for weight in re.findall(r"font(?:-weight)?: *(\d{3})", body)}
+    return used
+
+
+def test_the_weights_the_ui_asks_for_are_the_weights_that_are_downloaded():
+    """A weight the request does not carry is painted as synthetic bold: the
+    browser thickens a face that was never drawn that way, and money figures
+    become the one place on the page where the type looks manufactured.
+    """
+    faces = faces_from_url(next(iter(FONT_LINK_RE.findall(read("index.html")))))
+    offenders = []
+    for token in ("--font-mono", "--font-ui"):
+        for surface, css in (("style.css", CSS), ("app.html", APP_HTML)):
+            downloaded: set[int] = set()
+            named = False
+            for family in quoted_families(resolve(LIGHT if surface == "style.css" else MINI_LIGHT, token)):
+                if family in faces:
+                    named = True
+                    downloaded |= faces[family]
+            if not named:
+                continue  # the stack is made of system faces: nothing to download
+            missing = weights_with_stack(css, token) - downloaded
+            if missing:
+                offenders.append((surface, token, sorted(missing), sorted(downloaded)))
+    assert not offenders, f"these weights are synthesised, not downloaded: {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# keyboard, motion, structure
+# ---------------------------------------------------------------------------
+
+
+def test_an_outline_is_only_erased_where_something_visible_is_drawn():
+    """`outline: none` on `:focus` deletes the keyboard cursor. It is legal only
+    where the same rule paints a replacement — a border colour or a ring — and a
+    blanket `outline: none` on an element type is legal only while a
+    `:focus-visible` rule in the same document brings the ring back."""
+    offenders = []
+    for surface, css in (("style.css", CSS), ("app.html", APP_HTML)):
+        rules = rule_selector_and_body(css)
+        has_focus_visible_ring = any(
+            selector.strip().endswith(":focus-visible") and re.search(r"outline:\s*[1-9]", body)
+            for selector, body in rules
+        )
+        for selector, body in rules:
+            if not OUTLINE_OFF_RE.search(body):
+                continue
+            if ":focus" in selector and ":focus-visible" not in selector:
+                assert "box-shadow" in body or "border-color" in body, (
+                    f"{surface}: {selector} erases the ring and paints nothing in its place"
+                )
+            elif ":focus" not in selector and not has_focus_visible_ring:
+                offenders.append((surface, selector))
+    assert not offenders, f"{offenders} remove the outline with no :focus-visible ring behind them"
+
+
+def test_the_focus_ring_is_visible_on_both_canvases():
+    """2.4.11: a focus indicator is a non-text element, so it needs 3:1 against
+    the surface it is drawn on — the same test a logo or an icon gets."""
+    for surface, css, light, dark, canvas_token in (
+        ("style.css", CSS, LIGHT, DARK, "--canvas"),
+        ("app.html", APP_HTML, MINI_LIGHT, MINI_DARK, "--bg"),
+    ):
+        ring = next(
+            (
+                body
+                for selector, body in rule_selector_and_body(css)
+                if selector.strip().endswith(":focus-visible") and "outline:" in body
+            ),
+            None,
+        )
+        assert ring, f"{surface} has no :focus-visible rule at all"
+        width = re.search(r"outline:\s*([0-9.]+)px", ring)
+        assert width and float(width.group(1)) >= 2.0, f"{surface}: ring is {ring[:40]}"
+        colour = re.search(r"outline:[^;]*?(var\(--[a-z0-9-]+\)|#[0-9a-f]{3,8})", ring)
+        assert colour, f"{surface}: the ring colour is not a token — {ring[:40]}"
+        for theme, tokens in (("light", light), ("dark", dark)):
+            name = colour.group(1)
+            paint = parse_color(resolve(tokens, name[4:-1]) if name.startswith("var(") else name)
+            canvas = parse_color(resolve(tokens, canvas_token))
+            assert paint and canvas, f"{surface} {theme}: unparseable ring {name}"
+            measured = ratio(paint, canvas)
+            assert measured >= 3.0, f"{surface} {theme}: focus ring {measured:.2f}:1 on the canvas"
+
+
+def media_block(css: str, query: str) -> str:
+    """The body of an `@media` block, braces matched."""
+    start = css.index(f"@media {query}")
+    brace = css.index("{", start)
+    depth = 0
+    for i in range(brace, len(css)):
+        if css[i] == "{":
+            depth += 1
+        elif css[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return css[brace + 1 : i]
+    raise AssertionError(f"unbalanced @media {query}")
+
+
+def test_reduced_motion_still_reveals_everything():
+    """A reveal is `opacity: 0` plus a class the observer adds. Under
+    prefers-reduced-motion the transition is killed, and with a sloppy block the
+    content stays invisible: the page renders empty and the visitor cannot tell
+    that the design is the reason."""
+    for surface, css, query in (
+        ("style.css", CSS, "(prefers-reduced-motion: reduce)"),
+        ("app.html", APP_HTML, "(prefers-reduced-motion: reduce)"),
+    ):
+        block = media_block(css, query)
+        assert re.search(r"animation-duration:\s*[0-9.]+m?s\s*!important", block), surface
+        assert re.search(r"transition-duration:\s*[0-9.]+m?s\s*!important", block), surface
+        hidden = [
+            selector
+            for selector, body in rule_selector_and_body(css)
+            if ".js " in selector and re.search(r"opacity:\s*0(?:\.0+)?\s*[;}]", body + "}")
+        ]
+        for selector in hidden:
+            name = selector.split()[-1]
+            assert name in block, f"{surface}: {name} stays invisible without motion"
+
+
+def test_every_page_owns_its_heading_outline():
+    """Screen readers navigate by heading. A page with no `<h1>` has no name, and
+    a jump from `<h1>` to `<h3>` is a section that announces itself as a subsection
+    of something that does not exist."""
+    for name in PAGES:
+        text = re.sub(r"<script.*?</script>", "", read(name), flags=re.S)
+        levels = [int(level) for level in re.findall(r"<h([1-6])\b", text)]
+        assert levels, f"{name} has no heading at all"
+        assert levels.count(1) == 1, f"{name}: {levels.count(1)} h1 in one document"
+        assert levels[0] == 1, f"{name}: the document opens at h{levels[0]}"
+        jumps = [
+            (before, after)
+            for before, after in pairwise(levels)
+            if after - before > 1
+        ]
+        assert not jumps, f"{name}: skipped heading levels {jumps}"
+
+
+def test_every_sprite_symbol_is_drawn_by_something():
+    """The Mini App defines its icons once; an id no template references is a
+    glyph kept alive by nothing."""
+    defined = set(re.findall(r'<symbol id="([a-z0-9-]+)"', APP_HTML))
+    outside = re.sub(r'<symbol id="[a-z0-9-]+"', "", APP_HTML)
+    used = set(re.findall(r"['\"]#?(i-[a-z-]+)['\"]", outside)) | set(
+        re.findall(r'href="#([a-z0-9-]+)"', outside)
+    )
+    dead = sorted(defined - used)
+    assert not dead, f"{dead} are defined in the sprite and never referenced"
+
+
+# ---------------------------------------------------------------------------
+# loading states
+# ---------------------------------------------------------------------------
+
+VOID_TAGS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+)
+TAG_RE = re.compile(r"<(/?)([a-zA-Z][\w-]*)([^>]*)>", re.S)
+ID_ATTR_RE = re.compile(r'\bid="([^"]+)"')
+CLASS_ATTR_RE = re.compile(r'class="([^"]*)"')
+
+
+def skeleton_owners(html: str) -> set[str]:
+    """The nearest enclosing id of every element that shimmers in the static markup.
+
+    A placeholder is a promise that code will replace it. Walking the tag stack
+    finds the container a script writes into, which is the only thing that keeps
+    a page from shimmering at a visitor forever. Script and style bodies are cut
+    first: a template literal is not markup the browser parsed, and treating its
+    unclosed tags as elements would invent containers. A shimmer with no id above
+    it is skipped — it is drawn by a template that replaces its whole subtree.
+    """
+    markup = re.sub(r"<(script|style|svg)\b.*?</\1>", "", html, flags=re.S)
+    stack: list[str | None] = []
+    owners: set[str] = set()
+    for closing, tag, attrs in TAG_RE.findall(markup):
+        name = tag.lower()
+        if closing:
+            if name not in VOID_TAGS and stack:
+                stack.pop()
+            continue
+        identifier = attribute(attrs, ID_ATTR_RE)
+        shimmers = "skeleton" in attribute(attrs, CLASS_ATTR_RE)
+        if name in VOID_TAGS or attrs.rstrip().endswith("/"):
+            if shimmers and identifier:
+                owners.add(identifier)
+            continue
+        stack.append(identifier or None)
+        if shimmers:
+            for ancestor in reversed(stack):
+                if ancestor:
+                    owners.add(ancestor)
+                    break
+    return owners
+
+
+def attribute(attrs: str, pattern: re.Pattern) -> str:
+    match = pattern.search(attrs)
+    return match.group(1) if match else ""
+
+
+def test_a_shimmer_is_owned_by_code_that_replaces_it():
+    """The fake-loading bug: markup ships a skeleton, no script ever writes into
+    that container, and the page shimmers at a visitor forever. Every placeholder
+    in the source has to name a container some script fills or clears."""
+    sources = {name: read(name) for name in (*SCRIPTS, "app.html")}
+    owners: set[str] = set()
+    for name in PAGES:
+        owners |= skeleton_owners(read(name))
+    unowned = []
+    for owner in sorted(owners):
+        writers = [
+            source
+            for source in sources.values()
+            if f'$("{owner}")' in source
+            or f"$('{owner}')" in source
+            or f"getElementById('{owner}')" in source
+            or f'getElementById("{owner}")' in source
+            or f"#{owner}'" in source
+        ]
+        if not writers:
+            unowned.append((owner, "no script touches it"))
+        elif not any(".innerHTML" in source or "classList.remove" in source or "replaceChildren" in source
+                     for source in writers):
+            unowned.append((owner, "a script reads it but never fills it"))
+    assert not unowned, f"skeletons that will never be replaced: {unowned}"
+
+
+def mono_class_tokens(css: str) -> list[str]:
     """Class names whose own element the stylesheet draws in the mono face.
 
     The rendered gate takes this list instead of a hand-written one: the law it
@@ -760,9 +1094,13 @@ def mono_class_tokens() -> list[str]:
     is renamed. Only the *subject* of a selector counts — `.x .label` styles
     `.label`, while `.label::after` paints a generated marker and not the
     element, so taking every class in a selector would flag text no rule touches.
+
+    Per document, because there are two: /app never loads style.css, so the site's
+    list would judge the Mini App's classes by rules that do not apply to them and
+    would never look at the ones that do.
     """
     tokens: set[str] = set()
-    for selector, body in rule_selector_and_body(CSS):
+    for selector, body in rule_selector_and_body(css):
         if "var(--font-mono)" not in body:
             continue
         for compound in selector.split(","):

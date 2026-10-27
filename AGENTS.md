@@ -29,13 +29,22 @@
   `tests/test_web.py::test_mini_app_dictionaries_have_identical_key_sets` is that rule as a gate.
 - `tests/test_design_system.py` is the design contract, measured from the files: contrast of every
   declared `color`/`background` pair **and** of every text colour against both canvases, "mono implies
-  tabular digits", no raw hex outside the token blocks, the site and Mini App palettes equal value for
-  value, inline styles limited to clamped geometry, no unsubstituted `__PLACEHOLDER__`. It reads files
-  only — no browser, no database, so it runs in ordinary CI.
+  tabular digits" **in both stylesheets**, no raw hex outside the token blocks, the site and Mini App
+  palettes equal value for value, inline styles limited to clamped geometry, no unsubstituted
+  `__PLACEHOLDER__`, no `@import` of a webfont (link it in `<head>` and preconnect), the weights the CSS
+  asks for are the weights the font URL downloads, no viewport that blocks pinch zoom, `theme-color`
+  present for both schemes and equal to the canvas token, `outline: none` legal only where a ring is
+  painted in its place, the focus ring ≥ 3:1 on both canvases, every page with exactly one `<h1>` and no
+  skipped heading levels, no dead `<symbol>` in the icon sprite, and every `skeleton` owned by code that
+  replaces it. It reads files only — no browser, no database, so it runs in ordinary CI.
 - `tests/test_production_design.py` measures the **rendered** page (Playwright, marked
-  `production`, runs in `prod-health-check.yml`): painted contrast, horizontal overflow at 390/1440,
+  `production`, runs in `prod-health-check.yml`) across five surfaces — landing dark/light, a market
+  page, `/app` on a phone with touch, and `/agent`: painted contrast, horizontal overflow at 390/1440,
   44 px touch targets, bar width against the percentage the same row prints and against the API, page
-  errors and same-origin 4xx. Point it at a local origin with
+  errors and same-origin 4xx (401/403 excluded — an anonymous probe is meant to be refused), no
+  skeleton still shimmering after load, no text clipped without an ellipsis, one `<h1>` and two
+  `theme-color` metas in the DOM, a ring on every element a real Tab key stops on, and nothing hidden
+  when `prefers-reduced-motion` is set. Point it at a local origin with
   `DESIGN_GATE_URL=http://127.0.0.1:8000` to check a change before publishing it.
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
   unused by any page.
