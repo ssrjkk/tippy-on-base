@@ -1359,11 +1359,9 @@ def test_api_ask_marks_a_model_answer_as_such(client, ledger, monkeypatch):
 def test_api_ask_still_throttles_per_ip(client, ledger, monkeypatch):
     """The cooldown is what keeps the free-data path from being a free DB
     hammer; the no-model answer must not have dissolved it."""
-    from bot import ai as ai_mod
     from web import server
 
-    monkeypatch.delenv("AI_API_KEY", raising=False)
-    monkeypatch.setattr(ai_mod.config, "AI_PROVIDER_CHAIN", "")
+    _no_provider(monkeypatch)
     monkeypatch.setattr(server.config, "AI_COOLDOWN_SECONDS", 600)
     _one_market(ledger)
 

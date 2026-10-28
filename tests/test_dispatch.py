@@ -302,11 +302,19 @@ def test_dispatch_market_full_lifecycle(ledger):
 
 
 def test_dispatch_ask_without_a_key_still_answers(ledger, monkeypatch):
-    """The dispatcher must reach the no-model answer path, not a refusal."""
+    """The dispatcher must reach the no-model answer path, not a refusal.
+
+    "Without a key" is no longer enough to get there: the chain also takes keys
+    found in the environment, a model server on this host and the keyless public
+    fallback, so all of those are switched off to isolate the ledger path."""
     from bot import ai as ai_mod
 
     monkeypatch.delenv("AI_API_KEY", raising=False)
     monkeypatch.setattr(ai_mod.config, "AI_PROVIDER_CHAIN", "")
+    monkeypatch.setattr(ai_mod.config, "AI_AUTODISCOVER_KEYS", False)
+    monkeypatch.setattr(ai_mod.config, "AI_FREE_ENDPOINT", False)
+    monkeypatch.setattr(ai_mod.config, "AI_LOCAL_SERVERS", "")
+    ai_mod._LOCAL.update(at=0.0, providers=[])
     ledger.credit(4001, 1000 * 10**6, "deposit")
     ledger.create_market(4001, "Кто победит?", ["Алиса", "Боб"], 50 * 10**6)
     s = RecorderSession()
