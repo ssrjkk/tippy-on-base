@@ -60,6 +60,20 @@
       </aside>
     </section>
 
+    <!-- A pricing product opens with prices. The same /api/stats the cabinet
+         reads, drawn as a hairline strip straight under the hero: this is where a
+         visitor decides whether anything real happens here. -->
+    <section class="hero-metrics reveal" id="metrics" aria-label="Метрики сети">
+      <div class="stats" id="stats">
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-volume">–</div><div class="stat-label">Объём, USDC</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-vol30">–</div><div class="stat-label">Объём за 30 дней, USDC</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-users">–</div><div class="stat-label">Пользователей</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-markets">–</div><div class="stat-label">Открытых ставок-пулов</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-tx">–</div><div class="stat-label">Транзакций</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-fees">–</div><div class="stat-label">Собрано комиссий, USDC</div></div>
+      </div>
+    </section>
+
     <section class="section reveal" id="workspace-section">
       <span class="eyebrow">Кабинет</span>
       <h2>Баланс, чаевые и позиции</h2>
@@ -310,21 +324,14 @@
       </div>
     </section>
 
-    <section class="section section--band reveal" id="metrics">
-      <span class="eyebrow">Метрики</span>
-      <div class="stats" id="stats">
-        <div class="stat-card"><div class="stat-value skeleton" id="stat-volume">–</div><div class="stat-label">Объём, USDC</div></div>
-        <div class="stat-card"><div class="stat-value skeleton" id="stat-vol30">–</div><div class="stat-label">Объём за 30 дней, USDC</div></div>
-        <div class="stat-card"><div class="stat-value skeleton" id="stat-users">–</div><div class="stat-label">Пользователей</div></div>
-        <div class="stat-card"><div class="stat-value skeleton" id="stat-markets">–</div><div class="stat-label">Открытых ставок-пулов</div></div>
-        <div class="stat-card"><div class="stat-value skeleton" id="stat-tx">–</div><div class="stat-label">Транзакций</div></div>
-        <div class="stat-card"><div class="stat-value skeleton" id="stat-fees">–</div><div class="stat-label">Собрано комиссий, USDC</div></div>
-      </div>
-    </section>
-
     <section class="section section--band reveal" id="volume-chart-section">
-      <span class="eyebrow">Объём</span>
-      <h2>Последние 14 дней</h2>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Объём</span>
+          <h2>Последние 14 дней</h2>
+        </div>
+        <p class="hint">Дневные суммы USDC по факту: чаевые, покупка долей LMSR и ставки в пулы.</p>
+      </div>
       <div class="chart" id="volume-chart">
         <div class="skeleton-bar"></div>
         <div class="skeleton-bar"></div>
@@ -337,13 +344,17 @@
     </section>
 
     <section class="section reveal" id="predictions">
-      <span class="eyebrow">Рынки</span>
-      <h2>Предсказания на LMSR</h2>
-      <p class="hint">
-        Цены долей задаёт LMSR — логарифмический маркет-мейкер: каждая покупка
-        сдвигает котировку, поэтому цена и есть вероятность, а не ручная оценка.
-        Торгуете внутренним балансом в USDC, без газа.
-      </p>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Рынки</span>
+          <h2>Предсказания на LMSR</h2>
+        </div>
+        <p class="hint">
+          Цены долей задаёт LMSR — логарифмический маркет-мейкер: каждая покупка
+          сдвигает котировку, поэтому цена и есть вероятность, а не ручная оценка.
+          Торгуете внутренним балансом в USDC, без газа.
+        </p>
+      </div>
       <div class="markets" id="predictions-list">
         <div class="skeleton-card"></div>
         <div class="skeleton-card"></div>
@@ -351,13 +362,17 @@
     </section>
 
     <section class="section reveal" id="markets">
-      <span class="eyebrow">Ставки</span>
-      <h2>Пулы по парамутюэлю</h2>
-      <p class="hint">
-        Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
-        выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
-        всего пула; не выбранный исход обнуляется.
-      </p>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Ставки</span>
+          <h2>Пулы по парамутюэлю</h2>
+        </div>
+        <p class="hint">
+          Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
+          выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
+          всего пула; не выбранный исход обнуляется.
+        </p>
+      </div>
       <div class="markets" id="markets-list">
         <div class="skeleton-card"></div>
         <div class="skeleton-card"></div>
@@ -403,14 +418,18 @@
     </section>
 
     <section class="section section--band reveal" id="commands">
-      <span class="eyebrow">Telegram</span>
-      <h2>Команды бота</h2>
-      <p class="hint">
-        Тот же список, который бот регистрирует в меню Telegram через
-        <code>set_my_commands</code>, — сайт отдаёт его из того же источника,
-        поэтому команды здесь не могут разойтись с ботом. Нажмите на команду,
-        чтобы скопировать её.
-      </p>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Telegram</span>
+          <h2>Команды бота</h2>
+        </div>
+        <p class="hint">
+          Тот же список, который бот регистрирует в меню Telegram через
+          <code>set_my_commands</code>, — сайт отдаёт его из того же источника,
+          поэтому команды здесь не могут разойтись с ботом. Нажмите на команду,
+          чтобы скопировать её.
+        </p>
+      </div>
       <div class="cmd-groups" id="commands-grid">
         <div class="skeleton-card"></div>
       </div>
