@@ -23,9 +23,12 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from . import config
 
@@ -50,7 +53,12 @@ _SECRET_RE = re.compile(r"\b(?:sk|gsk|pk|or|api|key)[_-][A-Za-z0-9_-]{6,}")
 @dataclass(frozen=True)
 class Provider:
     """One chat-completions endpoint of the chain. `key` is resolved from the
-    environment on every read and is never stored anywhere."""
+    environment on every read and is never stored anywhere.
+
+    `keyless` marks an endpoint that is designed to work without a secret — a
+    model server on loopback, or the anonymous public fallback. Without that flag
+    "has no key" and "is not usable" are the same thing, and every keyless path
+    to an answer is unreachable by construction."""
 
     pid: str
     name: str
@@ -58,6 +66,8 @@ class Provider:
     model: str
     key_env: str
     key: str
+    keyless: bool = False
+    kind: str = "explicit"
 
     def persist(self) -> dict:
         """The fields that go into ai_provider — deliberately without `key`."""
@@ -98,7 +108,9 @@ def _normalize_url(raw: str) -> str:
     return url
 
 
-def _entry(name: str, url: str, key_env: str, model: str) -> Provider:
+def _entry(
+    name: str, url: str, key_env: str, model: str, *, keyless: bool = False, kind: str = "explicit"
+) -> Provider:
     return Provider(
         pid=_provider_id(name, url, model, key_env),
         name=name,
@@ -106,14 +118,104 @@ def _entry(name: str, url: str, key_env: str, model: str) -> Provider:
         model=model,
         key_env=key_env,
         key=(os.environ.get(key_env, "") or "").strip(),
+        keyless=keyless,
+        kind=kind,
     )
 
 
-def chain() -> list[Provider]:
-    """Every configured provider, key present or not, in the order to try them.
+# Services whose key is a well-known environment variable. A chain nobody edits is
+# a chain nobody uses: if the operator already holds a key for one of these, the
+# assistant finds it on its own, and a wrong default model name only costs one
+# parked attempt, not the answer.
+DISCOVERABLE_KEYS = {
+    "OPENAI_API_KEY": ("openai", "https://api.openai.com/v1", "gpt-4o-mini"),
+    "GROQ_API_KEY": ("groq", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    "OPENROUTER_API_KEY": ("openrouter", "https://openrouter.ai/api/v1", "meta-llama/llama-3.3-70b-instruct"),
+    "DEEPSEEK_API_KEY": ("deepseek", "https://api.deepseek.com/v1", "deepseek-chat"),
+    "MISTRAL_API_KEY": ("mistral", "https://api.mistral.ai/v1", "mistral-small-latest"),
+    "XAI_API_KEY": ("xai", "https://api.x.ai/v1", "grok-2-latest"),
+    "TOGETHER_API_KEY": ("together", "https://api.together.xyz/v1", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"),
+}
 
-    Malformed entries are skipped rather than raising: a typo in a fallback
-    provider must not take the working primary one with it.
+
+def _discovered() -> list[Provider]:
+    """Chain members built from keys that are already in the environment."""
+    if not config.AI_AUTODISCOVER_KEYS:
+        return []
+    out = []
+    for key_env, (name, url, model) in DISCOVERABLE_KEYS.items():
+        if not (os.environ.get(key_env, "") or "").strip():
+            continue
+        out.append(_entry(name, _normalize_url(url), key_env, model, kind="discovered"))
+    return out
+
+
+def _probe_local(base_url: str) -> str:
+    """The first model a local server advertises, or "" when nothing is listening.
+
+    Loopback only, one request, a short timeout: this runs while a user waits for
+    an answer, so a hung server must cost milliseconds, not the question. The
+    parsing is inside the guard because "a server that speaks OpenAI" is a
+    convention, not a contract — some answer a bare list, or a list of strings."""
+    try:
+        request = urllib.request.Request(base_url.rstrip("/") + "/models", headers={"user-agent": "tippy/1.0"})
+        with urllib.request.urlopen(request, timeout=config.AI_LOCAL_PROBE_TIMEOUT) as resp:
+            payload = json.loads(resp.read().decode("utf-8", "replace"))
+        if isinstance(payload, dict):
+            models = payload.get("data") or payload.get("models") or []
+        else:
+            models = payload  # a bare list of model names
+        for model in models if isinstance(models, list) else []:
+            if isinstance(model, str):
+                identifier = model
+            else:
+                identifier = str((model or {}).get("id") or (model or {}).get("name") or "")
+            if identifier.strip():
+                return identifier.strip()
+    except Exception:
+        return ""
+    return ""
+
+
+_LOCAL: dict = {"at": 0.0, "providers": []}
+_LOCAL_LOCK = threading.Lock()
+
+
+def _local_servers() -> list[Provider]:
+    """Model servers running on this host, re-probed on a schedule.
+
+    Ollama, LM Studio, vLLM and llama.cpp's server all answer GET /v1/models, so
+    one probe covers the field. The TTL is what makes "start a model later" work:
+    the assistant notices within AI_LOCAL_REPROBE_SECONDS without a restart, and a
+    server that goes away simply stops being offered."""
+    now = time.monotonic()
+    with _LOCAL_LOCK:
+        if now - _LOCAL["at"] < config.AI_LOCAL_REPROBE_SECONDS:
+            return list(_LOCAL["providers"])
+        found = []
+        for raw in config.AI_LOCAL_SERVERS.split(","):
+            base = _normalize_url(raw)
+            if not base:
+                continue
+            model = _probe_local(base)
+            if model:
+                found.append(
+                    _entry(f"local:{urlparse(base).port or 'srv'}", base, "", model,
+                           keyless=True, kind="local")
+                )
+        _LOCAL["at"] = now
+        _LOCAL["providers"] = found
+        return list(found)
+
+
+def chain() -> list[Provider]:
+    """Every provider worth trying, in the order to try them.
+
+    Explicit configuration first — if the operator named a chain, that is the
+    intent. Then keys found in the environment, then a model server on this host,
+    then the anonymous public fallback. Malformed entries are skipped rather than
+    raising: a typo in a fallback provider must not take the working primary one
+    with it.
     """
     out = [_entry("primary", _normalize_url(config.AI_API_URL), "AI_API_KEY", config.AI_MODEL)]
     for raw_entry in config.AI_PROVIDER_CHAIN.split(","):
@@ -125,6 +227,13 @@ def chain() -> list[Provider]:
             continue
         name, url, key_env, model = parts
         out.append(_entry(name, _normalize_url(url), key_env, model))
+    out.extend(_discovered())
+    out.extend(_local_servers())
+    if config.AI_FREE_ENDPOINT:
+        out.append(
+            _entry("public", _normalize_url(config.AI_FREE_URL), "", config.AI_FREE_MODEL,
+                   keyless=True, kind="free")
+        )
     seen: set[str] = set()
     unique = []
     for p in out:
@@ -135,8 +244,8 @@ def chain() -> list[Provider]:
 
 
 def configured() -> list[Provider]:
-    """Providers that could be called right now — a name, a URL and a key in hand."""
-    return [p for p in chain() if p.key]
+    """Providers that could be called right now: a key in hand, or none needed."""
+    return [p for p in chain() if p.key or p.keyless]
 
 
 def candidates() -> list[Provider]:
@@ -188,13 +297,15 @@ def _park_seconds(status: int) -> int:
 def _post(provider: Provider, payload: dict) -> dict:
     """One chat-completions call. Raises ProviderError on anything the caller
     should not retry against the same endpoint."""
+    headers = {"Content-Type": "application/json"}
+    # A local model server and the anonymous fallback have no credential to send,
+    # and an empty Bearer header is how both of them get a 401.
+    if provider.key:
+        headers["Authorization"] = f"Bearer {provider.key}"
     req = urllib.request.Request(
         f"{provider.url}/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {provider.key}",
-        },
+        headers=headers,
         method="POST",
     )
     try:
@@ -500,6 +611,9 @@ def status() -> dict:
                 "model": p.model,
                 "key_env": p.key_env,
                 "key_present": bool(p.key),
+                "keyless": p.keyless,
+                "kind": p.kind,
+                "usable": bool(p.key or p.keyless),
                 "parked": bool(by_id.get(p.pid, {}).get("parked")),
                 "last_error": by_id.get(p.pid, {}).get("last_error"),
             }

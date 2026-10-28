@@ -188,6 +188,28 @@ AI_MODEL: str = os.environ.get("AI_MODEL", "openai/gpt-oss-120b")
 # provider health is persisted in the DB, and a key must not land in a row.
 # Empty means the AI_API_URL / AI_API_KEY / AI_MODEL triple above is the chain.
 AI_PROVIDER_CHAIN: str = os.environ.get("AI_PROVIDERS", "").strip()
+# Keys the assistant is allowed to look for on its own. bot/ai.py:DISCOVERABLE_KEYS
+# names the variables and their endpoints; a key that is already in the environment
+# becomes a chain member without anyone editing AI_PROVIDERS.
+AI_AUTODISCOVER_KEYS: bool = os.environ.get("AI_AUTODISCOVER", "1").strip() not in ("0", "", "false")
+# Model servers on this host. All four speak GET /v1/models, so a server started
+# after the bot booted is picked up on the next probe — no restart, no config.
+AI_LOCAL_SERVERS: str = os.environ.get(
+    "AI_LOCAL_SERVERS",
+    "http://127.0.0.1:11434/v1,http://127.0.0.1:1234/v1,http://127.0.0.1:8080/v1",
+).strip()
+AI_LOCAL_REPROBE_SECONDS: int = int(os.environ.get("AI_LOCAL_REPROBE_SECONDS", "120"))
+# A port with nothing behind it refuses in microseconds; the timeout only buys
+# protection against something listening and not answering, and this runs while a
+# user waits for their answer.
+AI_LOCAL_PROBE_TIMEOUT: float = float(os.environ.get("AI_LOCAL_PROBE_TIMEOUT", "0.4"))
+# The last member of the chain: a public OpenAI-compatible endpoint that needs no
+# account. It is what keeps the assistant speaking like a model when nobody has
+# pasted a key and no local server runs — at the cost of the question text leaving
+# this machine. Set AI_FREE_ENDPOINT=0 to keep every answer on the ledger path.
+AI_FREE_ENDPOINT: bool = os.environ.get("AI_FREE_ENDPOINT", "1").strip() not in ("0", "false")
+AI_FREE_URL: str = os.environ.get("AI_FREE_URL", "https://text.pollinations.ai/openai").strip()
+AI_FREE_MODEL: str = os.environ.get("AI_FREE_MODEL", "openai").strip()
 AI_TIMEOUT_SECONDS: int = int(os.environ.get("AI_TIMEOUT_SECONDS", "45"))
 AI_COOLDOWN_SECONDS: int = int(os.environ.get("AI_COOLDOWN_SECONDS", "15"))
 AI_MAX_QUESTION_LEN: int = int(os.environ.get("AI_MAX_QUESTION_LEN", "1000"))

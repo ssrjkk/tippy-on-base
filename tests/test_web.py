@@ -1299,13 +1299,19 @@ def test_prod_health_workflow_fails_instead_of_skipping():
 
 
 def _no_provider(monkeypatch):
-    """Pretend the machine has no AI keys at all — the state the demo site is
-    actually in, and the state the no-model answer path exists for."""
+    """Pretend nothing can serve a model answer: no key anywhere, no model server
+    on this host and no public fallback. That is the state the no-model answer
+    path exists for, and the only state in which /api/info may say "data" —
+    with a fallback enabled the assistant does run on a model, which is the point."""
     from bot import ai
     from web import server
 
     monkeypatch.delenv("AI_API_KEY", raising=False)
     monkeypatch.setattr(ai.config, "AI_PROVIDER_CHAIN", "")
+    monkeypatch.setattr(ai.config, "AI_AUTODISCOVER_KEYS", False)
+    monkeypatch.setattr(ai.config, "AI_FREE_ENDPOINT", False)
+    monkeypatch.setattr(ai.config, "AI_LOCAL_SERVERS", "")
+    ai._LOCAL.update(at=0.0, providers=[])
     monkeypatch.setattr(server.config, "AI_COOLDOWN_SECONDS", 0)
 
 

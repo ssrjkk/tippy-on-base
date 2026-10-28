@@ -715,10 +715,18 @@ def test_cb_mk_resolve_rejects_non_creator(ledger):
 
 
 def test_ask_without_a_key_answers_from_the_ledger(ledger, monkeypatch):
-    """/ask used to be one empty env var away from being useless. With no
-    provider configured it now reads the answer out of the ledger instead."""
+    """/ask used to be one empty env var away from being useless. With no provider
+    at all it reads the answer out of the ledger instead.
+
+    "No provider" now means more than an empty AI_API_KEY: the chain fills itself
+    from the environment, from a local model server and from the keyless public
+    fallback, so this test has to switch all three off to reach the no-model path."""
     monkeypatch.delenv("AI_API_KEY", raising=False)
     monkeypatch.setattr(ai_mod.config, "AI_PROVIDER_CHAIN", "")
+    monkeypatch.setattr(ai_mod.config, "AI_AUTODISCOVER_KEYS", False)
+    monkeypatch.setattr(ai_mod.config, "AI_FREE_ENDPOINT", False)
+    monkeypatch.setattr(ai_mod.config, "AI_LOCAL_SERVERS", "")
+    ai_mod._LOCAL.update(at=0.0, providers=[])
     mid = make_market(ledger)
     m = Message("/ask какие рынки открыты?")
     run(cmd_ask(m))

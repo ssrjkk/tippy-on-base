@@ -24,17 +24,29 @@ def run(coro):
 
 @pytest.fixture(autouse=True)
 def _isolated_providers(monkeypatch):
-    """No test inherits the machine's real .env keys or a fallback chain."""
+    """No test inherits the machine's real .env keys, a local model server or the
+    public fallback. The chain tests below are about order and parking; the
+    auto-discovered members are covered by their own tests, which switch them on."""
     monkeypatch.setattr(ai.config, "AI_PROVIDER_CHAIN", "")
     monkeypatch.delenv("AI_API_KEY", raising=False)
     monkeypatch.setenv("AI_API_URL", "https://primary.invalid/v1")
     monkeypatch.setattr(ai.config, "AI_API_URL", "https://primary.invalid/v1")
+    _off(monkeypatch)
     yield
+
+
+def _off(monkeypatch):
+    """Every automatic source of providers, switched off."""
+    monkeypatch.setattr(ai.config, "AI_AUTODISCOVER_KEYS", False)
+    monkeypatch.setattr(ai.config, "AI_FREE_ENDPOINT", False)
+    monkeypatch.setattr(ai.config, "AI_LOCAL_SERVERS", "")
+    ai._LOCAL.update(at=0.0, providers=[])
 
 
 def _no_model(monkeypatch):
     monkeypatch.delenv("AI_API_KEY", raising=False)
     monkeypatch.setattr(ai.config, "AI_PROVIDER_CHAIN", "")
+    _off(monkeypatch)
 
 
 # ---------- the chain ----------
@@ -70,6 +82,134 @@ def test_both_endpoint_spellings_reach_the_same_provider(monkeypatch):
     )
     full = next(p for p in ai.chain() if p.name == "full")
     assert full.url == "https://e.invalid/v1"
+
+
+# ---------- what the chain finds by itself ----------
+
+
+def test_a_key_already_in_the_environment_becomes_a_provider(monkeypatch):
+    """Nobody edited AI_PROVIDERS here. The point of the map in bot/ai.py is that
+    an operator who holds a key for a known service gets it used, verified against
+    the real endpoint, and parked by the same rules as a hand-written entry."""
+    monkeypatch.setattr(ai.config, "AI_AUTODISCOVER_KEYS", True)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_fake_for_test")
+    found = {p.name: p for p in ai.chain()}
+    assert "groq" in found
+    assert found["groq"].key == "gsk_fake_for_test"
+    assert found["groq"].kind == "discovered"
+    assert "groq" in [p.name for p in ai.configured()]
+
+
+def test_an_empty_environment_variable_is_not_a_provider(monkeypatch):
+    monkeypatch.setattr(ai.config, "AI_AUTODISCOVER_KEYS", True)
+    monkeypatch.setenv("OPENAI_API_KEY", "   ")
+    assert "openai" not in [p.name for p in ai.chain()]
+
+
+def test_a_local_model_server_joins_the_chain_without_a_key(monkeypatch):
+    """Ollama, LM Studio, vLLM and llama.cpp all answer GET /v1/models, so starting
+    one on this host is enough — the assistant finds it and needs no credential."""
+    monkeypatch.setattr(ai.config, "AI_LOCAL_SERVERS", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(ai, "_probe_local", lambda base: "qwen2.5:1.5b")
+    local = [p for p in ai.chain() if p.kind == "local"]
+    assert [(p.url, p.model, p.keyless) for p in local] == [
+        ("http://127.0.0.1:11434/v1", "qwen2.5:1.5b", True)
+    ]
+    assert local[0].pid in {p.pid for p in ai.configured()}
+
+
+def test_a_server_that_is_not_there_offers_nothing(monkeypatch):
+    monkeypatch.setattr(ai.config, "AI_LOCAL_SERVERS", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(ai, "_probe_local", lambda base: "")
+    assert [p for p in ai.chain() if p.kind == "local"] == []
+    assert ai.configured() == []
+
+
+def test_the_probe_is_repeated_only_after_its_ttl(monkeypatch):
+    """Probing happens while a user waits for an answer, so it is cached — but a
+    server started later has to be noticed without a restart."""
+    calls = []
+    monkeypatch.setattr(ai.config, "AI_LOCAL_SERVERS", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(ai.config, "AI_LOCAL_REPROBE_SECONDS", 120)
+    monkeypatch.setattr(ai, "_probe_local", lambda base: calls.append(base) or "m1")
+    ai.chain()
+    ai.chain()
+    ai.chain()
+    assert len(calls) == 1
+    monkeypatch.setattr(ai.config, "AI_LOCAL_REPROBE_SECONDS", 0)
+    ai.chain()
+    assert len(calls) == 2
+
+
+def test_the_public_fallback_is_last_and_needs_no_key(monkeypatch):
+    monkeypatch.setattr(ai.config, "AI_PROVIDER_CHAIN", "backup|https://b.invalid/v1|BK|m2")
+    monkeypatch.setenv("BK", "k2")
+    monkeypatch.setattr(ai.config, "AI_FREE_ENDPOINT", True)
+    monkeypatch.setattr(ai.config, "AI_FREE_URL", "https://free.invalid/v1")
+    members = ai.chain()
+    assert members[-1].kind == "free"
+    assert members[-1].key == "" and members[-1].keyless is True
+    # A configured provider is still tried before the anonymous one.
+    assert [p.name for p in members] == ["primary", "backup", "public"]
+
+
+def test_a_keyless_request_carries_no_authorization_header(monkeypatch):
+    """`Bearer ` with an empty token is how a local server and an anonymous
+    endpoint answer 401, which then parks a provider that was never broken."""
+    captured = {}
+
+    class FakeResponse(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["headers"] = dict(req.headers)
+        return FakeResponse(b'{"choices":[{"message":{"role":"assistant","content":"ok"}}]}')
+
+    monkeypatch.setattr(ai.config, "AI_FREE_ENDPOINT", True)
+    provider = next(p for p in ai.chain() if p.kind == "free")
+    monkeypatch.setattr(ai.urllib.request, "urlopen", fake_urlopen)
+    ai._post(provider, {"model": "m", "messages": []})
+    assert not any("uthorization" in k for k in captured["headers"]), captured["headers"]
+
+
+def test_status_says_why_a_member_cannot_be_used(monkeypatch):
+    monkeypatch.setattr(ai.config, "AI_PROVIDER_CHAIN", "backup|https://b.invalid/v1|BK|m2")
+    monkeypatch.delenv("BK", raising=False)
+    monkeypatch.setattr(ai.config, "AI_FREE_ENDPOINT", True)
+    state = ai.status()
+    by_name = {p["name"]: p for p in state["providers"]}
+    assert by_name["backup"]["usable"] is False
+    assert by_name["backup"]["key_present"] is False
+    assert by_name["public"]["usable"] is True and by_name["public"]["keyless"] is True
+    assert state["mode"] == "llm"
+
+
+def test_the_probe_survives_every_shape_a_local_server_may_answer(monkeypatch):
+    """/v1/models is a convention, not a contract: Ollama and vLLM return
+    {"data":[{...}]}, some llama.cpp builds return a bare list, and a malformed
+    answer must cost the assistant nothing — not a 500 on the question."""
+    class FakeResponse(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def serve(body: bytes):
+        monkeypatch.setattr(ai.urllib.request, "urlopen", lambda req, timeout=None: FakeResponse(body))
+
+    serve(b'{"data":[{"id":"qwen2.5:3b"}]}')
+    assert ai._probe_local("http://127.0.0.1:11434/v1") == "qwen2.5:3b"
+    serve(b'["llama-3.2-1b"]')
+    assert ai._probe_local("http://127.0.0.1:11434/v1") == "llama-3.2-1b"
+    serve(b'{"error":"no models loaded"}')
+    assert ai._probe_local("http://127.0.0.1:11434/v1") == ""
+    serve(b"<html>not json</html>")
+    assert ai._probe_local("http://127.0.0.1:11434/v1") == ""
 
 
 def test_a_bad_credential_is_parked_longer_than_a_rate_limit():

@@ -125,12 +125,29 @@ else:
     if x402_recv:
         WARNINGS.append("X402_RECEIVE_ADDRESS is set but X402_ENABLED != 1 — x402 payments stay disabled")
 
-# --- AI agent ---
+# --- AI assistant ---
 ai_key = os.environ.get("AI_API_KEY", "").strip()
-if not ai_key:
-    WARNINGS.append("AI_API_KEY is not set — /ask answers from ledger data only, no model")
-elif len(ai_key) < 8:
+if ai_key and len(ai_key) < 8:
     ERRORS.append("AI_API_KEY looks too short (must be >= 8 chars)")
+# One env var no longer decides whether the assistant has a model: the chain in
+# bot/ai.py also takes keys found in the environment, a model server answering
+# /v1/models on this host, and a keyless public fallback. So the validator asks
+# that code what it will do instead of guessing from AI_API_KEY.
+try:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from bot import ai as _ai
+
+    ready = _ai.configured()
+    if ready:
+        print("AI providers ready: " + ", ".join(f"{p.name}[{p.kind}]" for p in ready))
+    else:
+        WARNINGS.append(
+            "no AI provider answers right now — /ask replies from ledger data "
+            "(set AI_PROVIDERS or a provider key, run a local model server, or leave "
+            "AI_FREE_ENDPOINT=1)"
+        )
+except Exception as exc:  # the chain itself is not a deployment error
+    print(f"AI chain not inspected: {type(exc).__name__}: {exc}")
 
 # --- EAS attestations (agent) ---
 optional("EAS_SCHEMA_UID", r"0x[0-9a-fA-F]{64}", msg="must be 0x + 64 hex (registered EAS schema UID)")

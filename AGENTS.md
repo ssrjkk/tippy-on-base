@@ -67,8 +67,11 @@
 - The AI daily answer budget and provider health are DB rows (`ai_usage_day`, `ai_provider` in
   `bot/ledger/_ai.py`), never module dicts: uvicorn, the bot and the agent spend **one** limit. A key
   is read from `os.environ` by name (`AI_PROVIDERS=name|url|KEY_ENV|model`) — `ai_provider` stores the
-  variable's name, not the secret. `/ask` has no "AI disabled" state: when no model answers it serves
-  ledger data (`bot/ai_data.py`) and says so.
+  variable's name, not the secret. The chain also fills itself: keys already in the environment
+  (`bot/ai.py:DISCOVERABLE_KEYS`), any model server answering `GET /v1/models` on loopback (re-probed on
+  a TTL, so starting Ollama needs no restart), and one keyless public fallback. `AI_FREE_ENDPOINT=0` is
+  the switch for the only member that sends question text off this host. `/ask` has no "AI disabled"
+  state: when no model answers it serves ledger data (`bot/ai_data.py`) and says so.
 - No new module, mixin or migration lands unless it is called from the live runtime path in the same
   change; verify with a repository-wide grep that excludes its own definition and its tests.
 

@@ -114,6 +114,8 @@ class TestE2EAgentCycle:
 
         with patch("agent.main.fetch_news", return_value=[mock_news]), \
              patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("bot.ai.config.AI_LOCAL_SERVERS", ""), \
+             patch("bot.ai._LOCAL", {"at": 0.0, "providers": []}), \
              patch("agent.tools.ledger", mock_ledger), \
              patch("agent.signals.ledger", mock_ledger), \
              patch("bot.ledger.ledger", mock_ledger):
