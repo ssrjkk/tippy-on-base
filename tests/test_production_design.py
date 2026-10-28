@@ -22,7 +22,6 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from test_design_system import APP_HTML, CSS, mono_class_tokens
 
 pytestmark = pytest.mark.production
@@ -315,7 +314,13 @@ def measure(browser, path, theme, viewport, xff, touch=False):
     third-party CDN — Google Fonts is one — is a property of the network the
     suite runs on, not of the product, and treating it as a design failure would
     train everyone to ignore the red.
+
+    `playwright` is imported inside the function on purpose: the ordinary CI job
+    has no playwright installed and collects this module to deselect it, and a
+    module-level import turned that collection into an ImportError.
     """
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
     page_errors = []
     broken = []
 
@@ -481,6 +486,8 @@ def walk_mini_app(browser, *, theme, viewport, xff):
     """
     context = open_context(browser, theme=theme, viewport=viewport, xff=xff, touch=True)
     try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
         if SESSION_COOKIE:
             context.add_cookies([{"name": session_cookie_name(), "value": SESSION_COOKIE, "url": PROD_URL}])
         page = context.new_page()
