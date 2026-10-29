@@ -489,3 +489,7 @@ python -m uvicorn web.server:app          # dashboard only, on WEB_HOST:WEB_PORT
 The dashboard listens on `WEB_HOST:WEB_PORT` (`0.0.0.0:8000` by default) and the
 bot answers in Telegram; `docs/DEPLOY.md` covers the server, `docs/CLOUDFLARE.md`
 the Pages front.
+
+---
+
+**SSRJKK** — [GitHub](https://github.com/ssrjkk) · [Telegram](https://t.me/ssrjkk) · [Projects hub](https://ssrjkk.github.io/) · [Bot catalogue](https://t.me/ssrjkk_bot)
