@@ -394,6 +394,27 @@ class LedgerViewsMixin:
 
 
 
+    def top_balances(self, limit: int = 5) -> list[dict]:
+        """The largest liabilities, by stored balance. Not the leaderboard:
+        that one ranks tips sent, and an operator sizing the treasury needs to
+        see whom the ledger owes the most, whether or not they ever tipped."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT tg_id, balance FROM users ORDER BY balance DESC, tg_id LIMIT %s",
+                (limit,),
+            ).fetchall()
+        names = self.usernames_bulk([int(r["tg_id"]) for r in rows])
+        return [
+            {
+                "tg_id": int(r["tg_id"]),
+                "username": names[int(r["tg_id"])],
+                "balance_micro": int(r["balance"]),
+            }
+            for r in rows
+        ]
+
+
+
     def user_view(self, tg_id: int) -> dict | None:
         self.ensure_user(tg_id, None)
         sent, received, won, lost = self.user_stats(tg_id)

@@ -72,6 +72,10 @@
   a TTL, so starting Ollama needs no restart), and one keyless public fallback. `AI_FREE_ENDPOINT=0` is
   the switch for the only member that sends question text off this host. `/ask` has no "AI disabled"
   state: when no model answers it serves ledger data (`bot/ai_data.py`) and says so.
+- `/admin` is the owner's panel (`OWNER_ID`, falling back to `ADMIN_TG_ID`): every screen is a batch
+  of SELECTs, it rolls the shared connection back afterwards, and it refuses to render outside a
+  private chat. `tests/test_admin.py` fails if the panel grows a ledger call outside its read-only
+  allowlist.
 - No new module, mixin or migration lands unless it is called from the live runtime path in the same
   change; verify with a repository-wide grep that excludes its own definition and its tests.
 

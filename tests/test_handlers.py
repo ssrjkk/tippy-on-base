@@ -2741,9 +2741,9 @@ def test_deposit_has_disclaimer(ledger):
 
 
 # Commands the dispatcher answers but the user menu must not list: /start is
-# Telegram's own entry point, the rest are gated on ADMIN_TG_ID or the oracle
-# role, so autocompleting them would only invite "not authorized".
-OPERATOR_COMMANDS = {"start", "agent", "broadcast", "oc_resolve"}
+# Telegram's own entry point, the rest are gated on OWNER_ID / ADMIN_TG_ID or the
+# oracle role, so autocompleting them would only invite "not authorized".
+OPERATOR_COMMANDS = {"start", "agent", "admin", "broadcast", "oc_resolve"}
 
 
 def test_every_user_command_is_in_the_menu():

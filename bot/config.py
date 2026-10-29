@@ -127,6 +127,13 @@ WITHDRAW_LARGE_USDC_THRESHOLD: int = int(os.environ.get("WITHDRAW_LARGE_USDC_THR
 
 # Owner/announcements (/broadcast) — Telegram numeric ID
 ADMIN_TG_ID: int | None = int(os.environ.get("ADMIN_TG_ID", "0") or "0") or None
+# The single account allowed to open /admin. OWNER_ID is the name this project
+# standardises on; ADMIN_TG_ID keeps working so an existing deployment does not
+# silently lose its operator. One answer, not a list: the panel's gate is an
+# equality test.
+OWNER_ID: int | None = (
+    int(os.environ.get("OWNER_ID", "") or "0") or ADMIN_TG_ID or None
+)
 
 # Group rain (/rain <amount> [count]) — giveaway, pure transfers
 RAIN_MAX_USDC: Decimal = Decimal(os.environ.get("RAIN_MAX_USDC", "100"))

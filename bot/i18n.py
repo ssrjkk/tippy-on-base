@@ -2593,6 +2593,128 @@ STRINGS: dict[str, dict[str, str]] = {
     "kind_market_sell": {"ru": "Продажа долей", "en": "Share sale", "zh": "出售份额"},
     "kind_market_win": {"ru": "Выплата по рынку", "en": "Market payout", "zh": "市场派息"},
     "kind_market_cancel": {"ru": "Возврат по рынку", "en": "Market refund", "zh": "市场退款"},
+
+    # ---------- /admin: the owner's panel (bot/handlers/admin.py) ----------
+    # Read-only screens. The numbers are deliberately terse: this is a chat window,
+    # not the web dashboard, and an operator reads it with one thumb.
+    "admin_title": {"ru": "🛠 Админ-панель", "en": "🛠 Admin panel", "zh": "🛠 管理面板"},
+    "admin_denied": {
+        "ru": "Команда доступна только владельцу бота.",
+        "en": "This command is for the bot owner.",
+        "zh": "该命令仅机器人所有者可用。",
+    },
+    "admin_error": {
+        "ru": "Не удалось собрать данные: {err}",
+        "en": "Could not load the data: {err}",
+        "zh": "无法加载数据：{err}",
+    },
+    "admin_btn_summary": {"ru": "📊 Сводка", "en": "📊 Summary", "zh": "📊 概览"},
+    "admin_btn_ai": {"ru": "🤖 ИИ", "en": "🤖 AI", "zh": "🤖 AI"},
+    "admin_btn_treasury": {"ru": "💰 Казна", "en": "💰 Treasury", "zh": "💰 国库"},
+    "admin_btn_markets": {"ru": "🎯 Рынки", "en": "🎯 Markets", "zh": "🎯 市场"},
+    "admin_btn_agent": {"ru": "🛰 Агент", "en": "🛰 Agent", "zh": "🛰 代理"},
+    "admin_users": {"ru": "Пользователей: {n}", "en": "Users: {n}", "zh": "用户数：{n}"},
+    "admin_volume": {
+        "ru": "Объём: {v} USDC (за 30 дней: {v30})",
+        "en": "Volume: {v} USDC (30 days: {v30})",
+        "zh": "交易量：{v} USDC（30 天：{v30}）",
+    },
+    "admin_tips_fees": {
+        "ru": "Чаевые: {tips} · Комиссии: {fees} USDC",
+        "en": "Tips: {tips} · Fees: {fees} USDC",
+        "zh": "打赏：{tips} · 手续费：{fees} USDC",
+    },
+    "admin_txs": {
+        "ru": "Переводов: {n} · Открытых рынков: {markets}",
+        "en": "Movements: {n} · Open markets: {markets}",
+        "zh": "转账数：{n} · 开放市场：{markets}",
+    },
+    "admin_owed": {
+        "ru": "Обязательства: {v} USDC (в ожидании: {pending})",
+        "en": "Liabilities: {v} USDC (pending: {pending})",
+        "zh": "负债：{v} USDC（待入账：{pending}）",
+    },
+    "admin_ai_budget": {
+        "ru": "Ответов ИИ сегодня: {n} из {limit}",
+        "en": "AI answers today: {n} of {limit}",
+        "zh": "今日 AI 回答：{n} / {limit}",
+    },
+    "admin_lag": {
+        "ru": "Отставание сканера депозитов: {n} блоков",
+        "en": "Deposit scanner lag: {n} blocks",
+        "zh": "存款扫描延迟：{n} 个区块",
+    },
+    "admin_ai_mode": {
+        "ru": "Ассистент работает на: {mode}",
+        "en": "Assistant runs on: {mode}",
+        "zh": "助手当前模式：{mode}",
+    },
+    "admin_parked": {"ru": "припаркован: {err}", "en": "parked: {err}", "zh": "已暂停：{err}"},
+    "admin_hot_wallet": {
+        "ru": "Хот-кошелёк: {v} USDC",
+        "en": "Hot wallet: {v} USDC",
+        "zh": "热钱包：{v} USDC",
+    },
+    "admin_vault": {
+        "ru": "Ончейн-хранилище: {v} USDC",
+        "en": "On-chain vault: {v} USDC",
+        "zh": "链上金库：{v} USDC",
+    },
+    "admin_solvent_yes": {
+        "ru": "Резервов хватает: запас {v} USDC",
+        "en": "Reserves cover the liabilities: {v} USDC spare",
+        "zh": "储备充足：盈余 {v} USDC",
+    },
+    "admin_solvent_no": {
+        "ru": "⚠ Резервов не хватает: {v} USDC",
+        "en": "⚠ Reserves fall short: {v} USDC",
+        "zh": "⚠ 储备不足：{v} USDC",
+    },
+    "admin_top_balances": {"ru": "Топ балансов", "en": "Top balances", "zh": "余额排行"},
+    "admin_pending_withdraws": {
+        "ru": "Выводов в очереди: {n}",
+        "en": "Withdrawals queued: {n}",
+        "zh": "排队提现：{n}",
+    },
+    "admin_amm_head": {"ru": "Рынки LMSR", "en": "LMSR markets", "zh": "LMSR 市场"},
+    "admin_pool_head": {"ru": "Ставки-пулы", "en": "Pool bets", "zh": "奖池投注"},
+    "admin_liquidity": {"ru": "ликвидность {v}", "en": "liquidity {v}", "zh": "流动性 {v}"},
+    "admin_pot": {"ru": "банк {v}", "en": "pot {v}", "zh": "奖池 {v}"},
+    "admin_overdue": {
+        "ru": "Дедлайн прошёл, ждут разрешения: {n}",
+        "en": "Past their deadline, awaiting resolution: {n}",
+        "zh": "已过期待结算：{n}",
+    },
+    "admin_nothing_open": {
+        "ru": "Открытых рынков нет",
+        "en": "No open markets",
+        "zh": "暂无开放市场",
+    },
+    "admin_agent_off": {
+        "ru": "Агент ещё не запускался — state-файла нет",
+        "en": "The agent has not run yet — no state file",
+        "zh": "代理尚未运行——没有状态文件",
+    },
+    "admin_agent_spend": {
+        "ru": "Потрачено сегодня: {v} из {limit} USDC",
+        "en": "Spent today: {v} of {limit} USDC",
+        "zh": "今日支出：{v} / {limit} USDC",
+    },
+    "admin_agent_actions": {
+        "ru": "Действий сегодня: {n}",
+        "en": "Actions today: {n}",
+        "zh": "今日操作：{n}",
+    },
+    "admin_agent_breaker": {
+        "ru": "⚠ Circuit breaker взведён — агент остановлен",
+        "en": "⚠ Circuit breaker is tripped — the agent is stopped",
+        "zh": "⚠ 熔断器已触发——代理已停止",
+    },
+    "admin_agent_last": {
+        "ru": "Последние действия агента",
+        "en": "The agent's last actions",
+        "zh": "代理最近的操作",
+    },
 }
 
 

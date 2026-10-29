@@ -243,6 +243,9 @@ def ledger(monkeypatch):
     async_fresh = ledger_mod.AsyncLedger(fresh)
     monkeypatch.setattr(ledger_mod, "async_ledger", async_fresh)
     monkeypatch.setattr(handlers._common, "ledger", async_fresh)
+    # admin.py binds the proxy by name at import, like _common does.
+    import bot.handlers.admin
+    monkeypatch.setattr(bot.handlers.admin, "ledger", async_fresh)
     # Web modules bind the singleton at import time; rebind them so web
     # tests are hermetic (test database, not whatever DATABASE_URL points to).
     # Wrap in AsyncLedger: the routes now `await ledger.x()`, so the injected

@@ -297,6 +297,7 @@ A plain-language walkthrough for Telegram users lives in
 | `/buytoken <id> <amount>` · `/claim <id>` | Buy tokens / claim dividends |
 | `/basename` | Claim a Basename (on-chain identity) |
 | `/settings` · `/language` · `/about` · `/app` | Notifications, ru/en/zh, what this is, Mini App |
+| `/admin` | Owner-only panel: users, volume, fees, treasury against liabilities, deposit-scanner lag, AI chain and its daily budget — read-only, private chat only |
 
 ## Architecture
 

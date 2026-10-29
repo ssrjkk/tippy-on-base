@@ -36,6 +36,7 @@ from ._common import (
     router,
     wallets,
 )
+from .admin import cb_admin, cmd_admin
 from .agent import cmd_agent
 from .ai import cmd_ask
 from .basename import cb_basename, cmd_basename
@@ -225,6 +226,7 @@ __all__ = [
     "_to_micro",
     "_top_text",
     "base",
+    "cb_admin",
     "cb_basename",
     "cb_bet_amount",
     "cb_bet_place",
@@ -246,6 +248,7 @@ __all__ = [
     "cb_wallet_new",
     "cb_wallet_sel",
     "cb_withdraw_confirm",
+    "cmd_admin",
     "cmd_agent",
     "cmd_ask",
     "cmd_balance",
