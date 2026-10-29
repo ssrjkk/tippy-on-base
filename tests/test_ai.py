@@ -141,6 +141,17 @@ def test_the_probe_is_repeated_only_after_its_ttl(monkeypatch):
     assert len(calls) == 2
 
 
+def test_the_first_probe_happens_on_a_freshly_booted_host(monkeypatch):
+    """time.monotonic() counts from boot, so on a just-started runner it is smaller
+    than the TTL. The empty cache then looks fresh and the probe never runs — the
+    assistant misses a model server that was already up when it started."""
+    monkeypatch.setattr(ai.time, "monotonic", lambda: 5.0)
+    monkeypatch.setattr(ai.config, "AI_LOCAL_SERVERS", "http://127.0.0.1:11434/v1")
+    monkeypatch.setattr(ai.config, "AI_LOCAL_REPROBE_SECONDS", 120)
+    monkeypatch.setattr(ai, "_probe_local", lambda base: "m1")
+    assert [p.model for p in ai.chain() if p.kind == "local"] == ["m1"]
+
+
 def test_the_public_fallback_is_last_and_needs_no_key(monkeypatch):
     monkeypatch.setattr(ai.config, "AI_PROVIDER_CHAIN", "backup|https://b.invalid/v1|BK|m2")
     monkeypatch.setenv("BK", "k2")

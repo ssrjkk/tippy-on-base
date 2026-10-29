@@ -177,6 +177,10 @@ def _probe_local(base_url: str) -> str:
     return ""
 
 
+# at == 0.0 means "never probed". It cannot be read as a timestamp: time.monotonic()
+# on a freshly booted host is smaller than the TTL, so `now - 0.0 < TTL` would call an
+# empty cache fresh and skip the first probe for minutes after boot — exactly when a
+# container or a CI runner starts and a model server is usually already up.
 _LOCAL: dict = {"at": 0.0, "providers": []}
 _LOCAL_LOCK = threading.Lock()
 
@@ -190,7 +194,7 @@ def _local_servers() -> list[Provider]:
     server that goes away simply stops being offered."""
     now = time.monotonic()
     with _LOCAL_LOCK:
-        if now - _LOCAL["at"] < config.AI_LOCAL_REPROBE_SECONDS:
+        if _LOCAL["at"] and now - _LOCAL["at"] < config.AI_LOCAL_REPROBE_SECONDS:
             return list(_LOCAL["providers"])
         found = []
         for raw in config.AI_LOCAL_SERVERS.split(","):
