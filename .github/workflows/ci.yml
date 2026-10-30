@@ -25,10 +25,30 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: "3.12"
-      - name: Install ruff
-        run: pip install ruff==0.16.4
+      - name: Install ruff (same pin as requirements-dev.txt)
+        run: pip install ruff==0.17.2
       - name: Ruff check (bot web tests deploy agent scripts)
         run: ruff check bot web tests deploy agent scripts
+
+  # The Dockerfile has moved to python:3.14 while the suite runs on 3.12, so a
+  # dependency without a 3.14 wheel and a syntax the new interpreter rejects
+  # would first appear in production. This job uses the same version as the
+  # image and checks that the pinned set installs and every module compiles.
+  runtime:
+    name: Runtime interpreter (3.14)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.14"
+      - name: Install the image's dependency set
+        run: pip install -r requirements.txt
+      - name: Import every pinned dependency
+        run: python -c "import aiogram, web3, fastapi, uvicorn, psycopg, cryptography, PIL, qrcode, alembic, aiohttp_socks, pythonjsonlogger, dotenv"
+      - name: Compile every module
+        run: python -m compileall -q bot web deploy agent
 
   test:
     name: Tests (pytest)

@@ -1,5 +1,5 @@
 """Breakthrough Base features: gasless paymaster, recurring payments, credit
-score, batch transactions.
+score.
 
 Made by @ssrjkk — github.com/ssrjkk.
 """
@@ -113,34 +113,3 @@ async def test_credit_score_bounds():
     assert 300 <= credit.score <= 850
     assert credit.grade in ["A", "B", "C", "D", "F"]
     assert await scorer.get_max_loan(123456) > 0
-
-
-@pytest.mark.asyncio
-async def test_batch_executor_runs_actions():
-    from bot.batch import ActionType, BatchAction, BatchExecutor
-
-    mock_ledger = MagicMock()
-    mock_ledger.tip = AsyncMock()
-    mock_ledger.bet = AsyncMock()
-    mock_ledger.create_market = AsyncMock(return_value=42)
-    mock_ledger._lock = MagicMock()
-
-    executor = BatchExecutor(mock_ledger)
-    result = await executor.execute_batch(
-        from_tg_id=123456,
-        actions=[
-            BatchAction(action_type=ActionType.TIP, params={
-                "to_tg_id": 789012,
-                "amount_micro": 5_000_000,
-                "memo": "Test tip",
-            }),
-            BatchAction(action_type=ActionType.CREATE_MARKET, params={
-                "question": "Test market?",
-                "options": ["Yes", "No"],
-            }),
-        ],
-    )
-    assert result.success is True
-    assert len(result.results) == 2
-    assert mock_ledger.tip.called
-    assert mock_ledger.create_market.called

@@ -324,6 +324,34 @@ def test_nobody_is_owner_without_an_owner_id(monkeypatch):
     assert admin._owner(None) is False
 
 
+def test_admin_tg_id_is_only_an_alias_of_the_owner():
+    """One owner knob, not two. With OWNER_ID set and ADMIN_TG_ID empty (this
+    deployment) every gate that still reads ADMIN_TG_ID — web /api/agent/*,
+    /api/ai/status, /broadcast, /export, /agent — must resolve to the owner;
+    two conflicting ids must never authorize two accounts.
+    """
+    import os
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    probe = "from bot import config; print(config.OWNER_ID, config.ADMIN_TG_ID)"
+
+    def resolve(owner: str, admin: str) -> str:
+        env = {**os.environ, "OWNER_ID": owner, "ADMIN_TG_ID": admin}
+        out = subprocess.run(
+            [sys.executable, "-c", probe], cwd=root, env=env,
+            capture_output=True, text=True,
+        )
+        assert out.returncode == 0, out.stderr
+        return out.stdout.strip()
+
+    assert resolve("397", "") == "397 397"      # owner only — the live .env shape
+    assert resolve("", "397") == "397 397"      # legacy spelling only
+    assert resolve("397", "397") == "397 397"
+    assert resolve("397", "555") == "397 397"   # conflict: the owner wins
+
+
 def test_the_panel_calls_nothing_that_moves_money():
     source = Path(__file__).resolve().parents[1] / "bot" / "handlers" / "admin.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))

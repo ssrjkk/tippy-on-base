@@ -190,24 +190,7 @@ accounting backed by public proof-of-reserves.
 
 **Why it's a breakthrough:** First Telegram bot with native recurring payments on Base. Creators can set up patronage, teams can automate salaries, communities can run membership programs — all trustless and automatic.
 
-#### 3. Batch Transactions
-**Multiple actions in ONE UserOperation — save 60% gas.**
-
-- Atomic execution — all succeed or all fail (transaction-style)
-- Gas savings: first action pays full 21k base gas, each additional saves ~60%
-- Example: tip + create_market + bet = 1 transaction instead of 3
-
-```python
-# Internally: one UserOperation executes:
-# 1. Tip @alice $5
-# 2. Create market "Will BTC hit 100k?"
-# 3. Bet $10 on YES
-# Gas saved: 30-75% depending on action count
-```
-
-**Why it's a breakthrough:** ERC-4337 batch operations are unique to Account Abstraction. This is a native L2 feature that Base exposes — traditional EOA wallets can't do this efficiently.
-
-#### 4. On-chain Credit Score
+#### 3. On-chain Credit Score
 **History-based reputation for P2P micro-lending — no collateral needed.**
 
 - `/credit` — view your credit score (300-850) and loan limit
@@ -228,7 +211,7 @@ accounting backed by public proof-of-reserves.
 
 **Why it's a breakthrough:** Traditional DeFi requires collateral. This uses on-chain behavior to establish trust — enabling undercollateralized lending in Telegram communities. Perfect for micro-loans between people who tip and trade together.
 
-#### 5. Creator Tokens with Revenue Sharing
+#### 4. Creator Tokens with Revenue Sharing
 **Issue tokens that automatically distribute your earnings to holders.**
 
 - `/createtoken <name> <SYMBOL> <supply> <price>` — launch a creator token
@@ -334,9 +317,8 @@ bot/
 │  ├─ _messages.py / _notify.py / _admin.py / _views.py
 │  └─ _base.py          audit_log, MICRO, LMSR math
 ├─ base.py              web3 layer: USDC transfers, deposit scanning, tx decoding
-├─ chain/               relayer pool + on-chain helpers
+├─ chain/               on-chain helpers
 │  ├─ core.py           RPC, chain head, block polling
-│  ├─ relayers.py       persisted daily caps, multi-relayer pool
 │  ├─ transactions.py   tx status, receipts
 │  ├─ transfers.py      USDC transfer helpers
 │  ├─ tokens.py         token metadata, decimals
@@ -350,7 +332,6 @@ bot/
 ├─ smart_wallet.py      ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
 ├─ paymaster.py         Base Paymaster integration: gasless onboarding (10 free txs)
 ├─ recurring.py         Recurring payments: subscriptions executor (hourly watcher)
-─ batch.py              Batch transactions: multiple actions in one UserOperation
 ├─ credit.py            Credit scoring: 300-850 P2P lending score
 ├─ creator_tokens.py    Revenue sharing: creator tokens + dividend distribution
 ├─ create2.py           CREATE2 deterministic address computation
@@ -450,7 +431,7 @@ worst-case payout.
 
 - Per-user deposit addresses (CREATE2 vaults) 
 - ~~Smart Wallet (ERC-4337) + gasless paymaster~~ core shipped + Sepolia-proven (P2)
-- ~~Withdrawal batching for gas savings~~  shipped (queued payouts flushed as a batch; multi-relayer pool with persisted daily caps)
+- ~~Withdrawal batching for gas savings~~  shipped (queued payouts flushed as one vault batch, direct-send fallback)
 - Order-book style CLOB on top of the AMM
 - ~~On-chain market escrow (trustless resolution via UMA-style oracle)~~ shipped as **Cally** (OutcomeMarket ERC-1155)
 

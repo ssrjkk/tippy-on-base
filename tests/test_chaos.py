@@ -8,35 +8,74 @@ import pytest
 
 
 class TestRPCChaos:
-    """Simulate RPC failures."""
+    """Simulate RPC failures against the real failover paths."""
 
-    @pytest.mark.asyncio
-    async def test_rpc_timeout_propagates(self):
-        async def failing_poll():
-            raise TimeoutError("RPC timeout")
+    @staticmethod
+    def _provider(*, exc=None, logs=()):
+        import types
 
-        with pytest.raises(TimeoutError):
-            await failing_poll()
+        def get_logs(_params):
+            if exc:
+                raise exc
+            return list(logs)
 
-    @pytest.mark.asyncio
-    async def test_rpc_connection_refused_propagates(self):
-        async def failing_poll():
-            raise ConnectionRefusedError("RPC down")
+        return types.SimpleNamespace(eth=types.SimpleNamespace(get_logs=get_logs))
 
-        with pytest.raises(ConnectionRefusedError):
-            await failing_poll()
-
-    @pytest.mark.asyncio
-    async def test_hot_balance_rpc_down(self):
-        """hot_balance returns value even when RPC fails (uses primary)."""
+    def test_scan_deposits_fails_over_to_the_next_provider(self, monkeypatch):
+        """A dead primary must not drop deposits: the scan has to walk the
+        fallback list before giving up."""
         from bot import base
-        # hot_balance now has try/except fallback — just verify it returns a number
-        try:
-            bal = await base.hot_balance()
-        except Exception:
-            bal = None
-        # Should return either a float or None — never raise
-        assert bal is None or isinstance(bal, float)
+
+        seen = []
+
+        def fake_web3(_provider_obj):
+            seen.append(_provider_obj)
+            return self._provider(logs=[])
+
+        monkeypatch.setattr(base, "w3", self._provider(exc=ConnectionError("primary down")))
+        monkeypatch.setattr(base, "_RPC_FALLBACKS", ["http://fallback.invalid"])
+        monkeypatch.setattr(base, "Web3", types_web3_factory(fake_web3))
+
+        assert base._scan_deposits(10, 20) == []
+        assert seen == ["http://fallback.invalid"]
+
+    def test_scan_deposits_raises_when_every_provider_is_down(self, monkeypatch):
+        from bot import base
+
+        monkeypatch.setattr(base, "w3", self._provider(exc=ConnectionError("primary down")))
+        monkeypatch.setattr(base, "_RPC_FALLBACKS", [])
+
+        with pytest.raises(RuntimeError, match="all RPC providers failed"):
+            base._scan_deposits(10, 20)
+
+    @pytest.mark.asyncio
+    async def test_hot_balance_raises_instead_of_reporting_zero(self, monkeypatch):
+        """A blind RPC must surface as an error — a returned 0.0 would read as
+        «reserves empty» and either hide insolvency or fake it."""
+        from bot import base
+
+        class _DeadContract:
+            def __getattr__(self, _name):
+                raise ConnectionError("RPC down")
+
+        monkeypatch.setattr(base, "usdc", _DeadContract())
+        monkeypatch.setattr(base, "_w3_providers", [])
+
+        with pytest.raises(RuntimeError, match="all RPC providers failed"):
+            await base.hot_balance()
+
+
+def types_web3_factory(build):
+    """Stub for `bot.base.Web3` used to build fallback providers: the code calls
+    Web3(Web3.HTTPProvider(url, ...)), so the name must be callable and carry
+    HTTPProvider."""
+    class _FakeWeb3:
+        HTTPProvider = staticmethod(lambda url, **_kw: url)
+
+        def __call__(self, endpoint):
+            return build(endpoint)
+
+    return _FakeWeb3()
 
 
 class TestSolvencyChaos:
@@ -45,13 +84,6 @@ class TestSolvencyChaos:
     def test_alert_cooldown_is_minimum_5min(self):
         from bot.solvency import _ALERT_COOLDOWN
         assert _ALERT_COOLDOWN >= 300
-
-    def test_alert_state_can_be_reset(self):
-        import bot.solvency as s
-        old = s._last_alert_ts
-        s._last_alert_ts = 0
-        assert s._last_alert_ts == 0
-        s._last_alert_ts = old
 
     @pytest.mark.asyncio
     async def test_solvency_check_handles_ledger_failure(self):
@@ -67,6 +99,32 @@ class TestSolvencyChaos:
             await _check_solvency(mock_bot)
             # Bot's send_message should NOT be called (no alert on partial failure)
             mock_bot.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_insolvency_alert_fires_once_per_cooldown(self, monkeypatch):
+        """The canary must actually alert on a real deficit, and must not flood
+        the operator: a second check inside the window stays silent."""
+        from bot import solvency
+
+        monkeypatch.setattr(solvency, "_last_alert_ts", 0.0)
+        monkeypatch.setattr(solvency.config, "VAULT_ADDRESS", "")
+        monkeypatch.setattr(solvency.config, "SOLVENCY_ALERT_CHAT_ID", 424242)
+        monkeypatch.setattr(solvency.ledger, "total_liabilities", AsyncMock(return_value=1_000_000_000))
+        monkeypatch.setattr(solvency.ledger, "x402_unswept_credit_total", AsyncMock(return_value=0))
+        monkeypatch.setattr(solvency.base, "hot_balance", AsyncMock(return_value=1.0))
+        monkeypatch.setattr(solvency.base, "receive_pool_balance", AsyncMock(return_value=0.0))
+
+        bot = AsyncMock()
+        await solvency._check_solvency(bot)
+        assert bot.send_message.await_count == 1
+        assert "INSOLVENCY" in bot.send_message.await_args.args[1]
+
+        await solvency._check_solvency(bot)
+        assert bot.send_message.await_count == 1  # cooldown holds
+
+        monkeypatch.setattr(solvency, "_last_alert_ts", 0.0)
+        await solvency._check_solvency(bot)
+        assert bot.send_message.await_count == 2
 
 
 class TestHandlerErrorsChaos:

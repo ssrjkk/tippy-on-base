@@ -10,7 +10,10 @@ Endpoint: `GET /metrics`
 
 Authentication:
 - Set `METRICS_TOKEN` env var for Bearer token auth
-- Or set `METRICS_ALLOW_LOOPBACK=1` for loopback-only access (no auth)
+- Or set `METRICS_ALLOW_LOOPBACK=1` for a header-free scrape from this host
+  (no auth). Only direct loopback connections qualify: a request that arrives
+  through cloudflared also has a 127.0.0.1 peer, so it carries proxy headers
+  (`CF-Connecting-IP`, `X-Forwarded-For`, …) and still needs the token.
 
 Available metrics:
 - `tipbot_liabilities_usdc` — Total user liabilities (gauge)

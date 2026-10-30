@@ -488,18 +488,12 @@ TELEGRAM_API_PROXY=socks5h://user:pass@host:1080   # или http://host:8080
 
 Без `TELEGRAM_API_PROXY` бот использует прямое подключение (обычный случай).
 
-## Этап 8. Пул релейеров и батчинг выводов (опционально, для масштаба)
+## Этап 8. Батчинг выводов (опционально, для масштаба)
 
-Пока выводы идут с одного hot wallet, всё работает из коробки. Для роста можно
-подключить пул релейеров и батчинг очереди:
+Пока выводы идут с одного hot wallet, всё работает из коробки. Очередь
+`/withdraw` можно флашить одним `batchDistribute` через vault:
 
 ```env
-# Пул релейеров: 0x+64hex ключи через запятую, у каждого свой суточный кап.
-RELAYER_PRIVATE_KEYS=0x...,0x...
-RELAYER_DAILY_LIMIT=10000          # USDC/сутки на релейер (по UTC)
-RELAYER_FEE_GAS_GWEI=0.01          # цена газа для оценки комиссии вывода
-#RELAYER_STATE_FILE=.relayer_usage.json  # персистентный учёт капов (рестарт не сбрасывает)
-
 # Батчинг очереди /withdraw (флаш по любому порогу):
 WITHDRAW_BATCH_FLUSH_USDC=50
 WITHDRAW_BATCH_FLUSH_COUNT=20
@@ -507,7 +501,7 @@ WITHDRAW_BATCH_FLUSH_SECONDS=60
 WITHDRAW_BATCH_FALLBACK_DIRECT=1   # батч не удался -> прямые отправки
 ```
 
-Проверка формата ключей и лимитов — **перед каждым деплоем**:
+Проверка окружения — **перед каждым деплоем**:
 
 ```bash
 python scripts/validate_env.py     # exit 0 = всё ок; печатает [ERROR]/[WARN]

@@ -33,21 +33,47 @@ async def test_ack_notification_removes_it(ledger):
 
 
 @pytest.mark.asyncio
-async def test_retry_notification_increments_backoff(ledger):
-    """retry_notification must increment retries and schedule a future retry."""
+async def test_retry_notification_backs_off_exponentially(ledger):
+    """Each failure must push the retry out further than the previous one; a
+    fixed delay re-tries a blocked chat every minute forever."""
     import time
 
     notif_id = ledger.enqueue_notification(123, "retry me")
+
+    def retries_and_delay():
+        row = ledger._conn.execute(
+            "SELECT retries, next_retry_at FROM notification_outbox WHERE id = %s",
+            (notif_id,),
+        ).fetchone()
+        return int(row["retries"]), int(row["next_retry_at"]) - int(time.time())
+
     ledger.retry_notification(notif_id, 30)
+    assert ledger.dequeue_notifications() == []  # not due yet
+    attempts, delay = retries_and_delay()
+    assert attempts == 1
+    assert 28 <= delay <= 31
 
-    # Should not be due yet (next_retry_at is in the future).
-    items = ledger.dequeue_notifications()
-    assert len(items) == 0
+    ledger.retry_notification(notif_id, 30)
+    attempts, delay = retries_and_delay()
+    assert attempts == 2
+    assert 58 <= delay <= 61
 
-    # Manually check the row to verify retries incremented.
-    row = ledger._conn.execute(
-        "SELECT retries, next_retry_at FROM notification_outbox WHERE id = %s",
-        (notif_id,),
+
+@pytest.mark.asyncio
+async def test_undeliverable_notification_is_dropped_after_max_retries(ledger):
+    """A chat that can never receive the message must not sit at the head of the
+    queue forever: after `max_retries` failures the row is deleted."""
+    notif_id = ledger.enqueue_notification(999, "never delivered")
+
+    for _ in range(9):
+        ledger.retry_notification(notif_id, 1, max_retries=10)
+    still_there = ledger._conn.execute(
+        "SELECT 1 FROM notification_outbox WHERE id = %s", (notif_id,)
     ).fetchone()
-    assert int(row["retries"]) == 1
-    assert int(row["next_retry_at"]) > int(time.time())
+    assert still_there is not None
+
+    ledger.retry_notification(notif_id, 1, max_retries=10)
+    gone = ledger._conn.execute(
+        "SELECT 1 FROM notification_outbox WHERE id = %s", (notif_id,)
+    ).fetchone()
+    assert gone is None

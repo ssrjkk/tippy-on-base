@@ -64,7 +64,7 @@ def _extract_fee(note: str | None) -> int:
 CREDIT_KINDS = frozenset({
     'deposit', 'bet_win', 'bet_cancel', 'market_win', 'market_cancel',
     'market_sell', 'paywall_earn', 'channel_earn', 'x402', 'rain_in',
-    'creator_income', 'tip_in', 'withdraw_refund', 'dividend',
+    'creator_income', 'tip_in', 'withdraw_refund', 'dividend', 'token_sale',
 })
 
 # Rows that are the RECEIVER's copy of a movement already booked as the

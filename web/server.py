@@ -156,6 +156,21 @@ def _client_ip(request: Request) -> str:
     return peer
 
 
+# Headers a tunnel or reverse proxy adds on the way in. cloudflared connects
+# from 127.0.0.1, so public traffic has a loopback peer too — a loopback peer
+# alone therefore does not mean the request originated on this host.
+_PROXY_HEADERS = ('cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'x-real-ip', 'forwarded')
+
+
+def _direct_loopback(request: Request) -> bool:
+    """True only for a request that reached the app socket from this host with
+    no proxy in front of it (a local scrape/curl). A tunneled request has a
+    loopback peer as well, so the peer check is not sufficient on its own."""
+    if not (request.client and request.client.host in ('127.0.0.1', '::1')):
+        return False
+    return not any(request.headers.get(h) for h in _PROXY_HEADERS)
+
+
 _CSP_SCRIPT_WHITELIST = "https://esm.sh https://cdn.jsdelivr.net https://telegram.org"
 # The Telegram Login Widget draws its button inside an iframe from
 # oauth.telegram.org. frame-src is not set, so such a request falls back to
@@ -1020,7 +1035,10 @@ async def metrics(request: Request) -> Response:
 
     # Metrics are operational data: closed by default. Set METRICS_TOKEN or
     # explicitly opt into loopback-only access with METRICS_ALLOW_LOOPBACK=1.
-    if request.client and request.client.host in ('127.0.0.1', '::1') and os.environ.get('METRICS_ALLOW_LOOPBACK') == '1':
+    # The opt-in covers direct local requests only: cloudflared also dials the
+    # app from 127.0.0.1, so without the proxy-header check /metrics was open
+    # to anyone fetching it through the Pages Function.
+    if _direct_loopback(request) and os.environ.get('METRICS_ALLOW_LOOPBACK') == '1':
         return PlainTextResponse(await collect_metrics())
     if not config.METRICS_TOKEN:
         return PlainTextResponse("metrics disabled: set METRICS_TOKEN", status_code=401)

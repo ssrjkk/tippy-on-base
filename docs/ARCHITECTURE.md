@@ -23,7 +23,6 @@ content on Base. Two processes, one database.
           │  (web3.py)         │
           │  USDC deposits     │
           │  withdrawals       │
-          │  multi-relayer pool│
           │  TipBotVault       │
           │  EAS attestations  │
           └────────────────────┘
@@ -86,12 +85,8 @@ Key tables:
 
 ## On-chain
 
-- **Hot wallet** (EOA) — relayer for withdrawals and tips. Holds USDC.
-  Private key in `HOT_WALLET_KEY` env var. Daily cap enforced by vault.
-- **Multi-relayer pool** (`bot/chain/relayers.py`, `RELAYER_PRIVATE_KEYS`) —
-  several dedicated relayer keys, each with its own per-UTC-day USDC cap.
-  Usage is persisted to a state file (`RELAYER_STATE_FILE`, default
-  `.relayer_usage.json`) so a restart cannot reset the daily budget.
+- **Hot wallet** (EOA) — the vault's relayer for withdrawals and tips. Holds
+  USDC. Private key in `HOT_WALLET_KEY` env var. Daily cap enforced by vault.
 - **TipBotVault** (contract) — holds user USDC reserves. Relayer has a
   24h rolling daily limit. Owner (multisig) has full control. Two-step
   ownership transfer.

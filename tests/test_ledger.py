@@ -1966,8 +1966,159 @@ def test_concurrent_buy_shares_no_insolvency(ledger):
     assert escrow >= total_shares
 
 
-# ---------- P2: Smart Wallet ----------
+RACE_ADDR = "0x" + "ab" * 20
 
+
+def _run_parallel(fns):
+    """Run each callable in its own thread over its own Ledger connection.
+
+    Real cross-process races are reproduced here: worker connections are
+    separate sessions, so only Postgres atomicity (guarded UPDATE, unique
+    keys, row locks) can keep the money correct — the in-process RLock of
+    the fixture's ledger coordinates nothing between them.
+    """
+    import threading
+
+    results, errors = {}, {}
+
+    def wrap(i, fn):
+        try:
+            results[i] = fn()
+        except Exception as e:  # noqa: BLE001 — the test turns it into evidence
+            errors[i] = e
+
+    threads = [threading.Thread(target=wrap, args=(i, fn)) for i, fn in enumerate(fns)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(120)
+    return results, errors
+
+
+def test_concurrent_withdraws_cannot_overdraft(ledger):
+    """Twelve bot processes race to withdraw 60 USDC from a 100 USDC balance.
+
+    The guarded `UPDATE ... WHERE balance >= total` must let exactly one
+    debit through; the rest re-read the committed row after the lock wait
+    and report 'balance'. Anything else is money creation or a stuck lock.
+    """
+    fund(ledger, ALICE, 100_000_000)
+    # No open read transaction on the main connection: the worker
+    # constructors run DDL (ACCESS EXCLUSIVE) and would wait on it.
+    ledger._conn.rollback()
+    conns = [Ledger(TEST_DB_URL) for _ in range(12)]
+    try:
+        results, errors = _run_parallel(
+            [lambda c=c: c.reserve_withdraw(ALICE, RACE_ADDR, 60_000_000, 0) for c in conns]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert not errors, f"thread errors: {errors}"
+    outcomes = [results[i] for i in range(len(conns))]
+    won = [(wd_id, reason) for wd_id, reason in outcomes if wd_id is not None]
+    assert len(won) == 1, f"expected exactly one winner, got {outcomes}"
+    assert [reason for wd_id, reason in outcomes if wd_id is None] == ["balance"] * 11
+    assert ledger.balance(ALICE) == Decimal("40.000000")
+    rows = ledger._conn.execute(
+        "SELECT amount FROM tx_log WHERE kind = 'withdraw'"
+    ).fetchall()
+    assert [int(r["amount"]) for r in rows] == [60_000_000]
+
+
+def test_concurrent_duplicate_bet_charges_once(ledger):
+    """Twelve requests carrying the SAME Idempotency-Key race on one bet.
+
+    The key row is inserted inside the money transaction, so duplicates
+    serialize on the primary key: one stake lands, eleven calls raise
+    IdempotencyDuplicate, and the pot holds a single 10 USDC position.
+    """
+    from bot.ledger import IdempotencyDuplicate
+
+    fund(ledger, ALICE, 100_000_000)
+    bet_id = ledger.create_bet(CAROL, "Race?", ["A", "B"], close_at=int(time.time()) + 3600)
+    ledger._conn.rollback()
+    key = "a" * 64
+    conns = [Ledger(TEST_DB_URL) for _ in range(12)]
+    try:
+        results, errors = _run_parallel(
+            [lambda c=c: c.place_bet(bet_id, ALICE, 0, 10_000_000, idem=(key, ALICE)) for c in conns]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert list(results.values()) == ["ok"], f"results={results}, errors={errors}"
+    assert len(errors) == 11, errors
+    assert all(isinstance(e, IdempotencyDuplicate) for e in errors.values()), errors
+    assert ledger.balance(ALICE) == Decimal("90.000000")
+    positions = ledger.bet_positions(bet_id)
+    assert sum(int(p["amount"]) for p in positions) == 10_000_000
+
+
+def test_concurrent_bets_with_distinct_keys_never_overdraft(ledger):
+    """Twelve distinct-key bets of 10 USDC against a 100 USDC balance.
+
+    Ten must land and two must be refused for funds — never eleven debits,
+    and never a negative balance, however the row locks interleave.
+    """
+    fund(ledger, ALICE, 100_000_000)
+    bet_id = ledger.create_bet(CAROL, "Race?", ["A", "B"], close_at=int(time.time()) + 3600)
+    ledger._conn.rollback()
+    conns = [Ledger(TEST_DB_URL) for _ in range(12)]
+    try:
+        results, errors = _run_parallel(
+            [
+                lambda i=i, c=c: c.place_bet(
+                    bet_id, ALICE, i % 2, 10_000_000, idem=(f"{i:064d}", ALICE)
+                )
+                for i, c in enumerate(conns)
+            ]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert not errors, f"thread errors: {errors}"
+    outcomes = sorted(results.values())
+    assert outcomes == ["balance"] * 2 + ["ok"] * 10, outcomes
+    assert ledger.balance(ALICE) == 0
+    positions = ledger.bet_positions(bet_id)
+    assert sum(int(p["amount"]) for p in positions) == 100_000_000
+
+
+def test_concurrent_refund_of_one_withdraw_credits_once(ledger):
+    """Two reconciliation paths racing to refund the same withdrawal.
+
+    The status flip (`... NOT IN ('done','refunded') RETURNING id`) is the
+    gate: exactly one caller wins the flip and credits; the loser must not
+    pay a second time. Without it a crash-sweep overlap doubles the money.
+    """
+    fund(ledger, ALICE, 10_000_000)
+    wd_id, reason = ledger.reserve_withdraw(ALICE, RACE_ADDR, 5_000_000, 50_000)
+    assert wd_id is not None and reason == ""
+    assert ledger.balance(ALICE) == Decimal("4.950000")
+    ledger._conn.rollback()
+    conns = [Ledger(TEST_DB_URL) for _ in range(4)]
+    try:
+        results, errors = _run_parallel(
+            [lambda c=c: c.refund_withdraw(wd_id, ALICE, 5_050_000) for c in conns]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert not errors, f"thread errors: {errors}"
+    assert sorted(results.values()) == [False, False, False, True]
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+    refunds = ledger._conn.execute(
+        "SELECT amount FROM tx_log WHERE kind = 'withdraw_refund'"
+    ).fetchall()
+    assert [int(r["amount"]) for r in refunds] == [5_050_000]
+
+
+# ---------- P2: Smart Wallet ----------
 
 def test_smart_wallet_lifecycle(ledger):
     fund(ledger, ALICE, 10_000_000)

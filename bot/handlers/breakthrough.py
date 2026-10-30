@@ -1,4 +1,4 @@
-"""Handler for breakthrough Base features — gasless, recurring, batch, credit, creator tokens."""
+"""Handler for breakthrough Base features — gasless, recurring, credit, creator tokens."""
 
 import time
 from decimal import Decimal, InvalidOperation
@@ -249,10 +249,9 @@ async def cmd_buy_token(message: types.Message):
             await message.answer(i18n.t(lang, 'token_buy_failed'))
             return
 
-        await common.ledger.debit(uid, cost_micro, f"Buy {amount} tokens {token_id}")
-
+        cost = Decimal(cost_micro) / Decimal(10**common.config.USDC_DECIMALS)
         await message.answer(
-            i18n.t(lang, 'token_bought', amount=amount, cost=common._fmt(cost_micro))
+            i18n.t(lang, 'token_bought', amount=amount, cost=cost)
         )
     except (ValueError, IndexError):
         await message.answer(i18n.t(lang, 'buy_token_format'))

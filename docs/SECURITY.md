@@ -214,14 +214,6 @@ The Mini App keeps one key per unresolved action and replaces it only after
 the server accepts the request
 (`web/static/app.html`, `moneyHeaders` / `resetIdem`).
 
-## Multi-relayer pool
-
-`RELAYER_PRIVATE_KEYS` runs a pool of dedicated relayer keys, each capped by
-`RELAYER_DAILY_LIMIT` (USDC per UTC day). Usage is persisted to
-`RELAYER_STATE_FILE` (default `.relayer_usage.json`) so a restart cannot
-reset the daily budget. Keys and caps are format-checked by
-`python scripts/validate_env.py`.
-
 ## Autonomous agent
 
 The agent is fail-closed by construction: an LLM error means no action; an

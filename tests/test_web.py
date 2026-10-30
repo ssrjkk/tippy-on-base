@@ -1394,6 +1394,29 @@ def test_api_ai_status_is_owner_only(client, ledger, monkeypatch):
     assert "key" not in body["providers"][0]
 
 
+def test_metrics_loopback_opt_in_is_not_reachable_through_the_tunnel(monkeypatch):
+    """METRICS_ALLOW_LOOPBACK exists for a local Prometheus scrape. cloudflared
+    also dials the app from 127.0.0.1, so a loopback peer alone used to publish
+    liabilities, reserves and solvency to anyone fetching /metrics through the
+    Pages Function. A request carrying proxy headers must fall through to the
+    token check; a direct local one still gets the metrics."""
+    from web import metrics as metrics_mod
+    from web import server
+
+    async def _fake_metrics() -> str:
+        return "tipbot_solvent 1"
+
+    monkeypatch.setattr(metrics_mod, "collect_metrics", _fake_metrics)
+    monkeypatch.setenv("METRICS_ALLOW_LOOPBACK", "1")
+    monkeypatch.setattr(server.config, "METRICS_TOKEN", "")
+
+    local = TestClient(server.app, client=("127.0.0.1", 12345))
+    for header in ("Cf-Connecting-IP", "X-Forwarded-For", "X-Real-IP", "Forwarded"):
+        refused = local.get("/metrics", headers={header: "203.0.113.7"})
+        assert refused.status_code == 401, header
+    assert local.get("/metrics").status_code == 200
+
+
 def test_every_mini_app_translation_key_exists_in_all_three_languages():
     """`web/static/app.html` keeps its own dictionary inline (ru/en/zh), apart
     from bot/i18n.py, so `scripts/check_i18n.py` cannot see it: a key used in

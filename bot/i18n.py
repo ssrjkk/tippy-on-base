@@ -2593,6 +2593,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "kind_market_sell": {"ru": "Продажа долей", "en": "Share sale", "zh": "出售份额"},
     "kind_market_win": {"ru": "Выплата по рынку", "en": "Market payout", "zh": "市场派息"},
     "kind_market_cancel": {"ru": "Возврат по рынку", "en": "Market refund", "zh": "市场退款"},
+    "kind_token_buy": {"ru": "Покупка токенов", "en": "Token purchase", "zh": "购买代币"},
+    "kind_token_sale": {"ru": "Продажа токенов", "en": "Token sale", "zh": "出售代币"},
 
     # ---------- /admin: the owner's panel (bot/handlers/admin.py) ----------
     # Read-only screens. The numbers are deliberately terse: this is a chat window,

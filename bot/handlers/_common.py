@@ -13,7 +13,7 @@ from decimal import Decimal
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from .. import base, batch, config, credit, i18n, paymaster, wallets
+from .. import base, config, credit, i18n, paymaster, wallets
 from .. import qr as qrlib
 from ..creator_tokens import registry as creator_tokens
 from ..ledger import async_ledger as ledger
@@ -48,7 +48,6 @@ __all__ = [
     "_throttle",
     "_to_micro",
     "base",
-    "batch",
     "config",
     "creator_tokens",
     "credit",

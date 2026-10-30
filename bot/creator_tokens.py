@@ -158,15 +158,26 @@ class CreatorTokenRegistry:
         buyer_tg_id: int,
         amount: int,
     ) -> tuple[bool, int]:
-        """Buy creator tokens. Returns (success, cost_micro)."""
+        """Buy creator tokens. Returns (success, cost_micro).
+
+        `price_micro` is the price of ONE token in micro-USDC, so `amount`
+        tokens cost `amount * price_micro`. The old `// 1_000_000` made a token
+        a millionth of its listed price (400 tokens at $0.10 cost $0.00004).
+        The ledger call debits, credits the creator and grants the shares in
+        one transaction — see LedgerCreatorMixin.creator_token_buy.
+        """
         await self._ensure_migrated()
         led = self._led()
         token = await led.creator_token_get(token_id)
         if not token:
             return False, 0
 
-        cost_micro = (amount * token["price_micro"]) // 1000000  # Convert to micro
-        await led.creator_holder_add(token_id, buyer_tg_id, amount)
+        cost_micro = amount * int(token["price_micro"])
+        result, _holder = await led.creator_token_buy(
+            token_id, buyer_tg_id, amount, cost_micro
+        )
+        if result != "ok":
+            return False, 0
         return True, cost_micro
 
     async def sell_tokens(
@@ -186,7 +197,7 @@ class CreatorTokenRegistry:
         if not sold:
             return False, 0
 
-        proceeds_micro = (amount * token["price_micro"]) // 1000000
+        proceeds_micro = amount * int(token["price_micro"])
         return True, proceeds_micro
 
     async def distribute_dividend(

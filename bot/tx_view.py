@@ -26,6 +26,8 @@ KIND_REF = {
     'market_create': 'market', 'market_buy': 'market', 'market_sell': 'market',
     'market_win': 'market', 'market_cancel': 'market',
     'dividend': 'market',
+    # The counterparty of a creator-token trade is the token id, shown as-is.
+    'token_buy': 'market', 'token_sale': 'market',
 }
 
 # A withdraw row lives through states before the money is really gone; `done`

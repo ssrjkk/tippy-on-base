@@ -8,4 +8,5 @@ ruff==0.17.2
 coverage==7.17.0
 pytest==9.1.1
 pytest-asyncio==1.4.0
+pytest-timeout==2.4.0
 httpx==0.28.1

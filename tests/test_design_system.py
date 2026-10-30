@@ -728,6 +728,29 @@ def test_no_emoji_is_used_as_an_icon_in_the_web_ui():
     assert not offenders, offenders[:10]
 
 
+def test_every_escaper_that_builds_html_escapes_quotes():
+    """The four files below build markup by string concatenation and interpolate
+    esc() INSIDE attributes (`data-val="${esc(r.to)}"`, `aria-label="${…}"`).
+
+    app.html's escaper was a div.textContent round-trip: it escapes `& < >` for
+    a text node but leaves a quote untouched, which ends the attribute early and
+    turns the value into markup. Requiring the two quote entities keeps the
+    escaper safe in both positions.
+    """
+    builders = ("app.html", "app.js", "site.js", "agent.js")
+    for name in builders:
+        text = read(name)
+        bodies = [
+            text[m.start(): m.start() + 400]
+            for m in re.finditer(r"function\s+(?:esc|escapeHtml)\s*\(", text)
+        ]
+        assert bodies, f"{name} builds markup but has no escaper"
+        for body in bodies:
+            assert "&quot;" in body and "&#39;" in body, (
+                f"{name}: the escaper leaves quotes intact — unsafe inside an attribute"
+            )
+
+
 # ---------------------------------------------------------------------------
 # placeholders
 # ---------------------------------------------------------------------------

@@ -934,7 +934,14 @@ function updateLangHighlight() {
   });
 }
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// Quotes are escaped too: several call sites interpolate esc() INSIDE an
+// attribute (data-val="…", aria-label="…"), where textContent->innerHTML
+// leaves a quote untouched and would end the attribute early.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+}
 
 // FastAPI puts the rejection reason in `detail`; a non-error response carries
 // `error`. Without both, every refusal toast says just "Error".
