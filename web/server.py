@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from bot import base, config
+from bot import base, config, fees
 from bot import qr as qrlib
 from bot.base import hot_balance, hot_wallet, vault_balance
 from bot.commands_catalog import BOT_COMMAND_SPECS
@@ -834,6 +834,7 @@ def _static_page(page: str, request: Request | None = None) -> Response:
     """
     html = (STATIC / page).read_text(encoding='utf-8')
     html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
+    html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
     return Response(content=html.encode('utf-8'), media_type='text/html')
 
@@ -879,6 +880,11 @@ async def mini_app(request: Request):
     html = html.replace('__PUBLIC_URL__', base_url)
     html = html.replace('__CHAIN_NAME__', chain_label())
     html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
+    # The withdraw sheet quotes the running terms, not the defaults it used to
+    # spell out: an operator's env change has to reach the screen that spends.
+    html = html.replace('__WITHDRAW_FEE_PCT__', fees.withdraw_fee_pct_label())
+    html = html.replace('__MIN_WITHDRAW_USDC__', fees.usdc_label(config.MIN_WITHDRAW_USDC))
+    html = html.replace('__MAX_WITHDRAWS_PER_DAY__', str(config.MAX_WITHDRAWS_PER_DAY))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
     return Response(content=html.encode('utf-8'), media_type='text/html')
 

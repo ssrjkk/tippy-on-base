@@ -149,7 +149,7 @@ def _help_card(question: str, lang: str) -> str:
     Stripping the tags without unescaping the entities is what makes a user see
     "&lt;банк&gt;" instead of "<банк>".
     """
-    card = _plain(i18n.t(lang, "help_full"))
+    card = _plain(i18n.help_text(lang))
     named = {c.lower() for c, _d, _g in BOT_COMMAND_SPECS} & {
         m.lower() for m in _COMMAND_RE.findall(question)
     }

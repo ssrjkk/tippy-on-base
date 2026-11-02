@@ -368,7 +368,9 @@ def test_global_stats_is_one_statement_and_one_snapshot(ledger):
     assert s["tips_micro"] == sum_for("tip")
     assert s["deposits_micro"] == sum_for("deposit")
     assert s["fees_micro"] == sum_for("fee")
-    assert s["volume_micro"] == sum_for("tip") + sum_for("deposit") + sum_for("bet") + sum_for("x402")
+    from bot.ledger._views import VOLUME_KINDS
+
+    assert s["volume_micro"] == sum(sum_for(k) for k in VOLUME_KINDS)
     assert s["users"] >= 2
     assert s["transactions"] == int(real(
         "SELECT COUNT(*) AS c FROM tx_log WHERE NOT (kind = ANY(%s))",
@@ -1392,9 +1394,52 @@ def test_volume_history_and_30d(ledger):
     bid = ledger.create_bet(ALICE, "Q", ["А", "Б"])
     ledger.place_bet(bid, ALICE, 0, 10_000_000)  # bet 10
     hist = ledger.volume_history(14)
-    assert len(hist) == 1
-    assert hist[0]["volume_micro"] == 130_000_000
+    # One row per day, zero-filled: a sparse series drew a lonely bar under a
+    # "last 14 days" heading.
+    assert len(hist) == 14
+    assert sum(r["volume_micro"] for r in hist) == 130_000_000
+    assert hist[-1]["volume_micro"] == 130_000_000  # today is the last bucket
+    assert [r["volume_micro"] for r in hist[:-1]] == [0] * 13
     assert ledger.global_stats()["volume_30d_micro"] == 130_000_000
+
+
+def test_volume_includes_lmsr_purchases_and_books_an_exit_once(ledger):
+    """The landing page lists share purchases in the volume legend, so a
+    market_buy has to be counted — and its market_sell must not be: the same
+    USDC was already counted when it entered the market. The creator's subsidy is
+    counted like a pool stake, because it is the same shape of money."""
+    fund(ledger, ALICE, 100_000_000)
+    fund(ledger, CAROL, 10_000_000)  # the creator funds the AMM subsidy
+    mid = ledger.create_market(CAROL, "Q?", ["А", "Б"], 10_000_000)
+    assert isinstance(mid, int)
+    status, info = ledger.buy_shares(mid, ALICE, 0, 5_000_000)
+    assert status == "ok", status
+    # Two deposits (the second funds the subsidy), the subsidy, the purchase.
+    assert ledger.global_stats()["volume_micro"] == 125_000_000
+
+    status, _ = ledger.sell_shares(mid, ALICE, 0, info["shares"])
+    assert status == "ok", status
+    assert ledger.global_stats()["volume_micro"] == 125_000_000
+
+
+def test_volume_counts_content_purchases_but_not_the_earnings_mirror(ledger):
+    """A paywalled post and a paid channel subscription are USDC a user spends
+    inside the bot, so the published volume has to include them — while the
+    creator's `paywall_earn` / `channel_earn` row is the same movement seen from
+    the other account and would book it twice."""
+    from bot.ledger._views import VOLUME_KINDS
+
+    fund(ledger, ALICE, 50_000_000)
+    fund(ledger, BOB, 1_000_000)  # owner of the post and of the channel
+    item = ledger.create_paywall(BOB, "Пост", 20_000_000, "текст за платёжом")
+    assert item is not None
+    assert ledger.buy_paywall(ALICE, item) == "ok"
+    assert ledger.set_paywall_channel(-10020, BOB, 5_000_000) is True
+    assert ledger.subscribe_channel(-10020, ALICE) == "ok"
+
+    # 50 + 1 deposited, 20 for the post, 5 for the channel.
+    assert ledger.global_stats()["volume_micro"] == 76_000_000
+    assert not {"paywall_earn", "channel_earn"} & set(VOLUME_KINDS)
 
 
 def test_all_users(ledger):

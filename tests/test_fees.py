@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from bot import config, i18n
-from bot.fees import win_fee_micro, win_fee_pct_label
+from bot.fees import win_fee_micro, win_fee_pct_label, withdraw_fee_pct_label
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,7 +53,7 @@ def test_help_text_percentages_are_the_configured_rates():
         Decimal(r).normalize()
         for r in (
             win_fee_pct_label(),
-            f"{(config.WITHDRAW_FEE_PCT * 100).normalize():f}",
+            withdraw_fee_pct_label(),
         )
     }
     stale = []
@@ -80,4 +80,26 @@ def test_help_keys_interpolate_the_win_rate():
         assert f"{pct}%" in fee_note, (lang, fee_note)
         assert f"{pct}%" in hint and f"{window}</i>" in hint, (lang, hint)
         assert hint.count("(") == hint.count(")"), (lang, hint)
+        # The resolve card names the same rate; it used to say "2%" outright.
+        resolve = i18n.t(lang, "bet_resolve_title", id=1, question="Q", pot="10", pct=pct)
+        assert f"{pct}%" in resolve, (lang, resolve)
     assert "{pct}%" in i18n.STRINGS["bet_fee_note"]["ru"]
+    assert "{pct}%" in i18n.STRINGS["bet_resolve_title"]["en"]
+
+
+def test_help_card_names_the_configured_withdrawal_terms(monkeypatch):
+    """`help_full` carried "1%, min 1 USDC" as text in three languages, so an
+    operator changing either value kept sending users the old terms."""
+    monkeypatch.setattr(config, "WITHDRAW_FEE_PCT", Decimal("0.025"))
+    monkeypatch.setattr(config, "MIN_WITHDRAW_USDC", Decimal("3"))
+    expectations = {
+        "ru": ("2.5%", "мин. 3 USDC"),
+        "en": ("2.5%", "min 3 USDC"),
+        "zh": ("2.5%", "最低 3 USDC"),
+    }
+    for lang, needles in expectations.items():
+        text = i18n.help_text(lang)
+        for needle in needles:
+            assert needle in text, (lang, needle)
+        assert "1%" not in text, (lang, text)
+        assert "{wd_fee}" not in text and "{min_wd}" not in text, (lang, text)

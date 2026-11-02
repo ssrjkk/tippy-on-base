@@ -21,7 +21,12 @@ os.environ.setdefault("WALLET_ENC_KEY", "a" * 32)  # Test-only: 32-char key for 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-ci-only-32ch!")
 os.environ.setdefault("X402_ENABLED", "1")
 os.environ.setdefault("X402_RECEIVE_ADDRESS", "0x0000000000000000000000000000000000000001")
-os.environ.setdefault("ADMIN_TG_ID", "111")
+# Strong assignment, not setdefault: a dev .env with a real OWNER_ID keeps its
+# value (load_dotenv never overrides), and every owner-gated endpoint would then
+# refuse the session the tests mint for 111 — green in CI, red on the machine
+# the code is written on. Tests own both spellings of the owner.
+os.environ["ADMIN_TG_ID"] = "111"
+os.environ["OWNER_ID"] = "111"
 os.environ.setdefault("WEBHOOK_SECRET", "test-webhook-secret-for-ci")
 # Tests fake Base MAINNET (chain 8453); the repo .env points to Sepolia.
 os.environ.setdefault("EXPECTED_CHAIN_ID", "8453")

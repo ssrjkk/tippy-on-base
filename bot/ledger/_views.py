@@ -6,6 +6,20 @@ from datetime import UTC, datetime
 from ..fees import win_fee_micro
 from ._base import MICRO, MIRRORED_CREDIT_KINDS
 
+# What the site calls "volume": USDC that entered the bot (deposits) or changed
+# hands inside it (tips, pool stakes, market subsidies, LMSR share purchases,
+# creator tokens, paywalled posts, channel subscriptions, x402 payments).
+# Receiver-side mirrors (tip_in, rain_in, token_sale, paywall_earn, channel_earn)
+# are the sender's row seen from the other account, and payouts (bet_win,
+# market_win, market_sell, *_cancel, withdraw_refund, dividend, creator_income,
+# fee) are earlier volume arriving or the platform's cut of it — counting any of
+# those would book one movement twice. A subsidy (`market_create`) is counted for
+# the same reason a pool stake is: money the creator put into the pot.
+VOLUME_KINDS = (
+    'tip', 'deposit', 'bet', 'market_create', 'market_buy', 'token_buy',
+    'paywall', 'channel_pay', 'x402',
+)
+
 
 class LedgerViewsMixin:
     def top_tippers(self, limit: int = 10, since_days: int | None = None) -> list[dict]:
@@ -321,13 +335,32 @@ class LedgerViewsMixin:
 
 
     def volume_history(self, days: int = 14) -> list[dict]:
-        """Daily processed volume (tips + deposits + bets) for the last N days."""
+        """Daily VOLUME_KINDS sums for the last N days, one row per day.
+
+        Days without a movement are rows with a zero, not gaps: the landing
+        chart plots what it is given, so a sparse series drew two bars under a
+        "last 14 days" heading. The left edge is midnight of the first day in
+        the session timezone — the same basis `to_timestamp(...)::date` buckets
+        by, so no bucket can disagree with the filter.
+        """
         with self._lock:
             rows = self._conn.execute(
-                "SELECT to_timestamp(created_at)::date AS day, "
-                "COALESCE(SUM(CASE WHEN kind IN ('tip', 'deposit', 'bet', 'x402') THEN amount END), 0) AS v "
-                "FROM tx_log WHERE created_at >= %s GROUP BY day ORDER BY day",
-                (int(time.time()) - days * 86400,),
+                "WITH span AS ("
+                "  SELECT generate_series("
+                "    CURRENT_DATE - (%s::int - 1), CURRENT_DATE, interval '1 day'"
+                "  )::date AS day"
+                "), daily AS ("
+                "  SELECT to_timestamp(created_at)::date AS day,"
+                "         SUM(amount) FILTER (WHERE kind = ANY(%s)) AS volume"
+                "  FROM tx_log"
+                "  WHERE created_at >= extract(epoch FROM"
+                "    (CURRENT_DATE - (%s::int - 1))::timestamptz)::bigint"
+                "  GROUP BY 1"
+                ")"
+                " SELECT span.day, COALESCE(daily.volume, 0) AS v"
+                " FROM span LEFT JOIN daily ON daily.day = span.day"
+                " ORDER BY span.day",
+                (days, list(VOLUME_KINDS), days),
             ).fetchall()
         return [{"day": r["day"], "volume_micro": int(r["v"])} for r in rows]
 
@@ -352,14 +385,16 @@ class LedgerViewsMixin:
                 " COALESCE(SUM(amount) FILTER (WHERE kind = 'bet'), 0) AS bets_volume,"
                 " COALESCE(SUM(amount) FILTER (WHERE kind = 'fee'), 0) AS fees,"
                 " COALESCE(SUM(amount) FILTER (WHERE kind = 'x402'), 0) AS x402,"
-                " COALESCE(SUM(amount) FILTER (WHERE kind IN ('tip', 'deposit', 'bet', 'x402')"
+                " COALESCE(SUM(amount) FILTER (WHERE kind = ANY(%s)), 0) AS volume,"
+                " COALESCE(SUM(amount) FILTER (WHERE kind = ANY(%s)"
                 "                             AND created_at >= %s), 0) AS vol30,"
                 # The landing page labels this "Транзакций", so it counts
                 # movements, not journal lines: the receiver-side copy of a tip
                 # or a rain shares the sender's booking.
                 " COUNT(*) FILTER (WHERE NOT (kind = ANY(%s))) AS txs"
                 " FROM tx_log",
-                (since30, list(MIRRORED_CREDIT_KINDS)),
+                (list(VOLUME_KINDS), list(VOLUME_KINDS), since30,
+                 list(MIRRORED_CREDIT_KINDS)),
             ).fetchone()
         return {
             "users": int(row["users"]),
@@ -369,7 +404,7 @@ class LedgerViewsMixin:
             "bets_micro": int(row["bets_volume"]),
             "x402_micro": int(row["x402"]),
             "fees_micro": int(row["fees"]),
-            "volume_micro": int(row["tips"] + row["deposits"] + row["bets_volume"] + row["x402"]),
+            "volume_micro": int(row["volume"]),
             "volume_30d_micro": int(row["vol30"]),
             "transactions": int(row["txs"]),
         }

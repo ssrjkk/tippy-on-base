@@ -104,6 +104,8 @@
     const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
     const fmtUSDC = (x) =>
       Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    const fmtPct = (x) =>
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
     const relDeadline = (ts) => {
       const left = ts * 1000 - Date.now();
       if (left <= 0) return "дедлайн прошёл";
@@ -157,7 +159,7 @@
         <div class="option${isWinner ? " option-winner" : ""}">
           <div class="option-top">
             <span class="option-label">${esc(o.label)}</span>
-            <span class="option-val">${esc(String(pct))}%</span>
+            <span class="option-val">${fmtPct(pct)}</span>
           </div>
           <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(pct, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
         </div>`;

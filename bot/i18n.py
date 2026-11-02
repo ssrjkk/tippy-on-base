@@ -298,7 +298,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /donate — твоя страница донатов с QR\n"
             "• /deposit — QR + адрес для пополнения\n"
             "• /link &lt;адрес&gt; — привязать кошелёк (авто-зачисление)\n"
-            "• /withdraw &lt;адрес&gt; &lt;сумма&gt; — вывод (комиссия 1%, мин. 1 USDC)\n"
+            "• /withdraw &lt;адрес&gt; &lt;сумма&gt; — вывод (комиссия {wd_fee}%, мин. {min_wd} USDC)\n"
             "• /tx &lt;hash&gt; — проверить транзакцию в Base\n"
             "• /basename — твоё ончейн-имя на Base 🏷 (получай чаевые по имени)\n\n"
             "📊 <b>Ещё</b>\n"
@@ -339,7 +339,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /donate — your donate page with QR\n"
             "• /deposit — QR + address to top up\n"
             "• /link &lt;address&gt; — link a wallet (auto-credits)\n"
-            "• /withdraw &lt;address&gt; &lt;amount&gt; — withdraw (1% fee, min 1 USDC)\n"
+            "• /withdraw &lt;address&gt; &lt;amount&gt; — withdraw ({wd_fee}% fee, min {min_wd} USDC)\n"
             "• /tx &lt;hash&gt; — look up a Base transaction\n"
             "• /basename — your on-chain Base name 🏷 (receive tips by name)\n\n"
             "📊 <b>More</b>\n"
@@ -380,7 +380,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /donate —— 带二维码的捐赠页\n"
             "• /deposit —— 充值二维码与地址\n"
             "• /link &lt;地址&gt; —— 绑定钱包（自动到账）\n"
-            "• /withdraw &lt;地址&gt; &lt;金额&gt; —— 提现（手续费 1%，最低 1 USDC）\n"
+            "• /withdraw &lt;地址&gt; &lt;金额&gt; —— 提现（手续费 {wd_fee}%，最低 {min_wd} USDC）\n"
             "• /tx &lt;hash&gt; —— 查询 Base 交易\n"
             "• /basename —— 你在 Base 上的链上名字 🏷（可用名字接收打赏）\n\n"
             "📊 <b>更多</b>\n"
@@ -475,11 +475,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "❌ 失败：{reason}。余额：<b>{bal} USDC</b>",
     },
     # ----- withdraw -----
-    "withdraw_fail_balance": {
-        "ru": "❌ Недостаточно средств. Баланс: <b>{bal} USDC</b> (мин. 1 USDC, комиссия 1%)",
-        "en": "❌ Insufficient funds. Balance: <b>{bal} USDC</b> (min 1 USDC, 1% fee)",
-        "zh": "❌ 余额不足。余额：<b>{bal} USDC</b>（最低 1 USDC，手续费 1%）",
-    },
     "withdraw_need_args": {
         "ru": "⬆️ Формат: /withdraw &lt;адрес&gt; &lt;сумма&gt;\nПример: /withdraw 0x123...abc 10",
         "en": "⬆️ Format: /withdraw &lt;address&gt; &lt;amount&gt;\nExample: /withdraw 0x123...abc 10",
@@ -1150,9 +1145,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "点击市场查看详情。",
     },
     "bet_resolve_title": {
-        "ru": "🏁 <b>Закрыть #{id}</b> — «{question}»\n\nКто победил?\nПобедители делят пул ({pot} USDC), создатель получает 2%.",
-        "en": "🏁 <b>Close #{id}</b> — \"{question}\"\n\nWho won?\nWinners share pool ({pot} USDC), creator gets 2%.",
-        "zh": "🏁 <b>关闭 #{id}</b> ——「{question}」\n\n谁赢了？\n赢家瓜分奖池（{pot} USDC），创建者获得 2%。",
+        "ru": "🏁 <b>Закрыть #{id}</b> — «{question}»\n\nКто победил?\nПобедители делят пул ({pot} USDC), создатель получает {pct}%.",
+        "en": "🏁 <b>Close #{id}</b> — \"{question}\"\n\nWho won?\nWinners share pool ({pot} USDC), creator gets {pct}%.",
+        "zh": "🏁 <b>关闭 #{id}</b> ——「{question}」\n\n谁赢了？\n赢家瓜分奖池（{pot} USDC），创建者获得 {pct}%。",
     },
     "bet_resolved_header": {
         "ru": "✅ Ставка #{id} закрыта!",
@@ -2727,6 +2722,23 @@ def norm(lang: str | None) -> str:
 def t(lang: str | None, key: str, **kwargs) -> str:
     table = STRINGS[key]
     return table[norm(lang)].format(**kwargs)
+
+
+def help_text(lang: str | None = None) -> str:
+    """The full help card with the running withdrawal terms rendered in.
+
+    One entry point for the /help command and the AI data fallback: both used
+    to read `help_full` raw, which froze "1%, min 1 USDC" in three languages
+    and left it lying after an operator changed either rate.
+    """
+    from . import config, fees
+
+    return t(
+        lang,
+        "help_full",
+        wd_fee=fees.withdraw_fee_pct_label(),
+        min_wd=fees.usdc_label(config.MIN_WITHDRAW_USDC),
+    )
 
 
 def has(key: str) -> bool:

@@ -788,23 +788,30 @@ def test_stats_volume_30d(client, ledger):
 
 
 def test_volume_history(client, ledger):
+    from datetime import date, timedelta
+
     ledger.credit(1, 5_000_000, "deposit")
     r = client.get("/api/volume_history")
     assert r.status_code == 200
     data = r.json()
-    assert len(data) == 1
-    assert data[0]["day"] is not None
-    assert data[0]["volume_usdc"] == 5.0
+    # One row per day of the window, zeros included: the chart plots whatever
+    # it is given, so gaps used to make "14 days" look like two bars.
+    assert len(data) == 14
+    assert data[-1]["volume_usdc"] == 5.0  # today
+    assert [row["volume_usdc"] for row in data[:-1]] == [0.0] * 13
+    days = [date.fromisoformat(row["day"]) for row in data]
+    assert days == [days[0] + timedelta(days=i) for i in range(14)]
 
 
 def test_volume_history_days_clamped(client, ledger):
     ledger.credit(1, 5_000_000, "deposit")
     r = client.get("/api/volume_history?days=400")
     assert r.status_code == 200  # clamped to 30, not rejected
-    assert len(r.json()) == 1
+    assert len(r.json()) == 30
     r = client.get("/api/volume_history?days=0")
     assert r.status_code == 200
     assert len(r.json()) == 1
+    assert r.json()[0]["volume_usdc"] == 5.0
 
 
 # ---------- backers ----------
@@ -906,7 +913,7 @@ def test_tos_renders_as_a_document_not_raw_markdown(client):
     body = r.text
     assert 'name="viewport"' in body
     assert "<h1>Terms of Service" in body
-    assert "<li>USDC tipping between users</li>" in body
+    assert "<li>USDC tipping, rain and a custodial balance between Telegram users</li>" in body
     assert "<b>Last updated:</b>" in body
     assert "<code>/api/solvency</code>" in body
     assert "**" not in body
@@ -1006,6 +1013,75 @@ def test_miniapp_deposit_hint_names_the_chain_being_used(client, monkeypatch, ch
     assert '__CHAIN_NAME__' not in html, "placeholder must never leak to users"
     assert f"сеть {label}" in html
     assert f"({label} network)" in html
+
+
+def test_miniapp_withdraw_hint_quotes_the_configured_terms(client, monkeypatch):
+    """The sheet used to spell out "1%, min 1 USDC, 5 per day" in three
+    languages. An operator who changes a limit in .env must see the screen
+    change: a hardcoded hint quotes terms the server no longer enforces."""
+    from decimal import Decimal
+
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "WITHDRAW_FEE_PCT", Decimal("0.025"))
+    monkeypatch.setattr(cfg, "MIN_WITHDRAW_USDC", Decimal("3"))
+    monkeypatch.setattr(cfg, "MAX_WITHDRAWS_PER_DAY", 2)
+    html = client.get('/app').text
+    assert "2.5% комиссия, минимум 3 USDC, не более 2 в день" in html
+    assert "2.5% fee, min 3 USDC, up to 2 per day" in html
+    assert "手续费 2.5%，最低 3 USDC，每天最多 2 次" in html
+    assert "1% fee, min 1 USDC" not in html
+
+
+def test_landing_deadline_hint_quotes_the_configured_default(client, monkeypatch):
+    """The form said "Пусто — без дедлайна", but an empty field has meant
+    `now + MARKET_DEFAULT_HOURS` since deadlines became mandatory (015)."""
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "MARKET_DEFAULT_HOURS", 42)
+    html = client.get('/').text
+    assert "42 ч по умолчанию" in html
+    assert "без дедлайна" not in html
+    assert "__DEFAULT_DEADLINE_HOURS__" not in html
+
+
+# Each VOLUME_KINDS entry and the words the landing uses for it. A kind the copy
+# does not name is a number the site under-reports to the visitor.
+VOLUME_KIND_WORDS = {
+    "deposit": "депозит",
+    "tip": "чаев",
+    "bet": "ставк",
+    "market_create": "субсиди",
+    "market_buy": "долей",
+    "token_buy": "токен",
+    "paywall": "пост",
+    "channel_pay": "подписк",
+    "x402": "x402",
+}
+
+
+def test_landing_volume_hint_names_every_volume_kind(client):
+    """The chart's headline claim is a list of what counts as volume; the SQL
+    behind it sums `VOLUME_KINDS`. If the two sets diverge, the number on the
+    page is bigger than the sentence that explains it."""
+    from bot.ledger._views import VOLUME_KINDS
+
+    assert set(VOLUME_KIND_WORDS) == set(VOLUME_KINDS), (
+        f"VOLUME_KINDS = {sorted(VOLUME_KINDS)}, the hint's map = {sorted(VOLUME_KIND_WORDS)}"
+    )
+    hint = re.search(r'<p class="hint">(Дневной объём[^<]*)</p>', client.get('/').text)
+    assert hint, "the volume chart lost its explanatory hint"
+    missing = [kind for kind, word in VOLUME_KIND_WORDS.items() if word not in hint.group(1)]
+    assert not missing, f"объём считается по {sorted(VOLUME_KINDS)}, а в тексте нет про: {missing}"
+
+
+def test_landing_parimutuel_formula_names_the_winner_fee(client):
+    """`stake / option pool × total pool` is the gross share; the ledger debits
+    WIN_FEE_PCT from the winner. A formula printed without the fee promises more
+    than the bot pays."""
+    formula = re.search(r"Все ставки складываются.*?обнуляется\.", client.get('/').text, re.S)
+    assert formula, "the parimutuel explanation is gone from the landing page"
+    assert "комисс" in formula.group(0), "the payout formula does not mention the winner fee"
 
 
 def test_farcaster_manifest_404_when_not_configured(client, monkeypatch):

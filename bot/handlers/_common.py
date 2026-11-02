@@ -190,7 +190,7 @@ async def require_private(message: types.Message) -> bool:
 
 
 def help_text(lang: str = "ru") -> str:
-    return i18n.t(lang, "help_full")
+    return i18n.help_text(lang)
 
 
 KIND_EMOJI = {

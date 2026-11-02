@@ -97,6 +97,8 @@
     const $ = (id) => document.getElementById(id);
     const fmtUSDC = (x) =>
       (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+    const fmtPct = (x) =>
+      (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
     const esc = (s) =>
       String(s).replace(/[&<>"']/g, (c) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -152,7 +154,7 @@
           <div class="option${isWinner ? " option-winner" : ""}">
             <div class="option-top">
               <span class="option-label">${esc(o.label)}</span>
-              <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${esc(String(o.probability))}% · ${esc(String(o.backers))} чел.</span>
+              <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${fmtPct(o.probability)} · ${esc(String(o.backers))} чел.</span>
             </div>
             <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
           </div>`;

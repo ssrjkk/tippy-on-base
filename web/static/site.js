@@ -40,6 +40,14 @@
     return String(x).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   }
 
+  // Rates and odds, in the page's own separator and without invented precision:
+  // "1%" for a 1% fee, "2,5%" for a 2.5% one, "57,7%" for a probability.
+  function pctLabel(x, dp) {
+    var n = Number(x);
+    if (!isFinite(n)) n = 0;
+    return n.toLocaleString('ru-RU', { maximumFractionDigits: dp == null ? 1 : dp }) + '%';
+  }
+
   // tx_log stores created_at as epoch seconds, so it has to be read as a number:
   // slicing it like a timestamp string prints the digits, and new Date(seconds)
   // lands in 1970.
@@ -189,7 +197,7 @@
     }
     var wd = [];
     if (L.min_withdraw_usdc) wd.push('не меньше ' + usd(L.min_withdraw_usdc));
-    if (info.fees.withdraw_pct != null) wd.push('комиссия ' + fmt(info.fees.withdraw_pct, 2) + '% сверх суммы');
+    if (info.fees.withdraw_pct != null) wd.push('комиссия ' + pctLabel(info.fees.withdraw_pct) + ' сверх суммы');
     if (L.max_withdraws_per_day) wd.push(L.max_withdraws_per_day + ' в сутки');
     if (wd.length) $('wdLimits').textContent = 'Вывод: ' + wd.join(', ') + '.';
     if (L.min_subsidy_usdc && L.max_subsidy_usdc) {
@@ -303,7 +311,7 @@
       var price = o.price_pct != null ? o.price_pct
         : (o.chance_pct != null ? o.chance_pct : null);
       b.innerHTML = '<span class="opt-label">' + esc(o.label) + '</span>' +
-        (price != null ? '<span class="opt-price">' + fmt(price, 1) + '%</span>' : '');
+        (price != null ? '<span class="opt-price">' + pctLabel(price) + '</span>' : '');
       box.appendChild(b);
     });
   }

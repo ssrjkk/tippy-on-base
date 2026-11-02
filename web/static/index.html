@@ -272,7 +272,7 @@
           <div class="field">
             <label class="label" for="newHours">Дедлайн, часов</label>
             <input class="input" id="newHours" type="number" min="1" max="720" step="1" inputmode="numeric" placeholder="24" />
-            <div class="hint">До 30 дней. Пусто — без дедлайна.</div>
+            <div class="hint">До 30 дней. Пусто — __DEFAULT_DEADLINE_HOURS__ ч по умолчанию.</div>
           </div>
           <div class="field" id="subsidyField">
             <label class="label" for="newSubsidy">Субсидия ликвидности, USDC</label>
@@ -330,7 +330,7 @@
           <span class="eyebrow">Объём</span>
           <h2>Последние 14 дней</h2>
         </div>
-        <p class="hint">Дневные суммы USDC по факту: чаевые, покупка долей LMSR и ставки в пулы.</p>
+        <p class="hint">Дневной объём USDC через бота: депозиты, чаевые, ставки в пулы, субсидии и покупка долей рынков, токены создателей, платные посты, подписки на каналы и x402-платежи.</p>
       </div>
       <div class="chart" id="volume-chart">
         <div class="skeleton-bar"></div>
@@ -370,7 +370,7 @@
         <p class="hint">
           Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
           выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
-          всего пула; не выбранный исход обнуляется.
+          всего пула за вычетом комиссии победителю; не выбранный исход обнуляется.
         </p>
       </div>
       <div class="markets" id="markets-list">

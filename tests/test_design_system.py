@@ -629,15 +629,21 @@ def test_generated_bars_are_clamped_and_their_stagger_capped():
     assert not offenders, offenders
 
 
-def test_chart_scaling_divides_by_a_non_zero_max():
-    """`volume / max` over an empty or all-zero series is Infinity% — the chart
-    vanishes instead of drawing a flat line. The guard lives where max is born."""
+def test_chart_scaling_never_divides_by_a_zero_max():
+    """`volume / max` over an all-zero series is NaN% — the bars vanish and every
+    column height becomes an invalid CSS assertion. Zero days are real rows now,
+    so the function must take its empty branch before it divides."""
     for name in (*PAGES, *SCRIPTS):
-        text = read(name)
-        if "/ max" not in text:
+        body = js_function(read(name), "loadVolumeChart")
+        if body is None or "/ max" not in body:
             continue
-        assert re.search(r"max\s*=\s*Math\.max\([^;]*,\s*1\)", text), (
-            f"{name} scales a chart by a max that is not floored at 1"
+        assert re.search(r"max\s*=\s*Math\.max\([^;]*,\s*0\)", body), (
+            f"{name} scales a chart by a max that is not read from the series"
+        )
+        guard = re.search(r"if\s*\(\s*max\s*<=\s*0\s*\)", body)
+        assert guard, f"{name} has no all-zero branch for the chart"
+        assert body.index(guard.group(0)) < body.index("/ max"), (
+            f"{name} divides by max before checking that it is non-zero"
         )
 
 
@@ -650,6 +656,22 @@ def test_chart_columns_carry_their_value_as_text():
             continue
         assert 'title="${' in text, f"{name} renders chart columns with no readable value"
         assert "chart-day" in text, f"{name} renders chart bars with no axis label"
+
+
+def test_painted_percentages_take_the_interface_locale():
+    """`${pct.toFixed(1)}%` and `${String(o.probability)}%` paint a dot into a
+    Russian interface whose money is written with a comma, so two surfaces show
+    the same odds differently. A percent is a number like any other: it goes
+    through a helper that asks the locale. Only the template shapes are checked —
+    `x.toFixed(1) + '%'` inside a `style="width:…"` is geometry, not text."""
+    raw_percent = re.compile(r"\$\{[^}]*?(?:\.toFixed\(|String\()[^}]*?\}%")
+    offenders = [
+        f"{name}:{number}: {line.strip()[:80]}"
+        for name in (*PAGES, *SCRIPTS)
+        for number, line in enumerate(read(name).splitlines(), 1)
+        if raw_percent.search(line)
+    ]
+    assert not offenders, offenders
 
 
 def test_the_chart_has_both_an_empty_and_a_failed_state():
@@ -849,6 +871,49 @@ def test_the_document_preconnects_to_the_hosts_the_fonts_live_on():
         text = read(name)
         assert '<link rel="preconnect" href="https://fonts.googleapis.com"' in text, name
         assert '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin' in text, name
+
+
+EDGE = ROOT / "functions" / "[[path]].js"
+MAINTENANCE_RE = re.compile(r"const MAINTENANCE = `(.*?)`;\n\nfunction maintenance", re.S)
+
+
+def test_the_edge_maintenance_card_obeys_the_same_document_contract():
+    """The 503 card comes from the Pages function, not from web/static, so every
+    gate above walks past it. It is still the first page a visitor sees when the
+    origin is down: same faces, same canvas, and no @import on the critical path."""
+    match = MAINTENANCE_RE.search(EDGE.read_text(encoding="utf-8"))
+    assert match, "the edge maintenance card is gone or its template shape changed"
+    html = match.group(1)
+
+    viewport = VIEWPORT_RE.search(html)
+    assert viewport, "the maintenance card has no viewport meta"
+    assert not [token for token in ZOOM_BLOCKERS if token in viewport.group(1)]
+
+    assert not FONT_IMPORT_RE.findall(html), "the maintenance card @imports a webfont"
+    assert '<link rel="preconnect" href="https://fonts.googleapis.com"' in html
+    assert '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin' in html
+    reference = FONT_LINK_RE.search(read("index.html")).group(1)
+    assert FONT_LINK_RE.findall(html) == [reference], (
+        "the maintenance card requests different faces than the site"
+    )
+
+    want = {
+        "light": normalized(resolve(LIGHT, "--canvas")),
+        "dark": normalized(resolve(DARK, "--canvas")),
+    }
+    found = {scheme: content.strip().lower()
+             for scheme, content in THEME_COLOR_RE.findall(html)}
+    assert found == want, f"theme-color: {found} vs canvas {want}"
+
+    for tokens, label in ((LIGHT, "light"), (DARK, "dark")):
+        for token in ("--canvas", "--blue"):
+            value = resolve(tokens, token)
+            assert f"{token}: {value}" in html, (
+                f"the card does not carry the {label} {token} token ({value})"
+            )
+
+    assert len(re.findall(r"<h1[ >]", html)) == 1, "the card needs exactly one h1"
+    assert ":focus-visible" in html, "the card has links but paints no focus ring"
 
 
 def faces_from_url(href: str) -> dict[str, set[int]]:

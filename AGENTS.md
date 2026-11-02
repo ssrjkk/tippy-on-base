@@ -17,7 +17,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~12 min, 1121 tests (18 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~12 min, 1176 tests (18 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -35,8 +35,11 @@
   asks for are the weights the font URL downloads, no viewport that blocks pinch zoom, `theme-color`
   present for both schemes and equal to the canvas token, `outline: none` legal only where a ring is
   painted in its place, the focus ring ≥ 3:1 on both canvases, every page with exactly one `<h1>` and no
-  skipped heading levels, no dead `<symbol>` in the icon sprite, and every `skeleton` owned by code that
-  replaces it. It reads files only — no browser, no database, so it runs in ordinary CI.
+  skipped heading levels, no dead `<symbol>` in the icon sprite, every `skeleton` owned by code that
+  replaces it, every painted percentage taking the interface locale (a `${x.toFixed(1)}%` template is a
+  failure), and the **edge maintenance card** in `functions/[[path]].js` held to the same document
+  contract as the pages — it is served without the origin, so nothing else measures it.
+  It reads files only — no browser, no database, so it runs in ordinary CI.
 - `tests/test_production_design.py` measures the **rendered** page (Playwright, marked
   `production`, runs in `prod-health-check.yml`) across five surfaces — landing dark/light, a market
   page, `/app` on a phone with touch, and `/agent` — and taps **all four Mini App tabs** in one load,
@@ -52,6 +55,11 @@
   without it the bar-vs-number gate skips with that reason printed.
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
   unused by any page.
+- `tests/conftest.py` assigns `ADMIN_TG_ID` and `OWNER_ID` with `os.environ[...] =`, **not**
+  `setdefault`: `bot/config.py` `load_dotenv`s the dev `.env` at import and `load_dotenv` never
+  overrides, so a maintainer's real `OWNER_ID` folds `ADMIN_TG_ID` onto itself and every
+  owner-gated endpoint refuses the session the tests mint. Six gates were green in CI and red on the
+  laptop until the pin was made unconditional.
 - Never push without an explicit word from the maintainer. Commit locally, report, wait.
 
 ## Ledger facts
@@ -62,6 +70,14 @@
   `SELECT … FOR UPDATE` and guarded `INSERT … WHERE` statements, not from the lock.
 - `tx_log.amount` is always positive. Sign, label and counterparty come from `kind` through
   `bot/tx_view.py` — never from the amount, and never re-derived per page.
+- "Volume" has one definition: `VOLUME_KINDS` in `bot/ledger/_views.py` — tip, deposit, bet,
+  `market_create` (the creator's subsidy is a stake like any pool stake), `market_buy`, `token_buy`,
+  `paywall`, `channel_pay`, x402. Receiver mirrors (`tip_in`, `rain_in`, `token_sale`, `paywall_earn`,
+  `channel_earn`) and payouts (`bet_win`, `market_win`, `market_sell`, `*_cancel`, `withdraw_refund`,
+  `dividend`, `creator_income`, `fee`) stay out, because they are the same movement booked once or
+  money that already counted. `/api/stats`, `/api/volume_history`, `/metrics` and the landing legend
+  all read this tuple; `test_landing_volume_hint_names_every_volume_kind` fails when the sentence and
+  the tuple diverge.
 - Money-moving `POST /api/mini/*` requires an `Idempotency-Key` header (see `docs/SECURITY.md`);
   withdraw is the exception and uses the staged single-use token.
 - The AI daily answer budget and provider health are DB rows (`ai_usage_day`, `ai_provider` in

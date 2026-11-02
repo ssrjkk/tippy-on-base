@@ -636,15 +636,16 @@ def test_chart_bar_heights_match_the_numbers_they_plot(landing_phone):
     series = data["api"]["/api/volume_history?days=14"]
     if isinstance(series, dict) and series.get("error"):
         pytest.fail(f"volume history API failed: {series['error']}")
-    if not series:
-        assert not data["bars"], "empty series but the chart drew bars"
+    volumes = [float(item["volume_usdc"]) for item in series or []]
+    nonzero = [value for value in volumes if value > 0]
+    if not nonzero:
+        assert not data["bars"], "каждый день нулевой, а график нарисовал столбцы"
         return
-    assert len(data["bars"]) == len(series), (
-        f"API вернул {len(series)} дней, нарисовано {len(data['bars'])} столбцов"
+    assert len(data["bars"]) == len(nonzero), (
+        f"дней с объёмом {len(nonzero)}, нарисовано столбцов {len(data['bars'])}"
     )
-    volumes = [float(item["volume_usdc"]) for item in series]
-    maximum = max(max(volumes), 1.0)
-    expected = [max(v / maximum * 100, 2.0) for v in volumes]
+    maximum = max(nonzero)
+    expected = [max(value / maximum * 100, 2.0) for value in nonzero]
     for index, (got, want) in enumerate(zip(data["bars"], expected)):
         assert abs(got - want) <= 1.5, (
             f"столбец {index}: нарисовано {got}% высоты, по данным должно {want:.2f}%"
