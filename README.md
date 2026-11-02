@@ -157,7 +157,7 @@ accounting backed by public proof-of-reserves.
 
 ### Breakthrough Base L2 Features
 
-5 killer functions leveraging unique Base L2 capabilities:
+4 killer functions leveraging unique Base L2 capabilities:
 
 #### 1. Gasless Onboarding
 **New users get 10 FREE transactions — zero barrier to entry.**
@@ -188,30 +188,9 @@ accounting backed by public proof-of-reserves.
                                   @creator: $10.00 every monthly
 ```
 
-**Why it's a breakthrough:** First Telegram bot with native recurring payments on Base. Creators can set up patronage, teams can automate salaries, communities can run membership programs — all trustless and automatic.
+**Why it matters:** the schedule lives in the bot's own Postgres and an hourly watcher debits the internal USDC balance — no external billing service, nothing to renew by hand. Creators use it for patronage, communities for paid memberships.
 
-#### 3. On-chain Credit Score
-**History-based reputation for P2P micro-lending — no collateral needed.**
-
-- `/credit` — view your credit score (300-850) and loan limit
-- Score computed from 5 factors:
-  - Payment history (40%) — success rate of transactions
-  - Account age (20%) — older = higher score
-  - Transaction volume (15%) — more activity = higher score
-  - Market participation (15%) — prediction market activity
-  - Social connections (10%) — unique counterparties
-- Grades: A (750+), B (650+), C (550+), D (450+), F (<450)
-- Max loan: base_limit × grade_multiplier × confidence
-
-```
-/credit -> Credit Score: 775 (A)
-           Confidence: 100%
-           Max loan: $1000.00
-```
-
-**Why it's a breakthrough:** Traditional DeFi requires collateral. This uses on-chain behavior to establish trust — enabling undercollateralized lending in Telegram communities. Perfect for micro-loans between people who tip and trade together.
-
-#### 4. Creator Tokens with Revenue Sharing
+#### 3. Creator Tokens with Revenue Sharing
 **Issue tokens that automatically distribute your earnings to holders.**
 
 - `/createtoken <name> <SYMBOL> <supply> <price>` — launch a creator token
@@ -275,7 +254,6 @@ A plain-language walkthrough for Telegram users lives in
 | `/balance` / `/stats` / `/top` / `/history` | Analytics |
 | `/gasless` | Check free gasless transactions |
 | `/subscribe @user <amt> <interval>` · `/subscriptions` · `/cancelsub` | Recurring payments |
-| `/credit` | On-chain credit score + loan limit |
 | `/createtoken <name> <SYM> <supply> <price>` | Launch a creator token |
 | `/buytoken <id> <amount>` · `/claim <id>` | Buy tokens / claim dividends |
 | `/basename` | Claim a Basename (on-chain identity) |
@@ -300,7 +278,7 @@ bot/
 │  ├─ ai.py             /ask AI assistant
 │  ├─ basename.py       /basename on-chain identity
 │  ├─ agent.py          /agent admin dashboard
-│  └─ breakthrough.py   /gasless, /subscribe, /credit, /createtoken
+│  └─ breakthrough.py   /gasless, /subscribe, /createtoken
 ├─ ledger/              PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
 │  ├─ __init__.py       Ledger facade + singletons + lmsr_* re-exports
 │  ├─ _core.py          connect/schema/ping
@@ -332,7 +310,6 @@ bot/
 ├─ smart_wallet.py      ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
 ├─ paymaster.py         Base Paymaster integration: gasless onboarding (10 free txs)
 ├─ recurring.py         Recurring payments: subscriptions executor (hourly watcher)
-├─ credit.py            Credit scoring: 300-850 P2P lending score
 ├─ creator_tokens.py    Revenue sharing: creator tokens + dividend distribution
 ├─ create2.py           CREATE2 deterministic address computation
 ├─ solvency.py          Proof-of-reserves: liabilities vs on-chain USDC
@@ -371,7 +348,7 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts
-python -m pytest -q -m "not production"   # 1176 passed
+python -m pytest -q -m "not production"   # 1184 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password

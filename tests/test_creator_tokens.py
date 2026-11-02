@@ -413,3 +413,29 @@ async def test_handlers_bind_store_instances():
         hasattr(_common.recurring, name)
         for name in ("create", "cancel", "list_for_user", "get_due", "mark_executed")
     )
+async def test_claim_command_formats_the_dividend_it_paid(tmp_path, ledger, monkeypatch):
+    """/claim credited the dividend and then formatted it with `{amount:.2f}` while
+    handing that spec `_fmt()`'s text — ValueError after the money moved, so the
+    user saw nothing and the balance was already higher. The reply has to name
+    what was paid."""
+    from test_handlers import Message
+
+    from bot.creator_tokens import CreatorTokenRegistry
+    from bot.handlers import _common as common
+    from bot.handlers import cmd_claim_dividends
+
+    ledger.credit(BUYER_A, 200_000_000_000, "deposit")  # $200k
+    registry = CreatorTokenRegistry(tmp_path)
+    token = await _make_token(registry)
+    monkeypatch.setattr(common, "creator_tokens", registry)
+
+    assert (await registry.buy_tokens(token.token_id, BUYER_A, 1_000_000))[0] is True
+    after_buy = ledger.balance(BUYER_A)
+    assert await registry.distribute_dividend(token.token_id, 10_000_000) is not None
+
+    msg = Message(text=f"/claim {token.token_id}", from_id=BUYER_A)
+    await cmd_claim_dividends(msg)
+
+    text = msg.answers[0][0]
+    assert "$10.00" in text, text
+    assert ledger.balance(BUYER_A) == after_buy + Decimal("10")

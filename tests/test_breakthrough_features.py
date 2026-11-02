@@ -1,15 +1,12 @@
-"""Breakthrough Base features: gasless paymaster, recurring payments, credit
-score.
+"""Breakthrough Base features: gasless paymaster and recurring payments.
 
 Made by @ssrjkk — github.com/ssrjkk.
 """
 
 import time
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from bot.credit import CreditScorer
 from bot.paymaster import FREE_TRANSACTIONS_COUNT, check_eligibility, get_state
 from bot.recurring import RecurrenceInterval, RecurringPaymentStore
 
@@ -93,23 +90,3 @@ async def test_recurring_atomic_claim_prevents_double_execution(ledger):
     row2 = await ledger_mod.async_ledger.recurring_get("test_sub_atomic")
     assert int(row2["execution_count"]) == 1
     assert int(row2["next_execution"]) == first_next
-
-
-@pytest.mark.asyncio
-async def test_credit_score_bounds():
-    mock_ledger = MagicMock()
-    mock_ledger.user_stats = AsyncMock(return_value={
-        "total_transactions": 50,
-        "failed_transactions": 2,
-        "total_volume_micro": 5000_000_000,  # $5000
-    })
-    mock_ledger.get_user_created = AsyncMock(return_value=time.time() - 180 * 86400)
-    mock_ledger.count_markets_created = AsyncMock(return_value=5)
-    mock_ledger.count_markets_participated = AsyncMock(return_value=15)
-    mock_ledger.count_unique_peers = AsyncMock(return_value=12)
-
-    scorer = CreditScorer(mock_ledger)
-    credit = await scorer.calculate(123456)
-    assert 300 <= credit.score <= 850
-    assert credit.grade in ["A", "B", "C", "D", "F"]
-    assert await scorer.get_max_loan(123456) > 0

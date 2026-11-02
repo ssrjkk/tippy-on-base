@@ -1536,3 +1536,30 @@ def test_no_substitution_marker_survives_into_any_served_page(client):
         if found:
             leaked.append((url, found))
     assert not leaked, leaked
+def test_onchain_list_and_market_page_print_the_same_price(client, ledger, monkeypatch):
+    """`price_pct` is one field served two ways. The list rounded with the builtin
+    (banker's, over a float) and the page with Decimal ROUND_HALF_UP, so the same
+    market could read 12,34% in one place and 12,35% in the other."""
+    from bot import config
+    from bot import onchain_market as om
+
+    async def fake_prices(market_id, count):
+        # Chosen because the two rounders disagree here: the builtin sees
+        # 0.10499999999999999 * 100 and gives 0.1, ROUND_HALF_UP on the decimal
+        # text gives 0.11.
+        return [0.00105, 0.99895]
+
+    async def fake_info(market_id):
+        return {"b": 5_000_000_000, "escrow_micro": 250_000_000, "resolved": False,
+                "disputed": False, "cancelled": False, "winning_outcome": None}
+
+    monkeypatch.setattr(om, "market_prices", fake_prices)
+    monkeypatch.setattr(om, "get_market_info", fake_info)
+    monkeypatch.setattr(config, "OUTCOME_MARKET_ADDRESS", "0x" + "ab" * 20)
+    ledger.save_onchain_market(7, 777, "Один и тот же рынок?", ["да", "нет"], 4_000_000_000)
+
+    page = client.get("/api/onchain/market/7").json()["options"]
+    listed = next(m for m in client.get("/api/onchain/markets").json() if m["id"] == 7)
+    expected = [0.11, 99.9]
+    assert [o["price_pct"] for o in page] == expected, page
+    assert [o["price_pct"] for o in listed["options"]] == expected, listed

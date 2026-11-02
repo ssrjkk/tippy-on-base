@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import os
+import re
 import time
 from decimal import ROUND_CEILING, Decimal
 
@@ -2193,3 +2194,34 @@ def test_smart_wallet_deployed_flag(ledger):
     addr = "0x" + "cd" * 20
     ledger.set_smart_wallet(ALICE, addr)
     assert ledger.get_smart_wallet(ALICE)["smart_deployed"] is True
+
+
+LEDGER_CALL_RE = re.compile(r"(?:_ledger|ledger|async_ledger|led)\.([a-zA-Z_][a-zA-Z0-9_]*)\(")
+
+
+def test_every_ledger_call_site_resolves_on_the_real_class():
+    """`bot/credit.py` called five Ledger methods that were never written, so
+    `/credit` answered every user with an AttributeError — and its own test was
+    green because it handed the scorer a dict of its own invention. A call site
+    is checked against the class here, so a ledger API that does not exist cannot
+    be merged, and no test can invent one."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    real = {name for name in dir(Ledger) if not name.startswith("__")}
+
+    unresolved: dict[str, list[str]] = {}
+    for pkg in ("bot", "web", "agent", "deploy", "scripts"):
+        for dirpath, _dirs, files in os.walk(os.path.join(root, pkg)):
+            for fname in files:
+                if not fname.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, fname)
+                with open(path, encoding="utf-8") as handle:
+                    for name in LEDGER_CALL_RE.findall(handle.read()):
+                        if name not in real:
+                            rel = os.path.relpath(path, root).replace("\\", "/")
+                            unresolved.setdefault(name, []).append(rel)
+
+    assert not unresolved, (
+        f"Ledger has no {sorted(unresolved)} — "
+        + "; ".join(f"{m}() called from {', '.join(set(sites))}" for m, sites in sorted(unresolved.items()))
+    )

@@ -2519,11 +2519,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "❌ Subscription not found or you don't have permission.",
         "zh": "❌ 未找到订阅或你没有权限。",
     },
-    "credit_score": {
-        "ru": "📊 <b>Кредитный рейтинг:</b>\n\nОценка: <b>{score}</b> ({grade})\nДостоверность: {confidence}%\nМакс. займ: <b>${max_loan:.2f}</b>\n\nРейтинг растёт с активностью: транзакции, рынки, история.",
-        "en": "📊 <b>Credit Score:</b>\n\nScore: <b>{score}</b> ({grade})\nConfidence: {confidence}%\nMax loan: <b>${max_loan:.2f}</b>\n\nScore grows with activity: transactions, markets, history.",
-        "zh": "📊 <b>信用评分：</b>\n\n评分：<b>{score}</b>（{grade}）\n可信度：{confidence}%\n最大贷款：<b>${max_loan:.2f}</b>\n\n活跃度提升评分：交易、市场、历史。",
-    },
     "create_token_format": {
         "ru": "Формат: /createtoken <name> <SYMBOL> <supply> <price>\nПример: /createtoken \"My Token\" MTK 1000000 0.10",
         "en": "Format: /createtoken <name> <SYMBOL> <supply> <price>\nExample: /createtoken \"My Token\" MTK 1000000 0.10",

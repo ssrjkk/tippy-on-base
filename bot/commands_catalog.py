@@ -54,7 +54,6 @@ BOT_COMMAND_SPECS = [
     ('subscribe', 'Подписка на платежи', 'tips'),
     ('subscriptions', 'Мои подписки', 'tips'),
     ('cancelsub', 'Отменить подписку', 'tips'),
-    ('credit', 'Кредитный рейтинг', 'creator'),
     ('createtoken', 'Создать токен создателя', 'creator'),
     ('buytoken', 'Купить токен создателя', 'creator'),
 ]

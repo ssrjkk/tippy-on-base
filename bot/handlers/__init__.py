@@ -65,7 +65,6 @@ from .breakthrough import (
     cmd_cancel_sub,
     cmd_claim_dividends,
     cmd_create_token,
-    cmd_credit,
     cmd_gasless,
     cmd_subscribe,
     cmd_subscriptions,
@@ -158,7 +157,6 @@ router.message.register(cmd_gasless, Command('gasless'))
 router.message.register(cmd_subscribe, Command('subscribe'))
 router.message.register(cmd_subscriptions, Command('subscriptions'))
 router.message.register(cmd_cancel_sub, Command('cancelsub'))
-router.message.register(cmd_credit, Command('credit'))
 router.message.register(cmd_create_token, Command('createtoken'))
 router.message.register(cmd_buy_token, Command('buytoken'))
 router.message.register(cmd_claim_dividends, Command('claim'))

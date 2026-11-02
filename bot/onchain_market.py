@@ -785,6 +785,18 @@ async def cancel_expired(market_id: int, private_key: str) -> str:
         (market_id,), private_key, 200000)
 
 
+def price_pct(price) -> float:
+    """A share price as the percentage the page prints.
+
+    The market list used the builtin `round()` (banker's, on a float) while the
+    market page used Decimal ROUND_HALF_UP, so one market could show 12,34% on
+    the card and 12,35% on its own page. One field, one rounding.
+    """
+    from decimal import ROUND_HALF_UP, Decimal
+
+    return float((Decimal(str(price)) * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
 async def market_views(limit: int = 12) -> list[dict]:
     """Dashboard/Mini-App friendly snapshots of registered on-chain markets:
     registry labels + live on-chain prices and resolution state. Markets that
@@ -813,7 +825,7 @@ async def market_views(limit: int = 12) -> list[dict]:
             'winner': info.get('winning_outcome'),
             'market_address': config.OUTCOME_MARKET_ADDRESS,
             'options': [
-                {'index': i, 'label': o, 'price_pct': float(round(prices[i] * 100, 2))}
+                {'index': i, 'label': o, 'price_pct': price_pct(prices[i])}
                 for i, o in enumerate(options)
             ],
         }

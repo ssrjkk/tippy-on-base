@@ -134,7 +134,6 @@ revenue.
 | `/createtoken` | Launch your own creator token |
 | `/buytoken` | Buy a creator's token |
 | `/claim <token_id>` | Claim accumulated dividends |
-| `/credit` | Check your on-chain credit score |
 
 ---
 
@@ -152,7 +151,7 @@ revenue.
 
 | Command | What it does |
 |---|---|
-| `/subscribe <id>` · `/subscriptions` · `/cancelsub` | Recurring payments to a creator |
+| `/subscribe @user <amount> <interval>` · `/subscriptions` · `/cancelsub <id>` | Recurring payments to a user |
 | `/paywall` | Paid channels and content |
 | `/donate` | Personal donation page with QR |
 | `/ask <question>` | Ask the AI assistant |

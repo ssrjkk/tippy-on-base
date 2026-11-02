@@ -17,7 +17,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~12 min, 1176 tests (18 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~13 min, 1184 tests (18 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -27,6 +27,21 @@
   App keeps a separate dictionary inline in `web/static/app.html` (`I18N.ru/en/zh`) — a new `t('key')`
   has to be added to all three, and a key whose last reference is removed has to be removed too.
   `tests/test_web.py::test_mini_app_dictionaries_have_identical_key_sets` is that rule as a gate.
+- Two AST gates read the runtime tree, because prose review missed both:
+  `test_every_ledger_call_site_resolves_on_the_real_class` (every `ledger.<method>()` call in
+  `bot|web|agent|deploy|scripts` has to exist on `Ledger` — `bot/credit.py` called five methods
+  that were never written, so `/credit` answered every user with `AttributeError`) and
+  `test_no_pre_formatted_money_is_handed_a_numeric_placeholder` (a `{amount:.2f}` string given
+  `_fmt()`'s text raises `ValueError: Unknown format code 'f'`; `/subscribe` and `/claim` looked
+  broken forever because the broad `except` turned the successful debit into a format-hint card).
+  `test_every_i18n_call_passes_the_placeholders_its_string_needs` covers the third shape: a missing
+  kwarg is a `KeyError`, not a blank. A fourth reads every `i18n.t` argument that carries user text
+  (`name`, `to_username`, `question`, `label`, …) and requires the escaper — the bot answers with
+  `parse_mode=HTML`, so raw text either makes Telegram refuse a message whose money already moved or
+  injects markup; the deadline notifiers in `bot/main.py` did that. Percentage fields have ONE
+  rounder: `onchain_market.price_pct` (Decimal ROUND_HALF_UP) — the market list rounded with the
+  builtin (banker's, over a float) while the market page used HALF_UP, so `0.00105` printed 0.1 in one
+  place and 0.11 in the other (`test_onchain_list_and_market_page_print_the_same_price`).
 - `tests/test_design_system.py` is the design contract, measured from the files: contrast of every
   declared `color`/`background` pair **and** of every text colour against both canvases, "mono implies
   tabular digits" **in both stylesheets**, no raw hex outside the token blocks, the site and Mini App
@@ -70,6 +85,11 @@
   `SELECT … FOR UPDATE` and guarded `INSERT … WHERE` statements, not from the lock.
 - `tx_log.amount` is always positive. Sign, label and counterparty come from `kind` through
   `bot/tx_view.py` — never from the amount, and never re-derived per page.
+- The solvency number is `total_liabilities()` (`bot/ledger/_withdraw.py`) — SIX categories: user
+  balances, open market escrow, open bet pools, community treasuries, unswept x402 credit, unclaimed
+  pending deposits. `/api/solvency` prints `pending_deposits_usdc` as one of them, not as an extra;
+  the landing labels the total «Все обязательства бота». Never call it «balances» — the label is a
+  claim about the formula.
 - "Volume" has one definition: `VOLUME_KINDS` in `bot/ledger/_views.py` — tip, deposit, bet,
   `market_create` (the creator's subsidy is a stake like any pool stake), `market_buy`, `token_buy`,
   `paywall`, `channel_pay`, x402. Receiver mirrors (`tip_in`, `rain_in`, `token_sale`, `paywall_earn`,
@@ -94,6 +114,11 @@
   allowlist.
 - No new module, mixin or migration lands unless it is called from the live runtime path in the same
   change; verify with a repository-wide grep that excludes its own definition and its tests.
+- The bot lends nothing: there is no loan, collateral or repayment path anywhere in the ledger. The
+  `CreditScorer` / `/credit` feature (300-850 score, "Макс. займ: $100-1000") was deleted on
+  2026-11-02 — it never returned a number, and the limit it printed promised money the product
+  cannot move. Do not re-add a score, a limit or a "credit" menu entry without a lending ledger
+  operation behind it.
 
 ## Interface
 

@@ -584,7 +584,6 @@ async def api_onchain_markets() -> list[dict]:
 @app.get('/api/onchain/market/{market_id}', tags=['markets'])
 async def api_onchain_market(market_id: int) -> dict:
     """One on-chain market: registry labels + live on-chain state/prices."""
-    from decimal import ROUND_HALF_UP, Decimal
 
     from bot import onchain_market as om
     m = await ledger.get_onchain_market(market_id)
@@ -606,7 +605,7 @@ async def api_onchain_market(market_id: int) -> dict:
         'winner': info.get('winning_outcome'),
         'market_address': config.OUTCOME_MARKET_ADDRESS,
         'options': [
-            {'index': i, 'label': o, 'price_pct': float((Decimal(str(prices[i])) * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))}
+            {'index': i, 'label': o, 'price_pct': om.price_pct(prices[i])}
             for i, o in enumerate(options)
         ],
     }
@@ -719,11 +718,14 @@ async def api_x402_paywall(request: Request) -> Response:
 
 @app.get('/api/solvency', tags=['treasury'])
 async def api_solvency() -> dict:
-    """Transparency: every user balance is a claim on the treasury.
+    """Transparency: every claim on the treasury, against what is really held.
 
-    owed = internal balances + unclaimed pending deposits. Primary reserves
-    come from the TipBotVault contract when it is deployed (on-chain proof of
-    reserves, readable by anyone); otherwise the hot wallet is the reserve.
+    `owed_usdc` is `total_liabilities()` — six categories: user balances, open
+    market escrow, open bet pools, community treasuries, unswept x402 credit and
+    unclaimed pending deposits. `pending_deposits_usdc` is one of the six, printed
+    separately, not a seventh thing to add. Reserves come from the TipBotVault
+    contract when it is deployed (on-chain, readable by anyone); otherwise from
+    the hot wallet.
     """
     from decimal import ROUND_HALF_UP, Decimal
 
