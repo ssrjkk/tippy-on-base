@@ -103,3 +103,49 @@ def test_help_card_names_the_configured_withdrawal_terms(monkeypatch):
             assert needle in text, (lang, needle)
         assert "1%" not in text, (lang, text)
         assert "{wd_fee}" not in text and "{min_wd}" not in text, (lang, text)
+MONEY_SPEC = re.compile(r"\{[a-zA-Z_]\w*:[^{}]*[fdge][^{}]*\}")
+
+
+def test_the_dictionary_never_formats_money_itself():
+    """Precision belongs to `_fmt()`. A `{amount:.2f}` inside a translated string
+    creates a second money format and explodes with ValueError when a handler hands
+    it the text `_fmt()` already produced — which is exactly how `/subscribe` and
+    `/claim` looked broken after the money had moved."""
+    offenders = [
+        f"{key}/{lang}"
+        for key, table in i18n.STRINGS.items()
+        for lang, text in table.items()
+        if MONEY_SPEC.search(text)
+    ]
+    assert not offenders, offenders
+
+
+def test_usdc_is_never_printed_with_a_dollar_sign():
+    """The unit is USDC. Nine cards wrote "$5.00" while the rest of the bot wrote
+    "5 USDC", so the same money looked like two currencies in one chat. A ticker
+    like `($MTK)` is not an amount and stays."""
+    offenders = []
+    for key, table in i18n.STRINGS.items():
+        for lang, text in table.items():
+            for match in re.finditer(r"\$(?!\{symbol\})", text):
+                start = max(0, match.start() - 24)
+                offenders.append(f"{key}/{lang}: ...{text[start:match.start() + 24]}...")
+    assert not offenders, offenders
+
+
+def test_the_onchain_outcome_limits_are_the_contract_ones():
+    """`/oc_create` advertises an option band and refuses outside it; the chain
+    enforces the same numbers in `createMarket`. Two sources, one truth: the
+    Python constants are read out of the Solidity here."""
+    import bot.handlers.onchain as oc
+
+    source = (Path(__file__).resolve().parents[1] / "contracts" / "OutcomeMarket.sol").read_text(
+        encoding="utf-8"
+    )
+    declared = int(re.search(r"MAX_OUTCOMES = (\d+);", source).group(1))
+    accepted = int(re.search(r"numOutcomes < (\d+)", source).group(1))
+    bot_band = (oc.MIN_ONCHAIN_OUTCOMES, oc.MAX_ONCHAIN_OUTCOMES)
+    contract_band = (accepted, declared)
+    assert bot_band == contract_band, (
+        f"contract allows {contract_band[0]}..{contract_band[1]}, the bot claims {bot_band[0]}..{bot_band[1]}"
+    )

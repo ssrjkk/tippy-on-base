@@ -226,6 +226,16 @@ def _fmt(amount_micro: int) -> str:
     return s if s else "0"
 
 
+def _fmt_usdc(value: object) -> str:
+    """`_fmt()` for an amount that arrived in USDC rather than micro-units.
+
+    The agent's caps status reports floats (`daily_spent_micro / 1_000_000`);
+    printing those with an f-string spec would invent a second money format, so
+    they come back through the one formatter the ledger cards use.
+    """
+    return _fmt(int((Decimal(str(value)) * Decimal(10 ** config.USDC_DECIMALS)).to_integral_value()))
+
+
 def _to_micro(amount: Decimal) -> int:
     return int(amount * Decimal(10**config.USDC_DECIMALS))
 

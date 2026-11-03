@@ -2905,7 +2905,8 @@ def test_cmd_subscribe_resolves_the_peer(ledger, monkeypatch):
     m = Message(f"/subscribe {args}")
     run(cmd_subscribe(m))
 
-    assert "@bob" in m.answers[0][0] and "5.00" in m.answers[0][0], m.answers
+    text = m.answers[0][0]
+    assert "@bob" in text and "5 USDC" in text, text
     rows = ledger.recurring_list_for_user(ALICE)
     assert [int(r["to_tg_id"]) for r in rows] == [BOB]
     assert int(rows[0]["amount_micro"]) == 5_000_000
@@ -3034,3 +3035,38 @@ def test_user_text_reaching_an_html_reply_is_escaped():
                     rel = path.relative_to(root).as_posix()
                     offenders.append(f"{rel}:{kw.lineno}: {kw.arg}={expr[:50]}")
     assert not offenders, "\n".join(offenders)
+def test_oc_create_hint_names_the_configured_limits(ledger, monkeypatch):
+    """/oc_create used to print "Субсидия $10–1000 … метка до 60 символов" as text.
+    The numbers a user is refused by come from config, so the card has to follow
+    config too."""
+    from decimal import Decimal as _Decimal
+
+    from bot import config
+    from bot.handlers.onchain import cmd_oc_create
+
+    monkeypatch.setattr(config, "OUTCOME_MARKET_ADDRESS", "0x" + "11" * 20)
+    monkeypatch.setattr(config, "MARKET_MIN_SUBSIDY_USDC", _Decimal("17"))
+    monkeypatch.setattr(config, "MARKET_MAX_SUBSIDY_USDC", _Decimal("420"))
+    monkeypatch.setattr(config, "MAX_OPTION_LEN", 44)
+
+    m = Message("/oc_create")
+    run(cmd_oc_create(m))
+    text = m.answers[0][0]
+    assert "17–420 USDC" in text, text
+    assert "44" in text, text
+    assert "$" not in text, text
+
+
+def test_oc_create_refuses_too_many_options(ledger, monkeypatch):
+    """Nine options used to be cut to eight in silence: the user's last option
+    vanished and the market they got was not the one they asked for."""
+    from bot import config
+    from bot.handlers.onchain import cmd_oc_create
+
+    monkeypatch.setattr(config, "OUTCOME_MARKET_ADDRESS", "0x" + "11" * 20)
+    options = " | ".join(f"Вариант {i}" for i in range(1, 10))
+    m = Message(f"/oc_create 10 Вопрос | {options}")
+    run(cmd_oc_create(m))
+
+    assert "Формат" in m.answers[0][0], m.answers
+    assert ledger.open_amm_markets(limit=20) == []

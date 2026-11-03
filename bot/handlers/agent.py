@@ -79,10 +79,14 @@ async def cmd_agent(message: types.Message) -> None:
         return
     lines = [
         i18n.t(lang, 'agent_header', tg_id=agent_config.AGENT_TG_ID),
-        i18n.t(lang, 'agent_spend', spent=f"{s['daily_spent_usdc']:.2f}", cap=f"{s['daily_cap_usdc']:.2f}"),
+        i18n.t(lang, 'agent_spend',
+               spent=common._fmt_usdc(s["daily_spent_usdc"]),
+               cap=common._fmt_usdc(s["daily_cap_usdc"])),
         i18n.t(lang, 'agent_actions', done=s['actions_this_hour'], cap=s['max_actions_per_hour']),
         i18n.t(lang, 'agent_errors', n=s['consecutive_errors'], cb='🔴' if s['cooldown_active'] else '🟢'),
-        i18n.t(lang, 'agent_caps_line', daily=f"{agent_config.DAILY_SPEND_CAP_USDC:.0f}", per_tx=f"{agent_config.PER_TX_CAP_USDC:.0f}"),
+        i18n.t(lang, 'agent_caps_line',
+               daily=common._fmt_usdc(agent_config.DAILY_SPEND_CAP_USDC),
+               per_tx=common._fmt_usdc(agent_config.PER_TX_CAP_USDC)),
     ]
 
     entries = _audit_tail()

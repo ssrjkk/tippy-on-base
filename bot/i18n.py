@@ -2202,9 +2202,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "买入：/oc_buy {id} &lt;选项&gt; &lt;金额&gt; • 卖出：/oc_sell {id} &lt;选项&gt; [50%]",
     },
     "oc_format_create": {
-        "ru": "Формат: /oc_create 50 Вопрос | Вариант 1 | Вариант 2 [24h]\nСубсидия $10–1000, вариантов 2–8, метка до 60 символов.",
-        "en": "Format: /oc_create 50 Question | Option 1 | Option 2 [24h]\nSubsidy $10–1000, 2–8 options, label up to 60 chars.",
-        "zh": "格式：/oc_create 50 问题 | 选项1 | 选项2 [24h]\n补贴 $10–1000，选项 2–8 个，标签 ≤60 字符。",
+        "ru": "Формат: /oc_create 50 Вопрос | Вариант 1 | Вариант 2 [24h]\nСубсидия {min}–{max} USDC, вариантов {min_opts}–{max_opts}, метка до {label_len} символов.",
+        "en": "Format: /oc_create 50 Question | Option 1 | Option 2 [24h]\nSubsidy {min}–{max} USDC, {min_opts}–{max_opts} options, label up to {label_len} chars.",
+        "zh": "格式：/oc_create 50 问题 | 选项1 | 选项2 [24h]\n补贴 {min}–{max} USDC，选项 {min_opts}–{max_opts} 个，标签 ≤{label_len} 字符。",
     },
     "oc_format_buy": {
         "ru": "Формат: /oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt; — например /oc_buy 3 1 5",
@@ -2327,9 +2327,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "市场已{state}——无需再判定。",
     },
     "oc_resolved": {
-        "ru": "Исход <b>{idx}</b> зафиксирован НА-ЦЕПИ. Победители забирают по $1 за долю: /oc_redeem\n🔗 {url}",
-        "en": "Outcome <b>{idx}</b> finalized ON-CHAIN. Winners redeem $1 per share: /oc_redeem\n🔗 {url}",
-        "zh": "结果 <b>{idx}</b> 已在链上敲定。赢家可按 $1/份额 领取：/oc_redeem\n🔗 {url}",
+        "ru": "Исход <b>{idx}</b> зафиксирован НА-ЦЕПИ. Победители забирают по 1 USDC за долю: /oc_redeem\n🔗 {url}",
+        "en": "Outcome <b>{idx}</b> finalized ON-CHAIN. Winners redeem 1 USDC per share: /oc_redeem\n🔗 {url}",
+        "zh": "结果 <b>{idx}</b> 已在链上敲定。赢家可按 1 USDC/份额 领取：/oc_redeem\n🔗 {url}",
     },
     "oc_pick": {
         "ru": "🎯 Рынок Cally <b>#{id}</b> закрылся: <b>{q}</b>\n\nВыбери победивший исход — я зафиксирую его в контракте на Base.",
@@ -2357,9 +2357,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "你还持有该结果的份额——请先卖出。不能判定自己下注的结果获胜。",
     },
     "oc_subsidy_cap": {
-        "ru": "Суточный лимит субсидий Cally исчерпан (${amount} USDC забронировано сегодня). Попробуй завтра или уменьши субсидию.",
-        "en": "The daily Cally subsidy cap (${amount} USDC booked today) is reached. Try tomorrow or lower the subsidy.",
-        "zh": "已达到 Cally 每日补贴上限（今日已预订 ${amount} USDC）。请明天再试或降低补贴。",
+        "ru": "Суточный лимит субсидий Cally исчерпан ({amount} USDC забронировано сегодня). Попробуй завтра или уменьши субсидию.",
+        "en": "The daily Cally subsidy cap ({amount} USDC booked today) is reached. Try tomorrow or lower the subsidy.",
+        "zh": "已达到 Cally 每日补贴上限（今日已预订 {amount} USDC）。请明天再试或降低补贴。",
     },
     "oc_registry_warn": {
         "ru": "Рынок создан В КОНТРАКТЕ, но не сохранён в реестре бота ({err}) — напиши /oc {id2}, он добавится повторно.",
@@ -2404,9 +2404,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "🤖 <b>Tippy 代理</b>（tg_id {tg_id}）",
     },
     "agent_spend": {
-        "ru": "💸 Расход за сутки: <b>${spent}</b> из ${cap}",
-        "en": "💸 Spent today: <b>${spent}</b> of ${cap}",
-        "zh": "💸 今日支出：<b>${spent}</b> / ${cap}",
+        "ru": "💸 Расход за сутки: <b>{spent} USDC</b> из {cap} USDC",
+        "en": "💸 Spent today: <b>{spent} USDC</b> of {cap} USDC",
+        "zh": "💸 今日支出：<b>{spent} USDC</b> / {cap} USDC",
     },
     "agent_actions": {
         "ru": "⚡ Действий за час: {done} из {cap}",
@@ -2419,9 +2419,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "🛡 连续错误：{n} · 熔断器：{cb}",
     },
     "agent_caps_line": {
-        "ru": "Капы: ${daily}/день, ${per_tx}/транзакция (зашиты в код)",
-        "en": "Caps: ${daily}/day, ${per_tx}/tx (hard-coded)",
-        "zh": "上限：${daily}/天，${per_tx}/笔（代码内置）",
+        "ru": "Капы: {daily} USDC/день, {per_tx} USDC/транзакция (зашиты в код)",
+        "en": "Caps: {daily} USDC/day, {per_tx} USDC/tx (hard-coded)",
+        "zh": "上限：{daily} USDC/天，{per_tx} USDC/笔（代码内置）",
     },
     "agent_recent": {
         "ru": "<b>Последние действия:</b>",
@@ -2490,9 +2490,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "❌ 间隔无效。请使用：daily, weekly, biweekly, monthly",
     },
     "subscribe_created": {
-        "ru": "✅ Подписка создана!\n\n📤 @{to_username}: ${amount:.2f} каждые {interval}\n\nИспользуй /subscriptions чтобы увидеть все.",
-        "en": "✅ Subscription created!\n\n📤 @{to_username}: ${amount:.2f} every {interval}\n\nUse /subscriptions to see all.",
-        "zh": "✅ 订阅已创建！\n\n📤 @{to_username}：每 {interval} ${amount:.2f}\n\n使用 /subscriptions 查看全部。",
+        "ru": "✅ Подписка создана!\n\n📤 @{to_username}: {amount} USDC каждые {interval}\n\nИспользуй /subscriptions чтобы увидеть все.",
+        "en": "✅ Subscription created!\n\n📤 @{to_username}: {amount} USDC every {interval}\n\nUse /subscriptions to see all.",
+        "zh": "✅ 订阅已创建！\n\n📤 @{to_username}：每 {interval} {amount} USDC\n\n使用 /subscriptions 查看全部。",
     },
     "no_subscriptions": {
         "ru": "📭 У тебя нет активных подписок.\n\nСоздай: /subscribe @user сумма интервал",
@@ -2540,9 +2540,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "❌ 购买代币失败。请检查 ID 和余额。",
     },
     "token_bought": {
-        "ru": "✅ Куплено <b>{amount}</b> токенов за ${cost:.2f}!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
-        "en": "✅ Bought <b>{amount}</b> tokens for ${cost:.2f}!\n\nYou'll receive dividends. Check: /claim <token_id>",
-        "zh": "✅ 已购买 <b>{amount}</b> 个代币，花费 ${cost:.2f}！\n\n你将获得分红。查看：/claim <token_id>",
+        "ru": "✅ Куплено <b>{amount}</b> токенов за {cost} USDC!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
+        "en": "✅ Bought <b>{amount}</b> tokens for {cost} USDC!\n\nYou'll receive dividends. Check: /claim <token_id>",
+        "zh": "✅ 已购买 <b>{amount}</b> 个代币，花费 {cost} USDC！\n\n你将获得分红。查看：/claim <token_id>",
     },
     "claim_format": {
         "ru": "Формат: /claim <token_id>",
@@ -2555,9 +2555,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "ℹ️ 没有可领取的分红。",
     },
     "dividends_claimed": {
-        "ru": "💰 Получено <b>${amount:.2f}</b> дивидендов!",
-        "en": "💰 Claimed <b>${amount:.2f}</b> in dividends!",
-        "zh": "💰 已领取 <b>${amount:.2f}</b> 分红！",
+        "ru": "💰 Получено <b>{amount} USDC</b> дивидендов!",
+        "en": "💰 Claimed <b>{amount} USDC</b> in dividends!",
+        "zh": "💰 已领取 <b>{amount} USDC</b> 分红！",
     },
     "kind_deposit": {"ru": "Пополнение", "en": "Deposit", "zh": "充值"},
     "kind_withdraw": {"ru": "Вывод", "en": "Withdrawal", "zh": "提现"},

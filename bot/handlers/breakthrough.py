@@ -98,7 +98,7 @@ async def cmd_subscribe(message: types.Message):
                 lang,
                 'subscribe_created',
                 to_username=common._h(to_username),
-                amount=Decimal(amount_micro) / Decimal(10**common.config.USDC_DECIMALS),
+                amount=common._fmt(amount_micro),
                 interval=interval_str,
             )
         )
@@ -230,9 +230,8 @@ async def cmd_buy_token(message: types.Message):
             await message.answer(i18n.t(lang, 'token_buy_failed'))
             return
 
-        cost = Decimal(cost_micro) / Decimal(10**common.config.USDC_DECIMALS)
         await message.answer(
-            i18n.t(lang, 'token_bought', amount=amount, cost=cost)
+            i18n.t(lang, 'token_bought', amount=amount, cost=common._fmt(cost_micro))
         )
     except (ValueError, IndexError):
         await message.answer(i18n.t(lang, 'buy_token_format'))
@@ -261,5 +260,5 @@ async def cmd_claim_dividends(message: types.Message):
 
     await message.answer(i18n.t(
         lang, 'dividends_claimed',
-        amount=Decimal(amount_micro) / Decimal(10**common.config.USDC_DECIMALS),
+        amount=common._fmt(amount_micro),
     ))

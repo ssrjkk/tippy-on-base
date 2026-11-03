@@ -149,7 +149,7 @@ async def test_buytoken_command_charges_and_formats_cost(tmp_path, ledger, monke
 
     assert len(msg.answers) == 1, msg.answers
     text = msg.answers[0][0]
-    assert "400" in text and "$40.00" in text, text
+    assert "400" in text and "40 USDC" in text, text
     assert ledger.balance(BUYER_A) == Decimal("160.000000")
     info = await registry.get_holder_info(token.token_id, BUYER_A)
     assert info["balance"] == 400
@@ -437,5 +437,5 @@ async def test_claim_command_formats_the_dividend_it_paid(tmp_path, ledger, monk
     await cmd_claim_dividends(msg)
 
     text = msg.answers[0][0]
-    assert "$10.00" in text, text
+    assert "10 USDC" in text, text
     assert ledger.balance(BUYER_A) == after_buy + Decimal("10")
