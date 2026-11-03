@@ -12,15 +12,22 @@
   Never assert a config literal in a test — read it from config.
 - stdout of redirected Python on this console is cp1251: printing Cyrillic or `–` raises
   `UnicodeEncodeError`. Write JSON/text reports as files opened with `encoding="utf-8"`.
+- Every text file is stored with LF and `.gitattributes` says so. A patch script must therefore
+  rewrite with `Path.write_bytes(...encode("utf-8"))`, not `write_text()`: text mode on this host
+  turns every `\n` into `\r\n` and the diff is the whole file. `web/server.py` and `web/frame.py`
+  also carry a UTF-8 BOM — read them with `utf-8-sig` and put the BOM back, or the gate that parses
+  their AST dies on `U+FEFF`.
 
 ## Gate
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~13 min, 1184 tests (18 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~9 min, 1205 tests (56 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
+  Never start a second pytest session against `tipbot_test` while one runs: `conftest.py`
+  recreates that database per session, and the in-flight run reports errors it did not cause.
 - Run targeted files first (`pytest tests/test_web.py -q --timeout=60`), the whole suite last.
   `--timeout=60 --timeout-method=thread` makes a hung test print its stack instead of freezing.
 - `python scripts/check_i18n.py` checks that every key in `bot/i18n.py` exists in ru/en/zh. The Mini
@@ -74,7 +81,16 @@
   `setdefault`: `bot/config.py` `load_dotenv`s the dev `.env` at import and `load_dotenv` never
   overrides, so a maintainer's real `OWNER_ID` folds `ADMIN_TG_ID` onto itself and every
   owner-gated endpoint refuses the session the tests mint. Six gates were green in CI and red on the
-  laptop until the pin was made unconditional.
+  laptop until the pin was made unconditional. It pins `MINI_APP_URL`/`WEBHOOK_URL` the same way for
+  the same reason: canonicals, share cards and the sitemap are built from the public origin.
+- `tests/test_web.py`'s SEO block measures the served bytes: `/robots.txt` is `text/plain` rules and
+  `/sitemap.xml` announces only URLs that then answer 200; every indexable page has exactly one
+  canonical, and `og:title`/`twitter:title` are the `<title>` of that same document; a market or
+  on-chain market the ledger does not have is a 404 with `noindex`, while `/u/{id}` deliberately stays
+  a 200 because `/api/user/{tg_id}` promises no enumeration oracle. `web/server.py` is the only
+  writer of `og:`/`twitter:`/`canonical` — templates other than `app.html` (the Base App launch card,
+  not a page of the site) declaring them is a failure — and absolute URLs come from
+  `public_base_url()`, never from `X-Forwarded-Host`, which a visitor brings with them.
 - Never push without an explicit word from the maintainer. Commit locally, report, wait.
 
 ## Ledger facts

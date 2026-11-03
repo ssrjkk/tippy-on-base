@@ -1,3 +1,12 @@
-*.sh text eol=lf
-*.py text eol=lf
-Dockerfile text eol=lf
+# Every text file in this repo is stored with LF. Without a rule per extension,
+# core.autocrlf=true checks out .html/.js/.css/.md as CRLF on Windows, and the
+# first text-mode rewrite of one of them commits a whole-file diff.
+#
+# text=auto, not text: git still sniffs the content, so a binary that arrives
+# without a rule below is left alone instead of being line-endian-converted.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.gz binary
+*.bin binary
+*.pyc binary

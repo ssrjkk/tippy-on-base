@@ -15,6 +15,7 @@ import secrets
 import sys
 import time
 from html import escape as _esc
+from html import unescape as _unesc
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -42,6 +43,7 @@ from web.auth import COOKIE_NAME, attach_login_state, parse_session
 from web.auth import router as auth_router
 from web.frame import router as frame_router
 from web.hook import router as tg_webhook
+from web.mini import SHARE_IMAGE, public_base_url
 from web.mini import router as mini_router
 from web.x402 import x402_paywall, x402_tip
 
@@ -822,8 +824,125 @@ def _signed_in(request: Request | None) -> bool:
     """True when the request carries a session cookie that parses."""
     return request is not None and parse_session(request.cookies.get(COOKIE_NAME)) is not None
 
-def _static_page(page: str, request: Request | None = None) -> Response:
-    """Serve a static page with the running config rendered into it.
+_TITLE_RE = re.compile(r'<title>(.*?)</title>', re.DOTALL)
+_DESC_RE = re.compile(r'<meta name="description" content="(.*?)"')
+OG_LOCALE = {'ru': 'ru_RU', 'en': 'en_US', 'zh': 'zh_CN'}
+
+
+def _public_base() -> str:
+    """Absolute origin the site is published under, for canonicals, share cards
+    and the sitemap.
+
+    The same value ``/app``'s ``fc:miniapp`` and ``og:image`` are built from, so
+    a card and the URL it is a card for cannot disagree. Config-derived on
+    purpose: ``X-Forwarded-Host`` is a header the visitor brings, and reading it
+    here would let one request put a foreign host into every canonical and every
+    ``<loc>`` a crawler is served.
+    """
+    return public_base_url().rstrip('/')
+
+
+def _usdc_label(micro: int) -> str:
+    from decimal import Decimal
+    return fees.usdc_label(Decimal(int(micro)) / Decimal(MICRO))
+
+
+def _document_meta(html: str, *, path: str, title: str | None = None,
+                   description: str | None = None, robots: str | None = None,
+                   json_ld: str | None = None) -> str:
+    """Write the document's identity into its ``<head>``: canonical, share card
+    and the crawl directive.
+
+    The copy lives once in the template — ``<title>`` and the description meta —
+    and ``og:``/``twitter:`` are derived from it here. They used to be typed next
+    to it by hand: the three shareable pages each carried one static ``og:title``
+    for every row, so all markets looked identical when forwarded, and
+    ``user.html`` put «Профиль в Tippy» on the card while the tab said «Профиль —
+    Tippy». Passing ``title`` or ``description`` replaces the template copy with
+    the row the page is about, which is what makes ``/m/12`` and ``/m/13`` two
+    different documents.
+    """
+    title_tag = _TITLE_RE.search(html)
+    desc_tag = _DESC_RE.search(html)
+    doc_title = title if title is not None else (_unesc(title_tag.group(1)) if title_tag else '')
+    doc_desc = description if description is not None else (_unesc(desc_tag.group(1)) if desc_tag else '')
+    if title_tag is not None and title is not None:
+        html = _TITLE_RE.sub(lambda _m: f'<title>{_esc(doc_title)}</title>', html, count=1)
+    if desc_tag is not None and description is not None:
+        html = _DESC_RE.sub(
+            lambda _m: f'<meta name="description" content="{_esc(doc_desc, quote=True)}"',
+            html, count=1)
+
+    base = _public_base()
+    url = _esc(base + path, quote=True)
+    image = _esc(base + SHARE_IMAGE, quote=True)
+    # The card speaks the language the document is written in, not the one the
+    # site is mostly in: /tos is English, and a ru_RU card around it is the same
+    # lie the <html lang> used to tell.
+    lang_tag = re.search(r'<html lang="([a-z]+)"', html)
+    locale = OG_LOCALE.get(lang_tag.group(1) if lang_tag else 'ru', 'en_US')
+    parts = [f'<link rel="canonical" href="{url}" />']
+    if robots:
+        parts.append(f'<meta name="robots" content="{_esc(robots, quote=True)}" />')
+    parts.append('<meta property="og:type" content="website" />')
+    parts.append('<meta property="og:site_name" content="Tippy" />')
+    parts.append(f'<meta property="og:locale" content="{locale}" />')
+    parts.append(f'<meta property="og:url" content="{url}" />')
+    parts.append(f'<meta property="og:title" content="{_esc(doc_title, quote=True)}" />')
+    if doc_desc:
+        parts.append(f'<meta property="og:description" content="{_esc(doc_desc, quote=True)}" />')
+    parts.append(f'<meta property="og:image" content="{image}" />')
+    parts.append('<meta name="twitter:card" content="summary_large_image" />')
+    parts.append(f'<meta name="twitter:title" content="{_esc(doc_title, quote=True)}" />')
+    if doc_desc:
+        parts.append(f'<meta name="twitter:description" content="{_esc(doc_desc, quote=True)}" />')
+    parts.append(f'<meta name="twitter:image" content="{image}" />')
+    if json_ld:
+        parts.append(f'<script type="application/ld+json">{json_ld}</script>')
+    head, sep, rest = html.partition('</head>')
+    if not sep:
+        return html
+    return head + '\n  ' + '\n  '.join(parts) + sep + rest
+
+
+def _landing_json_ld() -> str:
+    """Structured data for the landing: the site and the bot it is reached
+    through.
+
+    Only claims the page itself makes. Schema that overstates the product is a
+    manual-action risk, not a ranking trick, so this stays a name, two URLs and
+    the one handle the page links to.
+    """
+    base = _public_base()
+    graph = {
+        '@context': 'https://schema.org',
+        '@graph': [
+            {
+                '@type': 'WebSite',
+                '@id': f'{base}/#website',
+                'url': f'{base}/',
+                'name': 'Tippy',
+                'inLanguage': 'ru',
+            },
+            {
+                '@type': 'Organization',
+                '@id': f'{base}/#organization',
+                'name': 'Tippy',
+                'url': f'{base}/',
+                'logo': f'{base}{SHARE_IMAGE}',
+                'sameAs': [f'https://t.me/{config.BOT_USERNAME}'],
+            },
+        ],
+    }
+    return json.dumps(graph, ensure_ascii=False).replace('<', '\\u003c')
+
+
+def _static_page(page: str, request: Request | None = None, *, path: str,
+                 title: str | None = None, description: str | None = None,
+                 robots: str | None = None, json_ld: str | None = None,
+                 status_code: int = 200) -> Response:
+    """Serve a static page with the running config and the document's own
+    identity rendered into it.
 
     ``t.me/TIPBOT_USERNAME`` shipped in the HTML is a link that 404s for anyone
     whose scripts have not replaced it yet, so the real name is substituted
@@ -833,25 +952,97 @@ def _static_page(page: str, request: Request | None = None) -> Response:
     ``__SIGNED_IN__`` is the session cookie seen from the server. The scripts
     cannot read it (HttpOnly) and probing ``/api/me`` with it missing answers
     401, which every anonymous landing-page visitor used to see in the console.
+
+    ``path`` is the page's own path: a canonical has to name the URL the visitor
+    asked for, and ``/m/12`` and ``/m/13`` render from the same file.
     """
     html = (STATIC / page).read_text(encoding='utf-8')
     html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
     html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
-    return Response(content=html.encode('utf-8'), media_type='text/html')
+    html = _document_meta(html, path=path, title=title, description=description,
+                          robots=robots, json_ld=json_ld)
+    return Response(content=html.encode('utf-8'), media_type='text/html',
+                    status_code=status_code)
 
 @app.get('/u/{tg_id}')
 async def user_page(tg_id: int, request: Request) -> Response:
-    return _static_page('user.html', request)
+    """Public donation page for one Telegram id.
+
+    An id the ledger has never seen answers 200 with the empty profile, because
+    that is ``/api/user/{tg_id}``'s documented rule kept at the page level too:
+    the same shape for a stranger and for a newcomer, so neither route is an
+    enumeration oracle. It costs the site nothing in search — a profile with no
+    activity is not in the sitemap and no page links to it.
+    """
+    view = await ledger.user_view(tg_id) if await ledger.user_exists(tg_id) else None
+    name = str(view['username']) if view and view['username'] else ''
+    received = int(view['tips_received_micro']) if view else 0
+    # The same shape the page itself printed before: a Basename stays as it is,
+    # a Telegram handle gets its @, an id with no name is named by its id.
+    who = name if '.' in name else (f'@{name}' if name else f'id{tg_id}')
+    return _static_page(
+        'user.html', request, path=f'/u/{tg_id}',
+        title=f'{who} — Tippy' if view else 'Профиль в Tippy',
+        description=(
+            f'Донат-страница {who}: как поддержать этого пользователя чаевыми в USDC '
+            f'на Base прямо в Telegram. Через Tippy он уже получил {_usdc_label(received)} USDC.'
+            if received else None))
 
 @app.get('/m/{bet_id}')
 async def market_page(bet_id: int, request: Request) -> Response:
-    return _static_page('market.html', request)
+    """Shareable page for one parimutuel market, titled by that market.
+
+    A row the ledger does not have is a 404, the way ``/api/market/{bet_id}``
+    has always answered one. This page used to render the same 200 shell for any
+    integer, so every id a crawler guessed looked like a real market and the
+    sitemap could not be trusted to name only pages that exist.
+    """
+    view = await ledger.market_view(bet_id)
+    if not view:
+        return _static_page('market.html', request, path=f'/m/{bet_id}',
+                            title='Ставка не найдена — Tippy',
+                            description='Такой ставки в реестре Tippy нет.',
+                            robots='noindex', status_code=404)
+    status_word = ''
+    if view['status'] == 'open':
+        status_word = 'Приём ставок открыт. '
+    elif view['status'] == 'resolved' and view['winner'] is not None:
+        by_index = {int(o['index']): o for o in view['options']}
+        win = by_index.get(int(view['winner']))
+        if win:
+            status_word = f'Исход зафиксирован: {win["label"]}. '
+    elif view['status'] == 'cancelled':
+        status_word = 'Ставки возвращены. '
+    description = (
+        f'Парамутюэль-ставка в USDC на Base: исходов {len(view["options"])}, '
+        f'в пулах {_usdc_label(view["pot"])} USDC, участников {view["total_backers"]}. '
+        f'{status_word}Комиссия с выигрыша {fees.win_fee_pct_label()}%.')
+    return _static_page('market.html', request, path=f'/m/{bet_id}',
+                        title=f'{view["question"]} — Tippy',
+                        description=description)
 
 @app.get('/m/oc/{market_id}')
 async def onchain_market_page(market_id: int, request: Request) -> Response:
     """Shareable page for an ON-CHAIN market (OutcomeMarket ERC-1155)."""
-    return _static_page('oc.html', request)
+    m = await ledger.get_onchain_market(market_id)
+    if not m:
+        return _static_page('oc.html', request, path=f'/m/oc/{market_id}',
+                            title='Ончейн-рынок не найден — Tippy',
+                            description='Такого ончейн-рынка в реестре Tippy нет.',
+                            robots='noindex', status_code=404)
+    try:
+        options = json.loads(m['options'])
+    except (TypeError, json.JSONDecodeError):
+        options = []
+    creator = await ledger.username_of(int(m['creator']))
+    who = f'@{creator}' if creator else 'другой пользователь'
+    description = (
+        f'Рынок на Base: долей ERC-1155 {len(options)}, расчёты в USDC внутри контракта. '
+        f'Создал {who}.')
+    return _static_page('oc.html', request, path=f'/m/oc/{market_id}',
+                        title=f'{m["question"]} — ончейн-рынок в Tippy',
+                        description=description)
 
 @app.get('/me', include_in_schema=False)
 async def me_page() -> RedirectResponse:
@@ -870,13 +1061,13 @@ async def root(request: Request):
     Login Widget renders inline on this page, and its callback is rejected
     without that state.
     """
-    return attach_login_state(request, _static_page('index.html', request))
+    return attach_login_state(request, _static_page(
+        'index.html', request, path='/', json_ld=_landing_json_ld()))
 
 @app.get('/app', include_in_schema=False)
 async def mini_app(request: Request):
     """The Mini App page, with Base-App embed meta tags rendered against the
     public URL (the Base App crawls these tags to render the launch card)."""
-    from web.mini import public_base_url
     html = (STATIC / 'app.html').read_text(encoding='utf-8')
     base_url = public_base_url()
     html = html.replace('__PUBLIC_URL__', base_url)
@@ -894,8 +1085,60 @@ async def mini_app(request: Request):
 async def agent_page() -> Response:
     """Operator dashboard. README documents this URL, and the mounted
     StaticFiles only resolves paths that name the file, so ``/agent.html``
-    alone would leave ``/agent`` a 404."""
-    return _static_page('agent.html')
+    alone would leave ``/agent`` a 404.
+
+    ``noindex``: it is a tool, not a page. Left indexable it competed with the
+    landing for the product's own name and put a dashboard an anonymous visitor
+    cannot use into search results.
+    """
+    return _static_page('agent.html', path='/agent', robots='noindex')
+
+@app.get('/robots.txt', include_in_schema=False)
+async def robots_txt() -> Response:
+    """What a crawler may read.
+
+    The origin had no robots.txt at all, so the Pages Function answered it from
+    the asset bundle — a bundle with no such file in it, where Pages replies to a
+    missing path with the landing page: ``200`` and ``text/html`` where a robot
+    expected rules. Private surfaces are excluded by directive rather than by
+    hoping nothing links to them: ``/app`` needs a Telegram session, ``/metrics``
+    and ``/qr`` are operational, ``/api/`` is the same data the pages publish.
+    """
+    body = '\n'.join([
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /api/',
+        'Disallow: /app',
+        'Disallow: /me',
+        'Disallow: /metrics',
+        'Disallow: /qr',
+        '',
+        f'Sitemap: {_public_base()}/sitemap.xml',
+        '',
+    ])
+    return Response(content=body.encode('utf-8'), media_type='text/plain; charset=utf-8')
+
+@app.get('/sitemap.xml', include_in_schema=False)
+async def sitemap_xml() -> Response:
+    """Every page the ledger actually has, and no page it does not.
+
+    Rows, not guesses: ``/m/{bet_id}`` now answers 404 for an id that was never a
+    market, so an invented URL here would be one the crawler is told to fetch and
+    then refused. Closed markets stay out — their page describes a pool that no
+    longer moves — and profiles come from the leaderboard, the only list of users
+    the site itself links to.
+    """
+    urls = ['/', '/tos']
+    urls += [f'/m/{int(b["id"])}' for b in await ledger.bets_by_status('open', 500)]
+    urls += [f'/m/oc/{int(m["id"])}' for m in await ledger.list_onchain_markets(500)]
+    urls += [f'/u/{int(r["tg_id"])}' for r in await ledger.leaderboard(50)]
+    base = _public_base()
+    locs = ''.join(f'<url><loc>{_esc(base + u, quote=True)}</loc></url>'
+                   for u in dict.fromkeys(urls))
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           f'{locs}</urlset>')
+    return Response(content=xml.encode('utf-8'), media_type='application/xml; charset=utf-8')
 
 @app.post('/api/webhook-miniaction', include_in_schema=False)
 async def miniapp_webhook(request: Request):
@@ -996,12 +1239,20 @@ async def tos() -> Response:
     body = _legal_html(md)
     first_heading = re.search(r'^#\s+(.*)', md, re.MULTILINE)
     title = first_heading.group(1) if first_heading else 'Terms of Service'
+    # The document declares which language it is written in. A screen reader
+    # reads the page in the language of `lang` and Google processes it as that
+    # language, so the English legal file wrapped in lang="ru" was read wrong by
+    # both — the footer link that opens it is Russian either way.
+    lang = 'ru' if re.search(r'[а-яё]', md, re.I) else 'en'
     html_doc = f"""<!DOCTYPE html>
-<html lang="ru">
+<html lang="{lang}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111" />
   <title>{_esc(title)}</title>
+  <meta name="description" content="Terms of Service for Tippy: custodial USDC on Base, the fees and limits that apply, how a pool bet is settled and what the operator is not liable for." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/style.css" />
   <script src="/theme.js"></script>
@@ -1033,7 +1284,8 @@ async def tos() -> Response:
 </body>
 </html>
 """
-    return Response(content=html_doc.encode('utf-8'), media_type='text/html')
+    return Response(content=_document_meta(html_doc, path='/tos').encode('utf-8'),
+                    media_type='text/html')
 
 @app.get('/metrics', tags=['monitoring'])
 async def metrics(request: Request) -> Response:

@@ -6,7 +6,7 @@
 |---|---|---|
 | Cloudflare Pages | `web/static` (build output dir) | `style.css`, `app.js`, `site.js`, images |
 | Pages Functions | `functions/[[path]].js` | proxies every other request to the VPS |
-| FastAPI backend | VPS, Docker (`web/server.py`) | `/`, `/app`, `/u/{id}`, `/m/{id}`, `/tos`, `/metrics`, `/qr`, `/api/*`, `/telegram-webhook`, `/.well-known/farcaster.json`; `/login` and `/me` redirect to `/#workspace-section` |
+| FastAPI backend | VPS, Docker (`web/server.py`) | `/`, `/app`, `/u/{id}`, `/m/{id}`, `/m/oc/{id}`, `/agent`, `/tos`, `/robots.txt`, `/sitemap.xml`, `/metrics`, `/qr`, `/api/*`, `/telegram-webhook`, `/.well-known/farcaster.json`; `/login` and `/me` redirect to `/#workspace-section` |
 
 The function catches all requests first (a Pages Function takes precedence over
 the asset bundle) and asks the asset bundle only for `GET`/`HEAD` paths that end
@@ -17,6 +17,18 @@ to the origin. Two reasons documents must not be served as bare assets:
   `index.html` and issues the one-time login-state cookie that
   `/api/auth/telegram` requires. The raw file has neither.
 - `GET /app` substitutes the public URL into the mini app meta tags.
+- `/robots.txt` and `/sitemap.xml` are written by the origin from the rows the
+  ledger has. `txt` is therefore not a static extension: the bundle has no
+  `.txt` in it, Pages answers a missing path with `index.html`, and a crawler
+  was handed `200 text/html` — a whole website's markup — where it expected
+  rules. While the origin is down both are a 503 with a `Retry-After`, which is
+  the honest answer to the same question.
+
+Note that the bundle root **is** `web/static`, so an asset URL has no `/static/`
+in it: `/miniapp-hero.png`, not `/static/miniapp-hero.png`. Every absolute image
+URL the site publishes — `og:image`, `twitter:image`, `fc:miniapp.imageUrl`,
+`fc:frame:image` — is checked against the bundle by
+`tests/test_web.py::test_no_share_image_points_at_a_path_the_bundle_does_not_have`.
 
 For the same reason there is no `_redirects` file in the bundle: a
 `/* /index.html 200` rewrite is applied before Functions and would swallow

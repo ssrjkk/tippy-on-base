@@ -899,3 +899,65 @@ def test_no_mini_app_bar_paints_an_impossible_number(mini_screens):
             assert row["barPct"] is None or 0.0 <= row["barPct"] <= 100.0, (
                 f"tab{tab}: полоса вне 0..100% — {row}"
             )
+
+
+# ---------------------------------------------------------------------------
+# the crawler's documents, on the host the crawler is told about
+# ---------------------------------------------------------------------------
+
+def _get(path: str) -> tuple[int, str, str]:
+    request = urllib.request.Request(
+        f"{PROD_URL}{path}",
+        headers={"user-agent": USER_AGENT, "x-forwarded-for": XFF_POOL[7]},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        body = response.read().decode("utf-8", "replace")
+        return response.status, response.headers.get("content-type", ""), body
+
+
+def test_robots_txt_is_rules_on_the_deployed_site():
+    """The origin had no robots.txt, so the Pages Function answered it from the
+    asset bundle and Pages returned the landing page for a path that is not in
+    it: 200 and text/html where a robot expected rules. Measured here because
+    only the deployed edge decides which of the two answers a visitor gets."""
+    status, content_type, body = _get("/robots.txt")
+    assert status == 200
+    assert content_type.startswith("text/plain"), f"robots.txt arrived as {content_type!r}"
+    assert body.startswith("User-agent: *"), body[:120]
+    assert "Disallow: /api/" in body
+    assert f"Sitemap: {PROD_URL}/sitemap.xml" in body, body[-120:]
+
+
+def test_the_deployed_sitemap_points_back_at_itself_and_resolves():
+    status, content_type, body = _get("/sitemap.xml")
+    assert status == 200
+    assert content_type.startswith("application/xml"), f"sitemap arrived as {content_type!r}"
+    import xml.etree.ElementTree as ET
+
+    locs = [node.text for node in ET.fromstring(body).iter(
+        "{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+    assert locs, "the deployed sitemap names no page at all"
+    host = PROD_URL.split("://", 1)[1]
+    for loc in locs:
+        assert loc.startswith(PROD_URL + "/"), f"{loc} is not on the host being measured"
+        assert host in loc
+        page_status, page_type, _ = _get(loc[len(PROD_URL):])
+        assert page_status == 200, f"{loc} is announced and answers {page_status}"
+        assert page_type.startswith("text/html"), f"{loc} is announced as {page_type!r}"
+
+
+def test_the_landing_canonicalizes_the_host_it_is_served_from():
+    """The canonical is written by the origin from MINI_APP_URL/WEBHOOK_URL. If
+    the operator sets that to the tunnel instead of the Pages origin, every
+    page on the public host points at a different host and the crawler follows
+    the hint — so the two hosts being equal is the thing to measure."""
+    status, _, body = _get("/")
+    assert status == 200
+    canonical = re.findall(r'<link rel="canonical" href="([^"]*)"', body)
+    assert len(canonical) == 1, f"{len(canonical)} canonicals on the landing"
+    assert canonical[0].rstrip("/") == PROD_URL, f"{canonical[0]} vs {PROD_URL}"
+    og_url = re.findall(r'<meta property="og:url" content="([^"]*)"', body)
+    assert og_url == canonical, (og_url, canonical)
+    title = re.findall(r"<title>(.*?)</title>", body, re.S)
+    og_title = re.findall(r'<meta property="og:title" content="([^"]*)"', body)
+    assert len(title) == 1 and og_title == [title[0].strip()], (title, og_title)

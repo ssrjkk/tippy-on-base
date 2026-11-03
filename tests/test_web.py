@@ -1,7 +1,9 @@
 """Web dashboard API tests (FastAPI TestClient)."""
 
+import json
 import re
 import types
+from pathlib import Path
 
 import pytest
 from conftest import close_bet
@@ -622,24 +624,6 @@ def test_qr_endpoint_rejects_long_data(client):
     assert client.get("/qr", params={"data": "x" * 2000}).status_code == 400
 
 
-def test_frame_page_exposes_paywall_card(client, ledger, monkeypatch):
-    from bot import config as cfg
-
-    monkeypatch.setattr(cfg, "WEBHOOK_URL", "https://tipbot.example.com")
-    monkeypatch.setattr(cfg, "BOT_USERNAME", "base_tipbot")
-    item_id = ledger.create_paywall(777, "Альфа-сигнал", 1_000_000, "секрет")
-    r = client.get(f"/frame/{item_id}")
-    assert r.status_code == 200
-    html = r.text
-    assert "fc:frame" in html
-    assert "https://tipbot.example.com/static/frame.png" in html
-    assert "https://t.me/base_tipbot?start=paywall_" + str(item_id) in html
-    assert "x402" in html
-    assert "https://tipbot.example.com/api/x402/paywall?item=" + str(item_id) in html
-    # unknown item -> fallback page
-    assert "not found" in client.get("/frame/999").text
-
-
 def test_markets_status_filter(client, ledger):
     ledger.credit(1, 100_000_000, "deposit")
     ledger.credit(2, 100_000_000, "deposit")
@@ -977,14 +961,20 @@ def test_css_has_new_ui_styles(client):
 
 def test_miniapp_meta_tags_render_public_url(client, monkeypatch):
     """/app must embed fc:miniapp meta with the REAL public URL — the Base
-    App crawls these tags to render the launch card."""
-    from web import mini as mini_mod
+    App crawls these tags to render the launch card.
 
-    monkeypatch.setattr(mini_mod, "public_base_url", lambda: "https://tippy.example.com")
+    The origin is pinned through config, not by replacing
+    ``public_base_url``, because the config value is what that function reads:
+    stubbing the function would pass even if the page stopped calling it."""
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "MINI_APP_URL", "https://tippy.example.com")
+    monkeypatch.setattr(cfg, "WEBHOOK_URL", "")
     r = client.get('/app')
     assert r.status_code == 200
     assert 'fc:miniapp' in r.text
     assert 'https://tippy.example.com/app' in r.text
+    assert 'https://tippy.example.com/miniapp-hero.png' in r.text
     assert '__PUBLIC_URL__' not in r.text, "placeholder must never leak to users"
 
 
@@ -1563,3 +1553,225 @@ def test_onchain_list_and_market_page_print_the_same_price(client, ledger, monke
     expected = [0.11, 99.9]
     assert [o["price_pct"] for o in page] == expected, page
     assert [o["price_pct"] for o in listed["options"]] == expected, listed
+
+
+# ---------------------------------------------------------------------------
+# SEO: the document's identity is written by the server, once
+# ---------------------------------------------------------------------------
+
+PUBLIC_ORIGIN = "https://tippy.example"
+BUNDLE = Path(__file__).resolve().parents[1] / "web" / "static"
+
+
+@pytest.fixture()
+def seo_origin(monkeypatch):
+    """Pin the origin canonicals, share cards and the sitemap are built from.
+
+    Left to a maintainer's .env, these gates would assert whatever host that
+    file happens to name — green on the laptop, red in CI, or the reverse.
+    """
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "MINI_APP_URL", PUBLIC_ORIGIN)
+    monkeypatch.setattr(cfg, "WEBHOOK_URL", "")
+    return PUBLIC_ORIGIN
+
+
+def _head(html, pattern):
+    return re.findall(pattern, html)
+
+
+def test_robots_txt_is_rules_and_not_a_landing_page(client, seo_origin):
+    """The origin had no robots.txt, so the Pages Function answered it from the
+    asset bundle, Pages found no such file and returned the landing page: 200
+    and text/html where a crawler expected rules."""
+    r = client.get("/robots.txt")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain"), r.headers["content-type"]
+    body = r.text
+    assert body.startswith("User-agent: *")
+    for blocked in ("/api/", "/app", "/me", "/metrics", "/qr"):
+        assert f"Disallow: {blocked}" in body, blocked
+    assert f"Sitemap: {seo_origin}/sitemap.xml" in body
+
+
+def test_sitemap_names_only_pages_that_answer_200(client, seo_origin, ledger):
+    import xml.etree.ElementTree as ET
+
+    bid = ledger.create_bet(111, "Сыграем в эту игру?", ["Да", "Нет"])
+    r = client.get("/sitemap.xml")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/xml")
+    ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+    locs = [node.text for node in ET.fromstring(r.text).iter(f"{ns}loc")]
+    assert locs, "an empty sitemap tells a crawler the site has no pages"
+    assert len(locs) == len(set(locs)), "duplicate <loc>"
+    for loc in locs:
+        assert loc.startswith(seo_origin + "/"), loc
+        path = loc[len(seo_origin):]
+        page = client.get(path)
+        assert page.status_code == 200, f"{loc} is announced and answers {page.status_code}"
+    assert f"{seo_origin}/m/{bid}" in locs
+
+
+def test_the_share_card_names_the_market_it_is_about(client, seo_origin, ledger):
+    """Every market used to carry the same static og:title, so forwarding any
+    two pools produced one identical preview and the card said nothing about
+    the thing it linked to."""
+    a = ledger.create_bet(111, "Пойдёт дождь в субботу?", ["Да", "Нет"])
+    b = ledger.create_bet(111, "Закроет ли BTC год выше 200k?", ["Да", "Нет"])
+    page_a = client.get(f"/m/{a}").text
+    page_b = client.get(f"/m/{b}").text
+    title_a = _head(page_a, r"<title>(.*?)</title>")[0]
+    title_b = _head(page_b, r"<title>(.*?)</title>")[0]
+    assert title_a != title_b, "two markets, one title"
+    assert "Пойдёт дождь в субботу?" in title_a
+    assert "Закроет ли BTC год выше 200k?" in title_b
+    assert _head(page_a, r'<meta property="og:title" content="([^"]*)"')[0] == title_a
+
+
+def test_the_card_agrees_with_the_tab_on_every_indexable_page(client, seo_origin, ledger):
+    bid = ledger.create_bet(111, "Один заголовок?", ["Да", "Нет"])
+    pages = {"/": 200, "/tos": 200, "/agent": 200, f"/m/{bid}": 200, "/m/987654": 404}
+    for path, status in pages.items():
+        r = client.get(path)
+        assert r.status_code == status, path
+        html = r.text
+        titles = _head(html, r"<title>(.*?)</title>")
+        canonicals = _head(html, r'<link rel="canonical" href="([^"]*)"')
+        og_titles = _head(html, r'<meta property="og:title" content="([^"]*)"')
+        og_urls = _head(html, r'<meta property="og:url" content="([^"]*)"')
+        tw_titles = _head(html, r'<meta name="twitter:title" content="([^"]*)"')
+        assert len(titles) == 1, f"{path}: {len(titles)} titles"
+        assert len(canonicals) == 1, f"{path}: {len(canonicals)} canonicals"
+        assert len(og_titles) == 1, f"{path}: {len(og_titles)} og:title"
+        assert canonicals[0] == seo_origin + path, (path, canonicals[0])
+        assert og_urls == [canonicals[0]], (path, og_urls)
+        assert og_titles == tw_titles == [titles[0]], (path, titles[0], og_titles, tw_titles)
+        assert len(_head(html, r'<meta name="robots"')) <= 1, f"{path}: competing directives"
+        # the card speaks the language of the document, not of the product
+        lang = _head(html, r'<html lang="([a-z]+)"')
+        locale = _head(html, r'<meta property="og:locale" content="([a-zA-Z_]+)"')
+        assert locale and locale[0].startswith(lang[0] + "_"), (path, lang, locale)
+
+
+def test_a_page_for_a_row_that_never_existed_is_a_404_and_not_indexed(client, ledger):
+    """A 200 shell for any integer is a soft-404: the crawler cannot tell it
+    from a page, and the sitemap can no longer be trusted to name real rows."""
+    for path in ("/m/987654", "/m/oc/987654"):
+        r = client.get(path)
+        assert r.status_code == 404, path
+        assert 'content="noindex"' in r.text, path
+
+
+def test_an_unknown_profile_stays_200_because_the_api_promised_it_would(client):
+    """The deliberate asymmetry with /m/{id}. /api/user/{tg_id} answers the same
+    empty shape for a stranger and for a newcomer precisely so Telegram ids
+    cannot be enumerated; the page keeps that rule instead of leaking it in a
+    status code, and a profile with no activity is not in the sitemap anyway."""
+    assert client.get("/u/987654").status_code == 200
+    assert client.get("/api/user/987654").status_code == 200
+
+
+def test_private_surfaces_are_not_indexable(client):
+    for path in ("/app", "/agent"):
+        assert 'name="robots" content="noindex"' in client.get(path).text, path
+    assert 'name="robots"' not in client.get("/").text
+
+
+def test_the_landing_is_the_only_document_with_structured_data(client, seo_origin):
+    html = client.get("/").text
+    # the CSP middleware stamps a nonce onto every inline <script>, ld+json
+    # included, so the attribute order in the tag is not the one written
+    blocks = _head(html, r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>')
+    assert len(blocks) == 1, f"{len(blocks)} ld+json blocks on /"
+    data = json.loads(blocks[0])
+    assert data["@context"] == "https://schema.org"
+    canonical = _head(html, r'<link rel="canonical" href="([^"]*)"')[0]
+    assert {node["url"] for node in data["@graph"]} == {canonical}
+    org = next(node for node in data["@graph"] if node["@type"] == "Organization")
+    assert (BUNDLE / org["logo"][len(seo_origin) + 1:]).is_file(), org["logo"]
+    assert not _head(client.get("/tos").text, "application/ld+json")
+
+
+def test_no_share_image_points_at_a_path_the_bundle_does_not_have(client, seo_origin):
+    """pages_build_output_dir is web/static, so the URL a crawler fetches has no
+    /static/ in it. Both share images were published with it —
+    /static/miniapp-hero.png and /static/frame.png — and neither the origin nor
+    the Pages bundle ever served them, so every card was a card without a
+    picture."""
+    seen = set()
+    for path in ("/", "/tos", "/agent", "/app", "/m/987654", "/u/987654"):
+        html = client.get(path).text
+        seen |= set(_head(html, r'<meta (?:property="og|name="twitter):image" content="([^"]*)"'))
+        for blob in _head(html, r'<meta name="fc:miniapp" content=\'([^\']*)\''):
+            seen.add(json.loads(blob)["imageUrl"])
+    assert seen, "no share image anywhere: the gate would pass on an empty site"
+    for url in seen:
+        assert url.startswith(seo_origin + "/"), url
+        assert (BUNDLE / url[len(seo_origin) + 1:]).is_file(), url
+
+
+def test_no_substitution_marker_reaches_the_visitor(client, ledger):
+    """The general form of the __PUBLIC_URL__ check: a marker left in the HTML is
+    text the visitor reads."""
+    bid = ledger.create_bet(111, "Вопрос без ответа?", ["Да", "Нет"])
+    for path in ("/", "/tos", "/agent", "/app", f"/m/{bid}", "/u/987654"):
+        leaked = _head(client.get(path).text, r"__[A-Z][A-Z0-9_]*__")
+        assert not leaked, f"{path}: {leaked}"
+
+
+def test_no_double_encoded_text_reaches_a_public_page(client, ledger):
+    """web/frame.py shipped an em dash as its UTF-8 bytes read back through
+    cp1251, and the Farcaster card rendered it as «вЂ”». A page can be correct
+    and still print mojibake, so the signature is what gets measured."""
+    bid = ledger.create_bet(111, "Вопрос?", ["Да", "Нет"])
+    for path in ("/", "/tos", "/agent", "/app", f"/m/{bid}", "/u/987654", "/robots.txt",
+                 "/sitemap.xml"):
+        text = client.get(path).text
+        for signature in ("вЂ", "Ã¢", "â€"):
+            assert signature not in text, f"{path}: mojibake {signature!r}"
+
+
+def test_frame_page_exposes_paywall_card(client, ledger, monkeypatch):
+    from bot import config as cfg
+
+    monkeypatch.setattr(cfg, "MINI_APP_URL", "https://tipbot.example.com")
+    monkeypatch.setattr(cfg, "WEBHOOK_URL", "")
+    monkeypatch.setattr(cfg, "BOT_USERNAME", "base_tipbot")
+    item_id = ledger.create_paywall(777, "Альфа-сигнал", 1_000_000, "секрет")
+    r = client.get(f"/frame/{item_id}")
+    assert r.status_code == 200
+    html = r.text
+    assert "fc:frame" in html
+    assert "https://tipbot.example.com/miniapp-hero.png" in html
+    assert "https://t.me/base_tipbot?start=paywall_" + str(item_id) in html
+    assert "x402" in html
+    assert "https://tipbot.example.com/api/x402/paywall?item=" + str(item_id) in html
+    assert "вЂ" not in html, "mojibake on a card Warpcast renders"
+
+
+def test_frame_page_for_a_post_that_does_not_exist_is_a_404(client):
+    """It used to be a 200 that said "Post not found" — a card for no post,
+    indexable and indistinguishable from a real one by anything that reads the
+    status instead of the text."""
+    r = client.get("/frame/987654")
+    assert r.status_code == 404
+    assert 'content="noindex"' in r.text
+
+
+def test_the_legal_page_declares_the_language_its_body_is_written_in(client):
+    """``/tos`` wrapped the English legal file in ``lang="ru"``, so a screen
+    reader read English prose with Russian phonemes and Google processed the
+    page as Russian. The chrome around it is Russian either way, which is why
+    the rule is measured on ``<main>`` and on the description, not on the whole
+    document."""
+    html = client.get("/tos").text
+    lang = re.search(r'<html lang="([^"]+)"', html).group(1)
+    main = html[html.index("<main>"):html.index("</main>")]
+    description = re.search(r'<meta name="description" content="([^"]*)"', html).group(1)
+    cyrillic = lambda text: bool(re.search(r"[а-яё]", text, re.I))  # noqa: E731
+    assert (lang == "ru") == cyrillic(main), (lang, cyrillic(main), main[:120])
+    assert (lang == "ru") == cyrillic(description), (lang, description[:80])
+    locale = re.search(r'<meta property="og:locale" content="([^"]*)"', html).group(1)
+    assert locale == {"ru": "ru_RU", "en": "en_US"}[lang], (lang, locale)

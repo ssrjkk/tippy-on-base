@@ -13,13 +13,20 @@
 // Assets are matched by extension, so no .html is ever served straight from
 // the edge and the routes above always reach the origin.
 //
+// ``txt`` is deliberately NOT in that extension list. The bundle has no .txt in
+// it, and Pages answers a missing path with the landing page — so /robots.txt
+// came back as 200 text/html carrying a whole website's markup where a crawler
+// expected rules, and a robot that cannot read robots.txt is a robot guessing.
+// While the origin is down those two paths are a 503 with a Retry-After, which
+// is the honest answer to the same question.
+//
 // When the origin is not configured or unreachable, a branded maintenance
 // page is returned instead of a raw error — the site never shows a stack of
 // internal text. It carries its own copy of the Base tokens from
 // web/static/style.css because the page has to render with the asset bundle
 // missing too.
 
-const ASSET = /\.(?:css|js|mjs|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|otf|map|txt|webmanifest)$/i;
+const ASSET = /\.(?:css|js|mjs|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|otf|map|webmanifest)$/i;
 
 const MAINTENANCE = `<!doctype html>
 <html lang="ru">

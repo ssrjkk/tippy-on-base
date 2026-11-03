@@ -27,6 +27,13 @@ os.environ.setdefault("X402_RECEIVE_ADDRESS", "0x0000000000000000000000000000000
 # the code is written on. Tests own both spellings of the owner.
 os.environ["ADMIN_TG_ID"] = "111"
 os.environ["OWNER_ID"] = "111"
+# Same reason, same shape: canonicals, the share card and the sitemap are all
+# built from the public origin, and public_base_url() reads MINI_APP_URL first
+# and WEBHOOK_URL second. A dev .env with the real Pages host would make the SEO
+# gates assert that host — green on the laptop that has it, red in CI that does
+# not. Tests that care about the origin name it themselves.
+os.environ["MINI_APP_URL"] = ""
+os.environ["WEBHOOK_URL"] = ""
 os.environ.setdefault("WEBHOOK_SECRET", "test-webhook-secret-for-ci")
 # Tests fake Base MAINNET (chain 8453); the repo .env points to Sepolia.
 os.environ.setdefault("EXPECTED_CHAIN_ID", "8453")

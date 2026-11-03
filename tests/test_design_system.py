@@ -802,6 +802,63 @@ def test_no_substitution_key_is_dead():
 
 
 # ---------------------------------------------------------------------------
+# the document's identity: one writer for title, description and share card
+# ---------------------------------------------------------------------------
+
+INDEXABLE_PAGES = ("index.html", "market.html", "oc.html", "user.html", "agent.html")
+CARD_RE = re.compile(r'<meta (?:property="og:|name="twitter:)|<link rel="canonical"')
+TITLE_RE = re.compile(r"<title>")
+DESC_RE = re.compile(r'<meta name="description" content="([^"]+)"')
+
+
+def test_only_the_server_writes_a_share_card():
+    """``og:`` and ``twitter:`` are derived from ``<title>`` and the description
+    meta by `web/server.py`, so a template that also types them can only end up
+    disagreeing with its own document — which is exactly what `user.html` did:
+    the tab said «Профиль — Tippy» and the card said «Профиль в Tippy».
+
+    `app.html` is the exception and owns it: it is not a page of the site, it is
+    the launch card the Base App crawls, and its tags carry the Mini App's own
+    copy.
+    """
+    for name in INDEXABLE_PAGES:
+        found = CARD_RE.findall(read(name))
+        assert not found, f"{name} writes {found} — the server already does"
+    app = read("app.html")
+    assert app.count('<meta property="og:title"') == 1
+    assert app.count('<meta property="og:image"') == 1
+
+
+def test_every_indexable_page_declares_its_title_and_its_description():
+    """The two strings the server turns into a card. A page missing the
+    description gets a card with no second line, and nothing downstream notices.
+    """
+    offenders = {}
+    for name in INDEXABLE_PAGES:
+        text = read(name)
+        if len(TITLE_RE.findall(text)) != 1 or len(DESC_RE.findall(text)) != 1:
+            offenders[name] = (len(TITLE_RE.findall(text)), len(DESC_RE.findall(text)))
+    assert not offenders, offenders
+
+
+def test_the_edge_never_answers_the_robots_documents_from_the_bundle():
+    """``txt`` in the extension list made /robots.txt an edge asset. The bundle
+    has no such file, Pages answers a missing path with the landing page, and a
+    crawler was handed 200 + text/html where it expected rules.
+
+    The regex is read out of the function rather than restated, so this fails
+    when the routing changes and not when a copy of it goes stale.
+    """
+    source = EDGE.read_text(encoding="utf-8-sig")
+    declared = re.search(r"const ASSET = /\\.\((\?:[^)]*)\)\$/i;", source)
+    assert declared, "the edge asset pattern moved somewhere this gate cannot read"
+    asset = re.compile(f"\\.({declared.group(1)})$", re.I)
+    for origin_document in ("/robots.txt", "/sitemap.xml"):
+        assert not asset.search(origin_document), f"{origin_document} is served from the edge"
+    assert asset.search("/style.css"), "the extracted pattern matches nothing — a broken gate"
+
+
+# ---------------------------------------------------------------------------
 # the document: what the browser is told before it paints
 # ---------------------------------------------------------------------------
 

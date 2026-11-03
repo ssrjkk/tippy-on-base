@@ -669,6 +669,16 @@ async def mini_lang(body: LangBody, request: Request) -> dict:
     await ledger.set_setting(tg_id, 'lang', body.lang)
     return {'ok': True, 'lang': body.lang}
 
+# The one share image the bundle has, at the path the bundle serves it from:
+# ``pages_build_output_dir`` is ``web/static``, so the URL a crawler fetches has
+# no ``/static/`` in it. A picture that 404s is a card the platform draws
+# without one, so every absolute card — og:image, twitter:image,
+# fc:miniapp.imageUrl (spelled in the template), fc:frame:image — names this
+# file, and test_no_share_image_points_at_a_path_the_bundle_does_not_have
+# resolves each one against the directory.
+SHARE_IMAGE = "/miniapp-hero.png"
+
+
 def public_base_url() -> str:
     """https://host part where the Mini App lives (used for WebApp buttons).
 
