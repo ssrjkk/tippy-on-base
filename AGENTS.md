@@ -22,7 +22,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1210 tests (57 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~9 min, 1212 tests (57 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -77,6 +77,12 @@
   without it the bar-vs-number gate skips with that reason printed.
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
   unused by any page.
+- `web/static` is the site's source **and** the Pages build output, so anything added there is a
+  URL. The origin refuses its own plumbing — a path starting `/_` (`_headers`, `_redirects`) or
+  ending `.md` (`tos.md` is the source of the rendered `/tos`, not a second copy of it) — and
+  `test_the_bundle_directory_does_not_publish_its_own_plumbing` keeps the real assets reachable
+  while it does. Share images live at the bundle root: `/miniapp-hero.png`, never
+  `/static/miniapp-hero.png`.
 - `tests/conftest.py` assigns `ADMIN_TG_ID` and `OWNER_ID` with `os.environ[...] =`, **not**
   `setdefault`: `bot/config.py` `load_dotenv`s the dev `.env` at import and `load_dotenv` never
   overrides, so a maintainer's real `OWNER_ID` folds `ADMIN_TG_ID` onto itself and every

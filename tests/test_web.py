@@ -1808,3 +1808,30 @@ def test_every_api_call_the_site_makes_is_a_route_the_server_serves():
     if dead:
         name, path = dead[0]
         pytest.fail(f"{name} fetches {path}, which the server does not route ({len(dead)} in total)")
+
+
+def test_the_bundle_directory_does_not_publish_its_own_plumbing(client):
+    """``web/static`` is both the site's source and the Pages build output, so a
+    file added there is a URL whether or not it was meant for a browser. Before
+    this rule the origin answered ``/_headers`` with 200 and
+    ``application/octet-stream``, and ``/tos.md`` served the terms as a second
+    copy of ``/tos`` with no canonical to point back at the page. The real
+    assets keep serving — the guard is about plumbing, not about files."""
+    for plumbing in ("/_headers", "/_redirects", "/tos.md"):
+        assert client.get(plumbing).status_code == 404, plumbing
+    for asset in ("/style.css", "/theme.js", "/app.js", "/site.js", "/miniapp-hero.png", "/icon.png"):
+        assert client.get(asset).status_code == 200, asset
+
+
+def test_the_commands_the_site_publishes_are_the_ones_the_bot_installs(client):
+    """The landing states it in prose: «Тот же список, который бот регистрирует в
+    меню Telegram через set_my_commands, — сайт отдаёт его из того же источника,
+    поэтому команды здесь не могут разойтись с ботом». A sentence like that is a
+    contract, so it is measured: the payload and the installed menu have to be
+    the same commands, in the same order, with the same descriptions."""
+    from bot.main import BOT_COMMANDS
+
+    payload = client.get("/api/info").json()["commands"]
+    assert [(c["command"], c["description"]) for c in payload] == [
+        (c.command, c.description) for c in BOT_COMMANDS
+    ]

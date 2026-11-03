@@ -202,6 +202,13 @@ def _nonce_inject(html: str, nonce: str) -> str:
 async def rate_limit(request: Request, call_next):
     global _rl_last_sweep, _auth_rl_last_sweep
     path = request.url.path
+    # The bundle directory doubles as the web root, so every file that lands in
+    # web/static is published by StaticFiles: `/_headers` came back 200 as
+    # application/octet-stream, and `/tos.md` served the terms as a second,
+    # canonical-less copy of /tos. Both are plumbing for the host, not pages —
+    # Pages reads the `_`-prefixed files itself, and /tos renders the Markdown.
+    if path.startswith('/_') or path.endswith('.md'):
+        return JSONResponse(status_code=404, content={'detail': 'Not found'})
     if not _RL_DISABLED and (path.startswith('/api/') or path in ('/qr', '/metrics', '/tos', config.WEBHOOK_PATH)):
         client = _client_ip(request)
         now = time.time()
