@@ -146,11 +146,15 @@ accounting backed by public proof-of-reserves.
   `/api/prediction/{id}`, `/api/leaderboard`, `/api/user/{id}`, `/api/info`,
   `/api/health`, `/qr`, rate-limited per IP
 
-### Smart Wallet (ERC-4337) — gasless, non-custodial
+### Smart Wallet (ERC-4337) — gasless, operator-custodied
 - **Per-user Smart Accounts** via CREATE2 (`SmartAccountFactory`) — deterministic
   counterfactual addresses; no ETH needed from the user
 - **VerifyingPaymaster sponsors gas** — users tip/trade without ever holding ETH
   (Base Sepolia proven: direct `handleOps` and gasless paymaster UserOps, status=1)
+- **The operator holds the keys, not the user** — `SmartAccount.owner` is the relayer
+  address (`bot/smart_wallet.py::_owner`, derived from `HOT_WALLET_KEY`), and that key
+  signs every UserOperation. Gasless is what the user pays with custody; the same rule
+  is stated in `docs/SECURITY.md` («The hot wallet is custodial by design»).
 - `bot/smart_wallet.py` builds + signs UserOperations (EIP-191) and drives
   `approveAndTrade` from the wallet's own USDC
 - Details: `docs/ARCHITECTURE.md` (Smart Wallet section)
@@ -410,7 +414,10 @@ worst-case payout.
 - ~~Smart Wallet (ERC-4337) + gasless paymaster~~ core shipped + Sepolia-proven (P2)
 - ~~Withdrawal batching for gas savings~~  shipped (queued payouts flushed as one vault batch, direct-send fallback)
 - Order-book style CLOB on top of the AMM
-- ~~On-chain market escrow (trustless resolution via UMA-style oracle)~~ shipped as **Cally** (OutcomeMarket ERC-1155)
+- ~~On-chain market escrow (resolution via a UMA-style oracle)~~ shipped as **Cally**
+  (OutcomeMarket ERC-1155): an oracle proposes, the owner has 2h to dispute. Not
+  trustless — with no `ORACLE_PRIVATE_KEY` configured the bot resolves through the
+  owner key, so one signature holds both roles.
 
 ## Contributing
 

@@ -22,7 +22,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1212 tests (57 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~9 min, 1216 tests (57 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -106,7 +106,17 @@
   and the agent are separate processes with separate connections, and cross-process safety comes from
   `SELECT … FOR UPDATE` and guarded `INSERT … WHERE` statements, not from the lock.
 - `tx_log.amount` is always positive. Sign, label and counterparty come from `kind` through
-  `bot/tx_view.py` — never from the amount, and never re-derived per page.
+  `bot/tx_view.py` — never from the amount, and never re-derived per page. A row is never deleted
+  and its money columns are written once; the only `UPDATE tx_log` in the codebase sets a
+  withdrawal's `status` and `tx_hash` (`bot/ledger/_withdraw.py`), which is why
+  `docs/ARCHITECTURE.md` says "written once" rather than "immutable" — and
+  `test_the_audit_trail_keeps_the_properties_the_architecture_documents` reads the SQL to keep the
+  two from drifting.
+- Custody has one wording. The hot wallet is custodial by design (`docs/SECURITY.md`), so
+  "non-custodial" must not appear while `smart_wallet._owner()` derives from `HOT_WALLET_KEY`, and
+  "trustless" must not appear while `bot/handlers/onchain.py` falls back to `owner_resolve` with the
+  same key when `ORACLE_PRIVATE_KEY` is unset. Both are gated in `tests/test_docs.py`, and both
+  gates flip: if a user key ever really does sign, the docs are required to say which model applies.
 - The solvency number is `total_liabilities()` (`bot/ledger/_withdraw.py`) — SIX categories: user
   balances, open market escrow, open bet pools, community treasuries, unswept x402 credit, unclaimed
   pending deposits. `/api/solvency` prints `pending_deposits_usdc` as one of them, not as an extra;

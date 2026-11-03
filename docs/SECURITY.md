@@ -45,7 +45,9 @@ credit reporters in the release notes unless anonymity is requested.
   deadline was skipped by both watchers, which left an abandoned pool locked
   indefinitely with its creator as an oracle on no clock. Past the deadline the
   creator may settle; anyone may refund once the grace period runs out. On-chain
-  trustless resolution is on the roadmap.
+  markets (OutcomeMarket) resolve through an oracle with a 2h owner dispute window,
+  and the owner may finalize an abandoned market alone; a resolution no single key
+  can propose, veto and finalize is still the roadmap.
 - The hot wallet is custodial by design; production deployments should use
   TipBotVault with a multisig owner so the relayer key is daily-limit capped.
 
