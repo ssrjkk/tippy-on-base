@@ -22,7 +22,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1216 tests (57 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~9 min, 1219 tests (57 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -121,7 +121,12 @@
   balances, open market escrow, open bet pools, community treasuries, unswept x402 credit, unclaimed
   pending deposits. `/api/solvency` prints `pending_deposits_usdc` as one of them, not as an extra;
   the landing labels the total «Все обязательства бота». Never call it «balances» — the label is a
-  claim about the formula.
+  claim about the formula. Three gates hold that sentence open: the landing must name all six
+  categories the SQL sums (`LIABILITY_WORDS` in `tests/test_web.py`), the docstring's count must
+  equal the number of terms, and the figure is published under exactly one key — `owed_usdc` was
+  removed because a second name for one number is two numbers waiting to disagree. The landing no
+  longer states «обязательство не может превысить то, что лежит на адресе»: nothing enforces it, and
+  the page's own chip reads «недостаточно» whenever reserves fall short.
 - "Volume" has one definition: `VOLUME_KINDS` in `bot/ledger/_views.py` — tip, deposit, bet,
   `market_create` (the creator's subsidy is a stake like any pool stake), `market_buy`, `token_buy`,
   `paywall`, `channel_pay`, x402. Receiver mirrors (`tip_in`, `rain_in`, `token_sale`, `paywall_earn`,

@@ -1,4 +1,4 @@
-﻿"""Web dashboard: public stats, markets, leaderboard, wallet transparency.
+"""Web dashboard: public stats, markets, leaderboard, wallet transparency.
 
 Run:  python -m web.server
 Made by @ssrjkk — github.com/ssrjkk
@@ -729,29 +729,32 @@ async def api_x402_paywall(request: Request) -> Response:
 async def api_solvency() -> dict:
     """Transparency: every claim on the treasury, against what is really held.
 
-    `owed_usdc` is `total_liabilities()` — six categories: user balances, open
-    market escrow, open bet pools, community treasuries, unswept x402 credit and
-    unclaimed pending deposits. `pending_deposits_usdc` is one of the six, printed
-    separately, not a seventh thing to add. Reserves come from the TipBotVault
-    contract when it is deployed (on-chain, readable by anyone); otherwise from
-    the hot wallet.
+    `liabilities_usdc` is `total_liabilities()` — six categories: user balances,
+    open market escrow, open bet pools, community treasuries, unswept x402 credit
+    and unclaimed pending deposits. `pending_deposits_usdc` is one of the six,
+    printed separately, not a seventh thing to add. Reserves come from the
+    TipBotVault contract when it is deployed (on-chain, readable by anyone);
+    otherwise from the hot wallet.
+
+    One number gets one name: the payload used to carry the same figure as
+    `owed_usdc` as well, and nothing but a test read that second key.
     """
     from decimal import ROUND_HALF_UP, Decimal
 
     liabilities = await ledger.total_liabilities()
     pending = await ledger.pending_deposit_total()
-    owed_usdc = _usdc(liabilities)
+    owed = _usdc(liabilities)
     bal = await _safe_hot_balance()
     vault_bal = await _safe_vault_balance()
     vault_addr = config.VAULT_ADDRESS
     reserves = vault_bal if vault_addr else bal
     if reserves is not None:
-        reserve_diff = float((Decimal(str(reserves)) - Decimal(str(owed_usdc))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-        solvent = Decimal(str(reserves)) >= Decimal(str(owed_usdc))
+        reserve_diff = float((Decimal(str(reserves)) - Decimal(str(owed))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        solvent = Decimal(str(reserves)) >= Decimal(str(owed))
     else:
         reserve_diff = None
         solvent = None
-    return {'hot_wallet': str(hot_wallet()), 'vault_address': vault_addr, 'vault_balance_usdc': vault_bal, 'reserves_source': 'vault' if vault_addr else 'hot_wallet', 'hot_wallet_balance_usdc': bal, 'liabilities_usdc': _usdc(liabilities), 'pending_deposits_usdc': _usdc(pending), 'owed_usdc': owed_usdc, 'reserve_usdc': reserve_diff, 'solvent': solvent}
+    return {'hot_wallet': str(hot_wallet()), 'vault_address': vault_addr, 'vault_balance_usdc': vault_bal, 'reserves_source': 'vault' if vault_addr else 'hot_wallet', 'hot_wallet_balance_usdc': bal, 'liabilities_usdc': owed, 'pending_deposits_usdc': _usdc(pending), 'reserve_usdc': reserve_diff, 'solvent': solvent}
 
 @app.get('/qr', tags=['treasury'])
 async def api_qr(data: str, size: int=220) -> Response:

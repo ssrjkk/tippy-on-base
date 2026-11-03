@@ -943,7 +943,7 @@ def test_e2e_dashboard_values(e2e, monkeypatch, api):
     sol = api.get("/api/solvency").json()
     assert sol["liabilities_usdc"] == 100.0  # 85 user bal + 15 bet pool
     assert sol["pending_deposits_usdc"] == 0.0
-    assert sol["owed_usdc"] == 100.0
+    assert sol["liabilities_usdc"] == 100.0
     assert sol["hot_wallet_balance_usdc"] == 500.0
     assert sol["solvent"] is True
     assert sol["reserve_usdc"] == 400.0

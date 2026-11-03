@@ -321,7 +321,7 @@ def test_solvency_zeros(client):
     data = r.json()
     assert data["liabilities_usdc"] == 0.0
     assert data["pending_deposits_usdc"] == 0.0
-    assert data["owed_usdc"] == 0.0
+    assert data["liabilities_usdc"] == 0.0
     assert data["vault_address"] is None
     assert data["vault_balance_usdc"] is None
     assert data["reserves_source"] == "hot_wallet"
@@ -334,7 +334,7 @@ def test_solvency_tracks_liabilities(client, ledger):
     r = client.get("/api/solvency").json()
     assert r["liabilities_usdc"] == 22.0
     assert r["pending_deposits_usdc"] == 7.0
-    assert r["owed_usdc"] == 22.0
+    assert r["liabilities_usdc"] == 22.0
 
 
 def test_solvency_insolvent_when_rpc_down(client, monkeypatch):
@@ -1835,3 +1835,70 @@ def test_the_commands_the_site_publishes_are_the_ones_the_bot_installs(client):
     assert [(c["command"], c["description"]) for c in payload] == [
         (c.command, c.description) for c in BOT_COMMANDS
     ]
+
+
+# ---------------------------------------------------------------------------
+# proof of reserves: what the landing promises, against what the ledger sums
+# ---------------------------------------------------------------------------
+
+LIABILITY_WORDS = {
+    "user_bal": "балансами пользователей",
+    "market_escrow": "эскроу рынков",
+    "bet_pool": "открытыми пулами",
+    "treasury_bal": "казначействами сообществ",
+    "x402_unswept_credit_total": "незачисленными x402",
+    "pending_deposit_total": "депозитами в ожидании",
+}
+
+
+def test_the_landing_names_every_category_total_liabilities_sums(client):
+    """«Все обязательства бота» is one number, and the sentence under it lists
+    what goes into it. The list is prose and the sum is SQL, so the number can
+    grow past the sentence without anyone noticing — which is how a
+    proof-of-reserves becomes a proof of something else."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "bot" / "ledger" / "_withdraw.py").read_text(
+        encoding="utf-8-sig")
+    body = re.search(r"def total_liabilities\(self\).*?\n        \)\n", source, re.S)
+    assert body, "total_liabilities() moved somewhere this gate cannot read"
+    parts = [name for pair in re.findall(
+        r'int\(row\["(\w+)"\]\)|self\.(\w+_total)\(\)', body.group(0)) for name in pair if name]
+    assert set(parts) == set(LIABILITY_WORDS), f"код суммирует {sorted(parts)}, карта гейта — {sorted(LIABILITY_WORDS)}"
+    claimed = re.search(r"([A-Z][a-z]+) categories", body.group(0))
+    assert claimed and {"Six": 6, "Seven": 7}.get(claimed.group(1), -1) == len(parts), (
+        f"docstring says {claimed and claimed.group(1)}, the sum has {len(parts)} terms"
+    )
+
+    hint = re.search(r"Все депозиты, чаевые и пулы.*?</p>", client.get("/").text, re.S)
+    assert hint, "the reserves explanation is gone from the landing"
+    missing = [word for key, word in LIABILITY_WORDS.items() if word not in hint.group(0)]
+    assert not missing, f"обязательства считаются по {sorted(parts)}, в тексте нет про: {missing}"
+
+
+def test_the_solvency_payload_names_the_liabilities_number_once(client, ledger):
+    """One figure under two keys is two figures waiting to disagree. The payload
+    used to answer both `liabilities_usdc` and `owed_usdc` from the same
+    variable; a liabilities number now appears exactly once, measured on a ledger
+    where it cannot coincide with the pending line."""
+    ledger.credit(1, 50_000_000, "deposit")
+    bid = ledger.create_bet(1, "Пул для сверки?", ["Да", "Нет"])
+    ledger.place_bet(bid, 1, 0, 10_000_000)
+    data = client.get("/api/solvency").json()
+    owed = data["liabilities_usdc"]
+    assert owed > 0, "nothing on the ledger — the gate would pass on an empty payload"
+    assert data["pending_deposits_usdc"] != owed
+    duplicated = [key for key, value in data.items()
+                  if key != "liabilities_usdc" and isinstance(value, (int, float)) and value == owed]
+    assert not duplicated, f"the same liabilities figure is also published as {duplicated}"
+
+
+def test_the_landing_does_not_promise_a_solvency_it_does_not_enforce(client):
+    """The page used to state «Обязательство не может превысить то, что реально
+    лежит на адресе» — an invariant nothing enforces, contradicted two rows
+    above whenever the treasury is short and the chip reads «недостаточно». A
+    promise the code cannot keep is not a guarantee, it is a bug that reads like
+    marketing."""
+    html = client.get("/").text
+    assert "не может превысить" not in html
+    assert "недостаточно" in html, "the page lost the word it shows when reserves fall short"
