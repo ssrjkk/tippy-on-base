@@ -1775,3 +1775,36 @@ def test_the_legal_page_declares_the_language_its_body_is_written_in(client):
     assert (lang == "ru") == cyrillic(description), (lang, description[:80])
     locale = re.search(r'<meta property="og:locale" content="([^"]*)"', html).group(1)
     assert locale == {"ru": "ru_RU", "en": "en_US"}[lang], (lang, locale)
+
+
+def test_every_api_call_the_site_makes_is_a_route_the_server_serves():
+    """The bundle fetches 25 endpoints by string, and a renamed or dropped one
+    fails only when a visitor presses the button. The OpenAPI table is what the
+    app really routes, so the two are compared here: every path a script fetches
+    has to be served, and a path built by concatenation is matched on the static
+    part the literal gives."""
+    import re as _re
+    from pathlib import Path
+
+    from web.server import app
+
+    static = Path(__file__).resolve().parents[1] / "web" / "static"
+    served = set(app.openapi()["paths"])
+    fetched = set()
+    for file in list(static.glob("*.js")) + list(static.glob("*.html")):
+        text = file.read_text(encoding="utf-8")
+        for match in _re.finditer(r"""fetch\(\s*[`'"](/api/[^`'"]*)""", text):
+            fetched.add((file.name, match.group(1)))
+        for match in _re.finditer(r"""[`'"](/api/[^`'"]*)[`'"]\s*\+""", text):
+            fetched.add((file.name, match.group(1)))
+    assert fetched, "no /api/ call found in the bundle — the gate would prove nothing"
+
+    def served_by(prefix: str) -> bool:
+        clean = prefix.split("?")[0].rstrip("/")
+        return any(path.rstrip("/") == clean or path.startswith(clean + "/") or clean == path
+                   for path in served)
+
+    dead = sorted((name, path) for name, path in fetched if not served_by(path))
+    if dead:
+        name, path = dead[0]
+        pytest.fail(f"{name} fetches {path}, which the server does not route ({len(dead)} in total)")

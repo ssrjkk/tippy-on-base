@@ -961,3 +961,21 @@ def test_the_landing_canonicalizes_the_host_it_is_served_from():
     title = re.findall(r"<title>(.*?)</title>", body, re.S)
     og_title = re.findall(r'<meta property="og:title" content="([^"]*)"', body)
     assert len(title) == 1 and og_title == [title[0].strip()], (title, og_title)
+
+
+def test_an_asset_from_the_edge_carries_the_same_protection_as_a_page():
+    """The origin sends nosniff on everything it answers; the CSS, the scripts
+    and the images are answered by the Pages bundle instead, and an asset
+    without the header is the half of the site where a mislabelled upload can be
+    executed. Measured here because only the deployed edge decides which of the
+    two servers answers the request."""
+    import urllib.request
+
+    for path in ("/style.css", "/site.js", "/miniapp-hero.png"):
+        request = urllib.request.Request(f"{PROD_URL}{path}", headers={"user-agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            assert response.status == 200, path
+            assert response.headers.get("x-content-type-options", "").lower() == "nosniff", (
+                f"{path} arrived as {response.headers.get('content-type')} without nosniff"
+            )
+            assert response.headers.get("referrer-policy", "") == "no-referrer", path

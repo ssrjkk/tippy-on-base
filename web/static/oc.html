@@ -26,7 +26,7 @@
           <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
           <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
         </button>
-        <a class="btn btn-ghost btn-sm" href="/#onchain">Все ончейн-рынки</a>
+        <a class="btn btn-ghost btn-sm" href="/#onchain-markets">Все ончейн-рынки</a>
       </div>
     </div>
   </header>
@@ -47,7 +47,7 @@
 
       <div class="cta-row">
         <a class="btn btn-primary" href="https://t.me/__BOT_USERNAME__" data-tg-link>Торговать в Telegram</a>
-        <a class="btn btn-ghost" id="oc-scan" href="#" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
+        <a class="btn btn-ghost" id="oc-scan" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
         <button class="btn btn-ghost" id="oc-share" type="button">Скопировать ссылку</button>
       </div>
 
@@ -126,7 +126,7 @@
         m = await r.json();
       } catch (e) {
         $("oc").innerHTML = '<div class="empty">Ончейн-рынок #' + esc(marketId) +
-          ' не найден — возможно, контракты ещё не развёрнуты в этой сети. Список рынков: <a class="m-link" href="/#onchain">на главной</a>.</div>';
+          ' не найден — возможно, контракты ещё не развёрнуты в этой сети. Список рынков: <a class="m-link" href="/#onchain-markets">на главной</a>.</div>';
         return;
       }
 
@@ -174,6 +174,10 @@
         scan.remove();
       } else {
         scan.href = info.explorer + "/address/" + encodeURIComponent(m.market_address);
+        // The markup ships hidden so a page whose contract is unknown shows no
+        // broken link — and nothing else ever clears the attribute, so setting
+        // the href alone left the button invisible in the one case it exists for.
+        scan.hidden = false;
       }
 
       $("oc-share").addEventListener("click", async () => {

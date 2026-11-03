@@ -1,0 +1,9 @@
+# Response headers for everything the Pages bundle serves itself — style.css,
+# the scripts and the images. Documents never come from here: the Function
+# proxies them to the origin, which sets its own CSP, nonce and cookie flags.
+#
+# Without this file the same site answers a page with nosniff and an asset
+# without it, and the weaker half is the one a mislabelled upload reaches.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer

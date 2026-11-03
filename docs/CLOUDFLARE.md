@@ -34,6 +34,13 @@ For the same reason there is no `_redirects` file in the bundle: a
 `/* /index.html 200` rewrite is applied before Functions and would swallow
 `/api/*`, `/app`, `/telegram-webhook` and every other dynamic path.
 
+There *is* a `_headers` file, and it carries only the two keys the origin already
+sends on every response — `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: no-referrer`. It applies to what the bundle answers itself
+(`style.css`, the scripts, the images); proxied documents keep the origin's own
+headers, including the CSP nonce. Without it the same site sends protection on
+its pages and nothing on the files those pages load.
+
 The proxy strips `Host` (the origin has its own hostname) and sets
 `X-Forwarded-Host` plus `X-Forwarded-Proto: https` — TLS terminates at
 Cloudflare, and without that header the backend would mark the session cookies

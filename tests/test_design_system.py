@@ -1258,3 +1258,157 @@ def mono_class_tokens(css: str) -> list[str]:
             subject = re.sub(r":[\w-]+(?:\([^)]*\))?", "", subject)
             tokens |= set(re.findall(r"\.([A-Za-z][\w-]*)", subject))
     return sorted(tokens)
+
+
+# ---------------------------------------------------------------------------
+# controls: what a visitor can click, and what is allowed to appear at all
+# ---------------------------------------------------------------------------
+
+PAGE_SCRIPTS = {
+    "index.html": ("theme.js", "chain.js", "app.js", "site.js"),
+    "app.html": (),
+    "market.html": ("theme.js", "chain.js"),
+    "oc.html": ("theme.js", "chain.js"),
+    "user.html": ("theme.js", "chain.js"),
+    "agent.html": ("theme.js", "agent.js"),
+}
+
+
+def page_code(name: str) -> str:
+    """Every line of script that runs against this document: the files it loads
+    plus the inline blocks it carries."""
+    html = read(name)
+    return "".join(read(js) for js in PAGE_SCRIPTS[name]) + "".join(
+        re.findall(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", html, re.S))
+
+
+def unhidden_ids(code: str) -> set[str]:
+    """ids the code names on its way to clearing `hidden` — by the attribute
+    assignment or by removing it, directly or through a variable bound to them."""
+    clear = r"(?:\.hidden\s*=\s*false|\.removeAttribute\(\s*['\"]hidden['\"]\))"
+    found = set(re.findall(
+        rf"""(?:\$\(\s*|getElementById\(\s*)['"]([\w-]+)['"]\s*\)\s*\??\s*{clear}""", code))
+    for var, ident in re.findall(
+            r"(?:const|let|var)\s+(\w+)\s*=\s*(?:\$\(\s*|document\.getElementById\(\s*)['\"]([\w-]+)['\"]", code):
+        if re.search(rf"\b{re.escape(var)}{clear}", code):
+            found.add(ident)
+    return found
+
+
+def unhidden_classes(code: str) -> set[str]:
+    """Classes a loop assigns `.hidden` to — the generic shape `switchTab` uses
+    over `.panel` elements, where no id is ever named."""
+    covered: set[str] = set()
+    for match in re.finditer(r"""querySelectorAll\(\s*['"]([^'"]+)['"]\s*\)""", code):
+        if re.search(r"\.hidden\s*=", code[match.end():match.end() + 400]):
+            covered |= set(re.findall(r"\.([\w-]+)", match.group(1)))
+    return covered
+
+
+def hidden_elements(html: str) -> dict[str, set[str]]:
+    """id -> classes, for every element the markup ships invisible. `aria-hidden`
+    is a different promise (screen readers) and is not counted."""
+    found: dict[str, set[str]] = {}
+    for tag in re.findall(r"<[a-z]+[^>]*>", html, re.I):
+        if not re.search(r"\shidden(\s|=|>)", tag) or "aria-hidden" in tag:
+            continue
+        classes: set[str] = set()
+        attr = re.search(r"\bclass=\"([^\"]*)\"", tag)
+        if attr:
+            classes = set(attr.group(1).split())
+        for ident in re.findall(r'\bid="([^"]+)"', tag):
+            found[ident] = classes
+    return found
+
+
+def test_no_anchor_leads_nowhere():
+    """A link that resolves to nothing is a button that does nothing, and only
+    the visitor finds out. ``/#onchain`` was exactly that: the landing names its
+    section ``#onchain-markets``, so every on-chain market page sent someone who
+    just failed to find a market to the top of the home page instead of the list
+    the link promised."""
+    index_ids = set(re.findall(r'\bid="([^"]+)"', read("index.html")))
+    offenders = []
+    for name in PAGES:
+        html = read(name)
+        own_ids = set(re.findall(r'\bid="([^"]+)"', html))
+        for href in re.findall(r'<a\b[^>]*href="([^"]*)"', html, re.I):
+            if href in ("", "#"):
+                offenders.append((name, href or "(empty href)", "leads nowhere"))
+                continue
+            crosses_pages = href.startswith("/#")
+            target = href[2:] if crosses_pages else (href[1:] if href.startswith("#") else "")
+            if not target:
+                continue
+            wanted = index_ids if crosses_pages or name == "index.html" else own_ids
+            if target not in wanted:
+                offenders.append((name, href, f"no id={target} where it points"))
+    assert not offenders, offenders
+
+
+def test_every_element_that_ships_hidden_can_appear():
+    """``hidden`` in the markup is a promise that code will clear it.
+    ``#oc-scan`` had its href filled in and nobody cleared the attribute, so the
+    contract link stayed invisible in the one configuration it exists for: a
+    feature the file implements and no visitor can reach."""
+    unreachable = []
+    for name in PAGES:
+        code = page_code(name)
+        ids, classes = unhidden_ids(code), unhidden_classes(code)
+        for ident, element_classes in hidden_elements(read(name)).items():
+            if ident in ids or (element_classes & classes):
+                continue
+            unreachable.append(f"{name}: #{ident} ships hidden and nothing clears it")
+    assert not unreachable, unreachable
+
+
+# ---------------------------------------------------------------------------
+# what the deploy files tell the operator to publish, and what the edge sends
+# ---------------------------------------------------------------------------
+
+MANIFEST = ROOT / "deploy" / "farcaster_manifest.example.json"
+EDGE_HEADERS = STATIC / "_headers"
+
+
+def test_the_manifest_template_publishes_paths_the_bundle_has():
+    """The Base App reads iconUrl, imageUrl and splashImageUrl off this file, and
+    the template said ``/static/icon.png`` — a path the bundle has never served,
+    because ``pages_build_output_dir`` already is ``web/static``. An operator
+    following the documented steps got a launch card with no picture, no icon and
+    a splash that 404s, and the button title carried an emoji the Mini App itself
+    does not use."""
+    import json
+
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    miniapp = manifest["miniapp"]
+    for key in ("iconUrl", "imageUrl", "splashImageUrl"):
+        url = miniapp[key]
+        assert "/static/" not in url, f"{key} publishes {url}"
+        filename = url.rsplit("/", 1)[-1]
+        assert (STATIC / filename).is_file(), f"{key} names {filename}, which the bundle does not have"
+    assert miniapp["homeUrl"].endswith("/app")
+    assert miniapp["webhookUrl"].endswith("/api/webhook-miniaction")
+    canvas = normalized(resolve(DARK, "--canvas"))
+    assert miniapp["splashBackgroundColor"].lower() == canvas, (
+        f"splash {miniapp['splashBackgroundColor']} is not the dark canvas {canvas}"
+    )
+    title = re.search(r'"button":\{"title":"([^"]+)"', read("app.html"))
+    assert title, "app.html no longer declares the fc:miniapp button title"
+    assert miniapp["buttonTitle"] == title.group(1), (miniapp["buttonTitle"], title.group(1))
+
+
+def test_the_edge_sends_the_headers_the_origin_sends():
+    """The origin answers every response with nosniff and no-referrer; the Pages
+    bundle answers the CSS, the scripts and the images itself, and until this
+    file existed it sent nothing. One site, two answers to the same question is
+    how a mislabelled asset starts being executed."""
+    assert EDGE_HEADERS.is_file(), "the bundle has no _headers file"
+    text = EDGE_HEADERS.read_text(encoding="utf-8")
+    block = re.search(r"^/\*\n((?:  [^\n]+\n)+)", text, re.M)
+    assert block, "_headers has no /* block"
+    edge_keys = {line.strip().split(":", 1)[0] for line in block.group(1).splitlines()}
+    assert {"X-Content-Type-Options", "Referrer-Policy"} <= edge_keys, edge_keys
+    assert "nosniff" in text and "no-referrer" in text
+    origin = (ROOT / "web" / "server.py").read_text(encoding="utf-8-sig")
+    for header in edge_keys:
+        assert header in origin, f"the origin never sets {header} — the two have drifted"

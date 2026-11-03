@@ -22,7 +22,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1205 tests (56 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~9 min, 1210 tests (57 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -144,6 +144,14 @@
   or gradient "wallet hero" cards. Tokens live in `web/static/style.css` `:root` / `[data-theme="dark"]`.
 - Money, addresses, odds and percentages use `--font-mono` with `font-variant-numeric: tabular-nums`.
 - Show/hide is `hidden` (see `[hidden] { display: none !important }`), never `el.style.display`.
+  …and an element that ships `hidden` is a promise someone clears: `#oc-scan` had its href filled
+  and no line ever removed the attribute, so the contract link was invisible in exactly the case it
+  exists for. `test_every_element_that_ships_hidden_can_appear` reads every page's own scripts (the
+  direct `$("id").hidden = false`, a variable bound to the id, `removeAttribute`, and the generic
+  `querySelectorAll('.panel')` loop `switchTab` uses) and fails on a control that can only stay
+  invisible. Same family: `test_no_anchor_leads_nowhere` (no `href="#"`, and `/#x` must name an id
+  the landing really has — `/#onchain` did not, the section is `#onchain-markets`) and
+  `test_every_api_call_the_site_makes_is_a_route_the_server_serves`.
 - CSP is strict: `script-src 'self' 'nonce-…'`. `_nonce_inject()` stamps a fresh nonce onto every
   inline `<script>`/`<style>` in any `text/html` response, so inline code works; `<script src=…>` is
   left alone and must come from a whitelisted origin. `img-src` allows `data:` URIs (the CSS chevrons
