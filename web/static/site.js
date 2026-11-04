@@ -98,10 +98,28 @@
     return body || {};
   }
 
-  function post(path, payload) {
+  /* The money endpoints reserve an Idempotency-Key and answer 400 without one.
+     One key per action, kept while the attempt is unresolved — the server rolls
+     the reservation back when the action fails, so a retry replays it instead of
+     spending twice — and dropped once the server accepted the action. Same rule
+     the Mini App follows, same reason. */
+  var _idemKeys = {};
+  function idemKey(action) {
+    if (!_idemKeys[action]) {
+      _idemKeys[action] = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+    return _idemKeys[action];
+  }
+  function resetIdem(action) { delete _idemKeys[action]; }
+
+  function post(path, payload, action) {
+    var headers = { 'Content-Type': 'application/json' };
+    if (action) headers['Idempotency-Key'] = idemKey(action);
     return api(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify(payload),
     });
   }
@@ -437,7 +455,8 @@
     if (amount <= 0) return showError('tipMsg', 'Сумма должна быть больше нуля.');
     clearMsg('tipMsg');
     try {
-      var r = await post('/api/mini/tip', { to: to.replace(/^@/, ''), amount: amount });
+      var r = await post('/api/mini/tip', { to: to.replace(/^@/, ''), amount: amount }, 'tip');
+      resetIdem('tip');
       showOk('tipMsg', 'Отправлено ' + usd(amount) + ' → ' + to + '. Остаток: ' + usd(r.new_balance));
       $('tipAmount').value = '';
       await refreshBalance(r.new_balance);
@@ -530,7 +549,8 @@
     try {
       var r = await post('/api/mini/trade', {
         market_id: m.id, option: pick.trade, amount: amount,
-      });
+      }, 'trade');
+      resetIdem('trade');
       showOk('tradeMsg', 'Куплено долей по рынку #' + m.id + '. Новый баланс: ' + usd(r.new_balance));
       $('tradeAmount').value = '';
       await refreshBalance(r.new_balance);
@@ -546,7 +566,8 @@
     if (amount <= 0) return showError('betMsg', 'Сумма должна быть больше нуля.');
     clearMsg('betMsg');
     try {
-      var r = await post('/api/mini/betplace', { bet_id: b.id, option: pick.bet, amount: amount });
+      var r = await post('/api/mini/betplace', { bet_id: b.id, option: pick.bet, amount: amount }, 'betplace');
+      resetIdem('betplace');
       showOk('betMsg', 'Ставка принята в пул #' + b.id + '. Баланс: ' + usd(r.new_balance));
       $('betAmount').value = '';
       await refreshBalance(r.new_balance);
@@ -564,7 +585,11 @@
     try {
       var payload = { kind: createKind, question: question, options: options, hours: hours };
       if (createKind === 'market') payload.subsidy_usdc = num('newSubsidy');
-      var r = await post('/api/mini/create', payload);
+      // The server names the action it guards, and the key is kept per action:
+      // creating a market and creating a bet are two different attempts.
+      var action = createKind === 'market' ? 'create_market' : 'create_bet';
+      var r = await post('/api/mini/create', payload, action);
+      resetIdem(action);
       showOk('createMsg', 'Создано: #' + r.id + '. Обновляю списки.');
       $('newQuestion').value = '';
       await loadState();
@@ -584,7 +609,8 @@
     try {
       var r = await post('/api/mini/smartbuy', {
         market_id: m.id, outcome: pick.oc, shares: shares, max_cost_usdc: maxCost,
-      });
+      }, 'smartbuy');
+      resetIdem('smartbuy');
       showOk('ocMsg', 'Транзакция отправлена: ' + r.tx_hash.slice(0, 18) + '…');
     } catch (e) { showError('ocMsg', e.message); }
   }

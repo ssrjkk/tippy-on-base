@@ -1902,3 +1902,69 @@ def test_the_landing_does_not_promise_a_solvency_it_does_not_enforce(client):
     html = client.get("/").text
     assert "не может превысить" not in html
     assert "недостаточно" in html, "the page lost the word it shows when reserves fall short"
+
+
+def test_both_bundles_send_the_key_every_money_endpoint_requires():
+    """`web/mini.py` answers 400 'missing Idempotency-Key header' before the
+    ledger is touched, and the Mini App has sent the key since it was
+    introduced. The landing's own workspace never did — so every money button on
+    `/` (tip, trade, bet, create, gasless buy) was refused, and the refusal
+    string was what the visitor saw in its place.
+
+    The rule is read from the server's guarded endpoints, so a new money route
+    cannot ship unreachable from the web: each guarded path has to be called by
+    both bundles with a key, and the action label the client keeps its key under
+    has to be one the server actually guards with — `create` and `create_market`
+    are two different attempts to the ledger."""
+    from pathlib import Path as _P
+
+    root = _P(__file__).resolve().parents[1]
+    mini = (root / "web" / "mini.py").read_text(encoding="utf-8-sig")
+    required: dict[str, set[str]] = {}
+    for match in re.finditer(r"@router\.post\('(/api/mini/[a-z/]+)'", mini):
+        path = match.group(1)
+        upto = mini.find("@router.", match.end())
+        body = mini[match.end():upto if upto > 0 else len(mini)]
+        actions = set(re.findall(r"_idempotent\(request,\s*'([a-z_]+)'", body))
+        if actions:
+            required[path] = actions
+    assert len(required) >= 5, f"only {len(required)} guarded endpoints — the scan is blind"
+
+    site = (root / "web" / "static" / "site.js").read_text(encoding="utf-8")
+    app = (root / "web" / "static" / "app.html").read_text(encoding="utf-8")
+    assert "Idempotency-Key" in site, "site.js has no idempotency helper at all"
+    assert "moneyHeaders" in app, "app.html lost its key helper"
+
+    def windows(text: str, endpoint: str) -> list[str]:
+        """Every place the bundle names this endpoint, with the call around it.
+        The Mini App picks trade/betplace with a ternary, so the path is not
+        always the first argument of the fetch()."""
+        quoted = re.escape(f"'{endpoint}'")
+        return [text[max(0, m.start() - 120):m.end() + 300]
+                for m in re.finditer(quoted, text)]
+
+    for path, actions in sorted(required.items()):
+        for name, text, needs in (("site.js", site, r",\s*(?:'[a-z_]+'|action)\s*\)"),
+                                  ("app.html", app, r"moneyHeaders\(")):
+            calls = windows(text, path)
+            if not calls:
+                # this surface does not offer the action at all — the Mini App
+                # sends on-chain trading to the bot chat (onchain_hint), so it
+                # never calls smartbuy. Absent is allowed; present-and-keyless
+                # is not.
+                continue
+            assert any(re.search(needs, call) for call in calls), (
+                f"{name} calls {path} without an Idempotency-Key — the server "
+                f"refuses it with 400 before the ledger is touched"
+            )
+            # The label is checked in the file, not in the call: the server
+            # hashes (tg_id, its own action, key), so a client label that names
+            # the action loosely can never make a double spend — at worst it
+            # reuses one key where two would be tidier. What must not happen is
+            # a guarded call leaving without a key at all.
+            for action in sorted(actions):
+                assert f"'{action}'" in text, f"{name} never names the guarded action {action}"
+
+    assert windows(site, "/api/mini/tip"), (
+        "site.js no longer tips at all — the loop above would pass on an empty scan"
+    )
