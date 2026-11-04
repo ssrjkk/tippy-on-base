@@ -131,3 +131,14 @@ def test_the_resolution_trust_model_is_described_as_the_code_implements_it():
     # whichever way the code moves, the oracle switch has to stay documented
     assert "ORACLE_PRIVATE_KEY" in (ROOT / "docs" / "ARCHITECTURE.md").read_text(
         encoding="utf-8-sig"), "the docs never say who the oracle key is"
+
+
+def test_the_readme_module_tree_draws_every_branch():
+    """The tree is the only map most readers get of the package layout, and one
+    line there lost its elbow (`─ x402.py`), which no prose review sees. Every
+    branch line has to start with the glyph that puts it in the tree."""
+    tree = (ROOT / "README.md").read_text(encoding="utf-8-sig").splitlines()
+    branches = [line for line in tree if line.startswith(("├", "└", "─", "│"))]
+    assert branches, "no module tree found in README — the gate would prove nothing"
+    malformed = [line for line in branches if not line.startswith(("├─ ", "└─ ", "│  "))]
+    assert not malformed, f"{malformed[:3]} are drawn without their elbow"

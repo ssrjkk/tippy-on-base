@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from bot import base, config, fees
+from bot import base, config, fees, i18n
 from bot import qr as qrlib
 from bot.base import hot_balance, hot_wallet, vault_balance
 from bot.commands_catalog import BOT_COMMAND_SPECS
@@ -45,6 +45,7 @@ from web.frame import router as frame_router
 from web.hook import router as tg_webhook
 from web.mini import SHARE_IMAGE, public_base_url
 from web.mini import router as mini_router
+from web.refusals import lang_of, refuse
 from web.x402 import x402_paywall, x402_tip
 
 _ENABLE_OPENAPI: bool = os.environ.get('ENABLE_OPENAPI', '0') == '1'
@@ -85,7 +86,14 @@ async def _idempotency_duplicate_handler(request: Request, exc: IdempotencyDupli
     replay = exc.replay
     if replay is not None:
         return JSONResponse(replay)
-    return JSONResponse({'detail': exc.message}, status_code=409)
+    # The two open states answer differently on purpose, and the visitor
+    # reads the difference in their own words: `applied` means the money
+    # moved, so a retry is a second spend; `pending` means it has not
+    # finished, so the only safe advice is to wait and look. The machine
+    # sentence stays in the log, where the action and key identify it.
+    status = exc.row.get('status')
+    key = 'api_idem_applied' if status == 'applied' else 'api_idem_pending'
+    return JSONResponse({'detail': i18n.t(lang_of(request), key)}, status_code=409)
 
 STATIC = Path(__file__).resolve().parent / 'static'
 MICRO = 10 ** config.USDC_DECIMALS
@@ -371,7 +379,7 @@ async def api_market(bet_id: int) -> dict:
     from bot import tip_targets
     view = await ledger.market_view(bet_id)
     if not view:
-        raise HTTPException(status_code=404, detail='Market not found')
+        raise refuse(None, 404, 'api_bet_missing')
     if not view['creator'].get('username'):
         try:
             bn = await tip_targets.display_name_for(view['creator']['id'])
@@ -406,7 +414,7 @@ async def api_predictions(status: str='open') -> list[dict]:
 async def api_prediction(market_id: int) -> dict:
     view = await ledger.amm_market_view(market_id)
     if not view:
-        raise HTTPException(status_code=404, detail='Prediction market not found')
+        raise refuse(None, 404, 'api_prediction_missing')
     view['liquidity_usdc'] = _usdc(view['liquidity_micro'])
     view['volume_usdc'] = _usdc(view['volume_micro'])
     return view
@@ -597,7 +605,7 @@ async def api_onchain_market(market_id: int) -> dict:
     from bot import onchain_market as om
     m = await ledger.get_onchain_market(market_id)
     if not m:
-        raise HTTPException(status_code=404, detail='On-chain market not found')
+        raise refuse(None, 404, 'api_oc_not_found')
     options = json.loads(m['options'])
     prices = await om.market_prices(market_id, len(options))
     info = await om.get_market_info(market_id)
@@ -789,11 +797,15 @@ async def api_ask(body: AskRequest, request: Request) -> dict:
     the user should not read it as prose written by an AI.
     """
     from bot import ai, ai_data, i18n
+    # The Mini App says which language it is showing, and the chat renders
+    # both the no-model answer and a refusal out of this request — so the
+    # refusals below speak that one too, not the developer's English.
+    request.state.lang = i18n.norm(body.lang)
     question = (body.question or '').strip()
     if not question:
-        raise HTTPException(status_code=400, detail='question must not be empty')
+        raise refuse(request, 400, 'api_question_empty')
     if len(question) > config.AI_MAX_QUESTION_LEN:
-        raise HTTPException(status_code=400, detail=f'question must be under {config.AI_MAX_QUESTION_LEN} chars')
+        raise refuse(request, 400, 'api_ask_too_long', limit=config.AI_MAX_QUESTION_LEN)
     now = time.time()
     # Cooldown keyed per client IP (same identity the rate limiter uses): a
     # single 'global' key would let one user 429 everyone else. Bounded by
@@ -801,7 +813,7 @@ async def api_ask(body: AskRequest, request: Request) -> dict:
     _ip = _client_ip(request)
     last = _ask_cooldown.get(_ip, 0.0)
     if now - last < config.AI_COOLDOWN_SECONDS:
-        raise HTTPException(status_code=429, detail='please wait before asking again')
+        raise refuse(request, 429, 'api_ask_cooldown')
     if len(_ask_cooldown) > WEB_RATE_MAX_CLIENTS:
         for ip, ts in list(_ask_cooldown.items()):
             if now - ts >= config.AI_COOLDOWN_SECONDS:

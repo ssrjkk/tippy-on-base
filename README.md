@@ -330,7 +330,8 @@ web/
 ├─ server.py            FastAPI: public API, proof-of-reserves, x402 endpoints
 ├─ auth.py              Telegram OAuth, session cookies, rate limiting
 ├─ mini.py              Mini App: balance, tip, deposit, withdraw, markets
-─ x402.py               x402 handshake: invoice → verify → replay-proof credit
+├─ refusals.py          Refusal sentences, in the language the caller reads
+├─ x402.py               x402 handshake: invoice → verify → replay-proof credit
 ├─ x402_spec.py         x402 protocol spec + types
 ├─ metrics.py           Prometheus metrics endpoint
 ├─ frame.py             Farcaster Frame endpoints

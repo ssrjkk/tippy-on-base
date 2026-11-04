@@ -193,7 +193,7 @@ def test_mini_tip_self_tip_rejected(client, ledger):
 
     r = client.post("/api/mini/tip", json={"to": str(TG_USER), "amount": 1.0})
     assert r.status_code == 400
-    assert "cannot tip yourself" in r.json()["detail"]
+    assert r.json()["detail"] == "Себе чаевые не отправить."
 
 
 def test_mini_tip_unknown_user(client, ledger):
@@ -266,7 +266,7 @@ def test_duplicate_key_still_in_flight_is_refused_saying_which(client, ledger):
         headers={"Idempotency-Key": key},
     )
     assert r.status_code == 409
-    assert "still being processed" in r.json()["detail"]
+    assert "ещё обрабатывается" in r.json()["detail"]
     assert ledger.balance(TG_USER) == Decimal("10.000000")
 
 
@@ -297,7 +297,7 @@ def test_committed_tip_without_a_stored_body_cannot_be_spent_again(client, ledge
 
     again = client.post("/api/mini/tip", json={"to": str(TG_OTHER), "amount": 2.5}, headers=headers)
     assert again.status_code == 409
-    assert "already applied" in again.json()["detail"]
+    assert "уже выполнен" in again.json()["detail"]
     assert ledger.balance(TG_USER) == Decimal("7.500000")
 
 
@@ -389,7 +389,7 @@ def test_unfunded_market_is_a_400_not_a_fake_id(client, ledger):
             "subsidy_usdc": 50, "hours": 24}
     r = client.post("/api/mini/create", json=body, headers={"Idempotency-Key": "mk1"})
     assert r.status_code == 400
-    assert "balance" in r.json()["detail"]
+    assert r.json()["detail"] == "На субсидию не хватает средств."
     # The failed attempt freed the key, so the same tap works after a deposit.
     ledger.credit(TG_USER, 100_000_000, "deposit")
     ok = client.post("/api/mini/create", json=body, headers={"Idempotency-Key": "mk1"})
@@ -451,7 +451,7 @@ def test_mini_tip_enforces_max_cap(client, ledger, monkeypatch):
     over = float(config.MAX_TIP_USDC) + 1
     r = client.post("/api/mini/tip", json={"to": str(TG_OTHER), "amount": over})
     assert r.status_code == 400
-    assert "cap" in r.json()["detail"]
+    assert "не больше" in r.json()["detail"] and "USDC" in r.json()["detail"]
 
 
 def test_mini_trade_enforces_max_cap(client, ledger, monkeypatch):
@@ -466,7 +466,7 @@ def test_mini_trade_enforces_max_cap(client, ledger, monkeypatch):
         "market_id": 99999, "option": 0, "amount": over,
     })
     assert r.status_code == 400
-    assert "cap" in r.json()["detail"]
+    assert "не больше" in r.json()["detail"] and "USDC" in r.json()["detail"]
 
 
 def test_mini_create_enforces_subsidy_caps(client, ledger, monkeypatch):
@@ -489,7 +489,7 @@ def test_mini_create_enforces_subsidy_caps(client, ledger, monkeypatch):
         "subsidy_usdc": low,
     })
     assert r.status_code == 400
-    assert "minimum" in r.json()["detail"]
+    assert "Субсидия меньше" in r.json()["detail"]
 
     high = float(config.MARKET_MAX_SUBSIDY_USDC) + 1
     r = client.post("/api/mini/create", json={
@@ -500,7 +500,7 @@ def test_mini_create_enforces_subsidy_caps(client, ledger, monkeypatch):
         "subsidy_usdc": high,
     })
     assert r.status_code == 400
-    assert "maximum" in r.json()["detail"]
+    assert "Субсидия больше" in r.json()["detail"]
 
 
 def test_mini_money_throttle_blocks_rapid_repeat(client, ledger, monkeypatch):
@@ -632,7 +632,7 @@ def test_mini_withdraw_confirm_is_single_use(client, ledger):
     assert _confirm(client, token).status_code == 200
     r = _confirm(client, token)
     assert r.status_code == 410
-    assert "expired or was already used" in r.json()["detail"]
+    assert "устарела или уже использована" in r.json()["detail"]
 
     assert ledger.balance(TG_USER) == Decimal("4.950000")
     assert len(_queued_rows(ledger, TG_USER)) == 1
@@ -734,7 +734,7 @@ def test_mini_withdraw_rejects_malformed_address(client, ledger):
     for bad in ["not-an-address", "0x123", "0x" + "zz" * 20, ""]:
         r = _stage(client, bad, 1)
         assert r.status_code == 400, bad
-        assert r.json()["detail"] == "invalid address"
+        assert r.json()["detail"] == "Адрес — это 0x и 40 hex-символов."
     assert ledger.balance(TG_USER) == Decimal("10.000000")
 
 
@@ -750,14 +750,14 @@ def test_mini_withdraw_defers_to_the_stricter_validator(client, ledger, monkeypa
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, EOA, 5)
     assert r.status_code == 400
-    assert r.json()["detail"] == "invalid address"
+    assert r.json()["detail"] == "Адрес — это 0x и 40 hex-символов."
 
 
 def test_mini_withdraw_refuses_zero_address(client, ledger):
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, "0x" + "0" * 40, 5)
     assert r.status_code == 400
-    assert "burns funds" in r.json()["detail"]
+    assert "Нулевой адрес" in r.json()["detail"]
 
 
 def test_mini_withdraw_refuses_hot_wallet(client, ledger):
@@ -766,14 +766,14 @@ def test_mini_withdraw_refuses_hot_wallet(client, ledger):
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, str(hot_wallet()), 5)
     assert r.status_code == 400
-    assert "own wallet" in r.json()["detail"]
+    assert "кошелёк самого бота" in r.json()["detail"]
 
 
 def test_mini_withdraw_refuses_x402_pool(client, ledger):
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, X402_ADDR, 5)
     assert r.status_code == 400
-    assert "x402 receive pool" in r.json()["detail"]
+    assert "пул приёма x402" in r.json()["detail"]
 
 
 def test_mini_withdraw_refuses_vault(client, ledger, monkeypatch):
@@ -784,18 +784,20 @@ def test_mini_withdraw_refuses_vault(client, ledger, monkeypatch):
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, vault, 5)
     assert r.status_code == 400
-    assert "vault" in r.json()["detail"]
+    assert "хранилище бота" in r.json()["detail"]
 
 
 def test_mini_withdraw_unknown_reason_still_refuses(client, ledger, monkeypatch):
-    """A block reason with no copy must never turn into an accept."""
+    """A block reason with no copy must never turn into an accept — and the
+    internal word for it is not what the visitor is shown."""
     import web.mini
 
     monkeypatch.setattr(web.mini, "blocked_destination", lambda a: "something_new")
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, EOA, 5)
     assert r.status_code == 400
-    assert r.json()["detail"] == "destination refused"
+    assert r.json()["detail"] == "Этот адрес отклонён как адрес бота."
+    assert "something_new" not in r.json()["detail"]
 
 
 def test_mini_withdraw_rejects_non_positive_amount(client, ledger):
@@ -809,7 +811,7 @@ def test_mini_withdraw_rejects_below_minimum(client, ledger):
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, EOA, "0.5")
     assert r.status_code == 400
-    assert r.json()["detail"] == "below the 1 USDC minimum"
+    assert r.json()["detail"] == "Минимум для вывода — 1 USDC."
 
 
 def test_mini_withdraw_rejects_contract_destination(client, ledger, monkeypatch):
@@ -820,14 +822,14 @@ def test_mini_withdraw_rejects_contract_destination(client, ledger, monkeypatch)
     _wallet(client, ledger, 10_000_000)
     r = _stage(client, EOA, 5)
     assert r.status_code == 400
-    assert "contract, not a wallet" in r.json()["detail"]
+    assert "Это контракт, а не кошелёк" in r.json()["detail"]
 
 
 def test_mini_withdraw_rejects_insufficient_balance(client, ledger):
     _wallet(client, ledger, 1_500_000)
     r = _stage(client, EOA, "1.5")
     assert r.status_code == 400
-    assert r.json()["detail"] == "insufficient balance: need 1.515, have 1.5"
+    assert r.json()["detail"] == "Нужно 1.515 USDC с комиссией, на балансе 1.5."
 
 
 def test_mini_withdraw_daily_cap_blocks_staging(client, ledger):
@@ -835,7 +837,7 @@ def test_mini_withdraw_daily_cap_blocks_staging(client, ledger):
     _queue_withdrawals(ledger, TG_USER, 5)
     r = _stage(client, EOA, 1)
     assert r.status_code == 400
-    assert r.json()["detail"] == "daily limit of 5 withdrawals reached"
+    assert "Дневной лимит из 5 выводов" in r.json()["detail"]
 
 
 def test_mini_withdraw_confirm_refuses_blocked_destination(client, ledger, monkeypatch):
@@ -849,7 +851,7 @@ def test_mini_withdraw_confirm_refuses_blocked_destination(client, ledger, monke
 
     r = _confirm(client, token)
     assert r.status_code == 400
-    assert "refused as a bot-owned address" in r.json()["detail"]
+    assert "отклонён как адрес бота" in r.json()["detail"]
     assert ledger.balance(TG_USER) == Decimal("10.000000")
     assert _queued_rows(ledger, TG_USER) == []
 
@@ -863,7 +865,7 @@ def test_mini_withdraw_confirm_refuses_cap_race(client, ledger):
 
     r = _confirm(client, token)
     assert r.status_code == 400
-    assert r.json()["detail"] == "daily withdrawal limit reached"
+    assert r.json()["detail"] == "Дневной лимит выводов исчерпан."
     assert ledger.balance(TG_USER) == Decimal("10.000000")
     assert len(_queued_rows(ledger, TG_USER)) == 5
 
@@ -876,7 +878,7 @@ def test_mini_withdraw_confirm_refuses_balance_race(client, ledger):
 
     r = _confirm(client, token)
     assert r.status_code == 400
-    assert r.json()["detail"] == "insufficient balance"
+    assert r.json()["detail"] == "Недостаточно средств на балансе."
     assert ledger.balance(TG_USER) == Decimal("1.000000")
     assert _queued_rows(ledger, TG_USER) == []
 
@@ -905,3 +907,53 @@ def test_mini_withdraw_all_the_way_to_zero(client, ledger):
     d = _stage(client, EOA, 1).json()
     assert (d["total"], d["balance_after"]) == ("1.01", "0")
     assert _confirm(client, d["token"]).json()["new_balance"] == 0.0
+
+def _has_cyrillic(text: str) -> bool:
+    return any(0x400 <= ord(c) <= 0x4FF for c in text)
+
+
+def _has_cjk(text: str) -> bool:
+    return any(0x4E00 <= ord(c) <= 0x9FFF for c in text)
+
+
+@pytest.mark.parametrize('lang', ['ru', 'en', 'zh'])
+def test_a_refusal_arrives_in_the_language_the_session_chose(client, ledger, lang):
+    """The slot under the tip button is filled with the answer's `detail`, and
+    until now that slot held a developer string — `tip exceeds the 1000 USDC
+    cap` — in front of a Russian, an English and a Chinese interface alike. The
+    refusal now comes out of the same table the bot's own cards are built from,
+    in the language this session chose, with the configured limit still named in
+    it: a refusal that quotes the wrong cap is worse than no refusal."""
+    from bot import config
+
+    ledger.ensure_user(TG_USER, 'alice')
+    ledger.set_setting(TG_USER, 'lang', lang)
+    ledger.credit(TG_USER, 1_000_000, 'deposit')
+    _auth(client, TG_USER)
+
+    r = client.post('/api/mini/tip', json={'to': 'alice', 'amount': 10 ** 6},
+                    headers={'Idempotency-Key': f'cap-{lang}'})
+    assert r.status_code == 400
+    detail = r.json()['detail']
+    if lang == 'ru':
+        assert _has_cyrillic(detail) and not _has_cjk(detail)
+    elif lang == 'zh':
+        assert _has_cjk(detail)
+    else:
+        assert not _has_cyrillic(detail) and not _has_cjk(detail)
+    assert str(int(config.MAX_TIP_USDC)) in detail, detail
+    assert 'USDC' in detail, detail
+
+
+def test_a_failed_mini_app_login_names_the_action_not_the_broken_check(client):
+    """Which HMAC comparison failed is for the log. The visitor gets the one
+    sentence they can act on, in the page's own language, and the machine words
+    must not survive into it — they tell an attacker which field was the weak
+    one and tell a user nothing."""
+    r = client.post('/api/mini/auth', json={'initData': 'user=x&auth_date=1&hash=deadbeef'})
+    assert r.status_code == 403
+    detail = r.json()['detail']
+    assert _has_cyrillic(detail), detail
+    leaked = [w for w in ('hash', 'signature', 'auth_date', 'initdata', 'hmac', 'secret')
+              if w in detail.lower()]
+    assert not leaked, f"{leaked} leaked into {detail!r}"

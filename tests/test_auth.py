@@ -93,7 +93,7 @@ def test_telegram_login_blob_is_single_use(client, ledger):
     replay.get("/login")          # its own, valid login-state cookie
     again = replay.get("/api/auth/telegram", params=params, follow_redirects=False)
     assert again.status_code == 403
-    assert "already been used" in again.json()["detail"]
+    assert "Этот вход уже использован" in again.json()["detail"]
 
     # A fresh blob for the same user (what a real reload produces) still works.
     # The auth_date must actually differ — tg_signed() defaults to now(), and two
@@ -114,7 +114,7 @@ def test_telegram_login_requires_login_state(client):
         follow_redirects=False,
     )
     assert r.status_code == 403
-    assert "login state" in r.json()["detail"]
+    assert "Ссылка входа устарела" in r.json()["detail"]
 
 
 def test_telegram_login_bad_hash(client):
@@ -252,7 +252,7 @@ def test_wallet_login_replay_rejected(client, ledger):
         json={"address": address, "message": msg, "signature": sig},
     )
     assert r2.status_code == 403
-    assert "already used" in r2.json()["detail"]
+    assert "уже использован" in r2.json()["detail"]
 
 
 def test_wallet_login_unlinked_wallet(client):
@@ -266,7 +266,7 @@ def test_wallet_login_unlinked_wallet(client):
         json={"address": acct.address, "message": msg, "signature": sig},
     )
     assert r.status_code == 404
-    assert "not linked" in r.json()["detail"]
+    assert "ни к кому не привязан" in r.json()["detail"] and "t.me/" in r.json()["detail"]
 
 
 def test_wallet_login_wrong_signer(client, ledger):

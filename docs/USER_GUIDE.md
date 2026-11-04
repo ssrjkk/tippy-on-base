@@ -10,7 +10,8 @@ prediction markets, parimutuel bets, creator tokens — all from a chat window.
 ## Getting started
 
 1. Open the bot in Telegram and press **Start** (or send `/start`).
-2. Pick your language — the whole interface speaks English, Russian and Chinese.
+2. Pick your language — the bot, the Mini App and every money refusal answer in English,
+   Russian or Chinese. The website itself is Russian-only.
 3. Send `/menu` any time to get the main menu back, `/help` for the command list.
 
 You don't need a wallet, seed phrase or gas to begin — your account works

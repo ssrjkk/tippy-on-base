@@ -951,6 +951,10 @@ function esc(s) {
 // `error`. Without both, every refusal toast says just "Error".
 function errMsg(d, status) {
   if (status === 409) return t('dup_request');
+  // A dead session is the one refusal the app answers in its own words: the
+  // server cannot know the language before the login that just failed, and the
+  // action is always the same — reopen the app from the chat.
+  if (status === 401 || status === 403) return t('auth_stale');
   return (d && (d.error || d.detail)) || t('error_generic');
 }
 

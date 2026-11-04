@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from bot import config
 from bot.ledger import async_ledger as ledger
+from web.refusals import refuse, refuse_protocol
 
 MICRO = 10 ** config.USDC_DECIMALS
 
@@ -67,51 +68,58 @@ def parse_session(token: str | None) -> int | None:
         return None
     return tg_id
 
-def verify_telegram(params: dict[str, str]) -> int:
-    """Validate Telegram Login Widget fields, return the tg_id."""
+def verify_telegram(params: dict[str, str], request: Request | None = None) -> int:
+    """Validate Telegram Login Widget fields, return the tg_id.
+
+    Which check failed goes to the log, not to the browser: the visitor
+    cannot act on a broken HMAC, and an attacker should not learn which
+    field was the weak one. They get the one line that helps — sign in
+    again. `request` only carries a language, and there is none before
+    identity, so the page's own (ru) answers.
+    """
     received_hash = params.get('hash', '')
     if not received_hash:
-        raise HTTPException(403, 'missing hash')
+        raise refuse_protocol(request, 403, 'api_widget_login_failed', 'missing hash')
     check_string = '\n'.join((f'{k}={v}' for k, v in sorted(params.items()) if k != 'hash'))
     secret_key = hashlib.sha256(config.BOT_TOKEN.encode()).digest()
     expected = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, received_hash):
-        raise HTTPException(403, 'bad signature')
+        raise refuse_protocol(request, 403, 'api_widget_login_failed', 'bad signature')
     try:
         auth_date = int(params.get('auth_date', '0'))
     except ValueError:
-        raise HTTPException(403, 'bad auth_date') from None
+        raise refuse_protocol(request, 403, 'api_widget_login_failed', 'bad auth_date') from None
     now = int(time.time())
     if now - auth_date > TG_AUTH_DATE_TTL:
-        raise HTTPException(403, 'stale auth_date')
+        raise refuse_protocol(request, 403, 'api_widget_login_failed', 'stale auth_date')
     if auth_date > now + TG_AUTH_DATE_FUTURE_SKEW:
         # A signed widget hash with a fabricated future timestamp would be
         # replayable forever; refuse anything that claims to be from the future.
-        raise HTTPException(403, 'auth_date in the future')
+        raise refuse_protocol(request, 403, 'api_widget_login_failed', 'auth_date in the future')
     try:
         return int(params['id'])
     except (KeyError, ValueError):
-        raise HTTPException(403, 'missing id') from None
+        raise refuse_protocol(request, 403, 'api_widget_login_failed', 'missing id') from None
 
 class WalletLogin(BaseModel):
     address: str
     message: str
     signature: str
 
-async def verify_wallet(body: WalletLogin) -> int:
+async def verify_wallet(body: WalletLogin, request: Request | None = None) -> int:
     """Recover the signer and map it to a linked bot user."""
     lines = body.message.strip().splitlines()
     exp = next((ln for ln in lines if ln.startswith('Expires:')), None)
     nonce = next((ln for ln in lines if ln.startswith('Nonce:')), None)
     if not exp or not nonce or len(nonce.split(': ', 1)) < 2:
-        raise HTTPException(403, 'malformed login message')
+        raise refuse_protocol(request, 403, 'api_wallet_login_failed', 'malformed login message')
     try:
         expires = int(exp.split(': ', 1)[1])
     except ValueError:
-        raise HTTPException(403, 'malformed expiry') from None
+        raise refuse_protocol(request, 403, 'api_wallet_login_failed', 'malformed expiry') from None
     now = time.time()
     if not now < expires <= now + WALLET_MSG_TTL:
-        raise HTTPException(403, 'expired login message')
+        raise refuse_protocol(request, 403, 'api_wallet_login_failed', 'expired login message')
     from eth_account import Account
     from eth_account.messages import encode_defunct
     try:
@@ -120,17 +128,17 @@ async def verify_wallet(body: WalletLogin) -> int:
             encode_defunct(text=body.message), signature=body.signature,
         )
     except Exception:
-        raise HTTPException(403, 'bad signature') from None
+        raise refuse_protocol(request, 403, 'api_wallet_login_failed', 'bad signature') from None
     if recovered.lower() != body.address.lower():
-        raise HTTPException(403, 'signature does not match address')
+        raise refuse_protocol(request, 403, 'api_wallet_login_failed', 'signature does not match address')
     tg_id = await ledger.tg_id_of_address(recovered)
     if tg_id is None:
-        raise HTTPException(404, f'wallet is not linked to any Tippy user - link it in the bot first (t.me/{config.BOT_USERNAME})')
+        raise refuse(request, 404, 'api_wallet_unlinked', bot=config.BOT_USERNAME)
     # One-time use per signed message: the same (message, signature) must not
     # mint a fresh session twice. Consumed only after full verification.
     nonce_val = nonce.split(': ', 1)[1].strip()
     if not await ledger.consume_login_nonce(nonce_val):
-        raise HTTPException(403, 'login message already used')
+        raise refuse(request, 403, 'api_login_replayed')
     return tg_id
 
 
@@ -234,9 +242,9 @@ async def auth_telegram(request: Request):
     # page cannot forge or read it, and a forged callback dies here before a
     # session cookie is minted).
     if not _check_login_state(request):
-        raise HTTPException(403, 'missing or expired login state — reload the page and try again')
+        raise refuse(request, 403, 'api_login_state_stale')
     params = dict(request.query_params)
-    tg_id = verify_telegram(params)
+    tg_id = verify_telegram(params, request)
     # One-time use per signed blob. Telegram's hash stays valid for
     # TG_AUTH_DATE_TTL (24h), so a captured callback URL — from a shoulder, an
     # extension, a leaked history entry — would otherwise mint sessions in the
@@ -244,14 +252,14 @@ async def auth_telegram(request: Request):
     # hash: Telegram stamps auth_date when it renders the widget, so every real
     # page load presents a new key and only a literal replay collides.
     if not await ledger.consume_login_nonce(f'tg-widget:{tg_id}:{params["auth_date"]}'):
-        raise HTTPException(403, 'this Telegram login has already been used — reload the page and sign in again')
+        raise refuse(request, 403, 'api_login_replayed')
     username = params.get('username', '')
     await ledger.ensure_user(tg_id, username or None)
     return _session_response(request, tg_id, redirect='/')
 
 @router.post('/api/auth/wallet', tags=['auth'])
 async def auth_wallet(request: Request, body: WalletLogin):
-    tg_id = await verify_wallet(body)
+    tg_id = await verify_wallet(body, request)
     return _session_response(request, tg_id)
 
 @router.post('/logout', include_in_schema=False)

@@ -1905,11 +1905,11 @@ def test_the_landing_does_not_promise_a_solvency_it_does_not_enforce(client):
 
 
 def test_both_bundles_send_the_key_every_money_endpoint_requires():
-    """`web/mini.py` answers 400 'missing Idempotency-Key header' before the
-    ledger is touched, and the Mini App has sent the key since it was
-    introduced. The landing's own workspace never did — so every money button on
-    `/` (tip, trade, bet, create, gasless buy) was refused, and the refusal
-    string was what the visitor saw in its place.
+    """`web/mini.py` refuses a money POST with a 400 before the ledger is
+    touched when no `Idempotency-Key` arrives, and the Mini App has sent the key
+    since the guard was introduced. The landing's own workspace never did — so
+    every money button on `/` (tip, trade, bet, create, gasless buy) was
+    refused, and the refusal text was what the visitor saw in its place.
 
     The rule is read from the server's guarded endpoints, so a new money route
     cannot ship unreachable from the web: each guarded path has to be called by
@@ -1968,3 +1968,172 @@ def test_both_bundles_send_the_key_every_money_endpoint_requires():
     assert windows(site, "/api/mini/tip"), (
         "site.js no longer tips at all — the loop above would pass on an empty scan"
     )
+
+
+def test_no_developer_string_answers_a_request_the_bundles_make():
+    """`insufficient balance` is a line for the log, not an answer to a person:
+    the landing paints `detail` straight into the slot under the button that was
+    just pressed, so every refusal on `/` ended in developer English — in front
+    of the Russian page and a Chinese user alike. Refusals now come out of
+    `bot/i18n.py`, and this gate reads the rule from the files:
+
+    * the only bare `HTTPException` left in `web/mini.py` and `web/auth.py` is
+      the 401 session probe — the one answer both bundles give in their own
+      words, because the server cannot know a language before the login that
+      just failed;
+    * every route the bundles fetch in `web/server.py` refuses through `refuse()`
+      too (`/qr` is an `<img>` src and `/api/admin` a page, so neither is in the
+      fetched set and both keep their machine strings);
+    * every refusal key answers in all three languages, in three different
+      sentences, each written in that language's script, and fills every
+      placeholder its own text asks for;
+    * and no api_* key sits in the table unused — copy no route answers with is
+      copy nobody asked for.
+    """
+    import ast
+    from pathlib import Path as _P
+
+    from bot import i18n
+
+    root = _P(__file__).resolve().parents[1]
+    web = root / "web"
+
+    fetched = set()
+    for file in list((web / "static").glob("*.js")) + list((web / "static").glob("*.html")):
+        text = file.read_text(encoding="utf-8")
+        for match in re.finditer(r"""fetch\(\s*[`'"](/api/[^`'"]*)""", text):
+            fetched.add(match.group(1).rstrip("/"))
+        for match in re.finditer(r"""[`'"](/api/[^`'"]*)[`'"]\s*\+""", text):
+            fetched.add(match.group(1).rstrip("/"))
+    assert fetched, "no /api/ call in the bundle — the scan is blind"
+
+    def bare_raises(tree):
+        """Every HTTPException this AST builds, except the 401 session probe."""
+        lines = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "HTTPException"):
+                continue
+            status = node.args[0] if node.args else next(
+                (k.value for k in node.keywords if k.arg == "status_code"), None)
+            if isinstance(status, ast.Constant) and status.value == 401:
+                continue
+            lines.append(node.lineno)
+        return lines
+
+    sources = {name: (web / name).read_text(encoding="utf-8-sig")
+               for name in ("mini.py", "auth.py", "server.py")}
+    offenders = []
+    for name in ("mini.py", "auth.py"):
+        offenders += [f"web/{name}:{line}" for line in
+                      bare_raises(ast.parse(sources[name], filename=name))]
+
+    for fn in ast.walk(ast.parse(sources["server.py"], filename="server.py")):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for deco in fn.decorator_list:
+            if not (isinstance(deco, ast.Call) and deco.args
+                    and isinstance(deco.args[0], ast.Constant)
+                    and isinstance(deco.args[0].value, str)):
+                continue
+            route = re.sub(r"\{[^}]*\}", "", deco.args[0].value).rstrip("/")
+            if route not in fetched:
+                continue
+            body = ast.parse(ast.unparse(fn), filename="server.py")
+            offenders += [f"web/server.py:{line} on fetched route {route}"
+                          for line in bare_raises(body)]
+    assert not offenders, f"{offenders} answer with a string no user reads"
+
+    # The duplicate-replay answer is not a route, so the walk above cannot see
+    # it — and it is the one refusal whose two open states must not blur.
+    assert "{'detail': exc.message}" not in sources["server.py"], (
+        "the replay answer stopped going through the refusal table")
+
+    declared = {k for k in i18n.STRINGS if k.startswith("api_")}
+    assert declared, "there is no refusal copy in the table at all"
+    used: dict[str, set[str]] = {}
+    for name, text in sources.items():
+        for node in ast.walk(ast.parse(text, filename=name)):
+            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and node.value.startswith("api_")):
+                if node.value not in declared:
+                    offenders.append(
+                        f"web/{name}:{node.lineno} names {node.value}, which i18n does not have")
+                used.setdefault(node.value, set())
+            if (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", "") in ("refuse", "refuse_protocol")
+                    and len(node.args) >= 3 and isinstance(node.args[2], ast.Constant)):
+                used.setdefault(node.args[2].value, set()).update(
+                    kw.arg for kw in node.keywords if kw.arg)
+    assert not offenders, f"{offenders}"
+
+    unused = sorted(declared - set(used))
+    assert not unused, f"{unused} are refusal copy no route answers with"
+
+    bad = []
+    for key in sorted(used):
+        table = i18n.STRINGS[key]
+        assert set(table) == {"ru", "en", "zh"}, f"{key} does not answer in all three languages"
+        ru, en, zh = table["ru"], table["en"], table["zh"]
+        if len({ru, en, zh}) != 3:
+            bad.append(f"{key}: one sentence reused across languages")
+        if not re.search(r"[а-яё]", ru, re.I):
+            bad.append(f"{key}: ru is not Russian")
+        if re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", ru):
+            bad.append(f"{key}: ru carries Chinese text")
+        if re.search(r"[а-яё\u3040-\u30ff\u4e00-\u9fff]", en, re.I):
+            bad.append(f"{key}: en carries Russian or Chinese text")
+        if not re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", zh):
+            bad.append(f"{key}: zh has no Chinese text")
+        want = {name for text in table.values()
+                for name in re.findall(r"\{([a-zA-Z_]\w*)", text)}
+        if want - used[key]:
+            bad.append(f"{key} needs {sorted(want - used[key])}; "
+                       f"the call sites pass {sorted(used[key])}")
+    assert not bad, "\n".join(bad)
+
+
+def test_a_dead_session_is_answered_by_each_bundle_in_its_own_words():
+    """The 401 carve-out above only holds if both surfaces really do answer a
+    dead session themselves: the server cannot know a language before the login
+    that failed, so a bundle painting `detail` there would show Russian text to a
+    Chinese user. Their own strings, and both paint as text — which is also why a
+    refusal is allowed to carry a nickname the visitor typed."""
+    root = Path(__file__).resolve().parents[1]
+    site = (root / "web" / "static" / "site.js").read_text(encoding="utf-8")
+    app = (root / "web" / "static" / "app.html").read_text(encoding="utf-8")
+
+    assert re.search(r"r\.status === 401", site), "site.js paints a dead session's detail"
+    assert "сессия истекла" in site
+    assert re.search(r"status === 401 \|\| status === 403", app), (
+        "app.html paints the server's pre-identity string to a zh user")
+    assert "t('auth_stale')" in app
+
+    assert re.search(r"function showError[\s\S]{0,160}\.textContent = text", site), (
+        "site.js no longer paints refusals as text, so a nickname in one is markup now")
+    assert re.search(r"function toast[\s\S]{0,160}el\.textContent = msg", app), (
+        "app.html no longer paints toasts as text")
+
+
+def test_the_agent_page_has_a_line_for_every_error_the_api_answers():
+    """`/agent` answers a failed load with `ERRORS[s.error] || s.error`, so a
+    code the table has no row for is painted to the owner as the server's
+    English sentence — and a row for a code the server no longer sends is a
+    line nobody reads. Both directions are measured here, from the two files.
+    """
+    root = Path(__file__).resolve().parents[1]
+    server_src = (root / "web" / "server.py").read_text(encoding="utf-8-sig")
+    agent_js = (root / "web" / "static" / "agent.js").read_text(encoding="utf-8")
+
+    answered = set(re.findall(r"return \{'error': '([^']+)'\}", server_src))
+    assert answered, "no agent error code found — the scan is blind"
+
+    table = re.search(r"var ERRORS = \{([\s\S]*?)\};", agent_js)
+    assert table, "agent.js has no error table at all"
+    rows = dict(re.findall(r"'([^']+)':\s*'([^']+)'", table.group(1)))
+
+    missing = sorted(answered - set(rows))
+    assert not missing, f"/agent would paint these codes raw: {missing}"
+    stale = sorted(set(rows) - answered)
+    assert not stale, f"agent.js still translates codes the server never answers: {stale}"
+    for code, line in rows.items():
+        assert re.search(r"[а-яё]", line, re.I), f"{code} is answered in a language /agent is not"

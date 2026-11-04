@@ -2707,6 +2707,277 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "The agent's last actions",
         "zh": "代理最近的操作",
     },
+    # ----- API refusals (web/*): the sentence a money action leaves on screen.
+    # The Mini App answers in the user's stored language, the landing in the
+    # page's own (ru is the product default), so both read this one table.
+    "api_retry": {
+        "ru": "Запрос не отправлен — нажми кнопку ещё раз.",
+        "en": "The request wasn't sent — tap the button again.",
+        "zh": "请求未发送——请再按一次按钮。",
+    },
+    "api_cooldown": {
+        "ru": "Слишком часто — подожди {seconds} с.",
+        "en": "Too fast — wait {seconds}s.",
+        "zh": "操作太快——请等待 {seconds} 秒。",
+    },
+    "api_error_generic": {
+        "ru": "Запрос не выполнен.",
+        "en": "The request failed.",
+        "zh": "请求未完成。",
+    },
+    "api_amount_positive": {
+        "ru": "Сумма должна быть больше нуля.",
+        "en": "The amount must be greater than zero.",
+        "zh": "金额必须大于零。",
+    },
+    "api_insufficient": {
+        "ru": "Недостаточно средств на балансе.",
+        "en": "Not enough balance.",
+        "zh": "余额不足。",
+    },
+    "api_cap_tip": {
+        "ru": "Чаевые не больше {cap} USDC.",
+        "en": "A tip can be at most {cap} USDC.",
+        "zh": "单笔打赏最多 {cap} USDC。",
+    },
+    "api_cap_trade": {
+        "ru": "Сделка не больше {cap} USDC.",
+        "en": "A trade can be at most {cap} USDC.",
+        "zh": "单笔交易最多 {cap} USDC。",
+    },
+    "api_cap_bet": {
+        "ru": "Ставка не больше {cap} USDC.",
+        "en": "A bet can be at most {cap} USDC.",
+        "zh": "单笔投注最多 {cap} USDC。",
+    },
+    "api_basename_unknown": {
+        "ru": "Бейснейм @{to} не найден.",
+        "en": "No Basename found for @{to}.",
+        "zh": "未找到 @{to} 的 Basename。",
+    },
+    "api_user_not_found": {
+        "ru": "Пользователь @{to} не найден — сначала он должен открыть бота.",
+        "en": "@{to} isn't a Tippy user yet — they have to open the bot first.",
+        "zh": "用户 @{to} 还不是 Tippy 用户——他需要先打开机器人。",
+    },
+    "api_tip_self": {
+        "ru": "Себе чаевые не отправить.",
+        "en": "You can't tip yourself.",
+        "zh": "不能给自己打赏。",
+    },
+    "api_market_closed": {
+        "ru": "Рынок закрыт.",
+        "en": "The market is closed.",
+        "zh": "该市场已关闭。",
+    },
+    "api_deadline_passed": {
+        "ru": "Приём ставок уже закрыт.",
+        "en": "Betting is past the deadline.",
+        "zh": "已截止，不能再投注。",
+    },
+    "api_no_such_option": {
+        "ru": "Такого варианта нет.",
+        "en": "There is no such option.",
+        "zh": "没有这个选项。",
+    },
+    "api_bet_missing": {
+        "ru": "Ставка не найдена.",
+        "en": "That bet doesn't exist.",
+        "zh": "未找到该投注。",
+    },
+    "api_prediction_missing": {
+        "ru": "Рынок не найден.",
+        "en": "That prediction market doesn't exist.",
+        "zh": "未找到该预测市场。",
+    },
+    "api_oc_not_found": {
+        "ru": "Ончейн-рынок не найден.",
+        "en": "That on-chain market doesn't exist.",
+        "zh": "未找到链上市场。",
+    },
+    "api_bad_outcome": {
+        "ru": "Такого исхода у рынка нет.",
+        "en": "The market has no such outcome.",
+        "zh": "该市场没有这个结果。",
+    },
+    "api_market_settled": {
+        "ru": "Рынок уже завершён или оспаривается.",
+        "en": "The market is already settled, cancelled or disputed.",
+        "zh": "该市场已结算、已取消或正在争议中。",
+    },
+    "api_chain_unreadable": {
+        "ru": "Сеть не отвечает — попробуй чуть позже.",
+        "en": "The chain isn't answering — try again a little later.",
+        "zh": "链上暂时无响应——请稍后重试。",
+    },
+    "api_smart_disabled": {
+        "ru": "Безгазовая торговля ещё не включена.",
+        "en": "Gasless trading isn't enabled yet.",
+        "zh": "免 gas 交易尚未启用。",
+    },
+    "api_smart_undeployed": {
+        "ru": "SmartAccount ещё не развёрнут — пополни USDC.",
+        "en": "Your SmartAccount isn't deployed yet — deposit USDC first.",
+        "zh": "SmartAccount 尚未部署——请先存入 USDC。",
+    },
+    "api_smart_balance": {
+        "ru": "В смарт-кошельке не хватает USDC.",
+        "en": "The smart wallet doesn't hold enough USDC.",
+        "zh": "智能钱包中的 USDC 不足。",
+    },
+    "api_address_invalid": {
+        "ru": "Адрес — это 0x и 40 hex-символов.",
+        "en": "An address is 0x followed by 40 hex characters.",
+        "zh": "地址必须是 0x 加 40 个十六进制字符。",
+    },
+    "api_wd_zero": {
+        "ru": "Нулевой адрес сжигает деньги — укажи свой кошелёк.",
+        "en": "The zero address burns funds — name your own wallet.",
+        "zh": "零地址会销毁资金——请填写你自己的钱包地址。",
+    },
+    "api_wd_bot_wallet": {
+        "ru": "Это кошелёк самого бота — выводи на личный адрес (EOA).",
+        "en": "That is the bot's own wallet — withdraw to a personal (EOA) address.",
+        "zh": "这是机器人自己的钱包——请提现到个人地址（EOA）。",
+    },
+    "api_wd_vault": {
+        "ru": "Это хранилище бота — выводи на личный адрес (EOA).",
+        "en": "That is the bot's vault — withdraw to a personal (EOA) address.",
+        "zh": "这是机器人的金库——请提现到个人地址（EOA）。",
+    },
+    "api_wd_x402": {
+        "ru": "Это пул приёма x402 — выводи на личный адрес (EOA).",
+        "en": "That is the x402 receive pool — withdraw to a personal (EOA) address.",
+        "zh": "这是 x402 收款池——请提现到个人地址（EOA）。",
+    },
+    "api_wd_refused": {
+        "ru": "Этот адрес отклонён как адрес бота.",
+        "en": "That destination was refused as a bot-owned address.",
+        "zh": "该地址被判定为机器人地址，已拒绝。",
+    },
+    "api_wd_minimum": {
+        "ru": "Минимум для вывода — {min} USDC.",
+        "en": "The withdrawal minimum is {min} USDC.",
+        "zh": "提现最低 {min} USDC。",
+    },
+    "api_wd_daily_limit": {
+        "ru": "Дневной лимит из {limit} выводов уже исчерпан.",
+        "en": "The daily limit of {limit} withdrawals is used up.",
+        "zh": "每日 {limit} 次提现的上限已用完。",
+    },
+    "api_wd_cap": {
+        "ru": "Дневной лимит выводов исчерпан.",
+        "en": "The daily withdrawal limit is reached.",
+        "zh": "已达到每日提现上限。",
+    },
+    "api_wd_contract": {
+        "ru": "Это контракт, а не кошелёк — деньги бы потерялись.",
+        "en": "That address is a contract, not a wallet — the funds would be lost.",
+        "zh": "该地址是合约而非钱包——资金将会丢失。",
+    },
+    "api_wd_shortfall": {
+        "ru": "Нужно {need} USDC с комиссией, на балансе {have}.",
+        "en": "It needs {need} USDC including the fee; the balance is {have}.",
+        "zh": "含手续费需要 {need} USDC，当前余额 {have}。",
+    },
+    "api_wd_expired": {
+        "ru": "Заявка на вывод устарела или уже использована.",
+        "en": "That withdrawal request expired or was already used.",
+        "zh": "该提现申请已过期或已被使用。",
+    },
+    "api_subsidy_insufficient": {
+        "ru": "На субсидию не хватает средств.",
+        "en": "Not enough balance to fund the subsidy.",
+        "zh": "余额不足以支付补贴。",
+    },
+    "api_subsidy_too_small": {
+        "ru": "Субсидии не хватит на такое число вариантов.",
+        "en": "The subsidy is too small for this many options.",
+        "zh": "补贴不足以支撑这么多选项。",
+    },
+    "api_subsidy_min": {
+        "ru": "Субсидия меньше {min} USDC.",
+        "en": "The subsidy is below {min} USDC.",
+        "zh": "补贴低于 {min} USDC。",
+    },
+    "api_subsidy_max": {
+        "ru": "Субсидия больше {max} USDC.",
+        "en": "The subsidy is above {max} USDC.",
+        "zh": "补贴高于 {max} USDC。",
+    },
+    "api_question_short": {
+        "ru": "Вопрос короче 5 символов или вариантов меньше двух.",
+        "en": "The question is under 5 characters, or there are fewer than two options.",
+        "zh": "问题少于 5 个字符，或选项少于两个。",
+    },
+    "api_question_long": {
+        "ru": "Вопрос длиннее 200 символов.",
+        "en": "The question is longer than 200 characters.",
+        "zh": "问题超过 200 个字符。",
+    },
+    "api_options_limit": {
+        "ru": "Максимум 4 варианта по 64 символа.",
+        "en": "At most 4 options, 64 characters each.",
+        "zh": "最多 4 个选项，每个 64 个字符。",
+    },
+    "api_question_empty": {
+        "ru": "Спроси что-нибудь.",
+        "en": "Ask something.",
+        "zh": "请输入你的问题。",
+    },
+    "api_ask_too_long": {
+        "ru": "Вопрос длиннее {limit} символов.",
+        "en": "The question is longer than {limit} characters.",
+        "zh": "问题超过 {limit} 个字符。",
+    },
+    "api_ask_cooldown": {
+        "ru": "Подожди перед новым вопросом.",
+        "en": "Wait a moment before asking again.",
+        "zh": "请稍等片刻再提问。",
+    },
+    # The replay answer of an idempotency key that has already been seen. The
+    # two states must not blur: one says the money moved, the other says it has
+    # not finished moving, and the advice that follows is the opposite.
+    "api_idem_applied": {
+        "ru": "Этот запрос уже выполнен — проверь баланс, не повторяй его.",
+        "en": "This request was already applied — check the balance, do not retry it.",
+        "zh": "该请求已经执行——请检查余额，不要重试。",
+    },
+    "api_idem_pending": {
+        "ru": "Запрос ещё обрабатывается — не повторяй его, сначала проверь баланс.",
+        "en": "That request is still being processed — do not retry it, check the balance first.",
+        "zh": "该请求仍在处理中——请勿重试，先检查余额。",
+    },
+    "api_miniapp_login_failed": {
+        "ru": "Не удалось проверить вход — закрой и снова открой приложение из чата.",
+        "en": "The login couldn't be verified — close the app and reopen it from the chat.",
+        "zh": "无法验证登录——请关闭应用后从聊天中重新打开。",
+    },
+    "api_widget_login_failed": {
+        "ru": "Вход через Telegram не прошёл — обнови страницу и войди заново.",
+        "en": "The Telegram login failed — reload the page and sign in again.",
+        "zh": "Telegram 登录失败——请刷新页面后重新登录。",
+    },
+    "api_login_state_stale": {
+        "ru": "Ссылка входа устарела — обнови страницу и войди заново.",
+        "en": "That login link expired — reload the page and sign in again.",
+        "zh": "登录链接已过期——请刷新页面后重新登录。",
+    },
+    "api_login_replayed": {
+        "ru": "Этот вход уже использован — обнови страницу и войди заново.",
+        "en": "That login has already been used — reload the page and sign in again.",
+        "zh": "该登录已被使用——请刷新页面后重新登录。",
+    },
+    "api_wallet_login_failed": {
+        "ru": "Подпись не прошла проверку — обнови страницу и подпиши вход заново.",
+        "en": "The signature didn't check out — reload the page and sign the login again.",
+        "zh": "签名验证失败——请刷新页面后重新签署登录信息。",
+    },
+    "api_wallet_unlinked": {
+        "ru": "Этот кошелёк ни к кому не привязан — привяжи его в боте: t.me/{bot}",
+        "en": "This wallet isn't linked to a Tippy user — link it in the bot: t.me/{bot}",
+        "zh": "此钱包未绑定任何 Tippy 用户——请先在机器人中绑定：t.me/{bot}",
+    },
 }
 
 

@@ -170,6 +170,17 @@ webhook UI adds no separate money path.
   "insufficient balance" for an address the bot was going to refuse anyway.
   A mismatch is recorded in `suspicious_activity` with the exact reason.
 
+## Refusals are written for the person, not for the log
+
+Every refusal a browser can paint — a cap, a minimum, an insufficient balance, an expired
+withdrawal token — is built by `web/refusals.py` out of `bot/i18n.py`, in the language the
+session already chose (`user_settings.lang`, the same setting the bot's `/language` writes).
+Before identity there is no language to inherit: the 401 session probe answers in machine
+text and each surface replaces it with its own line, because the Mini App cannot show Russian
+to a Chinese user and the landing has no other language. A failed signature says *that* the
+login did not verify, never *which* comparison broke — the exact check goes to the log, where
+it helps the operator and not whoever sent the bad blob.
+
 ## Money endpoints require an Idempotency-Key
 
 `POST /api/mini/{tip,trade,betplace,smartbuy,create}` debit or reserve funds
@@ -192,8 +203,10 @@ reservation.
   `completed` = and the response body is stored for the next duplicate.
 - **A duplicate gets the first attempt's answer.** `completed` → 200 with the
   stored body (`idempotency_keys.response`), so a client that retried after a
-  dropped connection learns what happened; `applied` → 409 "already applied,
-  check your balance"; `pending` → 409 "still being processed, do not retry".
+  dropped connection learns what happened; `applied` → 409 says the money
+  moved, `pending` → 409 says it has not finished. The two must not blur into one warning:
+  the first means "do not retry", the second means "retrying is the second spend". Both
+  arrive as the localized refusal the visitor reads, not as an English code string.
   None of the three ever answers "the key is free", because that is how a retry
   becomes a second spend.
 - **Rejected attempts leave the key usable.** Validation, insufficient balance
