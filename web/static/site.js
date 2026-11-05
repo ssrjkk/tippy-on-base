@@ -165,7 +165,35 @@
     try { me = await api('/api/me'); return true; } catch (e) { return false; }
   }
 
+  /* A widget login that failed is a trip through the browser, not a fetch, so
+     /api/auth/telegram sends the visitor back here with one of these codes: a
+     JSON error there replaced the whole site with a document nobody reads. The
+     words belong to this page — there is no session to take a language from
+     yet — and which check failed stays in the server's log. */
+  var LOGIN_FAILURES = {
+    state: 'Ссылка входа устарела — войди через Telegram заново.',
+    failed: 'Telegram не подтвердил вход — попробуй ещё раз.',
+    replay: 'Этот вход уже использован — войди через Telegram заново.',
+    slow: 'Слишком много попыток входа — подожди немного и попробуй снова.',
+  };
+
+  function reportLoginFailure() {
+    var q = new URLSearchParams(window.location.search || '');
+    var code = q.get('auth');
+    if (!code) return;
+    var line = LOGIN_FAILURES[code];
+    if (line) showError('connectMsg', line);
+    // Spent once it is on screen: left in the URL it says the same thing on
+    // every reload and makes a shared link look like a broken page.
+    q.delete('auth');
+    var rest = q.toString();
+    if (window.history && history.replaceState) {
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
+  }
+
   async function boot() {
+    reportLoginFailure();
     // The session cookie is HttpOnly, so the server renders whether there is
     // one: probing /api/me without it only answers 401, which every anonymous
     // visitor used to see as a console error. Inside Telegram the handshake

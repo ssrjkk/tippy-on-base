@@ -2710,6 +2710,16 @@ STRINGS: dict[str, dict[str, str]] = {
     # ----- API refusals (web/*): the sentence a money action leaves on screen.
     # The Mini App answers in the user's stored language, the landing in the
     # page's own (ru is the product default), so both read this one table.
+    "api_login_too_fast": {
+        "ru": "Слишком много попыток входа — подожди немного.",
+        "en": "Too many login attempts — wait a moment.",
+        "zh": "登录尝试过于频繁——请稍等片刻。",
+    },
+    "api_rate_limited": {
+        "ru": "Слишком много запросов — подожди немного.",
+        "en": "Too many requests — wait a moment.",
+        "zh": "请求过于频繁——请稍等片刻。",
+    },
     "api_retry": {
         "ru": "Запрос не отправлен — нажми кнопку ещё раз.",
         "en": "The request wasn't sent — tap the button again.",
@@ -2952,16 +2962,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Не удалось проверить вход — закрой и снова открой приложение из чата.",
         "en": "The login couldn't be verified — close the app and reopen it from the chat.",
         "zh": "无法验证登录——请关闭应用后从聊天中重新打开。",
-    },
-    "api_widget_login_failed": {
-        "ru": "Вход через Telegram не прошёл — обнови страницу и войди заново.",
-        "en": "The Telegram login failed — reload the page and sign in again.",
-        "zh": "Telegram 登录失败——请刷新页面后重新登录。",
-    },
-    "api_login_state_stale": {
-        "ru": "Ссылка входа устарела — обнови страницу и войди заново.",
-        "en": "That login link expired — reload the page and sign in again.",
-        "zh": "登录链接已过期——请刷新页面后重新登录。",
     },
     "api_login_replayed": {
         "ru": "Этот вход уже использован — обнови страницу и войди заново.",

@@ -44,3 +44,18 @@ def refuse_protocol(request: Request | None, status: int, key: str, reason: str)
     """A refusal whose precise reason is for the log, not for the visitor."""
     log.info('protocol refusal (%s): %s', status, reason)
     return refuse(request, status, key)
+
+
+class LoginRejected(Exception):
+    """A login did not verify; `reason` says which check said no.
+
+    The verifier must not decide how the visitor learns this: a fetch paints
+    the localized refusal, a browser navigation gets the page back with a
+    reason code. So it raises this, and the route answers in its own shape —
+    and the reason goes to the log, never into what the page shows, because
+    naming the weak comparison helps whoever sent the bad blob.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason

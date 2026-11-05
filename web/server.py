@@ -39,7 +39,7 @@ from bot.commands_catalog import BOT_COMMAND_SPECS
 from bot.ledger import IdempotencyDuplicate
 from bot.ledger import async_ledger as ledger
 from bot.tx_view import rows_view
-from web.auth import COOKIE_NAME, attach_login_state, parse_session
+from web.auth import COOKIE_NAME, attach_login_state, login_failed, parse_session
 from web.auth import router as auth_router
 from web.frame import router as frame_router
 from web.hook import router as tg_webhook
@@ -226,9 +226,14 @@ async def rate_limit(request: Request, call_next):
             window = _auth_rl_state.setdefault(client, [])
             _auth_rl_state[client] = [t for t in window if t > cutoff]
             if len(_auth_rl_state[client]) >= AUTH_RATE_LIMIT:
+                if path == '/api/auth/telegram':
+                    # The widget navigates the browser into this limiter, so a body
+                    # here is the same replaced site the refusals used to print: the
+                    # landing gets the fourth reason code and says it in its own words.
+                    return login_failed('slow')
                 return JSONResponse(
                     status_code=429,
-                    content={'detail': 'too many login attempts, try again later'},
+                    content={'detail': i18n.t(lang_of(request), 'api_login_too_fast')},
                     headers={
                         'Retry-After': str(AUTH_RATE_WINDOW),
                         'X-Content-Type-Options': 'nosniff',
@@ -248,7 +253,7 @@ async def rate_limit(request: Request, call_next):
         if len(_rl_state[client]) >= WEB_RATE_LIMIT:
             return JSONResponse(
                 status_code=429,
-                content={'detail': 'rate limit exceeded'},
+                content={'detail': i18n.t(lang_of(request), 'api_rate_limited')},
                 headers={
                     'Retry-After': str(WEB_RATE_WINDOW),
                     'X-Content-Type-Options': 'nosniff',

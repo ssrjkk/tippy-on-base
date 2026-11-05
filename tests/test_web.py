@@ -2027,7 +2027,8 @@ def test_no_developer_string_answers_a_request_the_bundles_make():
         offenders += [f"web/{name}:{line}" for line in
                       bare_raises(ast.parse(sources[name], filename=name))]
 
-    for fn in ast.walk(ast.parse(sources["server.py"], filename="server.py")):
+    server_tree = ast.parse(sources["server.py"], filename="server.py")
+    for fn in ast.walk(server_tree):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for deco in fn.decorator_list:
@@ -2047,6 +2048,29 @@ def test_no_developer_string_answers_a_request_the_bundles_make():
     # it — and it is the one refusal whose two open states must not blur.
     assert "{'detail': exc.message}" not in sources["server.py"], (
         "the replay answer stopped going through the refusal table")
+
+    # The rate limiters answer JSONResponse from the middleware, outside any
+    # route function, so nothing above looks at their wording. A refusal there
+    # reaches the same two bundles. Only the plumbing guard's status phrase is
+    # allowed as a literal: it advises nobody, and no person is meant to see it.
+    middleware = [fn for fn in ast.walk(server_tree)
+                  if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and any(isinstance(d, ast.Call)
+                          and getattr(d.func, "attr", "") == "middleware"
+                          for d in fn.decorator_list)]
+    assert middleware, "no http middleware found — the scan is blind"
+    literal_refusals = []
+    for fn in middleware:
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Dict):
+                continue
+            for key, value in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == 'detail'
+                        and isinstance(value, ast.Constant)
+                        and isinstance(value.value, str) and value.value != 'Not found'):
+                    literal_refusals.append(f"web/server.py:{value.lineno}: {value.value!r}")
+    assert not literal_refusals, (
+        f"{literal_refusals} answer a request in text no user reads")
 
     declared = {k for k in i18n.STRINGS if k.startswith("api_")}
     assert declared, "there is no refusal copy in the table at all"
@@ -2137,3 +2161,36 @@ def test_the_agent_page_has_a_line_for_every_error_the_api_answers():
     assert not stale, f"agent.js still translates codes the server never answers: {stale}"
     for code, line in rows.items():
         assert re.search(r"[а-яё]", line, re.I), f"{code} is answered in a language /agent is not"
+
+
+def test_the_landing_has_a_line_for_every_login_reason_the_callback_emits():
+    """`?auth=<code>` is a contract across three files: `web/auth.py` and the
+    login rate limiter in `web/server.py` emit the code, `site.js` holds the
+    sentence. A code with no line is silence exactly where a person was told
+    something failed, and a line for a code nobody emits is copy that can never
+    be shown — so both directions are measured, from every file that can answer
+    a login with a redirect, the same way the agent page's error table is.
+    """
+    root = Path(__file__).resolve().parents[1]
+    emit_src = "".join((root / "web" / name).read_text(encoding="utf-8-sig")
+                       for name in ("auth.py", "server.py"))
+    site = (root / "web" / "static" / "site.js").read_text(encoding="utf-8")
+
+    emitted = set(re.findall(r"login_failed\('([a-z]+)'\)", emit_src))
+    assert emitted, "the callback emits no reason code — the scan is blind"
+    table = re.search(r"var LOGIN_FAILURES = \{([\s\S]*?)\};", site)
+    assert table, "site.js has no login-failure copy at all"
+    lines = dict(re.findall(r"([a-z]+):\s*'([^']+)'", table.group(1)))
+
+    missing = sorted(emitted - set(lines))
+    assert not missing, f"the landing would stay silent on {['?auth=' + c for c in missing]}"
+    stale = sorted(set(lines) - emitted)
+    assert not stale, f"site.js translates codes the callback never emits: {stale}"
+    for code, line in lines.items():
+        assert re.search(r"[а-яё]", line, re.I), f"?auth={code} answers in a language the page is not"
+        assert "Telegram" in line or "вход" in line.lower(), (code, line)
+
+    # Spent once it is on screen: left in the address bar, the same line returns
+    # on every reload and a shared link looks like a broken page.
+    assert re.search(r"q\.delete\('auth'\)[\s\S]{0,220}history\.replaceState", site), (
+        "the reason code is never stripped from the URL")

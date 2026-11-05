@@ -153,6 +153,7 @@ stay on `/` and show the workspace with your balance.
 | `cloudflared: Could not lookup srv records on _v2-origintunneld._tcp.argotunnel.com` | The host's resolver answers A but not SRV, which is how VPN/TUN resolvers behave. Allow SRV for `argotunnel.com`, or run the origin where DNS is normal |
 | Every page shows the landing page | A `_redirects` rewrite is still in the bundle |
 | Signs in, then immediately signed out | `Secure` cookie rejected: check `X-Forwarded-Proto` and that the origin is https |
-| `403 missing or expired login state` | Cookie not surviving the proxy (same as above) or older than 30 minutes |
+| Address bar ends in `/?auth=state` after the Telegram button | Cookie not surviving the proxy (same as above) or older than 30 minutes |
+| Address bar ends in `/?auth=slow` | That IP hit `AUTH_RATE_LIMIT` attempts in `AUTH_RATE_WINDOW` seconds — the origin answers the browser with the landing and a reason code, so the limit shows up as a message, not a JSON page |
 | Rate limits trigger for one user only, or for everyone | `TRUST_PROXY_XFF` / `TRUSTED_PROXY_PEERS` misconfigured |
 | Telegram keeps retrying the webhook | Wrong `secret_token` between `setWebhook` and `WEBHOOK_SECRET` |

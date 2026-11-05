@@ -23,7 +23,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1228 tests (57 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~9 min, 1231 tests (57 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -136,7 +136,18 @@
   money that already counted. `/api/stats`, `/api/volume_history`, `/metrics` and the landing legend
   all read this tuple; `test_landing_volume_hint_names_every_volume_kind` fails when the sentence and
   the tuple diverge.
-- A refusal is the only text a user gets instead of a receipt, so it is localized: `web/refusals.py`'s `refuse(request, 400, 'api_key')` answers from `bot/i18n.py` in the language `_user()` cached on `request.state` from `user_settings.lang`. The only bare `HTTPException` allowed in `web/mini.py` / `web/auth.py` is the 401 session probe — before identity there is no language to inherit, and both bundles answer 401/403 with their own line. A signature failure says *that* it failed, never *which* comparison broke; the reason goes to the log.
+- A refusal is the only text a user gets instead of a receipt, so it is localized:
+  `web/refusals.py`'s `refuse(request, 400, 'api_key')` answers from `bot/i18n.py` in the language
+  `_user()` cached on `request.state` from `user_settings.lang`. The only bare `HTTPException`
+  allowed in `web/mini.py` / `web/auth.py` is the 401 session probe — before identity there is no
+  language to inherit, and both bundles answer 401/403 with their own line. A signature failure
+  says *that* it failed, never *which* comparison broke; the reason goes to the log. A route the
+  **browser navigates to** (`/api/auth/telegram`) answers no body at all — it 303s to
+  `/?auth=<code>` and `site.js` renders its own line, because a JSON error there used to replace
+  the whole site. `LoginRejected` carries the reason to the log; the code is a fixed enum the
+  landing has a sentence for. The rate limiters answer `JSONResponse` from the middleware,
+  outside any route, so they build their `detail` from the same table — a literal `detail`
+  string there is a refusal nobody can read (the gate walks the middleware's AST).
 - Money-moving `POST /api/mini/*` requires an `Idempotency-Key` header (see `docs/SECURITY.md`);
   withdraw is the exception and uses the staged single-use token.
 - The AI daily answer budget and provider health are DB rows (`ai_usage_day`, `ai_provider` in
