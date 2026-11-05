@@ -142,3 +142,75 @@ def test_the_readme_module_tree_draws_every_branch():
     assert branches, "no module tree found in README — the gate would prove nothing"
     malformed = [line for line in branches if not line.startswith(("├─ ", "└─ ", "│  "))]
     assert not malformed, f"{malformed[:3]} are drawn without their elbow"
+
+
+def test_no_document_prints_an_address_the_tree_does_not_define():
+    """A 40-hex in a document reads as a payment instruction, and this repo
+    shipped two kinds of them: a hot-wallet address derived from the maintainer's
+    own `.env` (true of no clone, and it stops being true the moment the key
+    rotates), and CREATE2 factory addresses from one testnet deployment.
+
+    Every address a document states has to exist in the tracked tree — code,
+    contract, migration, manifest or template — so the docs can only repeat what
+    the project actually defines, and a number nobody can re-derive is written as
+    `<from the deploy output>` instead.
+    """
+    defined = ""
+    for folder in ("bot", "web", "agent", "scripts", "deploy", "contracts", "alembic", "functions"):
+        for path in (ROOT / folder).rglob("*"):
+            if path.is_file() and path.suffix in {".py", ".sol", ".json", ".js", ".sql", ".toml", ".yml", ".sh"}                     and "lib" not in path.parts:
+                defined += path.read_text(encoding="utf-8-sig", errors="ignore")
+    defined += (ROOT / ".env.example").read_text(encoding="utf-8-sig")
+    known = {a.lower() for a in re.findall(r"0x[a-fA-F0-9]{40}", defined)}
+    assert known, "no address found in the tree — the scan is blind"
+
+    invented = []
+    for path in [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]:
+        for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
+            for address in re.findall(r"0x[a-fA-F0-9]{40}", line):
+                if address.lower() not in known:
+                    invented.append(f"{path.relative_to(ROOT)}:{number} {address}")
+    assert not invented, f"{invented} are addresses no file in the repo defines"
+
+
+ENUMERATED = ("bot", "bot/ledger", "bot/handlers", "bot/chain", "web", "contracts")
+# These folders are described by their purpose in one line, not file by file —
+# that is a choice, and the gate only requires the line to stay.
+SUMMARISED = {"agent": "the autonomous market-maker",
+              "scripts": "the operator and smoke scripts",
+              "deploy": "the container entrypoints and the tunnel",
+              "functions": "the Cloudflare Pages function"}
+
+
+def test_the_readme_tree_names_every_module_of_what_it_enumerates():
+    """The Architecture block lists some folders file by file and summarizes
+    others. Silence inside an enumerated folder is the failure: five modules were
+    missing when this was measured — `bot/fees.py` (the file that decides how
+    every amount in the product is printed), `bot/tx_view.py`, `ledger/_ai.py`,
+    `ledger/_audit.py`, `handlers/admin.py` — and a reader looking for the money
+    notation would never find it.
+
+    The reverse direction is checked too, because a tree entry for a deleted file
+    sends a reader to a module that does not exist.
+    """
+    text = (ROOT / "README.md").read_text(encoding="utf-8-sig")
+    block = text.split("## Architecture", 1)[1].split("```", 2)[1]
+    named = set(re.findall(r"([A-Za-z0-9_]+\.(?:py|sol))", block))
+    assert len(named) > 40, f"only {len(named)} names parsed — the block moved"
+
+    missing = []
+    for rel in ENUMERATED:
+        folder = ROOT / rel
+        files = sorted({p.name for p in folder.glob("*.py")} | {p.name for p in folder.glob("*.sol")})
+        assert files, f"{rel} has no modules — the scan is blind"
+        missing += [f"{rel}/{n}" for n in files if n not in named]
+    assert not missing, f"{missing} exist, the tree does not name them"
+
+    on_disk = {p.name for p in ROOT.rglob("*")
+               if p.suffix in {".py", ".sol"} and p.is_file()
+               and not any(x in p.parts for x in {".git", ".venv", "node_modules", "lib", "versions"})}
+    phantom = sorted(n for n in named if n not in on_disk)
+    assert not phantom, f"{phantom} are in the tree and nowhere else"
+
+    for rel, why in SUMMARISED.items():
+        assert f"{rel}/" in block, f"{rel} ({why}) vanished from the tree"

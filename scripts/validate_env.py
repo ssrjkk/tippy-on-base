@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Validate .env configuration before first deploy or after changes.
+"""Validate the secrets a deployment cannot start without.
 
-Checks all required secrets, format constraints, and common mistakes.
+This checks the handful of names whose absence is fatal (bot token, hot
+wallet key, encryption and session keys, database and webhook URLs) and
+their formats — not the whole surface. The full contract, every name the
+code reads and every name the templates offer, is measured by
+tests/test_env_contract.py, which fails the build instead of a deploy.
+
 Run: python scripts/validate_env.py
 """
 import os

@@ -9,4 +9,7 @@ cryptography==50.0.2
 Pillow==13.0.0
 alembic==1.20.1
 python-json-logger==4.2.0
+# TELEGRAM_API_PROXY=socks5://… is a documented knob, and aiohttp needs python-socks
+# to dial a SOCKS proxy. This is the package that pins it (aiohttp-socks itself is not
+# imported anywhere); replacing it means declaring python-socks[asyncio] directly.
 aiohttp-socks==0.12.0

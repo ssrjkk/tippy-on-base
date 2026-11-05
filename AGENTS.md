@@ -23,7 +23,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1234 tests (58 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~12 min, 1241 tests (58 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -95,6 +95,13 @@
   because the reader is a bundle or an integrator. The rule is the path, not `Accept`: behind the
   Pages function this origin sees the function's request, whose headers say nothing about the
   browser.
+- The configuration surface is measured, not remembered: `tests/test_env_contract.py` requires
+  every `os.environ` name the code reads to appear in `.env.example`, `deploy/prod.env.example`
+  or a doc (harness-only names are listed with their reason), forbids a template offering a knob
+  nothing reads (`WETH_ADDRESS=` was one: `bot/config.py` keeps it a per-chain constant), rejects
+  an **empty** value for a knob parsed by `int()`/`float()` without an `or` fallback (`PORT=` is
+  one — the default only applies when the name is absent, not when it is blank), and demands
+  every `*_KEY`/`*_TOKEN`/`*_PASSWORD` line be empty or an unmistakable placeholder.
 - `tests/conftest.py` assigns `ADMIN_TG_ID` and `OWNER_ID` with `os.environ[...] =`, **not**
   `setdefault`: `bot/config.py` `load_dotenv`s the dev `.env` at import and `load_dotenv` never
   overrides, so a maintainer's real `OWNER_ID` folds `ADMIN_TG_ID` onto itself and every

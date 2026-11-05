@@ -282,6 +282,7 @@ bot/
 │  ├─ ai.py             /ask AI assistant
 │  ├─ basename.py       /basename on-chain identity
 │  ├─ agent.py          /agent admin dashboard
+│  ├─ admin.py          /admin — the owner's read-only panel
 │  └─ breakthrough.py   /gasless, /subscribe, /createtoken
 ├─ ledger/              PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
 │  ├─ __init__.py       Ledger facade + singletons + lmsr_* re-exports
@@ -291,6 +292,8 @@ bot/
 │  ├─ _users.py         accounts, wallet links, create2
 │  ├─ _pay.py / _paywall.py / _transfer.py   x402, paywalls, transfers
 │  ├─ _withdraw.py      AML, batches, refunds
+│  ├─ _audit.py         audit_log rows: who did what to whose money
+│  ├─ _ai.py            the shared AI budget and provider health, as DB rows
 │  ├─ _bets.py / _markets.py   parimutuel + LMSR AMM (buy/sell/resolve)
 │  ├─ _onchain.py       on-chain outcome markets registry
 │  ├─ _recurring.py     subscription executor
@@ -324,6 +327,8 @@ bot/
 ├─ x402_sweep.py        x402 invoice settlement sweeper
 ├─ onchain_market.py    OutcomeMarket contract ABI + helpers
 ├─ i18n.py              RU/EN/ZH message tables
+├─ fees.py              the one money notation: USDC labels, fee rates, percentages
+├─ tx_view.py           one tx_log row → one label (kind decides sign and counterparty)
 └─ config.py            env-driven configuration
 agent/                  autonomous market-maker: news → LLM → markets, EAS attestations
 web/
@@ -331,7 +336,7 @@ web/
 ├─ auth.py              Telegram OAuth, session cookies, rate limiting
 ├─ mini.py              Mini App: balance, tip, deposit, withdraw, markets
 ├─ refusals.py          Refusal sentences, in the language the caller reads
-├─ x402.py               x402 handshake: invoice → verify → replay-proof credit
+├─ x402.py              x402 handshake: invoice → verify → replay-proof credit
 ├─ x402_spec.py         x402 protocol spec + types
 ├─ metrics.py           Prometheus metrics endpoint
 ├─ frame.py             Farcaster Frame endpoints
@@ -347,6 +352,9 @@ contracts/
 ├─ LMSR.sol             on-chain LMSR market maker
 ├─ MiniUSDC.sol         minimal USDC mock for testing
 └─ USDCForwarder.sol    USDC transfer helper
+scripts/                deploy, smoke, backup, restore and the i18n check
+deploy/                 container entrypoint, launch supervisor, tunnel, oracle bootstrap
+functions/              the Cloudflare Pages edge: bundle assets, proxy the rest to the origin
 tests/                  real Postgres, real dispatcher, real crypto, local EVM
 ```
 ## Testing
