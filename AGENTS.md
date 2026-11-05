@@ -23,7 +23,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~9 min, 1231 tests (57 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~9 min, 1234 tests (58 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -79,11 +79,22 @@
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
   unused by any page.
 - `web/static` is the site's source **and** the Pages build output, so anything added there is a
-  URL. The origin refuses its own plumbing — a path starting `/_` (`_headers`, `_redirects`) or
-  ending `.md` (`tos.md` is the source of the rendered `/tos`, not a second copy of it) — and
-  `test_the_bundle_directory_does_not_publish_its_own_plumbing` keeps the real assets reachable
-  while it does. Share images live at the bundle root: `/miniapp-hero.png`, never
-  `/static/miniapp-hero.png`.
+  URL. The origin refuses its own plumbing: `/_*` (`_headers`, `_redirects`) is a JSON 404 from
+  the middleware because Pages reads those files itself and no browser is at that address, and
+  every `*.html` / `*.md` source is refused **in the mount** (`BundleFiles.get_response`), not
+  in the middleware: only there does the answer pass back through the layer that stamps the
+  nonce, the CSP and `nosniff`. `TEMPLATE_PAGES` and `MARKDOWN_PAGES` 301 a source to the page
+  that renders it (`/index.html` -> `/`, `/tos.md` -> `/tos`); `/user.html` is a shell whose id
+  comes from a path it does not have, so anything not in the maps is the dead-end page. Both
+  maps are compared against the directory by the plumbing gate. Share images live at the bundle
+  root: `/miniapp-hero.png`, never `/static/miniapp-hero.png`.
+- A browser navigation never gets a JSON body. `not_found.html` is rendered with `noindex`, **no
+  canonical and no share card** (`canonical=False` — a URL that 404s must not name itself as a
+  page), for any 404 outside `/api/`; a `RequestValidationError` on a page path is the same dead
+  end instead of a validation tree echoing what was typed, and under `/api/` both stay JSON
+  because the reader is a bundle or an integrator. The rule is the path, not `Accept`: behind the
+  Pages function this origin sees the function's request, whose headers say nothing about the
+  browser.
 - `tests/conftest.py` assigns `ADMIN_TG_ID` and `OWNER_ID` with `os.environ[...] =`, **not**
   `setdefault`: `bot/config.py` `load_dotenv`s the dev `.env` at import and `load_dotenv` never
   overrides, so a maintainer's real `OWNER_ID` folds `ADMIN_TG_ID` onto itself and every

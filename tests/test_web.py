@@ -1817,10 +1817,47 @@ def test_the_bundle_directory_does_not_publish_its_own_plumbing(client):
     ``application/octet-stream``, and ``/tos.md`` served the terms as a second
     copy of ``/tos`` with no canonical to point back at the page. The real
     assets keep serving — the guard is about plumbing, not about files."""
-    for plumbing in ("/_headers", "/_redirects", "/tos.md"):
+    for plumbing in ("/_headers", "/_redirects"):
         assert client.get(plumbing).status_code == 404, plumbing
+
+    # The two maps in web/server.py are compared with the directory instead of
+    # trusted: a file added to `web/static` is a URL the day it is committed,
+    # and a map nobody checks drifts behind it.
+    from web.server import MARKDOWN_PAGES, TEMPLATE_PAGES
+
+    root = Path(__file__).resolve().parents[1]
+    bundle = {f"/{p.name}" for p in (root / "web" / "static").glob("*.md")}
+    assert bundle == set(MARKDOWN_PAGES), f"{bundle ^ set(MARKDOWN_PAGES)} drifted from the map"
+    for name, page in MARKDOWN_PAGES.items():
+        moved = client.get(name, follow_redirects=False)
+        assert moved.status_code == 301, (name, moved.status_code)
+        assert moved.headers["location"] == page, (name, moved.headers["location"])
+    for name in sorted({f"/{p.name}" for p in (root / "web" / "static").glob("*.html")}
+                       - set(TEMPLATE_PAGES)):
+        assert client.get(name, follow_redirects=False).status_code == 404, name
+    missing_md = client.get("/nothingelse.md", follow_redirects=False)
+    assert missing_md.status_code == 404 and "text/html" in missing_md.headers["content-type"]
     for asset in ("/style.css", "/theme.js", "/app.js", "/site.js", "/miniapp-hero.png", "/icon.png"):
         assert client.get(asset).status_code == 200, asset
+
+    # The templates are the same class of file, and there are six of them.
+    # Served raw, `/index.html` is a second copy of the landing with no
+    # canonical to choose between it and `/`, `/app.html` carries a literal
+    # `__PUBLIC_URL__` inside its fc:miniapp block, and `/user.html` is a shell
+    # whose id comes from a path it does not have. None of them is a page.
+    templates = sorted(p.name for p in (Path(__file__).resolve().parents[1]
+                                        / "web" / "static").glob("*.html"))
+    assert len(templates) >= 6, f"only {templates} — the scan is blind"
+    for name in templates:
+        r = client.get(f"/{name}", follow_redirects=False)
+        assert r.status_code != 200, f"/{name} is published as a URL"
+        assert b"__" not in r.content, f"/{name} serves the template's own tokens"
+
+    # Three of them name a page that needs no id, so the visitor is moved to it.
+    for template, page in (("/index.html", "/"), ("/app.html", "/app"), ("/agent.html", "/agent")):
+        r = client.get(template, follow_redirects=False)
+        assert r.status_code == 301, (template, r.status_code)
+        assert r.headers["location"] == page, (template, r.headers["location"])
 
 
 def test_the_commands_the_site_publishes_are_the_ones_the_bot_installs(client):
@@ -2194,3 +2231,105 @@ def test_the_landing_has_a_line_for_every_login_reason_the_callback_emits():
     # on every reload and a shared link looks like a broken page.
     assert re.search(r"q\.delete\('auth'\)[\s\S]{0,220}history\.replaceState", site), (
         "the reason code is never stripped from the URL")
+
+
+def test_a_dead_link_answers_a_browser_a_page(client):
+    """An unknown URL used to reach `{"detail": "Not Found"}` — the only page a
+    visitor with a mistyped link, an expired bookmark or a search hit ever got,
+    with no title, no theme, no link back and nothing to read. The StaticFiles
+    mount raises the 404, so no route ever saw it.
+
+    The rule is by path, not by `Accept`: the Cloudflare function is what talks
+    to this origin, and its own headers say nothing about who sent the browser.
+    Everything under `/api/` keeps answering JSON, because that is what the two
+    bundles parse; everything else is a page.
+    """
+    r = client.get("/nothing-here")
+    assert r.status_code == 404
+    assert r.headers["content-type"].startswith("text/html"), r.headers["content-type"]
+    body = r.text
+    # Every path that renders this page has to arrive stamped by the CSP layer:
+    # the refusal lives in the mount, not in the middleware's early return, and
+    # the only way to tell those two placements apart is the headers. Checking
+    # one path proves one path — `/user.html` is the answer the mount gives, so
+    # it is measured the same way.
+    for dead_end in ("/nothing-here", "/user.html", "/nothingelse.md"):
+        page = client.get(dead_end, follow_redirects=False)
+        assert page.status_code == 404, dead_end
+        csp = page.headers.get("content-security-policy", "")
+        assert "script-src 'self' 'nonce-" in csp, f"{dead_end}: {csp[:80]!r}"
+        assert page.headers.get("x-content-type-options", "").lower() == "nosniff", dead_end
+        assert page.headers.get("referrer-policy", "") == "no-referrer", dead_end
+    assert body.count("<h1") == 1, "the 404 is not a document with one title"
+    assert 'name="robots" content="noindex"' in body, "a 404 page must not be indexed"
+    assert '<link rel="canonical"' not in body, "a 404 has no canonical to name"
+    assert "не найдена" in body, body[:200]
+    for target in ('href="/"', 'href="/tos"', "t.me/"):
+        assert target in body, f"the dead-end page offers no way to {target}"
+
+    # An id that is not a number is the same dead end. FastAPI's 422 answered a
+    # validation tree here — a page echoing the visitor's own guess back at them
+    # — while the bundles and any integrator still need that body on /api/ paths.
+    partial = client.get("/m/abc")
+    assert partial.status_code == 404, partial.status_code
+    assert partial.headers["content-type"].startswith("text/html"), partial.headers["content-type"]
+    assert "abc" not in partial.text, "the dead end repeats what was typed at it"
+    bad = client.post("/api/mini/tip", json={"to": "nobody"})
+    assert bad.status_code == 422, bad.text[:200]
+    assert "detail" in bad.json(), "an integrator lost the field list it fixes the call with"
+
+    # An API client is not a person reading a page, and gets the machine answer.
+    api = client.get("/api/nothing-here")
+    assert api.status_code == 404
+    assert api.headers["content-type"].startswith("application/json"), api.headers["content-type"]
+
+    # The same route the pages fetch: a missing row is still JSON, even to a
+    # browser tab that typed it — the bundles parse it and paint their own line.
+    row = client.get("/api/market/999999", headers={"accept": "text/html"})
+    assert row.status_code == 404
+    assert row.headers["content-type"].startswith("application/json")
+
+
+def test_every_template_is_rendered_by_a_route_and_none_by_its_own_url():
+    """The two halves of one rule: a template nobody renders is dead weight in
+    the bundle (and therefore a URL), and a route rendering a file that is not
+    there is a 500. Measured from the directory and the source, both ways."""
+    static = Path(__file__).resolve().parents[1] / "web" / "static"
+    files = {p.name for p in static.glob("*.html")}
+    source = "".join((Path(__file__).resolve().parents[1] / "web" / name)
+                     .read_text(encoding="utf-8-sig") for name in ("server.py", "mini.py"))
+
+    rendered = set(re.findall(r"'([a-z_]+\.html)'", source))
+    missing = sorted(rendered - files)
+    assert not missing, f"routes render {missing}, which the bundle does not have"
+    orphan = sorted(files - rendered)
+    assert not orphan, f"{orphan} sit in the bundle directory as URLs that no route renders"
+
+
+def test_every_error_handler_in_the_source_is_registered():
+    """A patch that shifts a decorator off a handler leaves the function
+    defined, imported, unit-tested by nothing and never called: the duplicate
+    money answer becomes an unhandled exception, and only a test that happens to
+    hit the 409 path notices — which is exactly how this one was lost while the
+    dead-end page was being added. The registration is therefore checked
+    syntactically, so a handler without a decorator cannot survive the commit
+    that dropped it.
+    """
+    import ast
+
+    from web.server import app
+
+    source = (Path(__file__).resolve().parents[1] / "web" / "server.py").read_text(
+        encoding="utf-8-sig")
+    unregistered, named = [], []
+    for fn in ast.parse(source, filename="server.py").body:
+        if not (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and fn.name.endswith("_handler")):
+            continue
+        named.append(fn.name)
+        if not any("exception_handler" in ast.unparse(d) for d in fn.decorator_list):
+            unregistered.append(fn.name)
+    assert len(named) >= 3, f"only {named} matched — the scan is blind"
+    assert not unregistered, f"{unregistered} are error handlers nobody registered"
+    assert len(app.exception_handlers) >= len(named), (
+        f"{len(named)} handlers in the source, {len(app.exception_handlers)} registered")

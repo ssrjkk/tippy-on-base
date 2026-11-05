@@ -17,8 +17,11 @@ import time
 from html import escape as _esc
 from html import unescape as _unesc
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import (
     JSONResponse,
     PlainTextResponse,
@@ -28,6 +31,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -71,6 +75,55 @@ app.include_router(tg_webhook)
 app.include_router(frame_router)
 app.include_router(auth_router)
 app.include_router(mini_router)
+
+
+# A template is the source of a page, not a page. These three are the
+# documents a visitor can end up naming directly (`/index.html` is what a
+# bookmark or a crawler guesses for `/`), and each has one address that
+# renders it. The id-carrying templates have no home without an id, so they
+# are refused and the dead-end page answers instead.
+TEMPLATE_PAGES = {'/index.html': '/', '/app.html': '/app', '/agent.html': '/agent'}
+# A Markdown file in the bundle is the source of a page, and the URL for it
+# is that page: `/tos.md` used to answer the terms a second time with no
+# canonical back. Both maps are compared against the directory by
+# test_the_bundle_directory_does_not_publish_its_own_plumbing, because a file
+# added to web/static is a URL the day it is committed and a map nobody
+# checks is a map that drifts.
+MARKDOWN_PAGES = {'/tos.md': '/tos'}
+
+
+def _not_found(request: Request) -> Response:
+    """The dead end as a document: a title, a theme, a way back, 404.
+
+    `StaticFiles` raises the 404 for anything it cannot name, so this used to
+    be the only page a mistyped link or an expired bookmark produced, and it
+    said `{"detail": "Not Found"}`. The rule is the path, not `Accept`: behind
+    the Pages function the request this origin sees is the function's, and its
+    headers say nothing about who sent the browser. Everything under `/api/`
+    keeps the machine answer, because there the reader parses JSON and paints
+    its own line.
+
+    No canonical, no share card: a URL that 404s must not tell a crawler what it
+    is the canonical page of, and `noindex` is what keeps this page out of
+    search instead of leaving a second copy of the site's chrome to rank.
+    """
+    return _static_page('not_found.html', request, path=request.url.path,
+                        robots='noindex', status_code=404, canonical=False)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _routing_404_handler(request: Request, exc: StarletteHTTPException):
+    """Routing's own answers, kept machine-readable where a client reads them.
+
+    FastAPI registers a handler for `HTTPException` (its subclass of this one),
+    so an API refusal raised through `refuse()` never lands here — only what
+    routing and the static mount raise: an unknown path, a wrong method, a
+    range the file cannot serve.
+    """
+    if exc.status_code == 404 and not request.url.path.startswith('/api/'):
+        return _not_found(request)
+    return JSONResponse({'detail': exc.detail}, status_code=exc.status_code,
+                        headers=getattr(exc, 'headers', None))
 
 
 @app.exception_handler(IdempotencyDuplicate)
@@ -212,10 +265,11 @@ async def rate_limit(request: Request, call_next):
     path = request.url.path
     # The bundle directory doubles as the web root, so every file that lands in
     # web/static is published by StaticFiles: `/_headers` came back 200 as
-    # application/octet-stream, and `/tos.md` served the terms as a second,
-    # canonical-less copy of /tos. Both are plumbing for the host, not pages —
-    # Pages reads the `_`-prefixed files itself, and /tos renders the Markdown.
-    if path.startswith('/_') or path.endswith('.md'):
+    # application/octet-stream, and a template or Markdown file answered the
+    # site's own source as a second copy of the page it renders. `/_` is the
+    # platform's config and is refused here; the source files are refused in the
+    # mount, so their answers still pass the header and CSP layer below.
+    if path.startswith('/_'):
         return JSONResponse(status_code=404, content={'detail': 'Not found'})
     if not _RL_DISABLED and (path.startswith('/api/') or path in ('/qr', '/metrics', '/tos', config.WEBHOOK_PATH)):
         client = _client_ip(request)
@@ -874,9 +928,24 @@ def _usdc_label(micro: int) -> str:
     return fees.usdc_label(Decimal(int(micro)) / Decimal(MICRO))
 
 
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    """The 422 stays where a client reads it, and becomes a page where a person does.
+
+    `/m/{id}` and `/u/{tg_id}` take an integer, and a link with anything else in
+    it — a copied id with a space, a bookmark cut short — answered a validation tree
+    that echoed the visitor's own text back at them. Under `/api/` that body is the
+    right answer, so it is handed to FastAPI's own handler unchanged rather than
+    reimplemented here: two answers for one status is how a client contract drifts.
+    """
+    if request.url.path.startswith('/api/'):
+        return await request_validation_exception_handler(request, exc)
+    return _not_found(request)
+
+
 def _document_meta(html: str, *, path: str, title: str | None = None,
                    description: str | None = None, robots: str | None = None,
-                   json_ld: str | None = None) -> str:
+                   json_ld: str | None = None, canonical: bool = True) -> str:
     """Write the document's identity into its ``<head>``: canonical, share card
     and the crawl directive.
 
@@ -924,6 +993,13 @@ def _document_meta(html: str, *, path: str, title: str | None = None,
     if doc_desc:
         parts.append(f'<meta name="twitter:description" content="{_esc(doc_desc, quote=True)}" />')
     parts.append(f'<meta name="twitter:image" content="{image}" />')
+    if not canonical:
+        # The identity block names a document that is not a page — a 404 has
+        # no canonical to claim and no card worth forwarding. The crawl
+        # directive stays, because that is the sentence telling a robot so.
+        parts = [p for p in parts
+                 if 'rel="canonical"' not in p and 'property="og:' not in p
+                 and 'name="twitter:' not in p]
     if json_ld:
         parts.append(f'<script type="application/ld+json">{json_ld}</script>')
     head, sep, rest = html.partition('</head>')
@@ -967,7 +1043,7 @@ def _landing_json_ld() -> str:
 def _static_page(page: str, request: Request | None = None, *, path: str,
                  title: str | None = None, description: str | None = None,
                  robots: str | None = None, json_ld: str | None = None,
-                 status_code: int = 200) -> Response:
+                 status_code: int = 200, canonical: bool = True) -> Response:
     """Serve a static page with the running config and the document's own
     identity rendered into it.
 
@@ -988,7 +1064,7 @@ def _static_page(page: str, request: Request | None = None, *, path: str,
     html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
     html = _document_meta(html, path=path, title=title, description=description,
-                          robots=robots, json_ld=json_ld)
+                          robots=robots, json_ld=json_ld, canonical=canonical)
     return Response(content=html.encode('utf-8'), media_type='text/html',
                     status_code=status_code)
 
@@ -1341,7 +1417,33 @@ async def metrics(request: Request) -> Response:
 # developer's box and CI sending the same bytes, and keeps the script tag
 # executing the same way on both.
 mimetypes.add_type('text/javascript', '.js')
-app.mount('/', StaticFiles(directory=str(STATIC), html=True), name='static')
+class BundleFiles(StaticFiles):
+    """The bundle directory is the web root — so its source is refused.
+
+    `/_headers` answered 200 as octet-stream — refused by the middleware, which
+    sees the path first — and every template and Markdown source in the
+    directory was a URL too: `/index.html` served the
+    landing with `__SIGNED_IN__` unsubstituted and no canonical, so a crawler
+    had two addresses to choose between for one page, and `/user.html` was a
+    shell whose id comes from a path it does not have.
+
+    Refusing them here rather than in the middleware is what lets the answer
+    travel back through the header and CSP layer instead of dodging it: a
+    redirect carries no body, a dead end carries a page.
+    """
+
+    async def get_response(self, path: str, scope):
+        url_path = '/' + unquote(path).lstrip('/')
+        if url_path.endswith(('.html', '.md')):
+            pages = TEMPLATE_PAGES if url_path.endswith('.html') else MARKDOWN_PAGES
+            home = pages.get(url_path)
+            if home:
+                return RedirectResponse(home, status_code=301)
+            return _not_found(Request(scope))
+        return await super().get_response(path, scope)
+
+
+app.mount('/', BundleFiles(directory=str(STATIC), html=True), name='static')
 if __name__ == '__main__':
     import uvicorn
     config.validate()

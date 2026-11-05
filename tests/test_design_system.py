@@ -27,7 +27,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "web" / "static"
 
-PAGES = ("index.html", "app.html", "market.html", "oc.html", "user.html", "agent.html")
+PAGES = ("index.html", "app.html", "market.html", "oc.html", "user.html", "agent.html", "not_found.html")
 SCRIPTS = ("app.js", "site.js", "agent.js", "theme.js", "chain.js")
 
 AA_TEXT = 4.5        # WCAG AA, body text
@@ -1271,6 +1271,7 @@ PAGE_SCRIPTS = {
     "oc.html": ("theme.js", "chain.js"),
     "user.html": ("theme.js", "chain.js"),
     "agent.html": ("theme.js", "agent.js"),
+    "not_found.html": ("theme.js",),
 }
 
 

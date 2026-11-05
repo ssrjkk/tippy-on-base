@@ -979,3 +979,45 @@ def test_an_asset_from_the_edge_carries_the_same_protection_as_a_page():
                 f"{path} arrived as {response.headers.get('content-type')} without nosniff"
             )
             assert response.headers.get("referrer-policy", "") == "no-referrer", path
+
+
+def _fetch(path: str) -> tuple[int, str, str, str]:
+    """Status, content type, body and Location — without following redirects.
+
+    urllib answers a 3xx by fetching its target, which is exactly what would
+    hide the thing the second half of this check is about: that a template URL
+    now points at the page that renders it instead of answering the template.
+    """
+
+    class _Stop(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(_Stop)
+    request = urllib.request.Request(f"{PROD_URL}{path}", headers={"user-agent": USER_AGENT})
+    try:
+        with opener.open(request, timeout=30) as response:
+            return (response.status, response.headers.get("content-type", ""),
+                    response.read(400_000).decode("utf-8", "replace"),
+                    response.headers.get("location", ""))
+    except urllib.error.HTTPError as e:
+        return (e.code, e.headers.get("content-type", ""),
+                e.read(400_000).decode("utf-8", "replace"), e.headers.get("location", ""))
+
+
+def test_the_deployed_site_answers_a_dead_link_with_a_page():
+    """The Pages function proxies everything that is not an asset, so on the
+    deployed host it decides which answer a wrong URL gets — and whether a
+    template in the bundle is still reachable beside the page that renders it.
+    Measured here because the origin alone cannot tell that the edge is the one
+    a visitor reaches."""
+    status, content_type, body, _ = _fetch("/this-page-does-not-exist")
+    assert status == 404, status
+    assert content_type.startswith("text/html"), f"a dead link arrived as {content_type!r}"
+    assert "<h1" in body, body[:200]
+    assert 'name="robots" content="noindex"' in body, "the dead end asks to be indexed"
+
+    moved, _, moved_body, location = _fetch("/index.html")
+    assert moved == 301, f"/index.html answered {moved} at {location!r}"
+    assert location == "/", location
+    assert "__" not in moved_body, f"the raw template is still served: {moved_body[:120]!r}"
