@@ -94,6 +94,80 @@ class LedgerCreatorMixin:
             self._conn.commit()
         return row
 
+    def creator_token_buy(
+        self, token_id: str, buyer_tg_id: int, amount: int, cost_micro: int
+    ) -> tuple[str, dict | None]:
+        """Buy `amount` tokens from the creator in ONE transaction.
+
+        Returns ('ok', holder) or ('bad'|'missing'|'supply'|'self'|'balance', None).
+        Granting shares before taking payment let `/buytoken` mint tokens for
+        free (the debit it attempted afterwards had the wrong arity and the
+        shares were already committed). Here the buyer's debit, the creator's
+        credit, the supply check and the share grant land together or not at
+        all; the token row is locked so two concurrent buyers cannot overshoot
+        `total_supply`.
+        """
+        if amount <= 0 or cost_micro <= 0:
+            return "bad", None
+        with self._lock:
+            token = self._conn.execute(
+                "SELECT creator_tg_id, total_supply FROM creator_tokens "
+                "WHERE token_id = %s FOR UPDATE",
+                (token_id,),
+            ).fetchone()
+            if token is None:
+                self._conn.rollback()
+                return "missing", None
+            creator_id = int(token["creator_tg_id"])
+            if buyer_tg_id == creator_id:
+                # Paying yourself cannot change your own exposure; it would
+                # only write a pair of rows that reads as volume.
+                self._conn.rollback()
+                return "self", None
+            held = self._conn.execute(
+                "SELECT COALESCE(SUM(balance), 0) AS s FROM creator_token_holders "
+                "WHERE token_id = %s",
+                (token_id,),
+            ).fetchone()["s"]
+            if int(held) + amount > int(token["total_supply"]):
+                self._conn.rollback()
+                return "supply", None
+            self.ensure_user(buyer_tg_id, None, commit=False)
+            self.ensure_user(creator_id, None, commit=False)
+            cur = self._conn.execute(
+                "UPDATE users SET balance = balance - %s WHERE tg_id = %s AND balance >= %s",
+                (cost_micro, buyer_tg_id, cost_micro),
+            )
+            if cur.rowcount == 0:
+                self._conn.rollback()
+                return "balance", None
+            self._conn.execute(
+                "UPDATE users SET balance = balance + %s WHERE tg_id = %s",
+                (cost_micro, creator_id),
+            )
+            holder = self._conn.execute(
+                f"""
+                INSERT INTO creator_token_holders (token_id, holder_tg_id, balance)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (token_id, holder_tg_id)
+                DO UPDATE SET balance = creator_token_holders.balance + EXCLUDED.balance
+                RETURNING {self._HOLDER_COLS}
+                """,
+                (token_id, buyer_tg_id, amount),
+            ).fetchone()
+            self._conn.execute(
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
+                "VALUES ('token_buy', %s, %s, %s, %s)",
+                (buyer_tg_id, token_id, cost_micro, f"{amount} tokens"),
+            )
+            self._conn.execute(
+                "INSERT INTO tx_log (kind, tg_id, counterparty, amount, note) "
+                "VALUES ('token_sale', %s, %s, %s, %s)",
+                (creator_id, token_id, cost_micro, f"{amount} tokens"),
+            )
+            self._conn.commit()
+            return "ok", holder
+
     def creator_holder_get(self, token_id: str, holder_tg_id: int) -> dict | None:
         with self._lock:
             return self._conn.execute(

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=Golos+Text:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" />
+  <title>Страница не найдена — Tippy</title>
+  <meta name="description" content="Страница по этому адресу не найдена: как устроены адреса Tippy и куда перейти." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x="50" y="71" font-size="58" font-weight="800" text-anchor="middle" fill="white"%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span>
+        <span class="brand-name"><b>Tippy</b></span>
+      </a>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="/#workspace-section">Кабинет</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <article class="page">
+      <span class="eyebrow">404</span>
+      <h1 class="page-title">Страница не найдена</h1>
+      <div class="page-meta">
+        <span>адрес проверен сайтом</span><span>·</span><span>ничего не удалено и не потеряно</span>
+      </div>
+      <p class="hint">
+        Сюда ведут два случая: ссылка устарела (рынок или ставка закрылись и исчезли из
+        меню, а адрес остался в закладках) или в адресе опечатка. Сайт не додумывает
+        идентификаторы — он говорит, что страницы с таким номером нет.
+      </p>
+
+      <section class="page-block">
+        <h2>Как устроены адреса</h2>
+        <div class="rows">
+          <div class="row"><span class="mono">/</span><span class="hint">главная, она же кабинет после входа</span></div>
+          <div class="row"><span class="mono">/m/{id}</span><span class="hint">ставка-пул по номеру из «Ставок»</span></div>
+          <div class="row"><span class="mono">/m/oc/{id}</span><span class="hint">ончейн-рынок Cally, доли в USDC</span></div>
+          <div class="row"><span class="mono">/u/{tg_id}</span><span class="hint">страница получателя чаевых</span></div>
+          <div class="row"><span class="mono">/app</span><span class="hint">Mini App — тот же кабинет внутри Telegram</span></div>
+          <div class="row"><span class="mono">/tos</span><span class="hint">условия пользования</span></div>
+        </div>
+        <p class="hint">
+          У ставок и ончейн-рынков адрес кончается идентификатором строки, поэтому
+          несуществующий номер отвечает этим же сообщением. Профиль по /u отвечает
+          пустой страницей всегда — по коду ответа нельзя перебором проверить,
+          зарегистрирован ли человек в боте.
+        </p>
+      </section>
+
+      <section class="page-block">
+        <h2>Куда перейти</h2>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/">На главную</a>
+          <a class="btn btn-ghost" href="/#onchain-markets">Ончейн-рынки</a>
+          <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__">Открыть бота</a>
+        </div>
+        <p class="hint">
+          Чаевые, рынки и ставки живут в боте <a class="m-link" href="https://t.me/__BOT_USERNAME__">@__BOT_USERNAME__</a> —
+          там адрес не нужен, всё считается из баланса бота. Условия — на странице
+          <a class="m-link" href="/tos">/tos</a>.
+        </p>
+      </section>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>Tippy — чаевые и рынки в USDC на Base</p>
+  </footer>
+</body>
+</html>

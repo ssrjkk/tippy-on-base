@@ -32,7 +32,8 @@ __all__ = ['cb_oc_resolve', 'cmd_oc', 'cmd_oc_buy', 'cmd_oc_create', 'cmd_oc_pos
 
 ZERO_ADDR = '0x0000000000000000000000000000000000000000'
 SELL_SLIPPAGE = Decimal('0.99')  # accept 1% slippage between quote and mine
-MAX_ONCHAIN_OUTCOMES = 8
+MAX_ONCHAIN_OUTCOMES = 8   # contracts/OutcomeMarket.sol `MAX_OUTCOMES`; pinned by tests/test_fees.py
+MIN_ONCHAIN_OUTCOMES = 2   # the same file's `numOutcomes < 2`
 # The contract lets anyone cancel at close + 24h; the bot waits one extra
 # hour before auto-cancelling to give the creator a last chance to resolve.
 ONCHAIN_CANCEL_GRACE_SECONDS = 24 * 3600 + 3600
@@ -170,6 +171,22 @@ async def cmd_oc(message: types.Message) -> None:
     await message.answer('\n'.join(lines))
 
 
+def _create_hint(lang: str) -> str:
+    """The `/oc_create` format card, printed with the limits the handler and the
+    contract actually apply. As literals they lied the moment an operator moved a
+    subsidy band or a label length in the environment."""
+    c = common.config
+    return i18n.t(
+        lang,
+        'oc_format_create',
+        min=common._fmt(common._to_micro(c.MARKET_MIN_SUBSIDY_USDC)),
+        max=common._fmt(common._to_micro(c.MARKET_MAX_SUBSIDY_USDC)),
+        min_opts=MIN_ONCHAIN_OUTCOMES,
+        max_opts=MAX_ONCHAIN_OUTCOMES,
+        label_len=c.MAX_OPTION_LEN,
+    )
+
+
 @common.router.message(Command('oc_create'))
 async def cmd_oc_create(message: types.Message) -> None:
     """Create an ON-CHAIN market: /oc_create 50 Question | Opt1 | Opt2 [24h].
@@ -183,16 +200,16 @@ async def cmd_oc_create(message: types.Message) -> None:
     body = ' '.join(message.text.strip().split()[1:])
     segs = [s.strip() for s in body.split('|') if s.strip()]
     if not segs:
-        await message.answer(i18n.t(lang, 'oc_format_create'))
+        await message.answer(_create_hint(lang))
         return
     head = segs[0].split(None, 1)
     if len(head) != 2 or not common.AMOUNT_RE.match(head[0]) or len(segs) < 3:
-        await message.answer(i18n.t(lang, 'oc_format_create'))
+        await message.answer(_create_hint(lang))
         return
     try:
         subsidy = common._to_micro(Decimal(head[0]))
     except Exception:
-        await message.answer(i18n.t(lang, 'oc_format_create'))
+        await message.answer(_create_hint(lang))
         return
     if subsidy < common._to_micro(common.config.MARKET_MIN_SUBSIDY_USDC):
         await message.answer(i18n.t(lang, 'market_min_bank', n=f'{common.config.MARKET_MIN_SUBSIDY_USDC:.0f}'))
@@ -201,15 +218,17 @@ async def cmd_oc_create(message: types.Message) -> None:
         await message.answer(i18n.t(lang, 'market_max_bank', n=f'{common.config.MARKET_MAX_SUBSIDY_USDC:.0f}'))
         return
     question = head[1].strip()
-    options = segs[1:][:MAX_ONCHAIN_OUTCOMES]
+    options = segs[1:]
     close_at = int(time.time()) + common.config.MARKET_DEFAULT_SECONDS
     if options and common.DEADLINE_RE.match(options[-1].lower()):
         m = common.DEADLINE_RE.match(options[-1].lower())
         secs = int(m.group(1)) * (3600 if m.group(2) == 'h' else 86400)
         close_at = int(time.time()) + min(secs, 365 * 86400)
         options = options[:-1]
-    if len(options) < 2 or len(question) > 200 or any(len(o) > common.config.MAX_OPTION_LEN for o in options):
-        await message.answer(i18n.t(lang, 'oc_format_create'))
+    if (len(options) < MIN_ONCHAIN_OUTCOMES or len(options) > MAX_ONCHAIN_OUTCOMES
+            or len(question) > 200
+            or any(len(o) > common.config.MAX_OPTION_LEN for o in options)):
+        await message.answer(_create_hint(lang))
         return
     wait = await common._throttle(message.from_user.id, 'oc')
     if wait:
@@ -226,7 +245,8 @@ async def cmd_oc_create(message: types.Message) -> None:
     # a malformed request or missing wallet must not consume the budget.
     daily_cap = common._to_micro(common.config.MARKET_SUBSIDY_DAILY_MAX_USDC)
     if not await common.ledger.try_book_subsidy(subsidy, daily_cap):
-        await message.answer(i18n.t(lang, 'oc_subsidy_cap', amount=f'{common.config.MARKET_SUBSIDY_DAILY_MAX_USDC:.0f}'))
+        await message.answer(i18n.t(lang, 'oc_subsidy_cap',
+                                 amount=common._fmt(common._to_micro(common.config.MARKET_SUBSIDY_DAILY_MAX_USDC))))
         return
     status = await message.answer(i18n.t(lang, 'oc_pending'))
     try:

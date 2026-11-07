@@ -298,7 +298,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /donate — твоя страница донатов с QR\n"
             "• /deposit — QR + адрес для пополнения\n"
             "• /link &lt;адрес&gt; — привязать кошелёк (авто-зачисление)\n"
-            "• /withdraw &lt;адрес&gt; &lt;сумма&gt; — вывод (комиссия 1%, мин. 1 USDC)\n"
+            "• /withdraw &lt;адрес&gt; &lt;сумма&gt; — вывод (комиссия {wd_fee}%, мин. {min_wd} USDC)\n"
             "• /tx &lt;hash&gt; — проверить транзакцию в Base\n"
             "• /basename — твоё ончейн-имя на Base 🏷 (получай чаевые по имени)\n\n"
             "📊 <b>Ещё</b>\n"
@@ -339,7 +339,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /donate — your donate page with QR\n"
             "• /deposit — QR + address to top up\n"
             "• /link &lt;address&gt; — link a wallet (auto-credits)\n"
-            "• /withdraw &lt;address&gt; &lt;amount&gt; — withdraw (1% fee, min 1 USDC)\n"
+            "• /withdraw &lt;address&gt; &lt;amount&gt; — withdraw ({wd_fee}% fee, min {min_wd} USDC)\n"
             "• /tx &lt;hash&gt; — look up a Base transaction\n"
             "• /basename — your on-chain Base name 🏷 (receive tips by name)\n\n"
             "📊 <b>More</b>\n"
@@ -380,7 +380,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "• /donate —— 带二维码的捐赠页\n"
             "• /deposit —— 充值二维码与地址\n"
             "• /link &lt;地址&gt; —— 绑定钱包（自动到账）\n"
-            "• /withdraw &lt;地址&gt; &lt;金额&gt; —— 提现（手续费 1%，最低 1 USDC）\n"
+            "• /withdraw &lt;地址&gt; &lt;金额&gt; —— 提现（手续费 {wd_fee}%，最低 {min_wd} USDC）\n"
             "• /tx &lt;hash&gt; —— 查询 Base 交易\n"
             "• /basename —— 你在 Base 上的链上名字 🏷（可用名字接收打赏）\n\n"
             "📊 <b>更多</b>\n"
@@ -475,11 +475,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "❌ 失败：{reason}。余额：<b>{bal} USDC</b>",
     },
     # ----- withdraw -----
-    "withdraw_fail_balance": {
-        "ru": "❌ Недостаточно средств. Баланс: <b>{bal} USDC</b> (мин. 1 USDC, комиссия 1%)",
-        "en": "❌ Insufficient funds. Balance: <b>{bal} USDC</b> (min 1 USDC, 1% fee)",
-        "zh": "❌ 余额不足。余额：<b>{bal} USDC</b>（最低 1 USDC，手续费 1%）",
-    },
     "withdraw_need_args": {
         "ru": "⬆️ Формат: /withdraw &lt;адрес&gt; &lt;сумма&gt;\nПример: /withdraw 0x123...abc 10",
         "en": "⬆️ Format: /withdraw &lt;address&gt; &lt;amount&gt;\nExample: /withdraw 0x123...abc 10",
@@ -1150,9 +1145,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "点击市场查看详情。",
     },
     "bet_resolve_title": {
-        "ru": "🏁 <b>Закрыть #{id}</b> — «{question}»\n\nКто победил?\nПобедители делят пул ({pot} USDC), создатель получает 2%.",
-        "en": "🏁 <b>Close #{id}</b> — \"{question}\"\n\nWho won?\nWinners share pool ({pot} USDC), creator gets 2%.",
-        "zh": "🏁 <b>关闭 #{id}</b> ——「{question}」\n\n谁赢了？\n赢家瓜分奖池（{pot} USDC），创建者获得 2%。",
+        "ru": "🏁 <b>Закрыть #{id}</b> — «{question}»\n\nКто победил?\nПобедители делят пул ({pot} USDC), создатель получает {pct}%.",
+        "en": "🏁 <b>Close #{id}</b> — \"{question}\"\n\nWho won?\nWinners share pool ({pot} USDC), creator gets {pct}%.",
+        "zh": "🏁 <b>关闭 #{id}</b> ——「{question}」\n\n谁赢了？\n赢家瓜分奖池（{pot} USDC），创建者获得 {pct}%。",
     },
     "bet_resolved_header": {
         "ru": "✅ Ставка #{id} закрыта!",
@@ -2207,9 +2202,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "买入：/oc_buy {id} &lt;选项&gt; &lt;金额&gt; • 卖出：/oc_sell {id} &lt;选项&gt; [50%]",
     },
     "oc_format_create": {
-        "ru": "Формат: /oc_create 50 Вопрос | Вариант 1 | Вариант 2 [24h]\nСубсидия $10–1000, вариантов 2–8, метка до 60 символов.",
-        "en": "Format: /oc_create 50 Question | Option 1 | Option 2 [24h]\nSubsidy $10–1000, 2–8 options, label up to 60 chars.",
-        "zh": "格式：/oc_create 50 问题 | 选项1 | 选项2 [24h]\n补贴 $10–1000，选项 2–8 个，标签 ≤60 字符。",
+        "ru": "Формат: /oc_create 50 Вопрос | Вариант 1 | Вариант 2 [24h]\nСубсидия {min}–{max} USDC, вариантов {min_opts}–{max_opts}, метка до {label_len} символов.",
+        "en": "Format: /oc_create 50 Question | Option 1 | Option 2 [24h]\nSubsidy {min}–{max} USDC, {min_opts}–{max_opts} options, label up to {label_len} chars.",
+        "zh": "格式：/oc_create 50 问题 | 选项1 | 选项2 [24h]\n补贴 {min}–{max} USDC，选项 {min_opts}–{max_opts} 个，标签 ≤{label_len} 字符。",
     },
     "oc_format_buy": {
         "ru": "Формат: /oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt; — например /oc_buy 3 1 5",
@@ -2332,9 +2327,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "市场已{state}——无需再判定。",
     },
     "oc_resolved": {
-        "ru": "Исход <b>{idx}</b> зафиксирован НА-ЦЕПИ. Победители забирают по $1 за долю: /oc_redeem\n🔗 {url}",
-        "en": "Outcome <b>{idx}</b> finalized ON-CHAIN. Winners redeem $1 per share: /oc_redeem\n🔗 {url}",
-        "zh": "结果 <b>{idx}</b> 已在链上敲定。赢家可按 $1/份额 领取：/oc_redeem\n🔗 {url}",
+        "ru": "Исход <b>{idx}</b> зафиксирован НА-ЦЕПИ. Победители забирают по 1 USDC за долю: /oc_redeem\n🔗 {url}",
+        "en": "Outcome <b>{idx}</b> finalized ON-CHAIN. Winners redeem 1 USDC per share: /oc_redeem\n🔗 {url}",
+        "zh": "结果 <b>{idx}</b> 已在链上敲定。赢家可按 1 USDC/份额 领取：/oc_redeem\n🔗 {url}",
     },
     "oc_pick": {
         "ru": "🎯 Рынок Cally <b>#{id}</b> закрылся: <b>{q}</b>\n\nВыбери победивший исход — я зафиксирую его в контракте на Base.",
@@ -2362,9 +2357,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "你还持有该结果的份额——请先卖出。不能判定自己下注的结果获胜。",
     },
     "oc_subsidy_cap": {
-        "ru": "Суточный лимит субсидий Cally исчерпан (${amount} USDC забронировано сегодня). Попробуй завтра или уменьши субсидию.",
-        "en": "The daily Cally subsidy cap (${amount} USDC booked today) is reached. Try tomorrow or lower the subsidy.",
-        "zh": "已达到 Cally 每日补贴上限（今日已预订 ${amount} USDC）。请明天再试或降低补贴。",
+        "ru": "Суточный лимит субсидий Cally исчерпан ({amount} USDC забронировано сегодня). Попробуй завтра или уменьши субсидию.",
+        "en": "The daily Cally subsidy cap ({amount} USDC booked today) is reached. Try tomorrow or lower the subsidy.",
+        "zh": "已达到 Cally 每日补贴上限（今日已预订 {amount} USDC）。请明天再试或降低补贴。",
     },
     "oc_registry_warn": {
         "ru": "Рынок создан В КОНТРАКТЕ, но не сохранён в реестре бота ({err}) — напиши /oc {id2}, он добавится повторно.",
@@ -2409,9 +2404,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "🤖 <b>Tippy 代理</b>（tg_id {tg_id}）",
     },
     "agent_spend": {
-        "ru": "💸 Расход за сутки: <b>${spent}</b> из ${cap}",
-        "en": "💸 Spent today: <b>${spent}</b> of ${cap}",
-        "zh": "💸 今日支出：<b>${spent}</b> / ${cap}",
+        "ru": "💸 Расход за сутки: <b>{spent} USDC</b> из {cap} USDC",
+        "en": "💸 Spent today: <b>{spent} USDC</b> of {cap} USDC",
+        "zh": "💸 今日支出：<b>{spent} USDC</b> / {cap} USDC",
     },
     "agent_actions": {
         "ru": "⚡ Действий за час: {done} из {cap}",
@@ -2424,9 +2419,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "🛡 连续错误：{n} · 熔断器：{cb}",
     },
     "agent_caps_line": {
-        "ru": "Капы: ${daily}/день, ${per_tx}/транзакция (зашиты в код)",
-        "en": "Caps: ${daily}/day, ${per_tx}/tx (hard-coded)",
-        "zh": "上限：${daily}/天，${per_tx}/笔（代码内置）",
+        "ru": "Капы: {daily} USDC/день, {per_tx} USDC/транзакция (зашиты в код)",
+        "en": "Caps: {daily} USDC/day, {per_tx} USDC/tx (hard-coded)",
+        "zh": "上限：{daily} USDC/天，{per_tx} USDC/笔（代码内置）",
     },
     "agent_recent": {
         "ru": "<b>Последние действия:</b>",
@@ -2495,9 +2490,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "❌ 间隔无效。请使用：daily, weekly, biweekly, monthly",
     },
     "subscribe_created": {
-        "ru": "✅ Подписка создана!\n\n📤 @{to_username}: ${amount:.2f} каждые {interval}\n\nИспользуй /subscriptions чтобы увидеть все.",
-        "en": "✅ Subscription created!\n\n📤 @{to_username}: ${amount:.2f} every {interval}\n\nUse /subscriptions to see all.",
-        "zh": "✅ 订阅已创建！\n\n📤 @{to_username}：每 {interval} ${amount:.2f}\n\n使用 /subscriptions 查看全部。",
+        "ru": "✅ Подписка создана!\n\n📤 @{to_username}: {amount} USDC каждые {interval}\n\nИспользуй /subscriptions чтобы увидеть все.",
+        "en": "✅ Subscription created!\n\n📤 @{to_username}: {amount} USDC every {interval}\n\nUse /subscriptions to see all.",
+        "zh": "✅ 订阅已创建！\n\n📤 @{to_username}：每 {interval} {amount} USDC\n\n使用 /subscriptions 查看全部。",
     },
     "no_subscriptions": {
         "ru": "📭 У тебя нет активных подписок.\n\nСоздай: /subscribe @user сумма интервал",
@@ -2524,11 +2519,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "❌ Subscription not found or you don't have permission.",
         "zh": "❌ 未找到订阅或你没有权限。",
     },
-    "credit_score": {
-        "ru": "📊 <b>Кредитный рейтинг:</b>\n\nОценка: <b>{score}</b> ({grade})\nДостоверность: {confidence}%\nМакс. займ: <b>${max_loan:.2f}</b>\n\nРейтинг растёт с активностью: транзакции, рынки, история.",
-        "en": "📊 <b>Credit Score:</b>\n\nScore: <b>{score}</b> ({grade})\nConfidence: {confidence}%\nMax loan: <b>${max_loan:.2f}</b>\n\nScore grows with activity: transactions, markets, history.",
-        "zh": "📊 <b>信用评分：</b>\n\n评分：<b>{score}</b>（{grade}）\n可信度：{confidence}%\n最大贷款：<b>${max_loan:.2f}</b>\n\n活跃度提升评分：交易、市场、历史。",
-    },
     "create_token_format": {
         "ru": "Формат: /createtoken <name> <SYMBOL> <supply> <price>\nПример: /createtoken \"My Token\" MTK 1000000 0.10",
         "en": "Format: /createtoken <name> <SYMBOL> <supply> <price>\nExample: /createtoken \"My Token\" MTK 1000000 0.10",
@@ -2550,9 +2540,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "❌ 购买代币失败。请检查 ID 和余额。",
     },
     "token_bought": {
-        "ru": "✅ Куплено <b>{amount}</b> токенов за ${cost:.2f}!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
-        "en": "✅ Bought <b>{amount}</b> tokens for ${cost:.2f}!\n\nYou'll receive dividends. Check: /claim <token_id>",
-        "zh": "✅ 已购买 <b>{amount}</b> 个代币，花费 ${cost:.2f}！\n\n你将获得分红。查看：/claim <token_id>",
+        "ru": "✅ Куплено <b>{amount}</b> токенов за {cost} USDC!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
+        "en": "✅ Bought <b>{amount}</b> tokens for {cost} USDC!\n\nYou'll receive dividends. Check: /claim <token_id>",
+        "zh": "✅ 已购买 <b>{amount}</b> 个代币，花费 {cost} USDC！\n\n你将获得分红。查看：/claim <token_id>",
     },
     "claim_format": {
         "ru": "Формат: /claim <token_id>",
@@ -2565,9 +2555,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "ℹ️ 没有可领取的分红。",
     },
     "dividends_claimed": {
-        "ru": "💰 Получено <b>${amount:.2f}</b> дивидендов!",
-        "en": "💰 Claimed <b>${amount:.2f}</b> in dividends!",
-        "zh": "💰 已领取 <b>${amount:.2f}</b> 分红！",
+        "ru": "💰 Получено <b>{amount} USDC</b> дивидендов!",
+        "en": "💰 Claimed <b>{amount} USDC</b> in dividends!",
+        "zh": "💰 已领取 <b>{amount} USDC</b> 分红！",
     },
     "kind_deposit": {"ru": "Пополнение", "en": "Deposit", "zh": "充值"},
     "kind_withdraw": {"ru": "Вывод", "en": "Withdrawal", "zh": "提现"},
@@ -2593,6 +2583,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "kind_market_sell": {"ru": "Продажа долей", "en": "Share sale", "zh": "出售份额"},
     "kind_market_win": {"ru": "Выплата по рынку", "en": "Market payout", "zh": "市场派息"},
     "kind_market_cancel": {"ru": "Возврат по рынку", "en": "Market refund", "zh": "市场退款"},
+    "kind_token_buy": {"ru": "Покупка токенов", "en": "Token purchase", "zh": "购买代币"},
+    "kind_token_sale": {"ru": "Продажа токенов", "en": "Token sale", "zh": "出售代币"},
 
     # ---------- /admin: the owner's panel (bot/handlers/admin.py) ----------
     # Read-only screens. The numbers are deliberately terse: this is a chat window,
@@ -2715,6 +2707,277 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "The agent's last actions",
         "zh": "代理最近的操作",
     },
+    # ----- API refusals (web/*): the sentence a money action leaves on screen.
+    # The Mini App answers in the user's stored language, the landing in the
+    # page's own (ru is the product default), so both read this one table.
+    "api_login_too_fast": {
+        "ru": "Слишком много попыток входа — подожди немного.",
+        "en": "Too many login attempts — wait a moment.",
+        "zh": "登录尝试过于频繁——请稍等片刻。",
+    },
+    "api_rate_limited": {
+        "ru": "Слишком много запросов — подожди немного.",
+        "en": "Too many requests — wait a moment.",
+        "zh": "请求过于频繁——请稍等片刻。",
+    },
+    "api_retry": {
+        "ru": "Запрос не отправлен — нажми кнопку ещё раз.",
+        "en": "The request wasn't sent — tap the button again.",
+        "zh": "请求未发送——请再按一次按钮。",
+    },
+    "api_cooldown": {
+        "ru": "Слишком часто — подожди {seconds} с.",
+        "en": "Too fast — wait {seconds}s.",
+        "zh": "操作太快——请等待 {seconds} 秒。",
+    },
+    "api_error_generic": {
+        "ru": "Запрос не выполнен.",
+        "en": "The request failed.",
+        "zh": "请求未完成。",
+    },
+    "api_amount_positive": {
+        "ru": "Сумма должна быть больше нуля.",
+        "en": "The amount must be greater than zero.",
+        "zh": "金额必须大于零。",
+    },
+    "api_insufficient": {
+        "ru": "Недостаточно средств на балансе.",
+        "en": "Not enough balance.",
+        "zh": "余额不足。",
+    },
+    "api_cap_tip": {
+        "ru": "Чаевые не больше {cap} USDC.",
+        "en": "A tip can be at most {cap} USDC.",
+        "zh": "单笔打赏最多 {cap} USDC。",
+    },
+    "api_cap_trade": {
+        "ru": "Сделка не больше {cap} USDC.",
+        "en": "A trade can be at most {cap} USDC.",
+        "zh": "单笔交易最多 {cap} USDC。",
+    },
+    "api_cap_bet": {
+        "ru": "Ставка не больше {cap} USDC.",
+        "en": "A bet can be at most {cap} USDC.",
+        "zh": "单笔投注最多 {cap} USDC。",
+    },
+    "api_basename_unknown": {
+        "ru": "Бейснейм @{to} не найден.",
+        "en": "No Basename found for @{to}.",
+        "zh": "未找到 @{to} 的 Basename。",
+    },
+    "api_user_not_found": {
+        "ru": "Пользователь @{to} не найден — сначала он должен открыть бота.",
+        "en": "@{to} isn't a Tippy user yet — they have to open the bot first.",
+        "zh": "用户 @{to} 还不是 Tippy 用户——他需要先打开机器人。",
+    },
+    "api_tip_self": {
+        "ru": "Себе чаевые не отправить.",
+        "en": "You can't tip yourself.",
+        "zh": "不能给自己打赏。",
+    },
+    "api_market_closed": {
+        "ru": "Рынок закрыт.",
+        "en": "The market is closed.",
+        "zh": "该市场已关闭。",
+    },
+    "api_deadline_passed": {
+        "ru": "Приём ставок уже закрыт.",
+        "en": "Betting is past the deadline.",
+        "zh": "已截止，不能再投注。",
+    },
+    "api_no_such_option": {
+        "ru": "Такого варианта нет.",
+        "en": "There is no such option.",
+        "zh": "没有这个选项。",
+    },
+    "api_bet_missing": {
+        "ru": "Ставка не найдена.",
+        "en": "That bet doesn't exist.",
+        "zh": "未找到该投注。",
+    },
+    "api_prediction_missing": {
+        "ru": "Рынок не найден.",
+        "en": "That prediction market doesn't exist.",
+        "zh": "未找到该预测市场。",
+    },
+    "api_oc_not_found": {
+        "ru": "Ончейн-рынок не найден.",
+        "en": "That on-chain market doesn't exist.",
+        "zh": "未找到链上市场。",
+    },
+    "api_bad_outcome": {
+        "ru": "Такого исхода у рынка нет.",
+        "en": "The market has no such outcome.",
+        "zh": "该市场没有这个结果。",
+    },
+    "api_market_settled": {
+        "ru": "Рынок уже завершён или оспаривается.",
+        "en": "The market is already settled, cancelled or disputed.",
+        "zh": "该市场已结算、已取消或正在争议中。",
+    },
+    "api_chain_unreadable": {
+        "ru": "Сеть не отвечает — попробуй чуть позже.",
+        "en": "The chain isn't answering — try again a little later.",
+        "zh": "链上暂时无响应——请稍后重试。",
+    },
+    "api_smart_disabled": {
+        "ru": "Безгазовая торговля ещё не включена.",
+        "en": "Gasless trading isn't enabled yet.",
+        "zh": "免 gas 交易尚未启用。",
+    },
+    "api_smart_undeployed": {
+        "ru": "SmartAccount ещё не развёрнут — пополни USDC.",
+        "en": "Your SmartAccount isn't deployed yet — deposit USDC first.",
+        "zh": "SmartAccount 尚未部署——请先存入 USDC。",
+    },
+    "api_smart_balance": {
+        "ru": "В смарт-кошельке не хватает USDC.",
+        "en": "The smart wallet doesn't hold enough USDC.",
+        "zh": "智能钱包中的 USDC 不足。",
+    },
+    "api_address_invalid": {
+        "ru": "Адрес — это 0x и 40 hex-символов.",
+        "en": "An address is 0x followed by 40 hex characters.",
+        "zh": "地址必须是 0x 加 40 个十六进制字符。",
+    },
+    "api_wd_zero": {
+        "ru": "Нулевой адрес сжигает деньги — укажи свой кошелёк.",
+        "en": "The zero address burns funds — name your own wallet.",
+        "zh": "零地址会销毁资金——请填写你自己的钱包地址。",
+    },
+    "api_wd_bot_wallet": {
+        "ru": "Это кошелёк самого бота — выводи на личный адрес (EOA).",
+        "en": "That is the bot's own wallet — withdraw to a personal (EOA) address.",
+        "zh": "这是机器人自己的钱包——请提现到个人地址（EOA）。",
+    },
+    "api_wd_vault": {
+        "ru": "Это хранилище бота — выводи на личный адрес (EOA).",
+        "en": "That is the bot's vault — withdraw to a personal (EOA) address.",
+        "zh": "这是机器人的金库——请提现到个人地址（EOA）。",
+    },
+    "api_wd_x402": {
+        "ru": "Это пул приёма x402 — выводи на личный адрес (EOA).",
+        "en": "That is the x402 receive pool — withdraw to a personal (EOA) address.",
+        "zh": "这是 x402 收款池——请提现到个人地址（EOA）。",
+    },
+    "api_wd_refused": {
+        "ru": "Этот адрес отклонён как адрес бота.",
+        "en": "That destination was refused as a bot-owned address.",
+        "zh": "该地址被判定为机器人地址，已拒绝。",
+    },
+    "api_wd_minimum": {
+        "ru": "Минимум для вывода — {min} USDC.",
+        "en": "The withdrawal minimum is {min} USDC.",
+        "zh": "提现最低 {min} USDC。",
+    },
+    "api_wd_daily_limit": {
+        "ru": "Дневной лимит из {limit} выводов уже исчерпан.",
+        "en": "The daily limit of {limit} withdrawals is used up.",
+        "zh": "每日 {limit} 次提现的上限已用完。",
+    },
+    "api_wd_cap": {
+        "ru": "Дневной лимит выводов исчерпан.",
+        "en": "The daily withdrawal limit is reached.",
+        "zh": "已达到每日提现上限。",
+    },
+    "api_wd_contract": {
+        "ru": "Это контракт, а не кошелёк — деньги бы потерялись.",
+        "en": "That address is a contract, not a wallet — the funds would be lost.",
+        "zh": "该地址是合约而非钱包——资金将会丢失。",
+    },
+    "api_wd_shortfall": {
+        "ru": "Нужно {need} USDC с комиссией, на балансе {have}.",
+        "en": "It needs {need} USDC including the fee; the balance is {have}.",
+        "zh": "含手续费需要 {need} USDC，当前余额 {have}。",
+    },
+    "api_wd_expired": {
+        "ru": "Заявка на вывод устарела или уже использована.",
+        "en": "That withdrawal request expired or was already used.",
+        "zh": "该提现申请已过期或已被使用。",
+    },
+    "api_subsidy_insufficient": {
+        "ru": "На субсидию не хватает средств.",
+        "en": "Not enough balance to fund the subsidy.",
+        "zh": "余额不足以支付补贴。",
+    },
+    "api_subsidy_too_small": {
+        "ru": "Субсидии не хватит на такое число вариантов.",
+        "en": "The subsidy is too small for this many options.",
+        "zh": "补贴不足以支撑这么多选项。",
+    },
+    "api_subsidy_min": {
+        "ru": "Субсидия меньше {min} USDC.",
+        "en": "The subsidy is below {min} USDC.",
+        "zh": "补贴低于 {min} USDC。",
+    },
+    "api_subsidy_max": {
+        "ru": "Субсидия больше {max} USDC.",
+        "en": "The subsidy is above {max} USDC.",
+        "zh": "补贴高于 {max} USDC。",
+    },
+    "api_question_short": {
+        "ru": "Вопрос короче 5 символов или вариантов меньше двух.",
+        "en": "The question is under 5 characters, or there are fewer than two options.",
+        "zh": "问题少于 5 个字符，或选项少于两个。",
+    },
+    "api_question_long": {
+        "ru": "Вопрос длиннее 200 символов.",
+        "en": "The question is longer than 200 characters.",
+        "zh": "问题超过 200 个字符。",
+    },
+    "api_options_limit": {
+        "ru": "Максимум 4 варианта по 64 символа.",
+        "en": "At most 4 options, 64 characters each.",
+        "zh": "最多 4 个选项，每个 64 个字符。",
+    },
+    "api_question_empty": {
+        "ru": "Спроси что-нибудь.",
+        "en": "Ask something.",
+        "zh": "请输入你的问题。",
+    },
+    "api_ask_too_long": {
+        "ru": "Вопрос длиннее {limit} символов.",
+        "en": "The question is longer than {limit} characters.",
+        "zh": "问题超过 {limit} 个字符。",
+    },
+    "api_ask_cooldown": {
+        "ru": "Подожди перед новым вопросом.",
+        "en": "Wait a moment before asking again.",
+        "zh": "请稍等片刻再提问。",
+    },
+    # The replay answer of an idempotency key that has already been seen. The
+    # two states must not blur: one says the money moved, the other says it has
+    # not finished moving, and the advice that follows is the opposite.
+    "api_idem_applied": {
+        "ru": "Этот запрос уже выполнен — проверь баланс, не повторяй его.",
+        "en": "This request was already applied — check the balance, do not retry it.",
+        "zh": "该请求已经执行——请检查余额，不要重试。",
+    },
+    "api_idem_pending": {
+        "ru": "Запрос ещё обрабатывается — не повторяй его, сначала проверь баланс.",
+        "en": "That request is still being processed — do not retry it, check the balance first.",
+        "zh": "该请求仍在处理中——请勿重试，先检查余额。",
+    },
+    "api_miniapp_login_failed": {
+        "ru": "Не удалось проверить вход — закрой и снова открой приложение из чата.",
+        "en": "The login couldn't be verified — close the app and reopen it from the chat.",
+        "zh": "无法验证登录——请关闭应用后从聊天中重新打开。",
+    },
+    "api_login_replayed": {
+        "ru": "Этот вход уже использован — обнови страницу и войди заново.",
+        "en": "That login has already been used — reload the page and sign in again.",
+        "zh": "该登录已被使用——请刷新页面后重新登录。",
+    },
+    "api_wallet_login_failed": {
+        "ru": "Подпись не прошла проверку — обнови страницу и подпиши вход заново.",
+        "en": "The signature didn't check out — reload the page and sign the login again.",
+        "zh": "签名验证失败——请刷新页面后重新签署登录信息。",
+    },
+    "api_wallet_unlinked": {
+        "ru": "Этот кошелёк ни к кому не привязан — привяжи его в боте: t.me/{bot}",
+        "en": "This wallet isn't linked to a Tippy user — link it in the bot: t.me/{bot}",
+        "zh": "此钱包未绑定任何 Tippy 用户——请先在机器人中绑定：t.me/{bot}",
+    },
 }
 
 
@@ -2725,6 +2988,23 @@ def norm(lang: str | None) -> str:
 def t(lang: str | None, key: str, **kwargs) -> str:
     table = STRINGS[key]
     return table[norm(lang)].format(**kwargs)
+
+
+def help_text(lang: str | None = None) -> str:
+    """The full help card with the running withdrawal terms rendered in.
+
+    One entry point for the /help command and the AI data fallback: both used
+    to read `help_full` raw, which froze "1%, min 1 USDC" in three languages
+    and left it lying after an operator changed either rate.
+    """
+    from . import config, fees
+
+    return t(
+        lang,
+        "help_full",
+        wd_fee=fees.withdraw_fee_pct_label(),
+        min_wd=fees.usdc_label(config.MIN_WITHDRAW_USDC),
+    )
 
 
 def has(key: str) -> bool:

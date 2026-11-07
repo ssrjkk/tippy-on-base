@@ -78,10 +78,11 @@ X402_INVOICE_KEY: str = os.environ.get("X402_INVOICE_KEY", "").strip()
 # to settle than the payment yields.
 X402_MIN_USDC: Decimal = Decimal(os.environ.get("X402_MIN_USDC", "0.01"))
 
-# Metrics endpoint protection. Empty (default) -> /metrics is open so a local
-# Prometheus can scrape it directly. Set METRICS_TOKEN to require
-# `Authorization: Bearer <token>`, keeping operational data (liabilities, user
-# counts, volume) off the public internet.
+# Metrics endpoint protection. Empty (default) -> /metrics answers 401. Set
+# METRICS_TOKEN to require `Authorization: Bearer <token>`; a local Prometheus
+# can instead opt into a header-free loopback scrape with
+# METRICS_ALLOW_LOOPBACK=1 (direct connections only — traffic arriving through
+# the tunnel carries proxy headers and still needs the token).
 METRICS_TOKEN: str = os.environ.get("METRICS_TOKEN", "").strip()
 
 # Telegram webhook (instead of long polling). Set WEBHOOK_URL (public https
@@ -134,6 +135,19 @@ ADMIN_TG_ID: int | None = int(os.environ.get("ADMIN_TG_ID", "0") or "0") or None
 OWNER_ID: int | None = (
     int(os.environ.get("OWNER_ID", "") or "0") or ADMIN_TG_ID or None
 )
+# ADMIN_TG_ID is a legacy SPELLING of the owner, never a second person. With
+# OWNER_ID set and ADMIN_TG_ID empty, every gate that still read ADMIN_TG_ID
+# (web /api/agent/*, /api/ai/status, /broadcast, /export, /agent) refused the
+# owner himself; with both set to different ids, two accounts were authorized.
+# Folding it here gives every gate the same id.
+if ADMIN_TG_ID is not None and OWNER_ID is not None and ADMIN_TG_ID != OWNER_ID:
+    import logging
+
+    logging.getLogger("tipbot.config").warning(
+        "OWNER_ID and ADMIN_TG_ID name different accounts (%s vs %s) — using "
+        "OWNER_ID, ADMIN_TG_ID is a legacy alias", OWNER_ID, ADMIN_TG_ID,
+    )
+ADMIN_TG_ID = OWNER_ID
 
 # Group rain (/rain <amount> [count]) — giveaway, pure transfers
 RAIN_MAX_USDC: Decimal = Decimal(os.environ.get("RAIN_MAX_USDC", "100"))
@@ -352,12 +366,6 @@ VAULT_ADDRESS: str | None = os.environ.get("VAULT_ADDRESS", "").strip() or None
 # Empty -> on-chain markets are simply off; the existing off-chain ones in
 # ledger.py are unaffected either way.
 OUTCOME_MARKET_ADDRESS: str | None = os.environ.get("OUTCOME_MARKET_ADDRESS", "").strip() or None
-# Multi-relayer withdrawal pool (bot/chain/relayers.py). Comma-separated hex
-# private keys; per-relayer USDC daily cap. Empty -> pool disabled (single-key
-# withdraw path only).
-RELAYER_PRIVATE_KEYS: str = os.environ.get("RELAYER_PRIVATE_KEYS", "").strip()
-RELAYER_DAILY_LIMIT: Decimal = Decimal(os.environ.get("RELAYER_DAILY_LIMIT", "10000"))
-RELAYER_FEE_GAS_GWEI: Decimal = Decimal(os.environ.get("RELAYER_FEE_GAS_GWEI", "0.01"))
 # A fresh custodial wallet has 0 ETH, so its first on-chain tx would fail
 # outright — onchain_market tops it up from the hot wallet when it dips below
 # the threshold. Both in whole ETH (Base gas is cheap; this is a few cents).
@@ -438,10 +446,6 @@ def validate() -> None:
 
     if ORACLE_PRIVATE_KEY and not re.fullmatch(r"0x[0-9a-fA-F]{64}", ORACLE_PRIVATE_KEY):
         raise ValueError("ORACLE_PRIVATE_KEY must be 0x + 64 hex chars")
-
-    for rk in [k.strip() for k in (RELAYER_PRIVATE_KEYS or "").split(",") if k.strip()]:
-        if not re.fullmatch(r"0x[0-9a-fA-F]{64}", rk):
-            raise ValueError(f"RELAYER_PRIVATE_KEYS contains an invalid key: {rk[:16]}…")
 
     if SMART_WALLET_ENABLED:
         if not SMART_WALLET_FACTORY_ADDRESS or not re.fullmatch(r"0x[0-9a-fA-F]{40}", SMART_WALLET_FACTORY_ADDRESS):

@@ -27,7 +27,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "web" / "static"
 
-PAGES = ("index.html", "app.html", "market.html", "oc.html", "user.html", "agent.html")
+PAGES = ("index.html", "app.html", "market.html", "oc.html", "user.html", "agent.html", "not_found.html")
 SCRIPTS = ("app.js", "site.js", "agent.js", "theme.js", "chain.js")
 
 AA_TEXT = 4.5        # WCAG AA, body text
@@ -629,15 +629,21 @@ def test_generated_bars_are_clamped_and_their_stagger_capped():
     assert not offenders, offenders
 
 
-def test_chart_scaling_divides_by_a_non_zero_max():
-    """`volume / max` over an empty or all-zero series is Infinity% — the chart
-    vanishes instead of drawing a flat line. The guard lives where max is born."""
+def test_chart_scaling_never_divides_by_a_zero_max():
+    """`volume / max` over an all-zero series is NaN% — the bars vanish and every
+    column height becomes an invalid CSS assertion. Zero days are real rows now,
+    so the function must take its empty branch before it divides."""
     for name in (*PAGES, *SCRIPTS):
-        text = read(name)
-        if "/ max" not in text:
+        body = js_function(read(name), "loadVolumeChart")
+        if body is None or "/ max" not in body:
             continue
-        assert re.search(r"max\s*=\s*Math\.max\([^;]*,\s*1\)", text), (
-            f"{name} scales a chart by a max that is not floored at 1"
+        assert re.search(r"max\s*=\s*Math\.max\([^;]*,\s*0\)", body), (
+            f"{name} scales a chart by a max that is not read from the series"
+        )
+        guard = re.search(r"if\s*\(\s*max\s*<=\s*0\s*\)", body)
+        assert guard, f"{name} has no all-zero branch for the chart"
+        assert body.index(guard.group(0)) < body.index("/ max"), (
+            f"{name} divides by max before checking that it is non-zero"
         )
 
 
@@ -650,6 +656,22 @@ def test_chart_columns_carry_their_value_as_text():
             continue
         assert 'title="${' in text, f"{name} renders chart columns with no readable value"
         assert "chart-day" in text, f"{name} renders chart bars with no axis label"
+
+
+def test_painted_percentages_take_the_interface_locale():
+    """`${pct.toFixed(1)}%` and `${String(o.probability)}%` paint a dot into a
+    Russian interface whose money is written with a comma, so two surfaces show
+    the same odds differently. A percent is a number like any other: it goes
+    through a helper that asks the locale. Only the template shapes are checked —
+    `x.toFixed(1) + '%'` inside a `style="width:…"` is geometry, not text."""
+    raw_percent = re.compile(r"\$\{[^}]*?(?:\.toFixed\(|String\()[^}]*?\}%")
+    offenders = [
+        f"{name}:{number}: {line.strip()[:80]}"
+        for name in (*PAGES, *SCRIPTS)
+        for number, line in enumerate(read(name).splitlines(), 1)
+        if raw_percent.search(line)
+    ]
+    assert not offenders, offenders
 
 
 def test_the_chart_has_both_an_empty_and_a_failed_state():
@@ -728,6 +750,29 @@ def test_no_emoji_is_used_as_an_icon_in_the_web_ui():
     assert not offenders, offenders[:10]
 
 
+def test_every_escaper_that_builds_html_escapes_quotes():
+    """The four files below build markup by string concatenation and interpolate
+    esc() INSIDE attributes (`data-val="${esc(r.to)}"`, `aria-label="${…}"`).
+
+    app.html's escaper was a div.textContent round-trip: it escapes `& < >` for
+    a text node but leaves a quote untouched, which ends the attribute early and
+    turns the value into markup. Requiring the two quote entities keeps the
+    escaper safe in both positions.
+    """
+    builders = ("app.html", "app.js", "site.js", "agent.js")
+    for name in builders:
+        text = read(name)
+        bodies = [
+            text[m.start(): m.start() + 400]
+            for m in re.finditer(r"function\s+(?:esc|escapeHtml)\s*\(", text)
+        ]
+        assert bodies, f"{name} builds markup but has no escaper"
+        for body in bodies:
+            assert "&quot;" in body and "&#39;" in body, (
+                f"{name}: the escaper leaves quotes intact — unsafe inside an attribute"
+            )
+
+
 # ---------------------------------------------------------------------------
 # placeholders
 # ---------------------------------------------------------------------------
@@ -754,6 +799,63 @@ def test_no_substitution_key_is_dead():
         used |= set(PLACEHOLDER_RE.findall(read(name)))
     unused = sorted(server_substitutions() - used)
     assert not unused, f"web/server.py replaces {unused} and no template asks for it"
+
+
+# ---------------------------------------------------------------------------
+# the document's identity: one writer for title, description and share card
+# ---------------------------------------------------------------------------
+
+INDEXABLE_PAGES = ("index.html", "market.html", "oc.html", "user.html", "agent.html")
+CARD_RE = re.compile(r'<meta (?:property="og:|name="twitter:)|<link rel="canonical"')
+TITLE_RE = re.compile(r"<title>")
+DESC_RE = re.compile(r'<meta name="description" content="([^"]+)"')
+
+
+def test_only_the_server_writes_a_share_card():
+    """``og:`` and ``twitter:`` are derived from ``<title>`` and the description
+    meta by `web/server.py`, so a template that also types them can only end up
+    disagreeing with its own document — which is exactly what `user.html` did:
+    the tab said «Профиль — Tippy» and the card said «Профиль в Tippy».
+
+    `app.html` is the exception and owns it: it is not a page of the site, it is
+    the launch card the Base App crawls, and its tags carry the Mini App's own
+    copy.
+    """
+    for name in INDEXABLE_PAGES:
+        found = CARD_RE.findall(read(name))
+        assert not found, f"{name} writes {found} — the server already does"
+    app = read("app.html")
+    assert app.count('<meta property="og:title"') == 1
+    assert app.count('<meta property="og:image"') == 1
+
+
+def test_every_indexable_page_declares_its_title_and_its_description():
+    """The two strings the server turns into a card. A page missing the
+    description gets a card with no second line, and nothing downstream notices.
+    """
+    offenders = {}
+    for name in INDEXABLE_PAGES:
+        text = read(name)
+        if len(TITLE_RE.findall(text)) != 1 or len(DESC_RE.findall(text)) != 1:
+            offenders[name] = (len(TITLE_RE.findall(text)), len(DESC_RE.findall(text)))
+    assert not offenders, offenders
+
+
+def test_the_edge_never_answers_the_robots_documents_from_the_bundle():
+    """``txt`` in the extension list made /robots.txt an edge asset. The bundle
+    has no such file, Pages answers a missing path with the landing page, and a
+    crawler was handed 200 + text/html where it expected rules.
+
+    The regex is read out of the function rather than restated, so this fails
+    when the routing changes and not when a copy of it goes stale.
+    """
+    source = EDGE.read_text(encoding="utf-8-sig")
+    declared = re.search(r"const ASSET = /\\.\((\?:[^)]*)\)\$/i;", source)
+    assert declared, "the edge asset pattern moved somewhere this gate cannot read"
+    asset = re.compile(f"\\.({declared.group(1)})$", re.I)
+    for origin_document in ("/robots.txt", "/sitemap.xml"):
+        assert not asset.search(origin_document), f"{origin_document} is served from the edge"
+    assert asset.search("/style.css"), "the extracted pattern matches nothing — a broken gate"
 
 
 # ---------------------------------------------------------------------------
@@ -826,6 +928,49 @@ def test_the_document_preconnects_to_the_hosts_the_fonts_live_on():
         text = read(name)
         assert '<link rel="preconnect" href="https://fonts.googleapis.com"' in text, name
         assert '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin' in text, name
+
+
+EDGE = ROOT / "functions" / "[[path]].js"
+MAINTENANCE_RE = re.compile(r"const MAINTENANCE = `(.*?)`;\n\nfunction maintenance", re.S)
+
+
+def test_the_edge_maintenance_card_obeys_the_same_document_contract():
+    """The 503 card comes from the Pages function, not from web/static, so every
+    gate above walks past it. It is still the first page a visitor sees when the
+    origin is down: same faces, same canvas, and no @import on the critical path."""
+    match = MAINTENANCE_RE.search(EDGE.read_text(encoding="utf-8"))
+    assert match, "the edge maintenance card is gone or its template shape changed"
+    html = match.group(1)
+
+    viewport = VIEWPORT_RE.search(html)
+    assert viewport, "the maintenance card has no viewport meta"
+    assert not [token for token in ZOOM_BLOCKERS if token in viewport.group(1)]
+
+    assert not FONT_IMPORT_RE.findall(html), "the maintenance card @imports a webfont"
+    assert '<link rel="preconnect" href="https://fonts.googleapis.com"' in html
+    assert '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin' in html
+    reference = FONT_LINK_RE.search(read("index.html")).group(1)
+    assert FONT_LINK_RE.findall(html) == [reference], (
+        "the maintenance card requests different faces than the site"
+    )
+
+    want = {
+        "light": normalized(resolve(LIGHT, "--canvas")),
+        "dark": normalized(resolve(DARK, "--canvas")),
+    }
+    found = {scheme: content.strip().lower()
+             for scheme, content in THEME_COLOR_RE.findall(html)}
+    assert found == want, f"theme-color: {found} vs canvas {want}"
+
+    for tokens, label in ((LIGHT, "light"), (DARK, "dark")):
+        for token in ("--canvas", "--blue"):
+            value = resolve(tokens, token)
+            assert f"{token}: {value}" in html, (
+                f"the card does not carry the {label} {token} token ({value})"
+            )
+
+    assert len(re.findall(r"<h1[ >]", html)) == 1, "the card needs exactly one h1"
+    assert ":focus-visible" in html, "the card has links but paints no focus ring"
 
 
 def faces_from_url(href: str) -> dict[str, set[int]]:
@@ -1113,3 +1258,158 @@ def mono_class_tokens(css: str) -> list[str]:
             subject = re.sub(r":[\w-]+(?:\([^)]*\))?", "", subject)
             tokens |= set(re.findall(r"\.([A-Za-z][\w-]*)", subject))
     return sorted(tokens)
+
+
+# ---------------------------------------------------------------------------
+# controls: what a visitor can click, and what is allowed to appear at all
+# ---------------------------------------------------------------------------
+
+PAGE_SCRIPTS = {
+    "index.html": ("theme.js", "chain.js", "app.js", "site.js"),
+    "app.html": (),
+    "market.html": ("theme.js", "chain.js"),
+    "oc.html": ("theme.js", "chain.js"),
+    "user.html": ("theme.js", "chain.js"),
+    "agent.html": ("theme.js", "agent.js"),
+    "not_found.html": ("theme.js",),
+}
+
+
+def page_code(name: str) -> str:
+    """Every line of script that runs against this document: the files it loads
+    plus the inline blocks it carries."""
+    html = read(name)
+    return "".join(read(js) for js in PAGE_SCRIPTS[name]) + "".join(
+        re.findall(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", html, re.S))
+
+
+def unhidden_ids(code: str) -> set[str]:
+    """ids the code names on its way to clearing `hidden` — by the attribute
+    assignment or by removing it, directly or through a variable bound to them."""
+    clear = r"(?:\.hidden\s*=\s*false|\.removeAttribute\(\s*['\"]hidden['\"]\))"
+    found = set(re.findall(
+        rf"""(?:\$\(\s*|getElementById\(\s*)['"]([\w-]+)['"]\s*\)\s*\??\s*{clear}""", code))
+    for var, ident in re.findall(
+            r"(?:const|let|var)\s+(\w+)\s*=\s*(?:\$\(\s*|document\.getElementById\(\s*)['\"]([\w-]+)['\"]", code):
+        if re.search(rf"\b{re.escape(var)}{clear}", code):
+            found.add(ident)
+    return found
+
+
+def unhidden_classes(code: str) -> set[str]:
+    """Classes a loop assigns `.hidden` to — the generic shape `switchTab` uses
+    over `.panel` elements, where no id is ever named."""
+    covered: set[str] = set()
+    for match in re.finditer(r"""querySelectorAll\(\s*['"]([^'"]+)['"]\s*\)""", code):
+        if re.search(r"\.hidden\s*=", code[match.end():match.end() + 400]):
+            covered |= set(re.findall(r"\.([\w-]+)", match.group(1)))
+    return covered
+
+
+def hidden_elements(html: str) -> dict[str, set[str]]:
+    """id -> classes, for every element the markup ships invisible. `aria-hidden`
+    is a different promise (screen readers) and is not counted."""
+    found: dict[str, set[str]] = {}
+    for tag in re.findall(r"<[a-z]+[^>]*>", html, re.I):
+        if not re.search(r"\shidden(\s|=|>)", tag) or "aria-hidden" in tag:
+            continue
+        classes: set[str] = set()
+        attr = re.search(r"\bclass=\"([^\"]*)\"", tag)
+        if attr:
+            classes = set(attr.group(1).split())
+        for ident in re.findall(r'\bid="([^"]+)"', tag):
+            found[ident] = classes
+    return found
+
+
+def test_no_anchor_leads_nowhere():
+    """A link that resolves to nothing is a button that does nothing, and only
+    the visitor finds out. ``/#onchain`` was exactly that: the landing names its
+    section ``#onchain-markets``, so every on-chain market page sent someone who
+    just failed to find a market to the top of the home page instead of the list
+    the link promised."""
+    index_ids = set(re.findall(r'\bid="([^"]+)"', read("index.html")))
+    offenders = []
+    for name in PAGES:
+        html = read(name)
+        own_ids = set(re.findall(r'\bid="([^"]+)"', html))
+        for href in re.findall(r'<a\b[^>]*href="([^"]*)"', html, re.I):
+            if href in ("", "#"):
+                offenders.append((name, href or "(empty href)", "leads nowhere"))
+                continue
+            crosses_pages = href.startswith("/#")
+            target = href[2:] if crosses_pages else (href[1:] if href.startswith("#") else "")
+            if not target:
+                continue
+            wanted = index_ids if crosses_pages or name == "index.html" else own_ids
+            if target not in wanted:
+                offenders.append((name, href, f"no id={target} where it points"))
+    assert not offenders, offenders
+
+
+def test_every_element_that_ships_hidden_can_appear():
+    """``hidden`` in the markup is a promise that code will clear it.
+    ``#oc-scan`` had its href filled in and nobody cleared the attribute, so the
+    contract link stayed invisible in the one configuration it exists for: a
+    feature the file implements and no visitor can reach."""
+    unreachable = []
+    for name in PAGES:
+        code = page_code(name)
+        ids, classes = unhidden_ids(code), unhidden_classes(code)
+        for ident, element_classes in hidden_elements(read(name)).items():
+            if ident in ids or (element_classes & classes):
+                continue
+            unreachable.append(f"{name}: #{ident} ships hidden and nothing clears it")
+    assert not unreachable, unreachable
+
+
+# ---------------------------------------------------------------------------
+# what the deploy files tell the operator to publish, and what the edge sends
+# ---------------------------------------------------------------------------
+
+MANIFEST = ROOT / "deploy" / "farcaster_manifest.example.json"
+EDGE_HEADERS = STATIC / "_headers"
+
+
+def test_the_manifest_template_publishes_paths_the_bundle_has():
+    """The Base App reads iconUrl, imageUrl and splashImageUrl off this file, and
+    the template said ``/static/icon.png`` — a path the bundle has never served,
+    because ``pages_build_output_dir`` already is ``web/static``. An operator
+    following the documented steps got a launch card with no picture, no icon and
+    a splash that 404s, and the button title carried an emoji the Mini App itself
+    does not use."""
+    import json
+
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    miniapp = manifest["miniapp"]
+    for key in ("iconUrl", "imageUrl", "splashImageUrl"):
+        url = miniapp[key]
+        assert "/static/" not in url, f"{key} publishes {url}"
+        filename = url.rsplit("/", 1)[-1]
+        assert (STATIC / filename).is_file(), f"{key} names {filename}, which the bundle does not have"
+    assert miniapp["homeUrl"].endswith("/app")
+    assert miniapp["webhookUrl"].endswith("/api/webhook-miniaction")
+    canvas = normalized(resolve(DARK, "--canvas"))
+    assert miniapp["splashBackgroundColor"].lower() == canvas, (
+        f"splash {miniapp['splashBackgroundColor']} is not the dark canvas {canvas}"
+    )
+    title = re.search(r'"button":\{"title":"([^"]+)"', read("app.html"))
+    assert title, "app.html no longer declares the fc:miniapp button title"
+    assert miniapp["buttonTitle"] == title.group(1), (miniapp["buttonTitle"], title.group(1))
+
+
+def test_the_edge_sends_the_headers_the_origin_sends():
+    """The origin answers every response with nosniff and no-referrer; the Pages
+    bundle answers the CSS, the scripts and the images itself, and until this
+    file existed it sent nothing. One site, two answers to the same question is
+    how a mislabelled asset starts being executed."""
+    assert EDGE_HEADERS.is_file(), "the bundle has no _headers file"
+    text = EDGE_HEADERS.read_text(encoding="utf-8")
+    block = re.search(r"^/\*\n((?:  [^\n]+\n)+)", text, re.M)
+    assert block, "_headers has no /* block"
+    edge_keys = {line.strip().split(":", 1)[0] for line in block.group(1).splitlines()}
+    assert {"X-Content-Type-Options", "Referrer-Policy"} <= edge_keys, edge_keys
+    assert "nosniff" in text and "no-referrer" in text
+    origin = (ROOT / "web" / "server.py").read_text(encoding="utf-8-sig")
+    for header in edge_keys:
+        assert header in origin, f"the origin never sets {header} — the two have drifted"

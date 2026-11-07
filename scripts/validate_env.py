@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Validate .env configuration before first deploy or after changes.
+"""Validate the secrets a deployment cannot start without.
 
-Checks all required secrets, format constraints, and common mistakes.
+This checks the handful of names whose absence is fatal (bot token, hot
+wallet key, encryption and session keys, database and webhook URLs) and
+their formats — not the whole surface. The full contract, every name the
+code reads and every name the templates offer, is measured by
+tests/test_env_contract.py, which fails the build instead of a deploy.
+
 Run: python scripts/validate_env.py
 """
 import os
@@ -156,21 +161,6 @@ optional("EAS_SCHEMA_UID", r"0x[0-9a-fA-F]{64}", msg="must be 0x + 64 hex (regis
 gd = os.environ.get("GAS_DRIP_DAILY_MAX", "").strip()
 if gd and not gd.isdigit():
     ERRORS.append("GAS_DRIP_DAILY_MAX must be a non-negative integer (drips per UTC day)")
-
-# --- Relayer private keys + limits (into bot/chain/relayers.py) ---
-relayer_keys = [k for k in os.environ.get("RELAYER_PRIVATE_KEYS", "").split(",") if k.strip()]
-for rk in relayer_keys:
-    if not re.fullmatch(r"0x[0-9a-fA-F]{64}", rk.strip()):
-        ERRORS.append(f"RELAYER_PRIVATE_KEYS contains an invalid key: {rk.strip()[:16]}… (must be 0x + 64 hex chars)")
-rl = os.environ.get("RELAYER_DAILY_LIMIT", "").strip()
-if rl and not rl.isdigit():
-    ERRORS.append("RELAYER_DAILY_LIMIT must be a non-negative integer (USDC micro-units per day)")
-rg = os.environ.get("RELAYER_FEE_GAS_GWEI", "").strip()
-if rg:
-    try:
-        float(rg)
-    except ValueError:
-        ERRORS.append("RELAYER_FEE_GAS_GWEI must be numeric (gas price in Gwei)")
 
 # --- Base/USDC sanity ---
 usdc = os.environ.get("USDC_ADDRESS", "").strip()

@@ -1,15 +1,12 @@
-"""Breakthrough Base features: gasless paymaster, recurring payments, credit
-score, batch transactions.
+"""Breakthrough Base features: gasless paymaster and recurring payments.
 
 Made by @ssrjkk — github.com/ssrjkk.
 """
 
 import time
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from bot.credit import CreditScorer
 from bot.paymaster import FREE_TRANSACTIONS_COUNT, check_eligibility, get_state
 from bot.recurring import RecurrenceInterval, RecurringPaymentStore
 
@@ -93,54 +90,3 @@ async def test_recurring_atomic_claim_prevents_double_execution(ledger):
     row2 = await ledger_mod.async_ledger.recurring_get("test_sub_atomic")
     assert int(row2["execution_count"]) == 1
     assert int(row2["next_execution"]) == first_next
-
-
-@pytest.mark.asyncio
-async def test_credit_score_bounds():
-    mock_ledger = MagicMock()
-    mock_ledger.user_stats = AsyncMock(return_value={
-        "total_transactions": 50,
-        "failed_transactions": 2,
-        "total_volume_micro": 5000_000_000,  # $5000
-    })
-    mock_ledger.get_user_created = AsyncMock(return_value=time.time() - 180 * 86400)
-    mock_ledger.count_markets_created = AsyncMock(return_value=5)
-    mock_ledger.count_markets_participated = AsyncMock(return_value=15)
-    mock_ledger.count_unique_peers = AsyncMock(return_value=12)
-
-    scorer = CreditScorer(mock_ledger)
-    credit = await scorer.calculate(123456)
-    assert 300 <= credit.score <= 850
-    assert credit.grade in ["A", "B", "C", "D", "F"]
-    assert await scorer.get_max_loan(123456) > 0
-
-
-@pytest.mark.asyncio
-async def test_batch_executor_runs_actions():
-    from bot.batch import ActionType, BatchAction, BatchExecutor
-
-    mock_ledger = MagicMock()
-    mock_ledger.tip = AsyncMock()
-    mock_ledger.bet = AsyncMock()
-    mock_ledger.create_market = AsyncMock(return_value=42)
-    mock_ledger._lock = MagicMock()
-
-    executor = BatchExecutor(mock_ledger)
-    result = await executor.execute_batch(
-        from_tg_id=123456,
-        actions=[
-            BatchAction(action_type=ActionType.TIP, params={
-                "to_tg_id": 789012,
-                "amount_micro": 5_000_000,
-                "memo": "Test tip",
-            }),
-            BatchAction(action_type=ActionType.CREATE_MARKET, params={
-                "question": "Test market?",
-                "options": ["Yes", "No"],
-            }),
-        ],
-    )
-    assert result.success is True
-    assert len(result.results) == 2
-    assert mock_ledger.tip.called
-    assert mock_ledger.create_market.called

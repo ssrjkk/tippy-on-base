@@ -943,7 +943,7 @@ def test_e2e_dashboard_values(e2e, monkeypatch, api):
     sol = api.get("/api/solvency").json()
     assert sol["liabilities_usdc"] == 100.0  # 85 user bal + 15 bet pool
     assert sol["pending_deposits_usdc"] == 0.0
-    assert sol["owed_usdc"] == 100.0
+    assert sol["liabilities_usdc"] == 100.0
     assert sol["hot_wallet_balance_usdc"] == 500.0
     assert sol["solvent"] is True
     assert sol["reserve_usdc"] == 400.0
@@ -1188,13 +1188,17 @@ def test_e2e_insufficient_and_limits(e2e, monkeypatch):
 
 def test_e2e_dashboard_rate_limit_and_static(e2e, monkeypatch, api):
     monkeypatch.setattr(web_server, "WEB_RATE_LIMIT", 2)
+    bid = e2e.create_bet(ALICE, "Ставка под лимитом?", ["А", "Б"])
     api.get("/api/health")
     api.get("/api/health")
     r = api.get("/api/health")
     assert r.status_code == 429
-    # static pages are never rate limited
+    # Pages are never rate limited, and a page of a real row is a 200. The id
+    # comes from this database: /m/{bet_id} answers 404 for a pool the ledger
+    # does not have, which is the point of the route, so a hardcoded 1 was
+    # asserting a number nobody created.
     assert api.get("/").status_code == 200
-    assert api.get("/m/1").status_code == 200
+    assert api.get(f"/m/{bid}").status_code == 200
 
 
 # ---------- scenario 8: concurrency ----------

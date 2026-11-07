@@ -72,7 +72,7 @@ def test_telegram_login_creates_user_and_cookie(client, ledger):
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert r.headers["location"] == "/"
+    assert r.headers["location"] == "/#workspace-section"
     cookie = r.cookies.get(auth.COOKIE_NAME)
     assert cookie and auth.parse_session(cookie) == 3001
     assert ledger.user_exists(3001)
@@ -92,8 +92,9 @@ def test_telegram_login_blob_is_single_use(client, ledger):
     replay = TestClient(app)
     replay.get("/login")          # its own, valid login-state cookie
     again = replay.get("/api/auth/telegram", params=params, follow_redirects=False)
-    assert again.status_code == 403
-    assert "already been used" in again.json()["detail"]
+    assert again.status_code == 303
+    assert again.headers["location"] == "/?auth=replay"
+    assert not again.content, "the replay answer became a body again"
 
     # A fresh blob for the same user (what a real reload produces) still works.
     # The auth_date must actually differ — tg_signed() defaults to now(), and two
@@ -107,14 +108,16 @@ def test_telegram_login_blob_is_single_use(client, ledger):
 
 
 def test_telegram_login_requires_login_state(client):
-    # No /login-state cookie: cross-site GET cannot forge a session.
+    # No /login-state cookie: cross-site GET cannot forge a session. It gets the
+    # landing back with a reason, not a JSON document.
     r = client.get(
         "/api/auth/telegram",
         params=tg_signed(3333),
         follow_redirects=False,
     )
-    assert r.status_code == 403
-    assert "login state" in r.json()["detail"]
+    assert r.status_code == 303
+    assert r.headers["location"] == "/?auth=state"
+    assert not r.content
 
 
 def test_telegram_login_bad_hash(client):
@@ -122,7 +125,8 @@ def test_telegram_login_bad_hash(client):
     params = tg_signed(3002)
     params["hash"] = "0" * 64
     r = client.get("/api/auth/telegram", params=params, follow_redirects=False)
-    assert r.status_code == 403
+    assert r.status_code == 303
+    assert r.headers["location"] == "/?auth=failed"
 
 
 def test_telegram_login_stale_auth_date(client):
@@ -133,7 +137,8 @@ def test_telegram_login_stale_auth_date(client):
         params=tg_signed(3003, auth_date=old),
         follow_redirects=False,
     )
-    assert r.status_code == 403
+    assert r.status_code == 303
+    assert r.headers["location"] == "/?auth=failed"
 
 
 def test_telegram_login_future_auth_date(client):
@@ -144,7 +149,8 @@ def test_telegram_login_future_auth_date(client):
         params=tg_signed(3004, auth_date=future),
         follow_redirects=False,
     )
-    assert r.status_code == 403
+    assert r.status_code == 303
+    assert r.headers["location"] == "/?auth=failed"
 
 
 def test_login_page_redirects_to_the_cabinet(client):
@@ -194,9 +200,80 @@ def test_telegram_login_with_state_from_landing_page(ledger):
     c.cookies.set(auth.LOGIN_STATE_COOKIE, state)
     r = c.get("/api/auth/telegram", params=tg_signed(3005), follow_redirects=False)
     assert r.status_code == 303
-    assert r.headers["location"] == "/"
+    assert r.headers["location"] == "/#workspace-section"
     assert auth.parse_session(r.cookies.get(auth.COOKIE_NAME)) == 3005
     assert ledger.user_exists(3005)
+
+
+
+def test_the_login_limiter_sends_the_browser_back_too():
+    """The stricter limiter sits in front of `/api/auth/*`, so the eleventh tap
+    on the Telegram button used to end on
+    `{"detail": "too many login attempts, try again later"}` — the same replaced
+    site this file is about. The XHR path (wallet connect) keeps a body, because
+    that is what the landing paints into the card under the button, and it now
+    paints it in the language the page answers in.
+    """
+    from web import server
+
+    server._auth_rl_state.clear()
+    try:
+        for attempt in range(server.AUTH_RATE_LIMIT):
+            c = TestClient(app)
+            c.get("/login")
+            r = c.get("/api/auth/telegram", params=tg_signed(4200 + attempt),
+                      follow_redirects=False)
+            assert r.status_code == 303, r.status_code
+        late = TestClient(app)
+        late.get("/login")
+        r = late.get("/api/auth/telegram", params=tg_signed(4300), follow_redirects=False)
+        assert r.status_code == 303, r.text[:120]
+        assert r.headers["location"] == "/?auth=slow"
+        assert not r.content
+
+        w = TestClient(app).post("/api/auth/wallet", json={
+            "address": "0x" + "00" * 20, "message": "Tippy login", "signature": "0x00"})
+        assert w.status_code == 429, w.text[:120]
+        detail = w.json()["detail"]
+        assert any(0x400 <= ord(ch) <= 0x4FF for ch in detail), detail
+        assert "too many" not in detail.lower(), detail
+    finally:
+        server._auth_rl_state.clear()
+def test_a_widget_login_never_leaves_the_browser_on_a_json_page():
+    """`/api/auth/telegram` is not an endpoint a bundle fetches — it is where
+    the Telegram widget sends the *browser*. Every refusal there used to be a
+    `{"detail": ...}` document: no title, no theme, no way back, and it replaced
+    the site for anyone whose login did not verify. All six ways the callback can
+    say no are measured here, and each has to answer the same way — the landing,
+    plus a fixed reason code for it to render.
+    """
+    def call(with_state: bool, params: dict):
+        c = TestClient(app)
+        if with_state:
+            c.get("/login")
+        return c.get("/api/auth/telegram", params=params, follow_redirects=False)
+
+    signed = tg_signed(4101)
+    tampered = dict(signed, hash="0" * 64)
+    stale = tg_signed(4102, auth_date=int(time.time()) - 3 * 24 * 3600)
+    future = tg_signed(4103, auth_date=int(time.time()) + 3600)
+    no_hash = {k: v for k, v in signed.items() if k != "hash"}
+
+    cases = {
+        "no login state": call(False, signed),
+        "bad signature": call(True, tampered),
+        "stale auth_date": call(True, stale),
+        "auth_date in the future": call(True, future),
+        "no hash at all": call(True, no_hash),
+    }
+    assert call(True, signed).status_code == 303      # the first use mints a session
+    cases["blob already used"] = call(True, signed)   # ... the second is a replay
+
+    for name, r in cases.items():
+        assert r.status_code == 303, f"{name}: {r.status_code} {r.text[:120]!r}"
+        location = r.headers["location"]
+        assert location.startswith("/?auth="), f"{name}: landed on {location!r}"
+        assert not r.content, f"{name}: a body came with the redirect: {r.content[:120]!r}"
 
 
 # ---------- wallet login ----------
@@ -252,7 +329,7 @@ def test_wallet_login_replay_rejected(client, ledger):
         json={"address": address, "message": msg, "signature": sig},
     )
     assert r2.status_code == 403
-    assert "already used" in r2.json()["detail"]
+    assert "уже использован" in r2.json()["detail"]
 
 
 def test_wallet_login_unlinked_wallet(client):
@@ -266,7 +343,7 @@ def test_wallet_login_unlinked_wallet(client):
         json={"address": acct.address, "message": msg, "signature": sig},
     )
     assert r.status_code == 404
-    assert "not linked" in r.json()["detail"]
+    assert "ни к кому не привязан" in r.json()["detail"] and "t.me/" in r.json()["detail"]
 
 
 def test_wallet_login_wrong_signer(client, ledger):

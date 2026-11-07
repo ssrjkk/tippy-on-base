@@ -34,10 +34,14 @@ _Проект: by @ssrjkk — github.com/ssrjkk_
 
 ### 0.3. Hot wallet (кошелёк бота)
 
-Кошелёк уже сгенерирован в `.env` (раздел `HOT_WALLET_KEY`), публичный адрес:
+Кошелёк — тот, чей приватный ключ лежит в `.env` в `HOT_WALLET_KEY`. Его публичный
+адрес выводится из ключа, поэтому в этой доке его нет: адрес из доке — это факт про
+чужую машину, а не про твою, и он перестаёт быть правдой в тот момент, когда ключ
+меняют. Получи свой из `.env`:
 
-```
-0xcd49f5b85B7C20EF2970f526c3D9058af5a240F0
+```bash
+python -c "from dotenv import dotenv_values; from eth_account import Account; \
+print(Account.from_key(dotenv_values('.env')['HOT_WALLET_KEY']).address)"
 ```
 
 Пополни его с любого кошелька/биржи (Base network!):
@@ -47,7 +51,8 @@ _Проект: by @ssrjkk — github.com/ssrjkk_
 | **ETH** | газ на выводы пользователей | ~$5 (0.002 ETH) |
 | **USDC** | стартовая ликвидность выплат | $20–50 |
 
-Проверь пополнение на `basescan.org/address/0xcd49...`.
+Проверь пополнение на `basescan.org/address/<твой адрес>` (Base mainnet, `8453`):
+и баланс USDC, и ETH на газ — бот читает их через `/admin` и `/api/solvency`.
 
 > ⚠️ Нельзя пополнить «потом»: первый же вывод пользователя жжёт газ из
 > этого кошелька. Если ETH кончится — выводы будут падать и автоматически
@@ -463,9 +468,13 @@ docker compose restart app cloudflared
 (EIP-1167 прокси за `Create2Factory`). Отправка USDC на прокси `forward()`-ится
 на hot wallet, а сканер зачисляет по `owner = tg_id_of_proxy(sender)`.
 
+Два адреса ниже — результат деплоя на Base Sepolia, а не константы: после своего
+`python scripts/deploy_create2_factory.py` впиши свои (завод детерминирован, но
+адрес зависит от ключа деплоера и сети).
+
 ```env
-CREATE2_FACTORY_ADDRESS=0x6Ee14Ee07f09B40505c0E815dAbFb97251a26f0c
-CREATE2_FACTORY_FORWARDER=0x2c66CD5393Fba7e1EFdfD866B0A622aA29D032cB
+CREATE2_FACTORY_ADDRESS=<from the deploy output>
+CREATE2_FACTORY_FORWARDER=<from the deploy output>
 CREATE2_PROXY_BYTECODE=<EIP-1167 init: 3d602d…f3>
 CREATE2_SAFE_DEPOSITS=1
 ```
@@ -488,18 +497,12 @@ TELEGRAM_API_PROXY=socks5h://user:pass@host:1080   # или http://host:8080
 
 Без `TELEGRAM_API_PROXY` бот использует прямое подключение (обычный случай).
 
-## Этап 8. Пул релейеров и батчинг выводов (опционально, для масштаба)
+## Этап 8. Батчинг выводов (опционально, для масштаба)
 
-Пока выводы идут с одного hot wallet, всё работает из коробки. Для роста можно
-подключить пул релейеров и батчинг очереди:
+Пока выводы идут с одного hot wallet, всё работает из коробки. Очередь
+`/withdraw` можно флашить одним `batchDistribute` через vault:
 
 ```env
-# Пул релейеров: 0x+64hex ключи через запятую, у каждого свой суточный кап.
-RELAYER_PRIVATE_KEYS=0x...,0x...
-RELAYER_DAILY_LIMIT=10000          # USDC/сутки на релейер (по UTC)
-RELAYER_FEE_GAS_GWEI=0.01          # цена газа для оценки комиссии вывода
-#RELAYER_STATE_FILE=.relayer_usage.json  # персистентный учёт капов (рестарт не сбрасывает)
-
 # Батчинг очереди /withdraw (флаш по любому порогу):
 WITHDRAW_BATCH_FLUSH_USDC=50
 WITHDRAW_BATCH_FLUSH_COUNT=20
@@ -507,7 +510,7 @@ WITHDRAW_BATCH_FLUSH_SECONDS=60
 WITHDRAW_BATCH_FALLBACK_DIRECT=1   # батч не удался -> прямые отправки
 ```
 
-Проверка формата ключей и лимитов — **перед каждым деплоем**:
+Проверка окружения — **перед каждым деплоем**:
 
 ```bash
 python scripts/validate_env.py     # exit 0 = всё ок; печатает [ERROR]/[WARN]

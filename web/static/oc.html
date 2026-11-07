@@ -9,9 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=Golos+Text:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" />
   <title>Ончейн-рынок — Tippy</title>
-  <meta property="og:title" content="Ончейн-рынок — Tippy" />
-  <meta property="og:description" content="Рынок на Base: доли ERC-1155, расчёты в USDC внутри контракта. Живые шансы и торговля через Telegram-бота." />
-  <meta property="og:type" content="website" />
+  <meta name="description" content="Рынок на Base: доли ERC-1155, расчёты в USDC внутри контракта. Живые шансы и торговля через Telegram-бота." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/style.css" />
   <script src="/theme.js"></script>
@@ -28,7 +26,7 @@
           <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
           <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
         </button>
-        <a class="btn btn-ghost btn-sm" href="/#onchain">Все ончейн-рынки</a>
+        <a class="btn btn-ghost btn-sm" href="/#onchain-markets">Все ончейн-рынки</a>
       </div>
     </div>
   </header>
@@ -49,7 +47,7 @@
 
       <div class="cta-row">
         <a class="btn btn-primary" href="https://t.me/__BOT_USERNAME__" data-tg-link>Торговать в Telegram</a>
-        <a class="btn btn-ghost" id="oc-scan" href="#" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
+        <a class="btn btn-ghost" id="oc-scan" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
         <button class="btn btn-ghost" id="oc-share" type="button">Скопировать ссылку</button>
       </div>
 
@@ -104,6 +102,8 @@
     const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
     const fmtUSDC = (x) =>
       Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    const fmtPct = (x) =>
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
     const relDeadline = (ts) => {
       const left = ts * 1000 - Date.now();
       if (left <= 0) return "дедлайн прошёл";
@@ -126,7 +126,7 @@
         m = await r.json();
       } catch (e) {
         $("oc").innerHTML = '<div class="empty">Ончейн-рынок #' + esc(marketId) +
-          ' не найден — возможно, контракты ещё не развёрнуты в этой сети. Список рынков: <a class="m-link" href="/#onchain">на главной</a>.</div>';
+          ' не найден — возможно, контракты ещё не развёрнуты в этой сети. Список рынков: <a class="m-link" href="/#onchain-markets">на главной</a>.</div>';
         return;
       }
 
@@ -147,8 +147,6 @@
 
       $("oc-kind").textContent = "Ончейн-рынок · #" + m.id;
       $("oc-question").textContent = m.question;
-      document.title = m.question + " — Tippy";
-      document.querySelector('meta[property="og:title"]').content = "#" + m.id + " " + m.question;
 
       $("oc-options").innerHTML = m.options.map((o, i) => {
         const isWinner = winnerIdx !== null && o.index === winnerIdx;
@@ -157,7 +155,7 @@
         <div class="option${isWinner ? " option-winner" : ""}">
           <div class="option-top">
             <span class="option-label">${esc(o.label)}</span>
-            <span class="option-val">${esc(String(pct))}%</span>
+            <span class="option-val">${fmtPct(pct)}</span>
           </div>
           <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(pct, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
         </div>`;
@@ -176,6 +174,10 @@
         scan.remove();
       } else {
         scan.href = info.explorer + "/address/" + encodeURIComponent(m.market_address);
+        // The markup ships hidden so a page whose contract is unknown shows no
+        // broken link — and nothing else ever clears the attribute, so setting
+        // the href alone left the button invisible in the one case it exists for.
+        scan.hidden = false;
       }
 
       $("oc-share").addEventListener("click", async () => {

@@ -2844,3 +2844,229 @@ def test_every_i18n_key_the_python_code_references_exists():
             if dead:
                 missing[source.relative_to(root).as_posix()] = dead
     assert not missing, missing
+
+
+def test_every_i18n_call_passes_the_placeholders_its_string_needs():
+    """`i18n.t()` interpolates on every call, so a missing kwarg is not a blank
+    space — it is a KeyError in front of a user. `/subscribe` answered an unknown
+    nickname with exactly that: the string says «Не нашёл @{user}», the call passed
+    nothing. Placeholders are read from `bot/i18n.py` and the arguments from the
+    AST of every call site, so neither side is assumed."""
+    import ast
+    from pathlib import Path
+
+    from bot import i18n
+
+    root = Path(__file__).resolve().parents[1]
+    offenders = []
+    for pkg in ("bot", "web", "agent", "deploy", "scripts"):
+        for path in sorted((root / pkg).rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                fname = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+                if fname != "t" or len(node.args) < 2 or not isinstance(node.args[1], ast.Constant):
+                    continue
+                key = node.args[1].value
+                if not isinstance(key, str) or key not in i18n.STRINGS:
+                    continue
+                if any(kw.arg is None for kw in node.keywords):
+                    continue  # **kwargs — resolvable only at runtime
+                passed = {kw.arg for kw in node.keywords if kw.arg}
+                want = {
+                    name
+                    for text in i18n.STRINGS[key].values()
+                    for name in re.findall(r"\{([a-zA-Z_][a-zA-Z0-9_]*)", text)
+                }
+                missing = want - passed
+                if missing:
+                    rel = path.relative_to(root).as_posix()
+                    offenders.append(f"{rel}:{node.lineno}: t('{key}') needs {sorted(missing)}")
+    assert not offenders, "\n".join(offenders)
+
+
+def test_cmd_subscribe_resolves_the_peer(ledger, monkeypatch):
+    """/subscribe had no test at all, which is how it shipped calling a Ledger
+    method that does not exist. The nickname in the argument has to become the
+    peer's tg_id, and the schedule has to be written for that id."""
+    from bot.handlers import _common as common
+    from bot.handlers.breakthrough import cmd_subscribe
+    from bot.recurring import RecurringPaymentStore
+
+    # A fresh store: the module singleton's asyncio.Lock binds to the loop of the
+    # first test that awaits it, and every later `asyncio.run` would fail on it.
+    monkeypatch.setattr(common, "recurring", RecurringPaymentStore("."))
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    ledger.ensure_user(BOB, "bob")
+
+    args = "@bob 5 daily"
+    m = Message(f"/subscribe {args}")
+    run(cmd_subscribe(m))
+
+    text = m.answers[0][0]
+    assert "@bob" in text and "5 USDC" in text, text
+    rows = ledger.recurring_list_for_user(ALICE)
+    assert [int(r["to_tg_id"]) for r in rows] == [BOB]
+    assert int(rows[0]["amount_micro"]) == 5_000_000
+
+
+def test_cmd_subscribe_unknown_nickname_names_it_back(ledger):
+    """The reply quotes the nickname, so the call has to pass `user=` — with no
+    argument `i18n.t` raised KeyError and an unknown @ghost became a crash."""
+    from bot.handlers.breakthrough import cmd_subscribe
+
+    ledger.credit(ALICE, 50_000_000, "deposit")
+
+    args = "@ghost 5 daily"
+    m = Message(f"/subscribe {args}")
+    run(cmd_subscribe(m))
+
+    assert "ghost" in m.answers[0][0], m.answers
+    assert ledger.recurring_list_for_user(ALICE) == []
+
+
+def test_cmd_subscriptions_shows_the_peer_by_username(ledger, monkeypatch):
+    """/subscriptions read the peer row through another Ledger method that never
+    existed; the list is only useful if it names who is being paid."""
+    from bot.handlers import _common as common
+    from bot.handlers.breakthrough import cmd_subscribe, cmd_subscriptions
+    from bot.recurring import RecurringPaymentStore
+
+    monkeypatch.setattr(common, "recurring", RecurringPaymentStore("."))
+    ledger.credit(ALICE, 50_000_000, "deposit")
+    ledger.ensure_user(BOB, "bob")
+    run(cmd_subscribe(Message("/subscribe @bob 5 daily")))
+
+    m = Message("/subscriptions")
+    run(cmd_subscriptions(m))
+    listing = m.answers[0][0]
+    assert "@bob" in listing, listing
+
+    # /cancelsub is only reachable if the list prints the id it demands.
+    payment_id = ledger.recurring_list_for_user(ALICE)[0]["id"]
+    assert payment_id in listing, listing
+    from bot.handlers.breakthrough import cmd_cancel_sub
+
+    run(cmd_cancel_sub(Message(f"/cancelsub {payment_id}")))
+    assert ledger.recurring_list_for_user(ALICE)[0]["active"] is False
+
+
+
+MONEY_FORMATTERS = ("_fmt(", "_usd(")
+
+
+def test_no_pre_formatted_money_is_handed_a_numeric_placeholder():
+    """`_fmt()` returns text ("5", "1,75"), and `"{amount:.2f}"` refuses text with
+    `ValueError: Unknown format code 'f'`. `/subscribe` and `/claim` hit exactly
+    that: the debit succeeded and the reply raised, so the broad `except` answered
+    with a format-hint card and the feature looked broken forever. A placeholder
+    that asks for a numeric format never gets a formatter's output."""
+    import ast
+    from pathlib import Path
+
+    import bot.i18n as i18n
+
+    root = Path(__file__).resolve().parents[1]
+    offenders = []
+    for pkg in ("bot", "web", "agent", "deploy", "scripts"):
+        for path in sorted((root / pkg).rglob("*.py")):
+            source = path.read_text(encoding="utf-8-sig")
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                fname = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+                if fname != "t" or len(node.args) < 2 or not isinstance(node.args[1], ast.Constant):
+                    continue
+                key = node.args[1].value
+                table = i18n.STRINGS.get(key) if isinstance(key, str) else None
+                if not table:
+                    continue
+                numeric = {
+                    name for text in table.values()
+                    for name, spec in re.findall(r"\{([a-zA-Z_]\w*):([^{}]+)\}", text)
+                    if any(code in spec for code in "fedg")
+                }
+                for kw in node.keywords:
+                    if kw.arg not in numeric:
+                        continue
+                    expr = ast.get_source_segment(source, kw.value) or ""
+                    if any(formatter in expr for formatter in MONEY_FORMATTERS):
+                        rel = path.relative_to(root).as_posix()
+                        offenders.append(f"{rel}:{node.lineno}: t('{key}', {kw.arg}={expr[:40]})")
+    assert not offenders, "\n".join(offenders)
+USER_TEXT_FIELDS = {"username", "to_username", "name", "full_name", "first_name",
+                    "question", "label", "memo", "title", "symbol"}
+ESCAPERS = ("_h(", "_esc(", "esc(", "escape(", "quote_plus(")
+
+
+def test_user_text_reaching_an_html_reply_is_escaped():
+    """The bot sends `parse_mode=HTML` on every message, so a nickname or a token
+    name with `<`/`&` in it either makes Telegram refuse the message (the action
+    already happened) or injects markup into the card. `/subscribe` and
+    `/createtoken` interpolated both raw. Any i18n argument that carries user
+    text has to pass through the escaper."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    offenders = []
+    for pkg in ("bot", "web"):
+        for path in sorted((root / pkg).rglob("*.py")):
+            source = path.read_text(encoding="utf-8-sig")
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "t"):
+                    continue
+                for kw in node.keywords:
+                    if kw.arg not in USER_TEXT_FIELDS:
+                        continue
+                    expr = ast.get_source_segment(source, kw.value) or ""
+                    if any(escaper in expr for escaper in ESCAPERS):
+                        continue
+                    if isinstance(kw.value, ast.Constant):
+                        continue  # a literal label, not user text
+                    if re.match(r"[A-Za-z_]\w*\.[A-Z_]+\[", expr):
+                        continue  # a curated uppercase table, not user text
+                    rel = path.relative_to(root).as_posix()
+                    offenders.append(f"{rel}:{kw.lineno}: {kw.arg}={expr[:50]}")
+    assert not offenders, "\n".join(offenders)
+def test_oc_create_hint_names_the_configured_limits(ledger, monkeypatch):
+    """/oc_create used to print "Субсидия $10–1000 … метка до 60 символов" as text.
+    The numbers a user is refused by come from config, so the card has to follow
+    config too."""
+    from decimal import Decimal as _Decimal
+
+    from bot import config
+    from bot.handlers.onchain import cmd_oc_create
+
+    monkeypatch.setattr(config, "OUTCOME_MARKET_ADDRESS", "0x" + "11" * 20)
+    monkeypatch.setattr(config, "MARKET_MIN_SUBSIDY_USDC", _Decimal("17"))
+    monkeypatch.setattr(config, "MARKET_MAX_SUBSIDY_USDC", _Decimal("420"))
+    monkeypatch.setattr(config, "MAX_OPTION_LEN", 44)
+
+    m = Message("/oc_create")
+    run(cmd_oc_create(m))
+    text = m.answers[0][0]
+    assert "17–420 USDC" in text, text
+    assert "44" in text, text
+    assert "$" not in text, text
+
+
+def test_oc_create_refuses_too_many_options(ledger, monkeypatch):
+    """Nine options used to be cut to eight in silence: the user's last option
+    vanished and the market they got was not the one they asked for."""
+    from bot import config
+    from bot.handlers.onchain import cmd_oc_create
+
+    monkeypatch.setattr(config, "OUTCOME_MARKET_ADDRESS", "0x" + "11" * 20)
+    options = " | ".join(f"Вариант {i}" for i in range(1, 10))
+    m = Message(f"/oc_create 10 Вопрос | {options}")
+    run(cmd_oc_create(m))
+
+    assert "Формат" in m.answers[0][0], m.answers
+    assert ledger.open_amm_markets(limit=20) == []

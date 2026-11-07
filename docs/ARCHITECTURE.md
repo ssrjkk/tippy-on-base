@@ -23,7 +23,6 @@ content on Base. Two processes, one database.
           │  (web3.py)         │
           │  USDC deposits     │
           │  withdrawals       │
-          │  multi-relayer pool│
           │  TipBotVault       │
           │  EAS attestations  │
           └────────────────────┘
@@ -78,7 +77,10 @@ PostgreSQL 16+ with `dict_row` factory. Schema managed by:
 
 Key tables:
 - `users` — Telegram user IDs and USDC balances (internal ledger)
-- `tx_log` — immutable audit trail of all balance changes
+- `tx_log` — the audit trail of every balance change. A row is never deleted,
+  and its money (`amount`, `kind`, counterparty) is written once; only a
+  withdrawal's `status` and `tx_hash` are updated as the payout moves through
+  its stages — see `tests/test_ledger.py` for the gate that keeps it that way.
 - `markets` — LMSR prediction markets (escrow, options, status)
 - `market_shares` — per-user share positions
 - `user_wallets` — encrypted custodial wallet keys/seeds
@@ -86,12 +88,8 @@ Key tables:
 
 ## On-chain
 
-- **Hot wallet** (EOA) — relayer for withdrawals and tips. Holds USDC.
-  Private key in `HOT_WALLET_KEY` env var. Daily cap enforced by vault.
-- **Multi-relayer pool** (`bot/chain/relayers.py`, `RELAYER_PRIVATE_KEYS`) —
-  several dedicated relayer keys, each with its own per-UTC-day USDC cap.
-  Usage is persisted to a state file (`RELAYER_STATE_FILE`, default
-  `.relayer_usage.json`) so a restart cannot reset the daily budget.
+- **Hot wallet** (EOA) — the vault's relayer for withdrawals and tips. Holds
+  USDC. Private key in `HOT_WALLET_KEY` env var. Daily cap enforced by vault.
 - **TipBotVault** (contract) — holds user USDC reserves. Relayer has a
   24h rolling daily limit. Owner (multisig) has full control. Two-step
   ownership transfer.
@@ -103,14 +101,20 @@ Key tables:
   check-then-act race, safe across processes). Queued rows flush as a
   batch (`WITHDRAW_BATCH_*`) with a direct-send fallback.
 - **OutcomeMarket** — on-chain prediction markets: ERC-1155 shares, LMSR
-  pricing on-chain, oracle resolution with owner dispute window, 24h
-  public cancel for abandoned markets.
+  pricing on-chain, oracle resolution with a 2h owner dispute window, 24h
+  public cancel for abandoned markets. The oracle is a separate key only when
+  `ORACLE_PRIVATE_KEY` is set; without it `bot/handlers/onchain.py` resolves
+  through `owner_resolve` with the hot wallet, and one signature then holds both
+  the proposal and the dispute power — so the window is a check on a second
+  party, not on a single one.
 
 ## Smart Wallet (ERC-4337) — P2
 
-Gasless, non-custodial per-user accounts on Base via account abstraction.
-User operations are sponsored by a VerifyingPaymaster so users don't need
-ETH. Deployed & proven on Base Sepolia.
+Gasless per-user accounts on Base via account abstraction — custodied by the
+operator: `SmartAccount.owner` is the relayer key, and that key signs every
+UserOperation, so a user's control over the account is exactly the operator's
+restraint. A VerifyingPaymaster sponsors gas so users don't need ETH.
+Deployed & proven on Base Sepolia.
 
 - **SmartAccount** (CREATE2, deterministic) — each Telegram user gets a
   counterfactual address; no creation until first fund. `validateUserOp`

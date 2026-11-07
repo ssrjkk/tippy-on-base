@@ -1,4 +1,4 @@
-"""Handler for breakthrough Base features — gasless, recurring, batch, credit, creator tokens."""
+"""Handler for breakthrough Base features — gasless, recurring, creator tokens."""
 
 import time
 from decimal import Decimal, InvalidOperation
@@ -71,12 +71,11 @@ async def cmd_subscribe(message: types.Message):
         interval = interval_map[interval_str]
         amount_micro = common._to_micro(amount)
 
-        to_user = await common.ledger.get_user_by_username(to_username)
-        if not to_user:
-            await message.answer(i18n.t(lang, 'tip_user_not_found'))
+        to_tg_id = await common.ledger.find_by_username(to_username)
+        if to_tg_id is None:
+            await message.answer(i18n.t(lang, 'tip_user_not_found', user=common._h(to_username)))
             return
 
-        to_tg_id = to_user['tg_id']
         from_tg_id = message.from_user.id
 
         # Throttle: recurring payments are financial operations, rate-limit like withdrawals.
@@ -98,7 +97,7 @@ async def cmd_subscribe(message: types.Message):
             i18n.t(
                 lang,
                 'subscribe_created',
-                to_username=to_username,
+                to_username=common._h(to_username),
                 amount=common._fmt(amount_micro),
                 interval=interval_str,
             )
@@ -117,17 +116,21 @@ async def cmd_subscriptions(message: types.Message):
         await message.answer(i18n.t(lang, 'no_subscriptions'))
         return
 
+    peers = [p.to_tg_id if p.from_tg_id == uid else p.from_tg_id for p in payments]
+    names = await common.ledger.usernames_bulk(peers)
     lines = []
     for p in payments:
         direction = "→" if p.from_tg_id == uid else "←"
         other_id = p.to_tg_id if p.from_tg_id == uid else p.from_tg_id
-        other_user = await common.ledger.get_user_by_tg_id(other_id)
-        other_name = other_user.get('username', f"ID{other_id}") if other_user else f"ID{other_id}"
+        other_name = names.get(other_id) or f"ID{other_id}"
 
         status = "✅" if p.active else "❌"
         amount_str = common._fmt(p.amount_micro)
+        # The id is part of the row because /cancelsub takes exactly this value:
+        # a list without it is a command nobody can call.
         lines.append(
             f"{status} {direction} @{other_name}: ${amount_str} {p.interval.value}"
+            f" · <code>{p.id}</code>"
         )
 
     text = i18n.t(lang, 'subscriptions_list', list="\n".join(lines))
@@ -151,28 +154,6 @@ async def cmd_cancel_sub(message: types.Message):
         await message.answer(i18n.t(lang, 'subscription_cancelled'))
     else:
         await message.answer(i18n.t(lang, 'subscription_not_found'))
-
-
-async def cmd_credit(message: types.Message):
-    """Check credit score: /credit"""
-    lang = await _lang(message.from_user.id)
-    uid = message.from_user.id
-
-    from ..credit import CreditScorer
-    scorer = CreditScorer(common.ledger)
-    credit = await scorer.calculate(uid)
-
-    max_loan = await scorer.get_max_loan(uid)
-
-    text = i18n.t(
-        lang,
-        'credit_score',
-        score=credit.score,
-        grade=credit.grade,
-        confidence=int(credit.confidence * 100),
-        max_loan=max_loan,
-    )
-    await message.answer(text)
 
 
 async def cmd_create_token(message: types.Message):
@@ -208,8 +189,8 @@ async def cmd_create_token(message: types.Message):
             i18n.t(
                 lang,
                 'token_created',
-                name=name,
-                symbol=symbol,
+                name=common._h(name),
+                symbol=common._h(symbol),
                 token_id=token.token_id,
             )
         )
@@ -249,8 +230,6 @@ async def cmd_buy_token(message: types.Message):
             await message.answer(i18n.t(lang, 'token_buy_failed'))
             return
 
-        await common.ledger.debit(uid, cost_micro, f"Buy {amount} tokens {token_id}")
-
         await message.answer(
             i18n.t(lang, 'token_bought', amount=amount, cost=common._fmt(cost_micro))
         )
@@ -279,4 +258,7 @@ async def cmd_claim_dividends(message: types.Message):
     # from it), so prose here would render a payout as money leaving the user.
     await common.ledger.credit(uid, amount_micro, "dividend", note=f"token {token_id}")
 
-    await message.answer(i18n.t(lang, 'dividends_claimed', amount=common._fmt(amount_micro)))
+    await message.answer(i18n.t(
+        lang, 'dividends_claimed',
+        amount=common._fmt(amount_micro),
+    ))

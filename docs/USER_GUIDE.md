@@ -10,7 +10,8 @@ prediction markets, parimutuel bets, creator tokens — all from a chat window.
 ## Getting started
 
 1. Open the bot in Telegram and press **Start** (or send `/start`).
-2. Pick your language — the whole interface speaks English, Russian and Chinese.
+2. Pick your language — the bot, the Mini App and every money refusal answer in English,
+   Russian or Chinese. The website itself is Russian-only.
 3. Send `/menu` any time to get the main menu back, `/help` for the command list.
 
 You don't need a wallet, seed phrase or gas to begin — your account works
@@ -134,7 +135,6 @@ revenue.
 | `/createtoken` | Launch your own creator token |
 | `/buytoken` | Buy a creator's token |
 | `/claim <token_id>` | Claim accumulated dividends |
-| `/credit` | Check your on-chain credit score |
 
 ---
 
@@ -152,7 +152,7 @@ revenue.
 
 | Command | What it does |
 |---|---|
-| `/subscribe <id>` · `/subscriptions` · `/cancelsub` | Recurring payments to a creator |
+| `/subscribe @user <amount> <interval>` · `/subscriptions` · `/cancelsub <id>` | Recurring payments to a user |
 | `/paywall` | Paid channels and content |
 | `/donate` | Personal donation page with QR |
 | `/ask <question>` | Ask the AI assistant |

@@ -7,12 +7,12 @@
   "miniapp": {
     "version": "1",
     "name": "Tippy",
-    "iconUrl": "https://YOUR_PUBLIC_HOST/static/icon.png",
+    "iconUrl": "https://YOUR_PUBLIC_HOST/icon.png",
     "homeUrl": "https://YOUR_PUBLIC_HOST/app",
-    "imageUrl": "https://YOUR_PUBLIC_HOST/static/miniapp-hero.png",
-    "buttonTitle": "💸 Открыть Tippy",
-    "splashImageUrl": "https://YOUR_PUBLIC_HOST/static/splash.png",
-    "splashBackgroundColor": "#0A0B0D",
+    "imageUrl": "https://YOUR_PUBLIC_HOST/miniapp-hero.png",
+    "buttonTitle": "Открыть Tippy",
+    "splashImageUrl": "https://YOUR_PUBLIC_HOST/splash.png",
+    "splashBackgroundColor": "#111111",
     "webhookUrl": "https://YOUR_PUBLIC_HOST/api/webhook-miniaction"
   }
 }

@@ -146,18 +146,22 @@ accounting backed by public proof-of-reserves.
   `/api/prediction/{id}`, `/api/leaderboard`, `/api/user/{id}`, `/api/info`,
   `/api/health`, `/qr`, rate-limited per IP
 
-### Smart Wallet (ERC-4337) — gasless, non-custodial
+### Smart Wallet (ERC-4337) — gasless, operator-custodied
 - **Per-user Smart Accounts** via CREATE2 (`SmartAccountFactory`) — deterministic
   counterfactual addresses; no ETH needed from the user
 - **VerifyingPaymaster sponsors gas** — users tip/trade without ever holding ETH
   (Base Sepolia proven: direct `handleOps` and gasless paymaster UserOps, status=1)
+- **The operator holds the keys, not the user** — `SmartAccount.owner` is the relayer
+  address (`bot/smart_wallet.py::_owner`, derived from `HOT_WALLET_KEY`), and that key
+  signs every UserOperation. Gasless is what the user pays with custody; the same rule
+  is stated in `docs/SECURITY.md` («The hot wallet is custodial by design»).
 - `bot/smart_wallet.py` builds + signs UserOperations (EIP-191) and drives
   `approveAndTrade` from the wallet's own USDC
 - Details: `docs/ARCHITECTURE.md` (Smart Wallet section)
 
 ### Breakthrough Base L2 Features
 
-5 killer functions leveraging unique Base L2 capabilities:
+4 killer functions leveraging unique Base L2 capabilities:
 
 #### 1. Gasless Onboarding
 **New users get 10 FREE transactions — zero barrier to entry.**
@@ -188,47 +192,9 @@ accounting backed by public proof-of-reserves.
                                   @creator: $10.00 every monthly
 ```
 
-**Why it's a breakthrough:** First Telegram bot with native recurring payments on Base. Creators can set up patronage, teams can automate salaries, communities can run membership programs — all trustless and automatic.
+**Why it matters:** the schedule lives in the bot's own Postgres and an hourly watcher debits the internal USDC balance — no external billing service, nothing to renew by hand. Creators use it for patronage, communities for paid memberships.
 
-#### 3. Batch Transactions
-**Multiple actions in ONE UserOperation — save 60% gas.**
-
-- Atomic execution — all succeed or all fail (transaction-style)
-- Gas savings: first action pays full 21k base gas, each additional saves ~60%
-- Example: tip + create_market + bet = 1 transaction instead of 3
-
-```python
-# Internally: one UserOperation executes:
-# 1. Tip @alice $5
-# 2. Create market "Will BTC hit 100k?"
-# 3. Bet $10 on YES
-# Gas saved: 30-75% depending on action count
-```
-
-**Why it's a breakthrough:** ERC-4337 batch operations are unique to Account Abstraction. This is a native L2 feature that Base exposes — traditional EOA wallets can't do this efficiently.
-
-#### 4. On-chain Credit Score
-**History-based reputation for P2P micro-lending — no collateral needed.**
-
-- `/credit` — view your credit score (300-850) and loan limit
-- Score computed from 5 factors:
-  - Payment history (40%) — success rate of transactions
-  - Account age (20%) — older = higher score
-  - Transaction volume (15%) — more activity = higher score
-  - Market participation (15%) — prediction market activity
-  - Social connections (10%) — unique counterparties
-- Grades: A (750+), B (650+), C (550+), D (450+), F (<450)
-- Max loan: base_limit × grade_multiplier × confidence
-
-```
-/credit -> Credit Score: 775 (A)
-           Confidence: 100%
-           Max loan: $1000.00
-```
-
-**Why it's a breakthrough:** Traditional DeFi requires collateral. This uses on-chain behavior to establish trust — enabling undercollateralized lending in Telegram communities. Perfect for micro-loans between people who tip and trade together.
-
-#### 5. Creator Tokens with Revenue Sharing
+#### 3. Creator Tokens with Revenue Sharing
 **Issue tokens that automatically distribute your earnings to holders.**
 
 - `/createtoken <name> <SYMBOL> <supply> <price>` — launch a creator token
@@ -292,7 +258,6 @@ A plain-language walkthrough for Telegram users lives in
 | `/balance` / `/stats` / `/top` / `/history` | Analytics |
 | `/gasless` | Check free gasless transactions |
 | `/subscribe @user <amt> <interval>` · `/subscriptions` · `/cancelsub` | Recurring payments |
-| `/credit` | On-chain credit score + loan limit |
 | `/createtoken <name> <SYM> <supply> <price>` | Launch a creator token |
 | `/buytoken <id> <amount>` · `/claim <id>` | Buy tokens / claim dividends |
 | `/basename` | Claim a Basename (on-chain identity) |
@@ -317,7 +282,8 @@ bot/
 │  ├─ ai.py             /ask AI assistant
 │  ├─ basename.py       /basename on-chain identity
 │  ├─ agent.py          /agent admin dashboard
-│  └─ breakthrough.py   /gasless, /subscribe, /credit, /createtoken
+│  ├─ admin.py          /admin — the owner's read-only panel
+│  └─ breakthrough.py   /gasless, /subscribe, /createtoken
 ├─ ledger/              PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
 │  ├─ __init__.py       Ledger facade + singletons + lmsr_* re-exports
 │  ├─ _core.py          connect/schema/ping
@@ -326,6 +292,8 @@ bot/
 │  ├─ _users.py         accounts, wallet links, create2
 │  ├─ _pay.py / _paywall.py / _transfer.py   x402, paywalls, transfers
 │  ├─ _withdraw.py      AML, batches, refunds
+│  ├─ _audit.py         audit_log rows: who did what to whose money
+│  ├─ _ai.py            the shared AI budget and provider health, as DB rows
 │  ├─ _bets.py / _markets.py   parimutuel + LMSR AMM (buy/sell/resolve)
 │  ├─ _onchain.py       on-chain outcome markets registry
 │  ├─ _recurring.py     subscription executor
@@ -334,9 +302,8 @@ bot/
 │  ├─ _messages.py / _notify.py / _admin.py / _views.py
 │  └─ _base.py          audit_log, MICRO, LMSR math
 ├─ base.py              web3 layer: USDC transfers, deposit scanning, tx decoding
-├─ chain/               relayer pool + on-chain helpers
+├─ chain/               on-chain helpers
 │  ├─ core.py           RPC, chain head, block polling
-│  ├─ relayers.py       persisted daily caps, multi-relayer pool
 │  ├─ transactions.py   tx status, receipts
 │  ├─ transfers.py      USDC transfer helpers
 │  ├─ tokens.py         token metadata, decimals
@@ -350,8 +317,6 @@ bot/
 ├─ smart_wallet.py      ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
 ├─ paymaster.py         Base Paymaster integration: gasless onboarding (10 free txs)
 ├─ recurring.py         Recurring payments: subscriptions executor (hourly watcher)
-─ batch.py              Batch transactions: multiple actions in one UserOperation
-├─ credit.py            Credit scoring: 300-850 P2P lending score
 ├─ creator_tokens.py    Revenue sharing: creator tokens + dividend distribution
 ├─ create2.py           CREATE2 deterministic address computation
 ├─ solvency.py          Proof-of-reserves: liabilities vs on-chain USDC
@@ -362,13 +327,16 @@ bot/
 ├─ x402_sweep.py        x402 invoice settlement sweeper
 ├─ onchain_market.py    OutcomeMarket contract ABI + helpers
 ├─ i18n.py              RU/EN/ZH message tables
+├─ fees.py              the one money notation: USDC labels, fee rates, percentages
+├─ tx_view.py           one tx_log row → one label (kind decides sign and counterparty)
 └─ config.py            env-driven configuration
 agent/                  autonomous market-maker: news → LLM → markets, EAS attestations
 web/
 ├─ server.py            FastAPI: public API, proof-of-reserves, x402 endpoints
 ├─ auth.py              Telegram OAuth, session cookies, rate limiting
 ├─ mini.py              Mini App: balance, tip, deposit, withdraw, markets
-─ x402.py               x402 handshake: invoice → verify → replay-proof credit
+├─ refusals.py          Refusal sentences, in the language the caller reads
+├─ x402.py              x402 handshake: invoice → verify → replay-proof credit
 ├─ x402_spec.py         x402 protocol spec + types
 ├─ metrics.py           Prometheus metrics endpoint
 ├─ frame.py             Farcaster Frame endpoints
@@ -384,13 +352,16 @@ contracts/
 ├─ LMSR.sol             on-chain LMSR market maker
 ├─ MiniUSDC.sol         minimal USDC mock for testing
 └─ USDCForwarder.sol    USDC transfer helper
+scripts/                deploy, smoke, backup, restore and the i18n check
+deploy/                 container entrypoint, launch supervisor, tunnel, oracle bootstrap
+functions/              the Cloudflare Pages edge: bundle assets, proxy the rest to the origin
 tests/                  real Postgres, real dispatcher, real crypto, local EVM
 ```
 ## Testing
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts
-python -m pytest -q -m "not production"   # 1121 passed
+python -m pytest -q -m "not production"   # 1184 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password
@@ -450,9 +421,12 @@ worst-case payout.
 
 - Per-user deposit addresses (CREATE2 vaults) 
 - ~~Smart Wallet (ERC-4337) + gasless paymaster~~ core shipped + Sepolia-proven (P2)
-- ~~Withdrawal batching for gas savings~~  shipped (queued payouts flushed as a batch; multi-relayer pool with persisted daily caps)
+- ~~Withdrawal batching for gas savings~~  shipped (queued payouts flushed as one vault batch, direct-send fallback)
 - Order-book style CLOB on top of the AMM
-- ~~On-chain market escrow (trustless resolution via UMA-style oracle)~~ shipped as **Cally** (OutcomeMarket ERC-1155)
+- ~~On-chain market escrow (resolution via a UMA-style oracle)~~ shipped as **Cally**
+  (OutcomeMarket ERC-1155): an oracle proposes, the owner has 2h to dispute. Not
+  trustless — with no `ORACLE_PRIVATE_KEY` configured the bot resolves through the
+  owner key, so one signature holds both roles.
 
 ## Contributing
 

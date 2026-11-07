@@ -35,16 +35,26 @@ class LedgerNotifyMixin:
 
 
 
-    def retry_notification(self, notif_id: int, backoff: int) -> None:
-        """Schedule a failed notification for retry with exponential backoff (max 3600s)."""
+    def retry_notification(self, notif_id: int, backoff: int = 30,
+                           max_retries: int = 10) -> None:
+        """Reschedule a failed notification with exponential backoff.
+
+        The delay doubles with every recorded attempt and is capped at an hour.
+        A row that fails `max_retries` times is dropped: Telegram answers
+        "bot was blocked" / "chat not found" permanently, and this queue is
+        drained oldest-first — a few undeliverable rows would otherwise be
+        retried forever and starve every deliverable notification behind them.
+        """
         import time as _time
-        delay = min(backoff * 2, 3600)
         with self._lock:
-            self._conn.execute(
+            row = self._conn.execute(
                 "UPDATE notification_outbox SET retries = retries + 1, "
-                "next_retry_at = %s WHERE id = %s",
-                (int(_time.time()) + delay, notif_id),
-            )
+                "next_retry_at = CAST(%s + LEAST(%s * POWER(2, retries), 3600) AS BIGINT) "
+                "WHERE id = %s RETURNING retries",
+                (int(_time.time()), int(backoff), notif_id),
+            ).fetchone()
+            if row is None or int(row["retries"]) >= max_retries:
+                self._conn.execute("DELETE FROM notification_outbox WHERE id = %s", (notif_id,))
             self._conn.commit()
 
 

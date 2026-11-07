@@ -22,11 +22,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from bot import base, config
+from bot import base, config, i18n
 from bot.ledger import IdempotencyDuplicate, blocked_destination
 from bot.ledger import async_ledger as ledger
 from bot.tx_view import rows_view
 from web.auth import COOKIE_NAME, SESSION_TTL_SECONDS, make_session, parse_session, secure_request
+from web.refusals import refuse, refuse_protocol
 
 router = APIRouter()
 log = logging.getLogger('web.mini')
@@ -45,28 +46,32 @@ INIT_DATA_FUTURE_SKEW = 300
 # the cap lives in exactly one place.
 HISTORY_ROWS = 10
 
-def verify_init_data(init_data: str) -> int:
-    """Validate Telegram Mini App initData, return tg_id."""
+def verify_init_data(init_data: str, request: Request | None = None) -> int:
+    """Validate Telegram Mini App initData, return tg_id.
+
+    `request` only carries a language; identity is what this function
+    establishes, so the refusal arrives in the product default.
+    """
     if not init_data or '=' not in init_data:
-        raise HTTPException(403, 'missing initData')
+        raise refuse_protocol(request, 403, 'api_miniapp_login_failed', 'missing initData')
     pairs = [p.split('=', 1) for p in init_data.split('&') if '=' in p]
     data: dict[str, str] = dict(pairs)
     received_hash = data.pop('hash', '')
     if not received_hash:
-        raise HTTPException(403, 'missing hash')
+        raise refuse_protocol(request, 403, 'api_miniapp_login_failed', 'missing hash')
     check_string = '\n'.join(f'{k}={data[k]}' for k in sorted(data))
     secret = hmac.new(b'WebAppData', config.BOT_TOKEN.encode(), hashlib.sha256).digest()
     expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, received_hash):
-        raise HTTPException(403, 'bad signature')
+        raise refuse_protocol(request, 403, 'api_miniapp_login_failed', 'bad signature')
     try:
         auth_date = int(data.get('auth_date', '0'))
     except ValueError:
-        raise HTTPException(403, 'bad auth_date') from None
+        raise refuse_protocol(request, 403, 'api_miniapp_login_failed', 'bad auth_date') from None
     if auth_date > int(time.time()) + INIT_DATA_FUTURE_SKEW:
-        raise HTTPException(403, 'auth_date in the future')
+        raise refuse_protocol(request, 403, 'api_miniapp_login_failed', 'auth_date in the future')
     if time.time() - auth_date > INIT_DATA_TTL:
-        raise HTTPException(403, 'stale initData')
+        raise refuse_protocol(request, 403, 'api_miniapp_login_failed', 'stale initData')
     try:
         # initData is form-urlencoded: the `user` value is a percent-encoded
         # JSON object ({"id":123,...} never appears literally). The HMAC above
@@ -74,7 +79,7 @@ def verify_init_data(init_data: str) -> int:
         user = _json.loads(urllib.parse.unquote(data['user']))
         return int(user['id'])
     except (KeyError, IndexError, ValueError, TypeError):
-        raise HTTPException(403, 'missing user') from None
+        raise refuse_protocol(request, 403, 'api_miniapp_login_failed', 'missing user') from None
 
 class InitAuth(BaseModel):
     initData: str
@@ -84,6 +89,10 @@ async def _user(request: Request) -> int:
     if tg_id is None:
         raise HTTPException(401, 'not logged in')
     await ledger.ensure_user(tg_id, None)
+    # Read once here, reused by every refusal this request raises and by
+    # /state's own rendering: the money endpoints would otherwise ask the
+    # settings table again per rejection, in the middle of a failed action.
+    request.state.lang = i18n.norm((await ledger.get_settings(tg_id)).get('lang'))
     return tg_id
 
 def _fmt(micro: int) -> float:
@@ -109,7 +118,7 @@ def _cap_micro(usdc: float) -> int:
 _money_last: dict[tuple[int, str], float] = {}
 
 
-def _throttle(tg_id: int, action: str) -> None:
+def _throttle(request: Request, tg_id: int, action: str) -> None:
     """Per-user cooldown for money actions, mirroring the Telegram handlers.
 
     The Mini App otherwise bypasses MONEY_CMD_COOLDOWN_SECONDS (it only had the
@@ -127,7 +136,7 @@ def _throttle(tg_id: int, action: str) -> None:
     now = time.time()
     last = _money_last.get(key, 0.0)
     if now - last < cooldown:
-        raise HTTPException(429, f'please wait {int(cooldown - (now - last)) + 1}s')
+        raise refuse(request, 429, 'api_cooldown', seconds=int(cooldown - (now - last)) + 1)
     if len(_money_last) > 100_000:
         cutoff = now - 3600
         for k in [k for k, v in _money_last.items() if v < cutoff]:
@@ -151,7 +160,7 @@ class _IdempotencyContext:
 
         async with _idempotent(request, 'tip', tg_id) as op:
             if not await ledger.transfer(..., idem=op.key):
-                raise HTTPException(400, 'insufficient balance')
+                raise refuse(request, 400, 'api_insufficient')
             return await op.reply({'ok': True, 'new_balance': ...})
 
     For a ledger action the key is NOT reserved here: the money primitive
@@ -175,7 +184,7 @@ class _IdempotencyContext:
         self.tg_id = tg_id
         raw_key = request.headers.get('Idempotency-Key', '').strip()
         if not raw_key:
-            raise HTTPException(400, 'missing Idempotency-Key header')
+            raise refuse(request, 400, 'api_retry')
         self.key = (_idempotency_hash(tg_id, action, raw_key), tg_id)
         self._replied = False
 
@@ -209,7 +218,7 @@ def _idempotent(request: Request, action: str, tg_id: int) -> _IdempotencyContex
 
 @router.post('/api/mini/auth', tags=['auth'])
 async def mini_auth(body: InitAuth, request: Request):
-    tg_id = verify_init_data(body.initData)
+    tg_id = verify_init_data(body.initData, request)
     username = None
     try:
         raw_user = next((v for k, v in (p.split('=', 1) for p in body.initData.split('&')) if k == 'user'))
@@ -244,7 +253,7 @@ async def mini_state(request: Request) -> dict:
     for view in await ledger.bulk_market_views([int(b['id']) for b in bet_rows]):
         pot = view['pot']
         bets.append({'id': view['id'], 'question': view['question'], 'creator': int(view['creator']['id']), 'pot_usdc': _fmt(pot), 'options': [{'index': o['index'], 'label': o['label'], 'pool_usdc': _fmt(o['pool']), 'chance_pct': round(100 * o['pool'] / pot, 1) if pot else 0.0} for o in view['options']]})
-    lang = (await ledger.get_settings(tg_id)).get('lang', 'ru')
+    lang = request.state.lang
     history = await rows_view(await ledger.history(tg_id, HISTORY_ROWS), lang, ledger)
     from bot import tip_targets
     top_rows = await ledger.leaderboard(5)
@@ -292,7 +301,7 @@ async def mini_smartwallet(request: Request) -> dict:
     """
     tg_id = await _user(request)
     if not _smart_wallet_enabled():
-        raise HTTPException(503, 'smart wallet not enabled')
+        raise refuse(request, 503, 'api_smart_disabled')
     from bot import smart_wallet as sw
 
     address = await asyncio.to_thread(sw.predict_address, tg_id)
@@ -325,9 +334,9 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
     deployed (it must already hold USDC).
     """
     tg_id = await _user(request)
-    _throttle(tg_id, 'smartbuy')
+    _throttle(request, tg_id, 'smartbuy')
     if not _smart_wallet_enabled():
-        raise HTTPException(503, 'smart wallet not enabled')
+        raise refuse(request, 503, 'api_smart_disabled')
     from bot import smart_wallet as sw
 
     # Server-side market validation BEFORE signing a sponsored UserOp: raw
@@ -335,26 +344,26 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
     # revert (internal re: turns a failed buy into a fee the operator pays).
     m = await ledger.get_onchain_market(body.market_id)
     if not m:
-        raise HTTPException(400, 'unknown on-chain market')
+        raise refuse(request, 400, 'api_oc_not_found')
     options = _json.loads(m['options'])
     if body.outcome < 0 or body.outcome >= len(options):
-        raise HTTPException(400, 'invalid outcome')
+        raise refuse(request, 400, 'api_bad_outcome')
     from bot import onchain_market as om
     try:
         info = await om.get_market_info(body.market_id)
     except Exception:
-        raise HTTPException(503, 'chain read failed') from None
+        raise refuse(request, 503, 'api_chain_unreadable') from None
     if info.get('resolved') or info.get('cancelled') or info.get('disputed'):
-        raise HTTPException(400, 'market settled')
+        raise refuse(request, 400, 'api_market_settled')
 
     if not await asyncio.to_thread(sw.is_deployed, tg_id):
-        raise HTTPException(400, 'smart account not deployed — deposit USDC first')
+        raise refuse(request, 400, 'api_smart_undeployed')
 
     # The account must actually hold enough USDC to cover the spend.
     balance_micro = await asyncio.to_thread(sw.smart_balance, tg_id)
     max_cost_micro = _to_micro(body.max_cost_usdc)
     if balance_micro < max_cost_micro:
-        raise HTTPException(400, 'insufficient smart-wallet USDC balance')
+        raise refuse(request, 400, 'api_smart_balance')
 
     async with _idempotent(request, 'smartbuy', tg_id) as op:
         tx_hash = await sw.smart_buy(
@@ -365,30 +374,30 @@ async def mini_smartbuy(body: SmartBuyBody, request: Request) -> dict:
 class TipBody(BaseModel):
     to: str = Field(min_length=1, max_length=32)
     amount: Decimal = Field(gt=0, allow_inf_nan=False)
-_ERR_MSG = {'closed': 'market closed', 'deadline': 'deadline passed', 'badopt': 'no such option', 'balance': 'insufficient balance'}
-# create_market's failure words, as the user must act on them.
-_MARKET_FAIL = {
-    'balance': 'insufficient balance to fund the subsidy',
-    'subsidy': 'subsidy too small for this many options',
-}
+# The ledger's failure words, as the user has to act on them: each maps to
+# the sentence the screen shows, and an unlisted status falls to the generic
+# refusal instead of echoing an internal code back at the visitor.
+_ERR_MSG = {'closed': 'api_market_closed', 'deadline': 'api_deadline_passed',
+            'badopt': 'api_no_such_option', 'balance': 'api_insufficient'}
+_MARKET_FAIL = {'balance': 'api_subsidy_insufficient', 'subsidy': 'api_subsidy_too_small'}
 
 @router.post('/api/mini/tip', tags=['users'])
 async def mini_tip(body: TipBody, request: Request) -> dict:
     tg_id = await _user(request)
-    _throttle(tg_id, 'tip')
+    _throttle(request, tg_id, 'tip')
     micro = _to_micro(body.amount)
     if micro <= 0:
-        raise HTTPException(400, 'amount must be positive')
+        raise refuse(request, 400, 'api_amount_positive')
     max_micro = _cap_micro(config.MAX_TIP_USDC)
     if micro > max_micro:
-        raise HTTPException(400, f'tip exceeds the {_fmt(max_micro)} USDC cap')
+        raise refuse(request, 400, 'api_cap_tip', cap=_fmt(max_micro))
     to = body.to.strip().lstrip('@')
     # Basenames first (name.base.eth -> on-chain address -> tg_id), then the
     # Telegram-username path, then a raw numeric tg_id.
     from bot import tip_targets
     target, bn_err = await tip_targets.resolve_tip_target(to)
     if bn_err:
-        raise HTTPException(404, f'unknown basename @{to}')
+        raise refuse(request, 404, 'api_basename_unknown', to=to)
     if target is None:
         target = await ledger.find_by_username(to)
     if target is None and to.isdigit():
@@ -397,12 +406,12 @@ async def mini_tip(body: TipBody, request: Request) -> dict:
         # Never mint a phantom user for a mistyped id: transfer() would create
         # one and the funds would be locked there forever (and inflate the
         # public Proof-of-Reserves liabilities).
-        raise HTTPException(404, f'user @{to} not found — they must open the bot first')
+        raise refuse(request, 404, 'api_user_not_found', to=to)
     if target == tg_id:
-        raise HTTPException(400, 'cannot tip yourself')
+        raise refuse(request, 400, 'api_tip_self')
     async with _idempotent(request, 'tip', tg_id) as op:
         if not await ledger.transfer(tg_id, target, micro, idem=op.key):
-            raise HTTPException(400, 'insufficient balance')
+            raise refuse(request, 400, 'api_insufficient')
         return await op.reply({'ok': True, 'new_balance': float(await ledger.balance(tg_id))})
 
 class TradeBody(BaseModel):
@@ -413,17 +422,17 @@ class TradeBody(BaseModel):
 @router.post('/api/mini/trade', tags=['markets'])
 async def mini_trade(body: TradeBody, request: Request) -> dict:
     tg_id = await _user(request)
-    _throttle(tg_id, 'trade')
+    _throttle(request, tg_id, 'trade')
     micro = _to_micro(body.amount)
     if micro <= 0:
-        raise HTTPException(400, 'amount must be positive')
+        raise refuse(request, 400, 'api_amount_positive')
     max_micro = _cap_micro(config.MARKET_MAX_TRADE_USDC)
     if micro > max_micro:
-        raise HTTPException(400, f'trade exceeds the {_fmt(max_micro)} USDC cap')
+        raise refuse(request, 400, 'api_cap_trade', cap=_fmt(max_micro))
     async with _idempotent(request, 'trade', tg_id) as op:
         status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro, idem=op.key)
         if status != 'ok':
-            raise HTTPException(400, _ERR_MSG.get(status, status))
+            raise refuse(request, 400, _ERR_MSG.get(status, 'api_error_generic'))
         bal = float(await ledger.balance(tg_id))
         pos = await ledger.user_market_position(body.market_id, tg_id) or {}
         return await op.reply({'ok': True, 'info': info, 'new_balance': bal, 'position': pos})
@@ -436,17 +445,17 @@ class BetPlaceBody(BaseModel):
 @router.post('/api/mini/betplace', tags=['markets'])
 async def mini_betplace(body: BetPlaceBody, request: Request) -> dict:
     tg_id = await _user(request)
-    _throttle(tg_id, 'betplace')
+    _throttle(request, tg_id, 'betplace')
     micro = _to_micro(body.amount)
     if micro <= 0:
-        raise HTTPException(400, 'amount must be positive')
+        raise refuse(request, 400, 'api_amount_positive')
     max_micro = _cap_micro(config.MAX_BET_USDC)
     if micro > max_micro:
-        raise HTTPException(400, f'bet exceeds the {_fmt(max_micro)} USDC cap')
+        raise refuse(request, 400, 'api_cap_bet', cap=_fmt(max_micro))
     async with _idempotent(request, 'betplace', tg_id) as op:
         res = await ledger.place_bet(body.bet_id, tg_id, body.option, micro, idem=op.key)
         if res != 'ok':
-            raise HTTPException(400, _ERR_MSG.get(res, res))
+            raise refuse(request, 400, _ERR_MSG.get(res, 'api_error_generic'))
         return await op.reply({'ok': True, 'new_balance': float(await ledger.balance(tg_id))})
 
 _ADDR_RE = re.compile(r'^0x[a-fA-F0-9]{40}$')
@@ -454,17 +463,13 @@ _ADDR_RE = re.compile(r'^0x[a-fA-F0-9]{40}$')
 # Refusal copy keyed by the reason blocked_destination() / reserve_withdraw()
 # actually returned — the same taxonomy the Telegram handler shows.
 _WD_BLOCK_MSG = {
-    'zero': 'the zero address burns funds — pick your own wallet address',
-    'hot_wallet': "that is the bot's own wallet; withdraw to a personal (EOA) address",
-    'vault': "that is the bot's vault; withdraw to a personal (EOA) address",
-    'x402': 'that is the x402 receive pool; withdraw to a personal (EOA) address',
+    'zero': 'api_wd_zero',
+    'hot_wallet': 'api_wd_bot_wallet',
+    'vault': 'api_wd_vault',
+    'x402': 'api_wd_x402',
 }
 
-_WD_REFUSAL = {
-    'cap': 'daily withdrawal limit reached',
-    'blocked': 'the destination was refused as a bot-owned address',
-    'balance': 'insufficient balance',
-}
+_WD_REFUSAL = {'cap': 'api_wd_cap', 'blocked': 'api_wd_refused', 'balance': 'api_insufficient'}
 
 
 def _exact(micro: int) -> str:
@@ -497,32 +502,32 @@ async def mini_withdraw(body: WithdrawStageBody, request: Request) -> dict:
     tg_id = await _user(request)
     addr = body.address.strip()
     if not _ADDR_RE.match(addr):
-        raise HTTPException(400, 'invalid address')
+        raise refuse(request, 400, 'api_address_invalid')
     from eth_utils import is_address
     if not is_address(addr):
-        raise HTTPException(400, 'invalid address')
+        raise refuse(request, 400, 'api_address_invalid')
     # First-party destinations burn the money; refused before the RPC probe.
     blocked = blocked_destination(addr)
     if blocked:
-        raise HTTPException(400, _WD_BLOCK_MSG.get(blocked, 'destination refused'))
+        raise refuse(request, 400, _WD_BLOCK_MSG.get(blocked, 'api_wd_refused'))
     micro = _to_micro(body.amount)
     if micro <= 0:
-        raise HTTPException(400, 'amount must be positive')
+        raise refuse(request, 400, 'api_amount_positive')
     min_micro = _cap_micro(config.MIN_WITHDRAW_USDC)
     if micro < min_micro:
-        raise HTTPException(400, f'below the {_exact(min_micro)} USDC minimum')
+        raise refuse(request, 400, 'api_wd_minimum', min=_exact(min_micro))
     if await ledger.withdrawals_today(tg_id) >= config.MAX_WITHDRAWS_PER_DAY:
-        raise HTTPException(400, f'daily limit of {config.MAX_WITHDRAWS_PER_DAY} withdrawals reached')
-    _throttle(tg_id, 'withdraw')
+        raise refuse(request, 400, 'api_wd_daily_limit', limit=config.MAX_WITHDRAWS_PER_DAY)
+    _throttle(request, tg_id, 'withdraw')
     from bot.chain.network import is_contract
     if await is_contract(addr):
-        raise HTTPException(400, 'the destination is a contract, not a wallet — funds would be lost')
+        raise refuse(request, 400, 'api_wd_contract')
     fee_micro = base.withdraw_fee(micro)
     total_micro = micro + fee_micro
     bal = Decimal(await ledger.balance(tg_id))
     if bal < Decimal(total_micro) / Decimal(MICRO):
-        raise HTTPException(400, f'insufficient balance: need {_exact(total_micro)}, '
-                                 f'have {_exact(int(bal * MICRO))}')
+        raise refuse(request, 400, 'api_wd_shortfall',
+                     need=_exact(total_micro), have=_exact(int(bal * MICRO)))
     token = await ledger.stage_withdraw(tg_id, addr, micro, fee_micro)
     after_micro = int(bal * MICRO) - total_micro
     return {
@@ -545,7 +550,7 @@ async def mini_withdraw_confirm(body: WithdrawConfirmBody, request: Request) -> 
     tg_id = await _user(request)
     staged = await ledger.take_withdraw(tg_id, body.token)
     if staged is None:
-        raise HTTPException(410, 'that withdrawal request expired or was already used')
+        raise refuse(request, 410, 'api_wd_expired')
     if not body.confirm:
         return {'ok': False, 'cancelled': True,
                 'new_balance': float(await ledger.balance(tg_id))}
@@ -558,7 +563,7 @@ async def mini_withdraw_confirm(body: WithdrawConfirmBody, request: Request) -> 
         log.warning('AML flags on Mini App withdrawal for %s: %s', tg_id, warnings)
     wd_id, reason = await ledger.reserve_withdraw(tg_id, to_address, amount_micro, fee_micro)
     if wd_id is None:
-        raise HTTPException(400, _WD_REFUSAL.get(reason, 'withdrawal refused'))
+        raise refuse(request, 400, _WD_REFUSAL.get(reason, 'api_error_generic'))
     return {
         'ok': True,
         'queued': True,
@@ -577,7 +582,7 @@ async def mini_onchain_market(market_id: int, request: Request) -> dict:
     from bot import onchain_market as om
     m = await ledger.get_onchain_market(market_id)
     if not m:
-        raise HTTPException(404, 'on-chain market not found')
+        raise refuse(request, 404, 'api_oc_not_found')
     options = _json.loads(m['options'])
     prices = await om.market_prices(market_id, len(options))
     info = await om.get_market_info(market_id)
@@ -627,24 +632,24 @@ def _parse_deadline(hours: float | None) -> int | None:
 @router.post('/api/mini/create', tags=['markets'])
 async def mini_create(body: CreateBody, request: Request) -> dict:
     tg_id = await _user(request)
-    _throttle(tg_id, 'create')
+    _throttle(request, tg_id, 'create')
     question = body.question.strip()
     options = [o.strip() for o in body.options if o.strip()]
     if len(question) < 5 or len(options) < 2:
-        raise HTTPException(400, 'question too short or fewer than 2 options')
+        raise refuse(request, 400, 'api_question_short')
     if len(options) > 4 or max(len(o) for o in options) > 64:
-        raise HTTPException(400, 'max 4 options, 64 chars each')
+        raise refuse(request, 400, 'api_options_limit')
     if len(question) > 200:
-        raise HTTPException(400, 'question too long (max 200 chars)')
+        raise refuse(request, 400, 'api_question_long')
     close_at = _parse_deadline(body.hours)
     if body.kind == 'market':
         subsidy_micro = _to_micro(body.subsidy_usdc)
         min_micro = _cap_micro(config.MARKET_MIN_SUBSIDY_USDC)
         max_micro = _cap_micro(config.MARKET_MAX_SUBSIDY_USDC)
         if subsidy_micro < min_micro:
-            raise HTTPException(400, f'subsidy below the {_fmt(min_micro)} USDC minimum')
+            raise refuse(request, 400, 'api_subsidy_min', min=_fmt(min_micro))
         if subsidy_micro > max_micro:
-            raise HTTPException(400, f'subsidy above the {_fmt(max_micro)} USDC maximum')
+            raise refuse(request, 400, 'api_subsidy_max', max=_fmt(max_micro))
         async with _idempotent(request, 'create_market', tg_id) as op:
             mid = await ledger.create_market(
                 tg_id, question, options, subsidy_micro, close_at=close_at, idem=op.key
@@ -652,13 +657,12 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
             # create_market answers with the id OR with a failure word — passing
             # 'balance' through used to report a market that was never created.
             if isinstance(mid, str):
-                raise HTTPException(400, _MARKET_FAIL.get(mid, mid))
+                raise refuse(request, 400, _MARKET_FAIL.get(mid, 'api_error_generic'))
             return await op.reply({'ok': True, 'id': mid}, result_id=str(mid))
     if body.kind == 'bet':
         async with _idempotent(request, 'create_bet', tg_id) as op:
             bid = await ledger.create_bet(tg_id, question, options, close_at=close_at, idem=op.key)
             return await op.reply({'ok': True, 'id': bid}, result_id=str(bid))
-    raise HTTPException(400, 'kind must be market or bet')
 
 class LangBody(BaseModel):
     lang: Literal['ru', 'en', 'zh']
@@ -668,6 +672,16 @@ async def mini_lang(body: LangBody, request: Request) -> dict:
     tg_id = await _user(request)
     await ledger.set_setting(tg_id, 'lang', body.lang)
     return {'ok': True, 'lang': body.lang}
+
+# The one share image the bundle has, at the path the bundle serves it from:
+# ``pages_build_output_dir`` is ``web/static``, so the URL a crawler fetches has
+# no ``/static/`` in it. A picture that 404s is a card the platform draws
+# without one, so every absolute card — og:image, twitter:image,
+# fc:miniapp.imageUrl (spelled in the template), fc:frame:image — names this
+# file, and test_no_share_image_points_at_a_path_the_bundle_does_not_have
+# resolves each one against the directory.
+SHARE_IMAGE = "/miniapp-hero.png"
+
 
 def public_base_url() -> str:
     """https://host part where the Mini App lives (used for WebApp buttons).

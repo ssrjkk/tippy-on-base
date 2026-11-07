@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import os
+import re
 import time
 from decimal import ROUND_CEILING, Decimal
 
@@ -368,7 +369,9 @@ def test_global_stats_is_one_statement_and_one_snapshot(ledger):
     assert s["tips_micro"] == sum_for("tip")
     assert s["deposits_micro"] == sum_for("deposit")
     assert s["fees_micro"] == sum_for("fee")
-    assert s["volume_micro"] == sum_for("tip") + sum_for("deposit") + sum_for("bet") + sum_for("x402")
+    from bot.ledger._views import VOLUME_KINDS
+
+    assert s["volume_micro"] == sum(sum_for(k) for k in VOLUME_KINDS)
     assert s["users"] >= 2
     assert s["transactions"] == int(real(
         "SELECT COUNT(*) AS c FROM tx_log WHERE NOT (kind = ANY(%s))",
@@ -1392,9 +1395,52 @@ def test_volume_history_and_30d(ledger):
     bid = ledger.create_bet(ALICE, "Q", ["А", "Б"])
     ledger.place_bet(bid, ALICE, 0, 10_000_000)  # bet 10
     hist = ledger.volume_history(14)
-    assert len(hist) == 1
-    assert hist[0]["volume_micro"] == 130_000_000
+    # One row per day, zero-filled: a sparse series drew a lonely bar under a
+    # "last 14 days" heading.
+    assert len(hist) == 14
+    assert sum(r["volume_micro"] for r in hist) == 130_000_000
+    assert hist[-1]["volume_micro"] == 130_000_000  # today is the last bucket
+    assert [r["volume_micro"] for r in hist[:-1]] == [0] * 13
     assert ledger.global_stats()["volume_30d_micro"] == 130_000_000
+
+
+def test_volume_includes_lmsr_purchases_and_books_an_exit_once(ledger):
+    """The landing page lists share purchases in the volume legend, so a
+    market_buy has to be counted — and its market_sell must not be: the same
+    USDC was already counted when it entered the market. The creator's subsidy is
+    counted like a pool stake, because it is the same shape of money."""
+    fund(ledger, ALICE, 100_000_000)
+    fund(ledger, CAROL, 10_000_000)  # the creator funds the AMM subsidy
+    mid = ledger.create_market(CAROL, "Q?", ["А", "Б"], 10_000_000)
+    assert isinstance(mid, int)
+    status, info = ledger.buy_shares(mid, ALICE, 0, 5_000_000)
+    assert status == "ok", status
+    # Two deposits (the second funds the subsidy), the subsidy, the purchase.
+    assert ledger.global_stats()["volume_micro"] == 125_000_000
+
+    status, _ = ledger.sell_shares(mid, ALICE, 0, info["shares"])
+    assert status == "ok", status
+    assert ledger.global_stats()["volume_micro"] == 125_000_000
+
+
+def test_volume_counts_content_purchases_but_not_the_earnings_mirror(ledger):
+    """A paywalled post and a paid channel subscription are USDC a user spends
+    inside the bot, so the published volume has to include them — while the
+    creator's `paywall_earn` / `channel_earn` row is the same movement seen from
+    the other account and would book it twice."""
+    from bot.ledger._views import VOLUME_KINDS
+
+    fund(ledger, ALICE, 50_000_000)
+    fund(ledger, BOB, 1_000_000)  # owner of the post and of the channel
+    item = ledger.create_paywall(BOB, "Пост", 20_000_000, "текст за платёжом")
+    assert item is not None
+    assert ledger.buy_paywall(ALICE, item) == "ok"
+    assert ledger.set_paywall_channel(-10020, BOB, 5_000_000) is True
+    assert ledger.subscribe_channel(-10020, ALICE) == "ok"
+
+    # 50 + 1 deposited, 20 for the post, 5 for the channel.
+    assert ledger.global_stats()["volume_micro"] == 76_000_000
+    assert not {"paywall_earn", "channel_earn"} & set(VOLUME_KINDS)
 
 
 def test_all_users(ledger):
@@ -1878,6 +1924,38 @@ def test_alembic_runs_are_serialised_within_one_process(monkeypatch):
     assert peak == [1] * 4, f"overlapping alembic runs: {peak}"
 
 
+@pytest.mark.parametrize("has_trades", [True, False])
+def test_token_trade_downgrade_preserves_financial_history(monkeypatch, has_trades):
+    import importlib.util
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    from sqlalchemy.engine import Connection, CursorResult
+
+    filename = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "017_token_trade_kinds.py"
+    spec = importlib.util.spec_from_file_location("token_trade_migration", filename)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    connection = MagicMock(spec=Connection)
+    result = MagicMock(spec=CursorResult)
+    result.scalar.return_value = 1 if has_trades else None
+    connection.execute.return_value = result
+    writes = []
+    monkeypatch.setattr(migration.op, "get_bind", lambda: connection)
+    monkeypatch.setattr(migration.op, "execute", writes.append)
+    if has_trades:
+        with pytest.raises(RuntimeError, match="financial"):
+            migration.downgrade()
+        assert not writes
+    else:
+        migration.downgrade()
+        assert len(writes) == 2
+        assert all("DELETE" not in statement for statement in writes)
+    assert connection.execute.call_count == 1
+    assert "token_buy" in str(connection.execute.call_args.args[0])
+    assert "token_sale" in str(connection.execute.call_args.args[0])
+
+
 def test_env_py_still_reads_database_url_for_a_plain_cli_run(ledger, monkeypatch):
     """`alembic upgrade head` from the docker entrypoint passes no attributes."""
     import pathlib
@@ -1966,8 +2044,159 @@ def test_concurrent_buy_shares_no_insolvency(ledger):
     assert escrow >= total_shares
 
 
-# ---------- P2: Smart Wallet ----------
+RACE_ADDR = "0x" + "ab" * 20
 
+
+def _run_parallel(fns):
+    """Run each callable in its own thread over its own Ledger connection.
+
+    Real cross-process races are reproduced here: worker connections are
+    separate sessions, so only Postgres atomicity (guarded UPDATE, unique
+    keys, row locks) can keep the money correct — the in-process RLock of
+    the fixture's ledger coordinates nothing between them.
+    """
+    import threading
+
+    results, errors = {}, {}
+
+    def wrap(i, fn):
+        try:
+            results[i] = fn()
+        except Exception as e:  # noqa: BLE001 — the test turns it into evidence
+            errors[i] = e
+
+    threads = [threading.Thread(target=wrap, args=(i, fn)) for i, fn in enumerate(fns)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(120)
+    return results, errors
+
+
+def test_concurrent_withdraws_cannot_overdraft(ledger):
+    """Twelve bot processes race to withdraw 60 USDC from a 100 USDC balance.
+
+    The guarded `UPDATE ... WHERE balance >= total` must let exactly one
+    debit through; the rest re-read the committed row after the lock wait
+    and report 'balance'. Anything else is money creation or a stuck lock.
+    """
+    fund(ledger, ALICE, 100_000_000)
+    # No open read transaction on the main connection: the worker
+    # constructors run DDL (ACCESS EXCLUSIVE) and would wait on it.
+    ledger._conn.rollback()
+    conns = [Ledger(TEST_DB_URL) for _ in range(12)]
+    try:
+        results, errors = _run_parallel(
+            [lambda c=c: c.reserve_withdraw(ALICE, RACE_ADDR, 60_000_000, 0) for c in conns]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert not errors, f"thread errors: {errors}"
+    outcomes = [results[i] for i in range(len(conns))]
+    won = [(wd_id, reason) for wd_id, reason in outcomes if wd_id is not None]
+    assert len(won) == 1, f"expected exactly one winner, got {outcomes}"
+    assert [reason for wd_id, reason in outcomes if wd_id is None] == ["balance"] * 11
+    assert ledger.balance(ALICE) == Decimal("40.000000")
+    rows = ledger._conn.execute(
+        "SELECT amount FROM tx_log WHERE kind = 'withdraw'"
+    ).fetchall()
+    assert [int(r["amount"]) for r in rows] == [60_000_000]
+
+
+def test_concurrent_duplicate_bet_charges_once(ledger):
+    """Twelve requests carrying the SAME Idempotency-Key race on one bet.
+
+    The key row is inserted inside the money transaction, so duplicates
+    serialize on the primary key: one stake lands, eleven calls raise
+    IdempotencyDuplicate, and the pot holds a single 10 USDC position.
+    """
+    from bot.ledger import IdempotencyDuplicate
+
+    fund(ledger, ALICE, 100_000_000)
+    bet_id = ledger.create_bet(CAROL, "Race?", ["A", "B"], close_at=int(time.time()) + 3600)
+    ledger._conn.rollback()
+    key = "a" * 64
+    conns = [Ledger(TEST_DB_URL) for _ in range(12)]
+    try:
+        results, errors = _run_parallel(
+            [lambda c=c: c.place_bet(bet_id, ALICE, 0, 10_000_000, idem=(key, ALICE)) for c in conns]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert list(results.values()) == ["ok"], f"results={results}, errors={errors}"
+    assert len(errors) == 11, errors
+    assert all(isinstance(e, IdempotencyDuplicate) for e in errors.values()), errors
+    assert ledger.balance(ALICE) == Decimal("90.000000")
+    positions = ledger.bet_positions(bet_id)
+    assert sum(int(p["amount"]) for p in positions) == 10_000_000
+
+
+def test_concurrent_bets_with_distinct_keys_never_overdraft(ledger):
+    """Twelve distinct-key bets of 10 USDC against a 100 USDC balance.
+
+    Ten must land and two must be refused for funds — never eleven debits,
+    and never a negative balance, however the row locks interleave.
+    """
+    fund(ledger, ALICE, 100_000_000)
+    bet_id = ledger.create_bet(CAROL, "Race?", ["A", "B"], close_at=int(time.time()) + 3600)
+    ledger._conn.rollback()
+    conns = [Ledger(TEST_DB_URL) for _ in range(12)]
+    try:
+        results, errors = _run_parallel(
+            [
+                lambda i=i, c=c: c.place_bet(
+                    bet_id, ALICE, i % 2, 10_000_000, idem=(f"{i:064d}", ALICE)
+                )
+                for i, c in enumerate(conns)
+            ]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert not errors, f"thread errors: {errors}"
+    outcomes = sorted(results.values())
+    assert outcomes == ["balance"] * 2 + ["ok"] * 10, outcomes
+    assert ledger.balance(ALICE) == 0
+    positions = ledger.bet_positions(bet_id)
+    assert sum(int(p["amount"]) for p in positions) == 100_000_000
+
+
+def test_concurrent_refund_of_one_withdraw_credits_once(ledger):
+    """Two reconciliation paths racing to refund the same withdrawal.
+
+    The status flip (`... NOT IN ('done','refunded') RETURNING id`) is the
+    gate: exactly one caller wins the flip and credits; the loser must not
+    pay a second time. Without it a crash-sweep overlap doubles the money.
+    """
+    fund(ledger, ALICE, 10_000_000)
+    wd_id, reason = ledger.reserve_withdraw(ALICE, RACE_ADDR, 5_000_000, 50_000)
+    assert wd_id is not None and reason == ""
+    assert ledger.balance(ALICE) == Decimal("4.950000")
+    ledger._conn.rollback()
+    conns = [Ledger(TEST_DB_URL) for _ in range(4)]
+    try:
+        results, errors = _run_parallel(
+            [lambda c=c: c.refund_withdraw(wd_id, ALICE, 5_050_000) for c in conns]
+        )
+    finally:
+        for c in conns:
+            c.close()
+
+    assert not errors, f"thread errors: {errors}"
+    assert sorted(results.values()) == [False, False, False, True]
+    assert ledger.balance(ALICE) == Decimal("10.000000")
+    refunds = ledger._conn.execute(
+        "SELECT amount FROM tx_log WHERE kind = 'withdraw_refund'"
+    ).fetchall()
+    assert [int(r["amount"]) for r in refunds] == [5_050_000]
+
+
+# ---------- P2: Smart Wallet ----------
 
 def test_smart_wallet_lifecycle(ledger):
     fund(ledger, ALICE, 10_000_000)
@@ -1997,3 +2226,34 @@ def test_smart_wallet_deployed_flag(ledger):
     addr = "0x" + "cd" * 20
     ledger.set_smart_wallet(ALICE, addr)
     assert ledger.get_smart_wallet(ALICE)["smart_deployed"] is True
+
+
+LEDGER_CALL_RE = re.compile(r"(?:_ledger|ledger|async_ledger|led)\.([a-zA-Z_][a-zA-Z0-9_]*)\(")
+
+
+def test_every_ledger_call_site_resolves_on_the_real_class():
+    """`bot/credit.py` called five Ledger methods that were never written, so
+    `/credit` answered every user with an AttributeError — and its own test was
+    green because it handed the scorer a dict of its own invention. A call site
+    is checked against the class here, so a ledger API that does not exist cannot
+    be merged, and no test can invent one."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    real = {name for name in dir(Ledger) if not name.startswith("__")}
+
+    unresolved: dict[str, list[str]] = {}
+    for pkg in ("bot", "web", "agent", "deploy", "scripts"):
+        for dirpath, _dirs, files in os.walk(os.path.join(root, pkg)):
+            for fname in files:
+                if not fname.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, fname)
+                with open(path, encoding="utf-8") as handle:
+                    for name in LEDGER_CALL_RE.findall(handle.read()):
+                        if name not in real:
+                            rel = os.path.relpath(path, root).replace("\\", "/")
+                            unresolved.setdefault(name, []).append(rel)
+
+    assert not unresolved, (
+        f"Ledger has no {sorted(unresolved)} — "
+        + "; ".join(f"{m}() called from {', '.join(set(sites))}" for m, sites in sorted(unresolved.items()))
+    )

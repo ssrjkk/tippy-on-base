@@ -15,6 +15,12 @@ if (scrollProgress) {
 const fmtUSDC = (x) =>
   (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
 
+// Probability display may round, but configured fees must preserve their stated rate.
+const fmtPct = (x) =>
+  (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
+const fmtFeePct = (x) =>
+  (x ?? 0).toLocaleString("ru-RU", { maximumSignificantDigits: 15 }) + "%";
+
 /* ---------- reveal-on-scroll ---------- */
 /* threshold 0.1 meant a section taller than ten viewports could never reach
  * 10% visibility and stayed transparent; any pixel entering the band above
@@ -165,8 +171,8 @@ function renderTerms(info) {
   if (!el || !info.limits || !info.fees) return;
   const L = info.limits, F = info.fees;
   const rows = [
-    ["Комиссия на вывод", F.withdraw_pct + "%"],
-    ["Комиссия с выигрыша", F.win_pct + "%"],
+    ["Комиссия на вывод", fmtFeePct(F.withdraw_pct)],
+    ["Комиссия с выигрыша", fmtFeePct(F.win_pct)],
     ["Максимум чаевых за раз", fmtUSDC(L.max_tip_usdc) + " USDC"],
     ["Максимум ставки за раз", fmtUSDC(L.max_bet_usdc) + " USDC"],
     ["Максимум сделки на рынке", fmtUSDC(L.max_trade_usdc) + " USDC"],
@@ -221,14 +227,16 @@ async function loadVolumeChart() {
     const r = await fetch("/api/volume_history?days=14");
     const days = await r.json();
     const el = $("volume-chart");
-    if (!days.length) {
+    const max = Math.max(...days.map((d) => d.volume_usdc), 0);
+    if (max <= 0) {
       el.innerHTML = '<div class="empty">Пока нет данных — объём появится после первых операций</div>';
       return;
     }
-    const max = Math.max(...days.map((d) => d.volume_usdc), 1);
+    // A zero day draws no bar: `.chart-bar` has a 2px min-height, so a bar
+    // element would paint volume the ledger does not hold.
     el.innerHTML = days.map((d, i) => `
       <div class="chart-col" title="${fmtDay(d.day)}: ${fmtUSDC(d.volume_usdc)} USDC">
-        <div class="chart-plot"><div class="chart-bar" aria-hidden="true" style="height:${Math.max(d.volume_usdc / max * 100, 2)}%;animation-delay:${Math.min(i * 60, 600)}ms"></div></div>
+        <div class="chart-plot">${d.volume_usdc > 0 ? `<div class="chart-bar" aria-hidden="true" style="height:${Math.max(d.volume_usdc / max * 100, 2)}%;animation-delay:${Math.min(i * 60, 600)}ms"></div>` : ""}</div>
         <div class="chart-day">${fmtDay(d.day)}</div>
       </div>`).join("");
   } catch (e) {
@@ -316,7 +324,7 @@ function marketCard(m, i) {
     <div class="option${isWinner ? " option-winner" : ""}">
       <div class="option-top">
         <span class="option-label">${escapeHtml(o.label)}</span>
-        <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${escapeHtml(String(o.probability))}% · ${escapeHtml(String(o.backers))} чел.</span>
+        <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${fmtPct(o.probability)} · ${escapeHtml(String(o.backers))} чел.</span>
       </div>
       <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
@@ -380,7 +388,7 @@ function predictionCard(m, i) {
     <div class="option${isWinner ? " option-winner" : ""}">
       <div class="option-top">
         <span class="option-label">${escapeHtml(o.label)}</span>
-        <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
+        <span class="option-val">${fmtPct(o.price_pct)}</span>
       </div>
       <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
@@ -419,7 +427,7 @@ function renderHeroSpot(markets) {
       <div class="option">
         <div class="option-top">
           <span class="option-label">${escapeHtml(o.label)}</span>
-          <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
+          <span class="option-val">${fmtPct(o.price_pct)}</span>
         </div>
         <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%"></div></div>
       </div>`).join("")}
@@ -509,7 +517,7 @@ async function loadOnchainMarkets() {
         <div class="option${isWinner ? " option-winner" : ""}">
           <div class="option-top">
             <span class="option-label">${escapeHtml(o.label)}</span>
-            <span class="option-val">${escapeHtml(String(o.price_pct))}%</span>
+            <span class="option-val">${fmtPct(o.price_pct)}</span>
           </div>
           <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
         </div>`;

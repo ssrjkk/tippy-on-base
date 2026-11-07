@@ -13,7 +13,7 @@ from decimal import Decimal
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from .. import base, batch, config, credit, i18n, paymaster, wallets
+from .. import base, config, i18n, paymaster, wallets
 from .. import qr as qrlib
 from ..creator_tokens import registry as creator_tokens
 from ..ledger import async_ledger as ledger
@@ -25,6 +25,7 @@ __all__ = [
     "AMOUNT_RE",
     "BET_ID_RE",
     "BET_LINK_RE",
+    "BTN_TEXT_LIMIT",
     "DEADLINE_RE",
     "DONATE_LINK_RE",
     "KIND_EMOJI",
@@ -48,10 +49,9 @@ __all__ = [
     "_throttle",
     "_to_micro",
     "base",
-    "batch",
+    "btn_text",
     "config",
     "creator_tokens",
-    "credit",
     "ledger",
     "paymaster",
     "qrlib",
@@ -191,7 +191,7 @@ async def require_private(message: types.Message) -> bool:
 
 
 def help_text(lang: str = "ru") -> str:
-    return i18n.t(lang, "help_full")
+    return i18n.help_text(lang)
 
 
 KIND_EMOJI = {
@@ -221,11 +221,40 @@ KIND_EMOJI = {
 
 _bot_username: str | None = None
 
+# Telegram's own hard limit on inline keyboard button text. Exceeding it does
+# not shorten one label: the API refuses the whole keyboard, so the screen the
+# user tapped stays frozen and the action behind it never happens.
+BTN_TEXT_LIMIT = 64
+
+
+def btn_text(text: object) -> str:
+    """A button label Telegram will accept: plain text, at most 64 characters.
+
+    Every label carrying text the bot does not write — a market question, an
+    on-chain option string, a wallet slot name, a username — goes through here.
+    Markup is not escaped on purpose: inline buttons are not message text, so
+    `&amp;` in a label is not hidden by the client, it is printed to the user.
+    """
+    s = str(text)
+    if len(s) <= BTN_TEXT_LIMIT:
+        return s
+    return s[:BTN_TEXT_LIMIT - 1] + "…"
+
 
 def _fmt(amount_micro: int) -> str:
     d = Decimal(amount_micro) / Decimal(10**config.USDC_DECIMALS)
     s = f"{d:,.6f}".rstrip("0").rstrip(".")
     return s if s else "0"
+
+
+def _fmt_usdc(value: object) -> str:
+    """`_fmt()` for an amount that arrived in USDC rather than micro-units.
+
+    The agent's caps status reports floats (`daily_spent_micro / 1_000_000`);
+    printing those with an f-string spec would invent a second money format, so
+    they come back through the one formatter the ledger cards use.
+    """
+    return _fmt(int((Decimal(str(value)) * Decimal(10 ** config.USDC_DECIMALS)).to_integral_value()))
 
 
 def _to_micro(amount: Decimal) -> int:
@@ -338,4 +367,10 @@ async def _edit_menu(cb: types.CallbackQuery, text: str, reply_markup=None) -> N
         try:
             await cb.message.edit_caption(caption=text, reply_markup=reply_markup)
         except Exception:
-            pass
+            # Both answers refused. "message is not modified" is normal here,
+            # but so is Telegram rejecting a payload over one of its hard
+            # limits — and without this line a tap that changed nothing leaves
+            # no trace, which is how a broken button gets mistaken for a slow
+            # bot.
+            log.warning("menu edit refused (user=%s markup=%s): %s",
+                        cb.from_user.id, bool(reply_markup), text[:80])

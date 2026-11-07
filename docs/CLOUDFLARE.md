@@ -6,7 +6,7 @@
 |---|---|---|
 | Cloudflare Pages | `web/static` (build output dir) | `style.css`, `app.js`, `site.js`, images |
 | Pages Functions | `functions/[[path]].js` | proxies every other request to the VPS |
-| FastAPI backend | VPS, Docker (`web/server.py`) | `/`, `/app`, `/u/{id}`, `/m/{id}`, `/tos`, `/metrics`, `/qr`, `/api/*`, `/telegram-webhook`, `/.well-known/farcaster.json`; `/login` and `/me` redirect to `/#workspace-section` |
+| FastAPI backend | VPS, Docker (`web/server.py`) | `/`, `/app`, `/u/{id}`, `/m/{id}`, `/m/oc/{id}`, `/agent`, `/tos`, `/robots.txt`, `/sitemap.xml`, `/metrics`, `/qr`, `/api/*`, `/telegram-webhook`, `/.well-known/farcaster.json`; `/login` and `/me` redirect to `/#workspace-section` |
 
 The function catches all requests first (a Pages Function takes precedence over
 the asset bundle) and asks the asset bundle only for `GET`/`HEAD` paths that end
@@ -17,10 +17,29 @@ to the origin. Two reasons documents must not be served as bare assets:
   `index.html` and issues the one-time login-state cookie that
   `/api/auth/telegram` requires. The raw file has neither.
 - `GET /app` substitutes the public URL into the mini app meta tags.
+- `/robots.txt` and `/sitemap.xml` are written by the origin from the rows the
+  ledger has. `txt` is therefore not a static extension: the bundle has no
+  `.txt` in it, Pages answers a missing path with `index.html`, and a crawler
+  was handed `200 text/html` — a whole website's markup — where it expected
+  rules. While the origin is down both are a 503 with a `Retry-After`, which is
+  the honest answer to the same question.
+
+Note that the bundle root **is** `web/static`, so an asset URL has no `/static/`
+in it: `/miniapp-hero.png`, not `/static/miniapp-hero.png`. Every absolute image
+URL the site publishes — `og:image`, `twitter:image`, `fc:miniapp.imageUrl`,
+`fc:frame:image` — is checked against the bundle by
+`tests/test_web.py::test_no_share_image_points_at_a_path_the_bundle_does_not_have`.
 
 For the same reason there is no `_redirects` file in the bundle: a
 `/* /index.html 200` rewrite is applied before Functions and would swallow
 `/api/*`, `/app`, `/telegram-webhook` and every other dynamic path.
+
+There *is* a `_headers` file, and it carries only the two keys the origin already
+sends on every response — `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: no-referrer`. It applies to what the bundle answers itself
+(`style.css`, the scripts, the images); proxied documents keep the origin's own
+headers, including the CSP nonce. Without it the same site sends protection on
+its pages and nothing on the files those pages load.
 
 The proxy strips `Host` (the origin has its own hostname) and sets
 `X-Forwarded-Host` plus `X-Forwarded-Proto: https` — TLS terminates at
@@ -134,6 +153,8 @@ stay on `/` and show the workspace with your balance.
 | `cloudflared: Could not lookup srv records on _v2-origintunneld._tcp.argotunnel.com` | The host's resolver answers A but not SRV, which is how VPN/TUN resolvers behave. Allow SRV for `argotunnel.com`, or run the origin where DNS is normal |
 | Every page shows the landing page | A `_redirects` rewrite is still in the bundle |
 | Signs in, then immediately signed out | `Secure` cookie rejected: check `X-Forwarded-Proto` and that the origin is https |
-| `403 missing or expired login state` | Cookie not surviving the proxy (same as above) or older than 30 minutes |
+| `/index.html` (or any `*.html`) answers 200 with the template | The Pages project is serving the bundle without the origin: `BundleFiles` refuses those paths, so a raw template means the function did not run for it |
+| Address bar ends in `/?auth=state` after the Telegram button | Cookie not surviving the proxy (same as above) or older than 30 minutes |
+| Address bar ends in `/?auth=slow` | That IP hit `AUTH_RATE_LIMIT` attempts in `AUTH_RATE_WINDOW` seconds — the origin answers the browser with the landing and a reason code, so the limit shows up as a message, not a JSON page |
 | Rate limits trigger for one user only, or for everyone | `TRUST_PROXY_XFF` / `TRUSTED_PROXY_PEERS` misconfigured |
 | Telegram keeps retrying the webhook | Wrong `secret_token` between `setWebhook` and `WEBHOOK_SECRET` |

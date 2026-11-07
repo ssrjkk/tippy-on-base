@@ -272,7 +272,7 @@
           <div class="field">
             <label class="label" for="newHours">Дедлайн, часов</label>
             <input class="input" id="newHours" type="number" min="1" max="720" step="1" inputmode="numeric" placeholder="24" />
-            <div class="hint">До 30 дней. Пусто — без дедлайна.</div>
+            <div class="hint">До 30 дней. Пусто — __DEFAULT_DEADLINE_HOURS__ ч по умолчанию.</div>
           </div>
           <div class="field" id="subsidyField">
             <label class="label" for="newSubsidy">Субсидия ликвидности, USDC</label>
@@ -330,7 +330,7 @@
           <span class="eyebrow">Объём</span>
           <h2>Последние 14 дней</h2>
         </div>
-        <p class="hint">Дневные суммы USDC по факту: чаевые, покупка долей LMSR и ставки в пулы.</p>
+        <p class="hint">Дневной объём USDC через бота: депозиты, чаевые, ставки в пулы, субсидии и покупка долей рынков, токены создателей, платные посты, подписки на каналы и x402-платежи.</p>
       </div>
       <div class="chart" id="volume-chart">
         <div class="skeleton-bar"></div>
@@ -370,7 +370,7 @@
         <p class="hint">
           Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
           выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
-          всего пула; не выбранный исход обнуляется.
+          всего пула за вычетом комиссии победителю; не выбранный исход обнуляется.
         </p>
       </div>
       <div class="markets" id="markets-list">
@@ -446,8 +446,8 @@
             <div class="wallet-row" id="wallet-vault-row" hidden>
               <span>Резервы в контракте TipBotVault</span><b id="wallet-vault">–</b>
             </div>
-            <div class="wallet-row"><span>Обязательства перед пользователями</span><b id="wallet-liabilities">–</b></div>
-            <div class="wallet-row"><span>Незачтённые депозиты</span><b id="wallet-pending">–</b></div>
+            <div class="wallet-row"><span>Все обязательства бота</span><b id="wallet-liabilities">–</b></div>
+            <div class="wallet-row"><span>в том числе незачтённых депозитов</span><b id="wallet-pending">–</b></div>
             <div class="wallet-row"><span>Свободный резерв</span><b id="wallet-reserve">–</b></div>
             <div class="wallet-row"><span>Платёжеспособность</span><b id="wallet-solvent">–</b></div>
             <div class="wallet-addr mono" id="wallet-address">загрузка…</div>
@@ -458,9 +458,12 @@
           <p class="hint">
             Все депозиты, чаевые и пулы хранятся в USDC в сети Base — в
             смарт-контракте TipBotVault либо на горячем кошельке до его деплоя.
-            Резервы читаются напрямую из блокчейна и сверяются с суммой всех
-            внутренних балансов: обязательство не может превысить то, что
-            реально лежит на адресе.
+            Резервы читаются напрямую из блокчейна и сверяются со всеми
+            обязательствами бота: балансами пользователей, эскроу рынков,
+            открытыми пулами, казначействами сообществ, незачисленными x402 и
+            депозитами в ожидании. Ниже сверено с тем, что реально лежит на
+            адресе: если резервов меньше обязательств, строка
+            «Платёжеспособность» показывает «недостаточно».
           </p>
           <p class="hint">
             Источник резервов сейчас: <b id="reserve-source">–</b>.

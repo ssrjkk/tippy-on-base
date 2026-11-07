@@ -23,7 +23,20 @@ def win_fee_micro(profit_micro: int) -> int:
     return int((Decimal(profit_micro) * config.WIN_FEE_PCT).to_integral_value(rounding=ROUND_CEILING))
 
 
+def rate_label(rate: Decimal) -> str:
+    """A rate as the exact text a screen shows — `f'{rate * 100:.0f}'` prints a
+    2.5% fee as "2%", and a preview that understates a fee is a broken promise."""
+    return f"{(Decimal(rate) * 100).normalize():f}"
+
+
+def usdc_label(amount: Decimal) -> str:
+    """A USDC amount with no trailing zeros and never in exponent notation."""
+    return f"{Decimal(amount).normalize():f}"
+
+
 def win_fee_pct_label() -> str:
-    """The rate as exact display text — `int(WIN_FEE_PCT * 100)` would print a
-    2.5% fee as "2%"."""
-    return f"{(config.WIN_FEE_PCT * 100).normalize():f}"
+    return rate_label(config.WIN_FEE_PCT)
+
+
+def withdraw_fee_pct_label() -> str:
+    return rate_label(config.WITHDRAW_FEE_PCT)

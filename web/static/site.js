@@ -40,6 +40,14 @@
     return String(x).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   }
 
+  // Rates and odds, in the page's own separator and without invented precision:
+  // "1%" for a 1% fee, "2,5%" for a 2.5% one, "57,7%" for a probability.
+  function pctLabel(x, dp) {
+    var n = Number(x);
+    if (!isFinite(n)) n = 0;
+    return n.toLocaleString('ru-RU', { maximumFractionDigits: dp == null ? 1 : dp }) + '%';
+  }
+
   // tx_log stores created_at as epoch seconds, so it has to be read as a number:
   // slicing it like a timestamp string prints the digits, and new Date(seconds)
   // lands in 1970.
@@ -81,21 +89,65 @@
   async function api(path, opts) {
     var r = await fetch(path, opts);
     var body = null;
-    try { body = await r.json(); } catch (e) { body = null; }
+    try { body = await r.json(); } catch (e) {
+      if (r.ok) {
+        var incomplete = new Error('Ответ операции не получен полностью. Повторите исходный запрос.');
+        incomplete.code = 'INCOMPLETE_API_RESPONSE';
+        throw incomplete;
+      }
+    }
     if (r.status === 401) {
       signedOut();
-      throw new Error('сессия истекла — войдите заново');
+      var expired = new Error('сессия истекла — войдите заново');
+      expired.httpStatus = r.status;
+      throw expired;
     }
-    if (!r.ok) throw new Error(reason(body));
+    if (!r.ok) {
+      var error = new Error(reason(body));
+      error.httpStatus = r.status;
+      throw error;
+    }
     return body || {};
   }
 
-  function post(path, payload) {
-    return api(path, {
+  // An unknown outcome must replay the original operation, never new parameters under its old key.
+  var _idemKeys = {};
+  function idemKey(action, path, payload) {
+    var serialized = JSON.stringify([path, payload]);
+    var pending = _idemKeys[action];
+    if (pending && pending.payload !== serialized) {
+      var error = new Error('Предыдущая операция не подтверждена. Повторите её исходные параметры; новые не отправлены.');
+      error.code = 'IDEMPOTENCY_PAYLOAD_CHANGED';
+      throw error;
+    }
+    if (!pending) pending = _idemKeys[action] = {
+      key: crypto.randomUUID(), payload: serialized, uncertain: false, promise: null,
+    };
+    return pending.key;
+  }
+  function resetIdem(action) { delete _idemKeys[action]; }
+
+  function post(path, payload, action) {
+    var headers = { 'Content-Type': 'application/json' };
+    if (action) headers['Idempotency-Key'] = idemKey(action, path, payload);
+    var pending = action ? _idemKeys[action] : null;
+    if (pending && pending.promise) return pending.promise;
+    var request = api(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify(payload),
+    }).catch(function (error) {
+      if (pending && _idemKeys[action] === pending) {
+        var refused = error.httpStatus >= 400 && error.httpStatus < 500 && error.httpStatus !== 409;
+        if (refused && !pending.uncertain) resetIdem(action);
+        else pending.uncertain = true;
+      }
+      throw error;
+    }).finally(function () {
+      if (pending) pending.promise = null;
     });
+    if (pending) pending.promise = request;
+    return request;
   }
 
   function usd(x) { return fmt(x) + ' USDC'; }
@@ -139,7 +191,35 @@
     try { me = await api('/api/me'); return true; } catch (e) { return false; }
   }
 
+  /* A widget login that failed is a trip through the browser, not a fetch, so
+     /api/auth/telegram sends the visitor back here with one of these codes: a
+     JSON error there replaced the whole site with a document nobody reads. The
+     words belong to this page — there is no session to take a language from
+     yet — and which check failed stays in the server's log. */
+  var LOGIN_FAILURES = {
+    state: 'Ссылка входа устарела — войди через Telegram заново.',
+    failed: 'Telegram не подтвердил вход — попробуй ещё раз.',
+    replay: 'Этот вход уже использован — войди через Telegram заново.',
+    slow: 'Слишком много попыток входа — подожди немного и попробуй снова.',
+  };
+
+  function reportLoginFailure() {
+    var q = new URLSearchParams(window.location.search || '');
+    var code = q.get('auth');
+    if (!code) return;
+    var line = LOGIN_FAILURES[code];
+    if (line) showError('connectMsg', line);
+    // Spent once it is on screen: left in the URL it says the same thing on
+    // every reload and makes a shared link look like a broken page.
+    q.delete('auth');
+    var rest = q.toString();
+    if (window.history && history.replaceState) {
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
+  }
+
   async function boot() {
+    reportLoginFailure();
     // The session cookie is HttpOnly, so the server renders whether there is
     // one: probing /api/me without it only answers 401, which every anonymous
     // visitor used to see as a console error. Inside Telegram the handshake
@@ -189,7 +269,7 @@
     }
     var wd = [];
     if (L.min_withdraw_usdc) wd.push('не меньше ' + usd(L.min_withdraw_usdc));
-    if (info.fees.withdraw_pct != null) wd.push('комиссия ' + fmt(info.fees.withdraw_pct, 2) + '% сверх суммы');
+    if (info.fees.withdraw_pct != null) wd.push('комиссия ' + pctLabel(info.fees.withdraw_pct) + ' сверх суммы');
     if (L.max_withdraws_per_day) wd.push(L.max_withdraws_per_day + ' в сутки');
     if (wd.length) $('wdLimits').textContent = 'Вывод: ' + wd.join(', ') + '.';
     if (L.min_subsidy_usdc && L.max_subsidy_usdc) {
@@ -303,7 +383,7 @@
       var price = o.price_pct != null ? o.price_pct
         : (o.chance_pct != null ? o.chance_pct : null);
       b.innerHTML = '<span class="opt-label">' + esc(o.label) + '</span>' +
-        (price != null ? '<span class="opt-price">' + fmt(price, 1) + '%</span>' : '');
+        (price != null ? '<span class="opt-price">' + pctLabel(price) + '</span>' : '');
       box.appendChild(b);
     });
   }
@@ -429,7 +509,8 @@
     if (amount <= 0) return showError('tipMsg', 'Сумма должна быть больше нуля.');
     clearMsg('tipMsg');
     try {
-      var r = await post('/api/mini/tip', { to: to.replace(/^@/, ''), amount: amount });
+      var r = await post('/api/mini/tip', { to: to.replace(/^@/, ''), amount: amount }, 'tip');
+      resetIdem('tip');
       showOk('tipMsg', 'Отправлено ' + usd(amount) + ' → ' + to + '. Остаток: ' + usd(r.new_balance));
       $('tipAmount').value = '';
       await refreshBalance(r.new_balance);
@@ -522,7 +603,8 @@
     try {
       var r = await post('/api/mini/trade', {
         market_id: m.id, option: pick.trade, amount: amount,
-      });
+      }, 'trade');
+      resetIdem('trade');
       showOk('tradeMsg', 'Куплено долей по рынку #' + m.id + '. Новый баланс: ' + usd(r.new_balance));
       $('tradeAmount').value = '';
       await refreshBalance(r.new_balance);
@@ -538,7 +620,8 @@
     if (amount <= 0) return showError('betMsg', 'Сумма должна быть больше нуля.');
     clearMsg('betMsg');
     try {
-      var r = await post('/api/mini/betplace', { bet_id: b.id, option: pick.bet, amount: amount });
+      var r = await post('/api/mini/betplace', { bet_id: b.id, option: pick.bet, amount: amount }, 'betplace');
+      resetIdem('betplace');
       showOk('betMsg', 'Ставка принята в пул #' + b.id + '. Баланс: ' + usd(r.new_balance));
       $('betAmount').value = '';
       await refreshBalance(r.new_balance);
@@ -556,7 +639,11 @@
     try {
       var payload = { kind: createKind, question: question, options: options, hours: hours };
       if (createKind === 'market') payload.subsidy_usdc = num('newSubsidy');
-      var r = await post('/api/mini/create', payload);
+      // The server names the action it guards, and the key is kept per action:
+      // creating a market and creating a bet are two different attempts.
+      var action = createKind === 'market' ? 'create_market' : 'create_bet';
+      var r = await post('/api/mini/create', payload, action);
+      resetIdem(action);
       showOk('createMsg', 'Создано: #' + r.id + '. Обновляю списки.');
       $('newQuestion').value = '';
       await loadState();
@@ -576,7 +663,8 @@
     try {
       var r = await post('/api/mini/smartbuy', {
         market_id: m.id, outcome: pick.oc, shares: shares, max_cost_usdc: maxCost,
-      });
+      }, 'smartbuy');
+      resetIdem('smartbuy');
       showOk('ocMsg', 'Транзакция отправлена: ' + r.tx_hash.slice(0, 18) + '…');
     } catch (e) { showError('ocMsg', e.message); }
   }

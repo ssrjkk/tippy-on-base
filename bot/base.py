@@ -526,7 +526,7 @@ async def send_usdc(to_address: str, amount_micro: int) -> str:
 # ---------------------------------------------------------------------------
 # Withdraw batching (P1): /withdraw enqueues; a watcher flushes the queue in a
 # single TipBotVault.batchDistribute tx (one on-chain tx for many recipients),
-# saving gas vs. N direct transfers. See docs/ECOSYSTEM_DESIGN.md §4.1.
+# saving gas vs. N direct transfers. See docs/ARCHITECTURE.md, "On-chain".
 # ---------------------------------------------------------------------------
 
 def _row_fee_micro(row: dict) -> int:

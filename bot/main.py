@@ -17,6 +17,7 @@ from aiogram.types import BotCommand
 from . import base, config, i18n
 from .commands_catalog import BOT_COMMAND_SPECS
 from .handlers import router
+from .handlers._common import _h
 from .handlers.onchain import onchain_watcher
 from .ledger import async_ledger as ledger
 from .solvency import solvency_watcher
@@ -92,7 +93,7 @@ async def market_watcher() -> None:
                 await ledger.mark_deadline_notified(int(bet['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(bet['creator'])).get('lang'))
-                    text = i18n.t(creator_lang, 'deadline_notify', id=bet['id'], question=bet['question'])
+                    text = i18n.t(creator_lang, 'deadline_notify', id=bet['id'], question=_h(bet['question']))
                     await ledger.enqueue_notification(bet['creator'], text)
                 except Exception as e:
                     log.warning('deadline notify enqueue failed for #%s: %s', bet['id'], e)
@@ -101,7 +102,7 @@ async def market_watcher() -> None:
                 await ledger.mark_grace_warned(int(bet['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(bet['creator'])).get('lang'))
-                    text = i18n.t(creator_lang, 'grace_warn', id=bet['id'], question=bet['question'], hours=hours_left)
+                    text = i18n.t(creator_lang, 'grace_warn', id=bet['id'], question=_h(bet['question']), hours=hours_left)
                     await ledger.enqueue_notification(bet['creator'], text)
                 except Exception as e:
                     log.warning('grace warn enqueue failed for #%s: %s', bet['id'], e)
@@ -109,7 +110,7 @@ async def market_watcher() -> None:
                 await ledger.mark_market_deadline_notified(int(m['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(m['creator'])).get('lang'))
-                    text = i18n.t(creator_lang, 'deadline_notify', id=m['id'], question=m['question'])
+                    text = i18n.t(creator_lang, 'deadline_notify', id=m['id'], question=_h(m['question']))
                     await ledger.enqueue_notification(m['creator'], text)
                 except Exception as e:
                     log.warning('market deadline notify enqueue failed for #%s: %s', m['id'], e)
@@ -118,7 +119,7 @@ async def market_watcher() -> None:
                 await ledger.mark_market_grace_warned(int(m['id']))
                 try:
                     creator_lang = i18n.norm((await ledger.get_settings(m['creator'])).get('lang'))
-                    text = i18n.t(creator_lang, 'grace_warn', id=m['id'], question=m['question'], hours=hours_left)
+                    text = i18n.t(creator_lang, 'grace_warn', id=m['id'], question=_h(m['question']), hours=hours_left)
                     await ledger.enqueue_notification(m['creator'], text)
                 except Exception as e:
                     log.warning('market grace warn enqueue failed for #%s: %s', m['id'], e)

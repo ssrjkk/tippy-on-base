@@ -242,7 +242,7 @@ async def cb_res(cb: types.CallbackQuery) -> None:
         return
     if len(parts) == 2:
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🏆 {o['label'][:30]}", callback_data=f"res:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
-        await common._edit_menu(cb, i18n.t(lang, 'bet_resolve_title', id=bet_id, question=common._h(view['question']), pot=common._fmt(view['pot'])), kb)
+        await common._edit_menu(cb, i18n.t(lang, 'bet_resolve_title', id=bet_id, question=common._h(view['question']), pot=common._fmt(view['pot']), pct=win_fee_pct_label()), kb)
         await cb.answer()
         return
     idx = int(parts[2])

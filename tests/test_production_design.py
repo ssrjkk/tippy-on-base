@@ -636,15 +636,16 @@ def test_chart_bar_heights_match_the_numbers_they_plot(landing_phone):
     series = data["api"]["/api/volume_history?days=14"]
     if isinstance(series, dict) and series.get("error"):
         pytest.fail(f"volume history API failed: {series['error']}")
-    if not series:
-        assert not data["bars"], "empty series but the chart drew bars"
+    volumes = [float(item["volume_usdc"]) for item in series or []]
+    nonzero = [value for value in volumes if value > 0]
+    if not nonzero:
+        assert not data["bars"], "каждый день нулевой, а график нарисовал столбцы"
         return
-    assert len(data["bars"]) == len(series), (
-        f"API вернул {len(series)} дней, нарисовано {len(data['bars'])} столбцов"
+    assert len(data["bars"]) == len(nonzero), (
+        f"дней с объёмом {len(nonzero)}, нарисовано столбцов {len(data['bars'])}"
     )
-    volumes = [float(item["volume_usdc"]) for item in series]
-    maximum = max(max(volumes), 1.0)
-    expected = [max(v / maximum * 100, 2.0) for v in volumes]
+    maximum = max(nonzero)
+    expected = [max(value / maximum * 100, 2.0) for value in nonzero]
     for index, (got, want) in enumerate(zip(data["bars"], expected)):
         assert abs(got - want) <= 1.5, (
             f"столбец {index}: нарисовано {got}% высоты, по данным должно {want:.2f}%"
@@ -898,3 +899,125 @@ def test_no_mini_app_bar_paints_an_impossible_number(mini_screens):
             assert row["barPct"] is None or 0.0 <= row["barPct"] <= 100.0, (
                 f"tab{tab}: полоса вне 0..100% — {row}"
             )
+
+
+# ---------------------------------------------------------------------------
+# the crawler's documents, on the host the crawler is told about
+# ---------------------------------------------------------------------------
+
+def _get(path: str) -> tuple[int, str, str]:
+    request = urllib.request.Request(
+        f"{PROD_URL}{path}",
+        headers={"user-agent": USER_AGENT, "x-forwarded-for": XFF_POOL[7]},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        body = response.read().decode("utf-8", "replace")
+        return response.status, response.headers.get("content-type", ""), body
+
+
+def test_robots_txt_is_rules_on_the_deployed_site():
+    """The origin had no robots.txt, so the Pages Function answered it from the
+    asset bundle and Pages returned the landing page for a path that is not in
+    it: 200 and text/html where a robot expected rules. Measured here because
+    only the deployed edge decides which of the two answers a visitor gets."""
+    status, content_type, body = _get("/robots.txt")
+    assert status == 200
+    assert content_type.startswith("text/plain"), f"robots.txt arrived as {content_type!r}"
+    assert body.startswith("User-agent: *"), body[:120]
+    assert "Disallow: /api/" in body
+    assert f"Sitemap: {PROD_URL}/sitemap.xml" in body, body[-120:]
+
+
+def test_the_deployed_sitemap_points_back_at_itself_and_resolves():
+    status, content_type, body = _get("/sitemap.xml")
+    assert status == 200
+    assert content_type.startswith("application/xml"), f"sitemap arrived as {content_type!r}"
+    import xml.etree.ElementTree as ET
+
+    locs = [node.text for node in ET.fromstring(body).iter(
+        "{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+    assert locs, "the deployed sitemap names no page at all"
+    host = PROD_URL.split("://", 1)[1]
+    for loc in locs:
+        assert loc.startswith(PROD_URL + "/"), f"{loc} is not on the host being measured"
+        assert host in loc
+        page_status, page_type, _ = _get(loc[len(PROD_URL):])
+        assert page_status == 200, f"{loc} is announced and answers {page_status}"
+        assert page_type.startswith("text/html"), f"{loc} is announced as {page_type!r}"
+
+
+def test_the_landing_canonicalizes_the_host_it_is_served_from():
+    """The canonical is written by the origin from MINI_APP_URL/WEBHOOK_URL. If
+    the operator sets that to the tunnel instead of the Pages origin, every
+    page on the public host points at a different host and the crawler follows
+    the hint — so the two hosts being equal is the thing to measure."""
+    status, _, body = _get("/")
+    assert status == 200
+    canonical = re.findall(r'<link rel="canonical" href="([^"]*)"', body)
+    assert len(canonical) == 1, f"{len(canonical)} canonicals on the landing"
+    assert canonical[0].rstrip("/") == PROD_URL, f"{canonical[0]} vs {PROD_URL}"
+    og_url = re.findall(r'<meta property="og:url" content="([^"]*)"', body)
+    assert og_url == canonical, (og_url, canonical)
+    title = re.findall(r"<title>(.*?)</title>", body, re.S)
+    og_title = re.findall(r'<meta property="og:title" content="([^"]*)"', body)
+    assert len(title) == 1 and og_title == [title[0].strip()], (title, og_title)
+
+
+def test_an_asset_from_the_edge_carries_the_same_protection_as_a_page():
+    """The origin sends nosniff on everything it answers; the CSS, the scripts
+    and the images are answered by the Pages bundle instead, and an asset
+    without the header is the half of the site where a mislabelled upload can be
+    executed. Measured here because only the deployed edge decides which of the
+    two servers answers the request."""
+    import urllib.request
+
+    for path in ("/style.css", "/site.js", "/miniapp-hero.png"):
+        request = urllib.request.Request(f"{PROD_URL}{path}", headers={"user-agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            assert response.status == 200, path
+            assert response.headers.get("x-content-type-options", "").lower() == "nosniff", (
+                f"{path} arrived as {response.headers.get('content-type')} without nosniff"
+            )
+            assert response.headers.get("referrer-policy", "") == "no-referrer", path
+
+
+def _fetch(path: str) -> tuple[int, str, str, str]:
+    """Status, content type, body and Location — without following redirects.
+
+    urllib answers a 3xx by fetching its target, which is exactly what would
+    hide the thing the second half of this check is about: that a template URL
+    now points at the page that renders it instead of answering the template.
+    """
+
+    class _Stop(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(_Stop)
+    request = urllib.request.Request(f"{PROD_URL}{path}", headers={"user-agent": USER_AGENT})
+    try:
+        with opener.open(request, timeout=30) as response:
+            return (response.status, response.headers.get("content-type", ""),
+                    response.read(400_000).decode("utf-8", "replace"),
+                    response.headers.get("location", ""))
+    except urllib.error.HTTPError as e:
+        return (e.code, e.headers.get("content-type", ""),
+                e.read(400_000).decode("utf-8", "replace"), e.headers.get("location", ""))
+
+
+def test_the_deployed_site_answers_a_dead_link_with_a_page():
+    """The Pages function proxies everything that is not an asset, so on the
+    deployed host it decides which answer a wrong URL gets — and whether a
+    template in the bundle is still reachable beside the page that renders it.
+    Measured here because the origin alone cannot tell that the edge is the one
+    a visitor reaches."""
+    status, content_type, body, _ = _fetch("/this-page-does-not-exist")
+    assert status == 404, status
+    assert content_type.startswith("text/html"), f"a dead link arrived as {content_type!r}"
+    assert "<h1" in body, body[:200]
+    assert 'name="robots" content="noindex"' in body, "the dead end asks to be indexed"
+
+    moved, _, moved_body, location = _fetch("/index.html")
+    assert moved == 301, f"/index.html answered {moved} at {location!r}"
+    assert location == "/", location
+    assert "__" not in moved_body, f"the raw template is still served: {moved_body[:120]!r}"
