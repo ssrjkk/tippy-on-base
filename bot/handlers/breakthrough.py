@@ -11,7 +11,7 @@ from . import _common as common
 from .menu import _lang
 
 
-async def cmd_gasless(message: types.Message):
+async def cmd_gasless(message: types.Message) -> None:
     """Check gasless transaction eligibility."""
     lang = await _lang(message.from_user.id)
     addr = await common.wallets.get_address(message.from_user.id)
@@ -33,7 +33,7 @@ async def cmd_gasless(message: types.Message):
     await message.answer(text)
 
 
-async def cmd_subscribe(message: types.Message):
+async def cmd_subscribe(message: types.Message) -> None:
     """Set up recurring payment: /subscribe @user amount interval"""
     lang = await _lang(message.from_user.id)
     parts = message.text.strip().split()
@@ -106,7 +106,7 @@ async def cmd_subscribe(message: types.Message):
         await message.answer(i18n.t(lang, 'subscribe_format'))
 
 
-async def cmd_subscriptions(message: types.Message):
+async def cmd_subscriptions(message: types.Message) -> None:
     """List active subscriptions: /subscriptions"""
     lang = await _lang(message.from_user.id)
     uid = message.from_user.id
@@ -137,7 +137,7 @@ async def cmd_subscriptions(message: types.Message):
     await message.answer(text)
 
 
-async def cmd_cancel_sub(message: types.Message):
+async def cmd_cancel_sub(message: types.Message) -> None:
     """Cancel subscription: /cancelsub <id>"""
     lang = await _lang(message.from_user.id)
     parts = message.text.strip().split()
@@ -156,7 +156,7 @@ async def cmd_cancel_sub(message: types.Message):
         await message.answer(i18n.t(lang, 'subscription_not_found'))
 
 
-async def cmd_create_token(message: types.Message):
+async def cmd_create_token(message: types.Message) -> None:
     """Create creator token: /createtoken <name> <symbol> <supply> <price>"""
     lang = await _lang(message.from_user.id)
     parts = message.text.strip().split()
@@ -198,7 +198,7 @@ async def cmd_create_token(message: types.Message):
         await message.answer(i18n.t(lang, 'create_token_format'))
 
 
-async def cmd_buy_token(message: types.Message):
+async def cmd_buy_token(message: types.Message) -> None:
     """Buy creator tokens: /buytoken <token_id> <amount>"""
     lang = await _lang(message.from_user.id)
     parts = message.text.strip().split()
@@ -237,7 +237,7 @@ async def cmd_buy_token(message: types.Message):
         await message.answer(i18n.t(lang, 'buy_token_format'))
 
 
-async def cmd_claim_dividends(message: types.Message):
+async def cmd_claim_dividends(message: types.Message) -> None:
     """Claim pending dividends: /claim <token_id>"""
     lang = await _lang(message.from_user.id)
     parts = message.text.strip().split()

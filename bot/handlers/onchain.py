@@ -18,7 +18,7 @@ import logging
 import time
 from decimal import Decimal
 
-from aiogram import F, types
+from aiogram import Bot, F, types
 from aiogram.filters import Command
 
 from bot import i18n
@@ -709,7 +709,7 @@ async def cb_oc_resolve(cb: types.CallbackQuery) -> None:
             pass  # message may already be edited or deleted
 
 
-async def onchain_watcher(bot) -> None:
+async def onchain_watcher(bot: Bot) -> None:
     """Once per cycle: DM creators of closed on-chain markets with
     outcome-pick buttons, and auto-cancel long-overdue markets so holders
     can pull refunds and the subsidy is not stuck forever."""
