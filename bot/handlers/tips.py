@@ -18,7 +18,7 @@ log = logging.getLogger("tipbot.tips")
 def amount_kb() -> InlineKeyboardMarkup:
     """Quick amounts, the same set the bet and trade cards use."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f'{a} USDC', callback_data=f'tip:a:{a}') for a in common.QUICK_AMOUNTS]
+        [InlineKeyboardButton(text=common.btn_text(f'{a} USDC'), callback_data=f'tip:a:{a}') for a in common.QUICK_AMOUNTS]
     ])
 
 
@@ -30,7 +30,7 @@ async def _recipient_kb(tg_id: int, amount: str, lang: str) -> InlineKeyboardMar
     if not ids:
         return None
     names = await common.ledger.usernames_bulk(ids)
-    rows = [[InlineKeyboardButton(text=f'@{names[i] or f"id{i}"}', callback_data=f'tip:r:{amount}:{i}')]
+    rows = [[InlineKeyboardButton(text=common.btn_text(f'@{names[i] or f"id{i}"}'), callback_data=f'tip:r:{amount}:{i}')]
             for i in ids]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

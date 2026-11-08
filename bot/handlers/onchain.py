@@ -99,7 +99,7 @@ async def _trade_keyboard(mid: int, options: list[str], tg_id: int | None) -> ty
     if tradable:
         for i, o in enumerate(options):
             rows.append([types.InlineKeyboardButton(
-                text=f"▲ {i + 1}) {o[:22]}", callback_data=f"ocbuy:{mid}:{i}")])
+                text=common.btn_text(f"▲ {i + 1}) {o[:22]}"), callback_data=f"ocbuy:{mid}:{i}")])
     if tg_id is not None:
         try:
             w = await common.ledger.get_active_wallet(tg_id)
@@ -115,7 +115,7 @@ async def _trade_keyboard(mid: int, options: list[str], tg_id: int | None) -> ty
                 for i, bal in enumerate(bals):
                     if bal > 0:
                         rows.append([types.InlineKeyboardButton(
-                            text=f"▼ sell {options[i][:20]}", callback_data=f"ocsell:{mid}:{i}")])
+                            text=common.btn_text(f"▼ sell {options[i][:20]}"), callback_data=f"ocsell:{mid}:{i}")])
         except Exception:
             pass  # the card must render even if the balance probe fails
     return types.InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
@@ -559,7 +559,7 @@ async def cmd_oc_pos(message: types.Message) -> None:
 
 def _resolve_buttons(mid: int, options: list[str]) -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text=f"{i + 1}) {esc(o[:30])}", callback_data=f"ocr:{mid}:{i}")]
+        [types.InlineKeyboardButton(text=common.btn_text(f"{i + 1}) {o[:30]}"), callback_data=f"ocr:{mid}:{i}")]
         for i, o in enumerate(options)
     ])
 
@@ -780,7 +780,7 @@ async def cb_oc_buy(cb: types.CallbackQuery) -> None:
         return
     label = json.loads(m['options'])[outcome]
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[
-        types.InlineKeyboardButton(text=f"${a}", callback_data=f"ocbuydo:{mid}:{outcome}:{a}")
+        types.InlineKeyboardButton(text=common.btn_text(f"${a}"), callback_data=f"ocbuydo:{mid}:{outcome}:{a}")
         for a in common.QUICK_AMOUNTS
     ]])
     try:
@@ -850,7 +850,7 @@ async def cb_oc_sell(cb: types.CallbackQuery) -> None:
         return
     label = json.loads(m['options'])[outcome]
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[
-        types.InlineKeyboardButton(text=f"{p}%", callback_data=f"ocselldo:{mid}:{outcome}:{p}")
+        types.InlineKeyboardButton(text=common.btn_text(f"{p}%"), callback_data=f"ocselldo:{mid}:{outcome}:{p}")
         for p in ('25', '50', '100')
     ]])
     try:

@@ -25,6 +25,7 @@ __all__ = [
     "AMOUNT_RE",
     "BET_ID_RE",
     "BET_LINK_RE",
+    "BTN_TEXT_LIMIT",
     "DEADLINE_RE",
     "DONATE_LINK_RE",
     "KIND_EMOJI",
@@ -48,6 +49,7 @@ __all__ = [
     "_throttle",
     "_to_micro",
     "base",
+    "btn_text",
     "config",
     "creator_tokens",
     "ledger",
@@ -219,6 +221,25 @@ KIND_EMOJI = {
 
 _bot_username: str | None = None
 
+# Telegram's own hard limit on inline keyboard button text. Exceeding it does
+# not shorten one label: the API refuses the whole keyboard, so the screen the
+# user tapped stays frozen and the action behind it never happens.
+BTN_TEXT_LIMIT = 64
+
+
+def btn_text(text: object) -> str:
+    """A button label Telegram will accept: plain text, at most 64 characters.
+
+    Every label carrying text the bot does not write — a market question, an
+    on-chain option string, a wallet slot name, a username — goes through here.
+    Markup is not escaped on purpose: inline buttons are not message text, so
+    `&amp;` in a label is not hidden by the client, it is printed to the user.
+    """
+    s = str(text)
+    if len(s) <= BTN_TEXT_LIMIT:
+        return s
+    return s[:BTN_TEXT_LIMIT - 1] + "…"
+
 
 def _fmt(amount_micro: int) -> str:
     d = Decimal(amount_micro) / Decimal(10**config.USDC_DECIMALS)
@@ -346,4 +367,10 @@ async def _edit_menu(cb: types.CallbackQuery, text: str, reply_markup=None) -> N
         try:
             await cb.message.edit_caption(caption=text, reply_markup=reply_markup)
         except Exception:
-            pass
+            # Both answers refused. "message is not modified" is normal here,
+            # but so is Telegram rejecting a payload over one of its hard
+            # limits — and without this line a tap that changed nothing leaves
+            # no trace, which is how a broken button gets mistaken for a slow
+            # bot.
+            log.warning("menu edit refused (user=%s markup=%s): %s",
+                        cb.from_user.id, bool(reply_markup), text[:80])

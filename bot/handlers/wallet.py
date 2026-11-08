@@ -279,7 +279,7 @@ def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[In
     row: list[InlineKeyboardButton] = []
     for w in wallets:
         row.append(InlineKeyboardButton(
-            text=f"{'🟢' if w['active'] else '⚪'}{w['slot']}",
+            text=common.btn_text(f"{'🟢' if w['active'] else '⚪'}{w['slot']}"),
             callback_data=f"wallet_sel:{w['id']}"))
         if len(row) == 5:
             kb.append(row)

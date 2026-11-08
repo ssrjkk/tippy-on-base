@@ -482,7 +482,7 @@ CREATE2_SAFE_DEPOSITS=1
 - Деплой (идемпотентный): `scripts/deploy_create2_factory.py` (флаги `--wire-env`, `--dry-run`).
 - Схема БД — таблица `create2_proxies` (миграция `004_create2_proxies`).
 - Sweep: `create2_sweep_watcher` каждые `POLL_SECONDS` форвардит прокси с балансом >0.
-- Диагностика E2E: `D:/Dev/Temp/opencode/e2e_create2.py` (копируется как `/app/e2e_create2.py`).
+- Диагностика E2E: `python -m pytest tests/test_create2.py -q` и `python scripts/deploy_create2_factory.py --dry-run`.
 - **Комиссия за деплой прокси** платит hot wallet (ETH на Sepolia), юзер платит только gas сети за Swift USDC.
 
 ## Этап 6. Telecom API через прокси

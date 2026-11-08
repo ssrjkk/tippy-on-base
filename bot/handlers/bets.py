@@ -189,7 +189,7 @@ async def _bets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMarkup]
     lines.append(i18n.t(lang, 'bet_list_hint'))
     # Buttons follow `views`, not `bets`: a market that has no view has no line
     # above it either, and a button that opens nothing is a dead end.
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🎯 #{v['id']}: {v['question'][:38]}", callback_data=f"market:{v['id']}")] for v in views] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')],
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"🎯 #{v['id']}: {v['question'][:38]}"), callback_data=f"market:{v['id']}")] for v in views] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')],
                               [common._back_row(lang)]])
     return ('\n'.join(lines), kb)
 
@@ -206,7 +206,7 @@ async def cb_market(cb: types.CallbackQuery) -> None:
     if not view:
         await cb.answer(i18n.t(lang, 'market_not_found'), show_alert=True)
         return
-    rows = [[InlineKeyboardButton(text=f"{o['index'] + 1}) {o['label'][:22]} — {o['probability']}%", callback_data=f"betq:{bet_id}:{o['index']}")] for o in view['options']]
+    rows = [[InlineKeyboardButton(text=common.btn_text(f"{o['index'] + 1}) {o['label'][:22]} — {o['probability']}%"), callback_data=f"betq:{bet_id}:{o['index']}")] for o in view['options']]
     user = cb.from_user
     # The ledger refuses to settle before close_at, so the button would only
     # ever answer with an error while trading is still open.
@@ -241,7 +241,7 @@ async def cb_res(cb: types.CallbackQuery) -> None:
         await cb.answer(i18n.t(lang, 'market_only_creator'), show_alert=True)
         return
     if len(parts) == 2:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🏆 {o['label'][:30]}", callback_data=f"res:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"🏆 {o['label'][:30]}"), callback_data=f"res:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
         await common._edit_menu(cb, i18n.t(lang, 'bet_resolve_title', id=bet_id, question=common._h(view['question']), pot=common._fmt(view['pot']), pct=win_fee_pct_label()), kb)
         await cb.answer()
         return
@@ -277,7 +277,7 @@ async def cb_bet_amount(cb: types.CallbackQuery) -> None:
         await cb.answer(i18n.t(lang, 'bet_bad_option'), show_alert=True)
         return
     label = view['options'][opt]['label']
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f'{a} USDC', callback_data=f'bets:{bet_id}:{opt}:{a}') for a in common.QUICK_AMOUNTS], [InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f'{a} USDC'), callback_data=f'bets:{bet_id}:{opt}:{a}') for a in common.QUICK_AMOUNTS], [InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
     await common._edit_menu(cb, i18n.t(lang, 'bet_amount_ask', id=bet_id, question=common._h(view['question']), label=common._h(label)), kb)
     await cb.answer()
 

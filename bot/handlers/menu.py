@@ -126,7 +126,7 @@ async def _send_market_deep_link(message: types.Message, bet_id: int) -> None:
     if not view:
         await message.answer(i18n.t(await _lang(message.from_user.id), 'deep_link_market_not_found'))
         return
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"{o['index'] + 1}) {o['label'][:22]} — {o['probability']}%", callback_data=f"betq:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text=i18n.t(await _lang(message.from_user.id), 'btn_all_markets_v2'), callback_data='bets')]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"{o['index'] + 1}) {o['label'][:22]} — {o['probability']}%"), callback_data=f"betq:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text=i18n.t(await _lang(message.from_user.id), 'btn_all_markets_v2'), callback_data='bets')]])
     lang = await _lang(message.from_user.id)
     await message.answer(i18n.t(lang, 'deep_link_market') + '\n\n' + await _market_detail_text(view, message.from_user.id), reply_markup=kb)
 
@@ -241,7 +241,7 @@ async def _settings_kb_text(tg_id: int) -> tuple[str, InlineKeyboardMarkup]:
     react = i18n.t(lang, 'on') if s['reaction_tips'] else i18n.t(lang, 'off')
     notif = i18n.t(lang, 'on') if s['notify_deposits'] else i18n.t(lang, 'off')
     text = f"{i18n.t(lang, 'set_title')}\n\n{i18n.t(lang, 'set_react', state=react)}\n\n{i18n.t(lang, 'set_notif', state=notif)}"
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"⚡ {(i18n.t(lang, 'on') if s['reaction_tips'] else i18n.t(lang, 'off'))}", callback_data='set:react')], [InlineKeyboardButton(text=f"🔔 {(i18n.t(lang, 'on') if s['notify_deposits'] else i18n.t(lang, 'off'))}", callback_data='set:notif')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_lang', name=i18n.LANG_NAME[lang]), callback_data='set:lang')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_back'), callback_data='menu')]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"⚡ {(i18n.t(lang, 'on') if s['reaction_tips'] else i18n.t(lang, 'off'))}"), callback_data='set:react')], [InlineKeyboardButton(text=common.btn_text(f"🔔 {(i18n.t(lang, 'on') if s['notify_deposits'] else i18n.t(lang, 'off'))}"), callback_data='set:notif')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_lang', name=i18n.LANG_NAME[lang]), callback_data='set:lang')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_back'), callback_data='menu')]])
     return (text, kb)
 
 @common.router.message(Command('settings'))

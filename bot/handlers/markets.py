@@ -145,7 +145,7 @@ async def _markets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMark
         top = max(range(len(prices)), key=lambda i: prices[i]) if prices else 0
         leader = json.loads(m['options'])[top] if prices else '?'
         lines.append(f"#{mid} {common._h(m['question'])}{i18n.t(lang, 'market_fav', leader=f'{common._h(leader[:30])} {_pct(prices[top])}')}" if prices else f"#{mid} {common._h(m['question'])}")
-        kb_rows.append([InlineKeyboardButton(text=f"📈 #{mid}: {m['question'][:36]}", callback_data=f'mk:{mid}')])
+        kb_rows.append([InlineKeyboardButton(text=common.btn_text(f"📈 #{mid}: {m['question'][:36]}"), callback_data=f'mk:{mid}')])
     lines.append(i18n.t(lang, 'market_list_hint'))
     kb_rows.append([InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='mkcreate')])
     return ('\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=kb_rows))
@@ -175,12 +175,12 @@ async def cb_market_card(cb: types.CallbackQuery) -> None:
     rows = []
     if m['status'] == 'open':
         for i, _opt in enumerate(options):
-            rows.append([InlineKeyboardButton(text=f"{i18n.t(lang, 'btn_buy')} {i + 1}", callback_data=f'mkbuy:{mid}:{i}')])
+            rows.append([InlineKeyboardButton(text=common.btn_text(f"{i18n.t(lang, 'btn_buy')} {i + 1}"), callback_data=f'mkbuy:{mid}:{i}')])
         if user:
             pos = await common.ledger.user_market_position(mid, user.id)
             for i, _opt in enumerate(options):
                 if int(pos.get(i, {}).get('shares', 0)) > 0:
-                    rows.append([InlineKeyboardButton(text=f"{i18n.t(lang, 'btn_sell')} {i + 1}", callback_data=f'mksell:{mid}:{i}')])
+                    rows.append([InlineKeyboardButton(text=common.btn_text(f"{i18n.t(lang, 'btn_sell')} {i + 1}"), callback_data=f'mksell:{mid}:{i}')])
         if user and int(m['creator']) == user.id:
             # resolve_market refuses before close_at, so offering the button
             # earlier would only produce an error; cancelling stays available.
@@ -307,7 +307,7 @@ async def cb_mk_resolve(cb: types.CallbackQuery) -> None:
         return
     if len(parts) == 2:
         options = json.loads(m['options'])
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f'🏆 {o[:30]}', callback_data=f'mkres:{mid}:{i}')] for i, o in enumerate(options)] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_back_short'), callback_data=f'mk:{mid}')]])
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f'🏆 {o[:30]}'), callback_data=f'mkres:{mid}:{i}')] for i, o in enumerate(options)] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_back_short'), callback_data=f'mk:{mid}')]])
         await common._edit_menu(cb, i18n.t(lang, 'market_resolve_title', mid=mid, question=common._h(m['question'])), kb)
         await cb.answer()
         return

@@ -172,16 +172,6 @@ WHERE user_id = 123456789
 GROUP BY action;
 ```
 
-### API Access
-
-Add admin endpoint for audit queries (future enhancement):
-```python
-@app.get('/api/admin/audit')
-async def admin_audit(request: Request, action: str = None, limit: int = 100):
-    _require_admin(request)
-    return await audit.query_logs(action=action, limit=limit)
-```
-
 ## Incident Response
 
 ### Insolvency Alert

@@ -23,7 +23,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~12 min, 1241 tests (58 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~10 min, 1248 tests (58 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -50,6 +50,17 @@
   rounder: `onchain_market.price_pct` (Decimal ROUND_HALF_UP) — the market list rounded with the
   builtin (banker's, over a float) while the market page used HALF_UP, so `0.00105` printed 0.1 in one
   place and 0.11 in the other (`test_onchain_list_and_market_page_print_the_same_price`).
+- `tests/test_telegram_limits.py` measures Telegram's hard limits: button text ≤64 chars, callback_data
+  ≤64 bytes, message ≤4096 chars. Seven gates: every `InlineKeyboardButton(text=...)` is either a
+  literal ≤64, an i18n call, a `LANG_NAME` lookup, or wrapped in `common.btn_text()` (an f-string that
+  interpolates user data without the helper fails — hand-slicing at each call site is how the 64-char
+  limit breaks); every i18n key used as a button label is ≤64 chars in all three languages (a translation
+  that grows past the limit makes Telegram refuse the whole keyboard); no `esc()` or `html.escape()`
+  inside any button text (buttons are plain text, not HTML); `_resolve_buttons()` with adversarial input
+  (30 `&` + 15 `<` + 15 `>`) produces labels ≤64 with no escaped substrings; `btn_text()` truncates to
+  64 chars with ellipsis; `_edit_menu()` logs refusals instead of swallowing them silently; docs name no
+  paths outside the repo (no `D:/Dev/Temp/...` laptop paths). The helper `btn_text()` in
+  `bot/handlers/_common.py` is the one way to build a dynamic button label — it truncates with `…` at 64.
 - `tests/test_design_system.py` is the design contract, measured from the files: contrast of every
   declared `color`/`background` pair **and** of every text colour against both canvases, "mono implies
   tabular digits" **in both stylesheets**, no raw hex outside the token blocks, the site and Mini App
