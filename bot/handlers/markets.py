@@ -300,8 +300,11 @@ async def cb_mk_resolve(cb: types.CallbackQuery) -> None:
     if not user:
         return
     lang = await common.user_lang(user.id)
-    parts = cb.data.split(':')
-    mid = int(parts[1])
+    ids = common._parse_cb_ids(cb.data, 'mkres:')
+    if ids is None or len(ids) < 1:
+        await cb.answer()
+        return
+    mid = ids[0]
     m = await common.ledger.get_market(mid)
     if not m:
         await cb.answer(i18n.t(lang, 'market_not_found'), show_alert=True)
@@ -312,13 +315,13 @@ async def cb_mk_resolve(cb: types.CallbackQuery) -> None:
     if int(m['creator']) != user.id:
         await cb.answer(i18n.t(lang, 'market_only_creator'), show_alert=True)
         return
-    if len(parts) == 2:
+    if len(ids) == 1:
         options = json.loads(m['options'])
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f'🏆 {o[:30]}'), callback_data=f'mkres:{mid}:{i}')] for i, o in enumerate(options)] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_back_short'), callback_data=f'mk:{mid}')]])
         await common._edit_menu(cb, i18n.t(lang, 'market_resolve_title', mid=mid, question=common._h(m['question'])), kb)
         await cb.answer()
         return
-    idx = int(parts[2])
+    idx = int(ids[1])
     ok, msg, payouts = await common.ledger.resolve_market(mid, idx, user.id)
     if not ok:
         await cb.answer(msg, show_alert=True)
