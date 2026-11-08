@@ -201,7 +201,10 @@ async def cmd_bets(message: types.Message) -> None:
 @common.router.callback_query(F.data.startswith('market:'))
 async def cb_market(cb: types.CallbackQuery) -> None:
     lang = await _lang(cb.from_user.id)
-    bet_id = int(cb.data.split(':', 1)[1])
+    bet_id = common._parse_cb_id(cb.data, 'market:')
+    if bet_id is None:
+        await cb.answer()
+        return
     view = await common.ledger.market_view(bet_id)
     if not view:
         await cb.answer(i18n.t(lang, 'market_not_found'), show_alert=True)
@@ -224,12 +227,11 @@ async def cb_res(cb: types.CallbackQuery) -> None:
     if not user:
         return
     lang = await _lang(user.id)
-    parts = cb.data.split(':')
-    try:
-        bet_id = int(parts[1])
-    except Exception:
+    ids = common._parse_cb_ids(cb.data, 'res:')
+    if ids is None or len(ids) < 1:
         await cb.answer(i18n.t(lang, 'bad_amount'), show_alert=True)
         return
+    bet_id = ids[0]
     view = await common.ledger.market_view(bet_id)
     if not view:
         await cb.answer(i18n.t(lang, 'market_not_found'), show_alert=True)
@@ -240,12 +242,12 @@ async def cb_res(cb: types.CallbackQuery) -> None:
     if user.id != view['creator']['id']:
         await cb.answer(i18n.t(lang, 'market_only_creator'), show_alert=True)
         return
-    if len(parts) == 2:
+    if len(ids) == 1:
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"🏆 {o['label'][:30]}"), callback_data=f"res:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
         await common._edit_menu(cb, i18n.t(lang, 'bet_resolve_title', id=bet_id, question=common._h(view['question']), pot=common._fmt(view['pot']), pct=win_fee_pct_label()), kb)
         await cb.answer()
         return
-    idx = int(parts[2])
+    idx = int(ids[1])
     if idx >= len(view['options']):
         await cb.answer(i18n.t(lang, 'bet_bad_option'), show_alert=True)
         return

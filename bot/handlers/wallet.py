@@ -251,8 +251,11 @@ async def cb_wallet_new(cb: types.CallbackQuery) -> None:
 async def cb_wallet_sel(cb: types.CallbackQuery) -> None:
     if not cb.from_user:
         return
+    wallet_id = common._parse_cb_id(cb.data, 'wallet_sel:')
+    if wallet_id is None:
+        await cb.answer()
+        return
     lang = await common.user_lang(cb.from_user.id)
-    wallet_id = int(cb.data.split(':')[1])
     ok = await common.ledger.set_active_wallet(cb.from_user.id, wallet_id)
     if not ok:
         await cb.answer()
@@ -314,6 +317,9 @@ async def wallet_screen(tg_id: int, lang: str) -> tuple[str, list[list[InlineKey
 async def _refresh_wallet_list(cb: types.CallbackQuery, tg_id: int, lang: str) -> None:
     """Edit the message to show updated wallet list."""
     wallets = await common.ledger.get_wallets(tg_id)
+    if not wallets:
+        await _ensure_wallet(tg_id)
+        wallets = await common.ledger.get_wallets(tg_id)
     text, kb = _wallet_list_view(wallets, lang)
     try:
         await cb.message.edit_text(

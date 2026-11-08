@@ -165,7 +165,10 @@ async def cb_market_list(cb: types.CallbackQuery) -> None:
 @common.router.callback_query(F.data.startswith('mk:'))
 async def cb_market_card(cb: types.CallbackQuery) -> None:
     lang = await common.user_lang(cb.from_user.id) if cb.from_user else 'ru'
-    mid = int(cb.data.split(':', 1)[1])
+    mid = common._parse_cb_id(cb.data, 'mk:')
+    if mid is None:
+        await cb.answer()
+        return
     m = await common.ledger.get_market(mid)
     if not m:
         await cb.answer(i18n.t(lang, 'market_not_found'), show_alert=True)
@@ -196,8 +199,12 @@ async def cb_market_card(cb: types.CallbackQuery) -> None:
 @common.router.callback_query(F.data.startswith('mkbuy:'))
 async def cb_mk_buy(cb: types.CallbackQuery) -> None:
     lang = await common.user_lang(cb.from_user.id) if cb.from_user else 'ru'
-    _, mid, opt = cb.data.split(':')
-    m = await common.ledger.get_market(int(mid))
+    ids = common._parse_cb_ids(cb.data, 'mkbuy:')
+    if ids is None or len(ids) != 2:
+        await cb.answer()
+        return
+    mid, opt = ids
+    m = await common.ledger.get_market(mid)
     if not m:
         await cb.answer(i18n.t(lang, 'market_not_found'), show_alert=True)
         return

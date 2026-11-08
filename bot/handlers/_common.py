@@ -45,6 +45,8 @@ __all__ = [
     "_money_cmd_last",
     "_more_kb",
     "_now",
+    "_parse_cb_id",
+    "_parse_cb_ids",
     "_qr_bytes",
     "_throttle",
     "_to_micro",
@@ -316,6 +318,34 @@ def _back_row(lang: str) -> InlineKeyboardButton:
     deletes the keyboard: one tap on «Баланс» and the only way back was typing
     /menu again."""
     return InlineKeyboardButton(text=i18n.t(lang, 'btn_back'), callback_data='menu')
+
+
+def _parse_cb_id(data: str, prefix: str) -> int | None:
+    """Safely parse an integer ID from callback data like 'prefix:123'.
+
+    Returns None if the format is invalid or the ID is not an integer.
+    Callback handlers should answer and return early on None.
+    """
+    if not data.startswith(prefix):
+        return None
+    try:
+        return int(data[len(prefix):])
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_cb_ids(data: str, prefix: str) -> tuple[int, ...] | None:
+    """Safely parse multiple integer IDs from callback data like 'prefix:1:2:3'.
+
+    Returns None if the format is invalid or any ID is not an integer.
+    """
+    if not data.startswith(prefix):
+        return None
+    parts = data[len(prefix):].split(':')
+    try:
+        return tuple(int(p) for p in parts if p)
+    except ValueError:
+        return None
 
 
 def _menu_button(lang: str, key: str, cb: str | None = None) -> InlineKeyboardButton:
