@@ -362,16 +362,17 @@ class LedgerMarketsMixin:
 
 
 
-    def user_market_positions(self, tg_id: int) -> list[dict]:
-        """All open AMM positions of a user, enriched with live prices."""
+    def user_market_positions(self, tg_id: int, limit: int = 15) -> list[dict]:
+        """Open AMM positions of a user, enriched with live prices. Limited to 15 by
+        default — more would exceed Telegram's 4096-char message limit."""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT ms.market_id, ms.option_idx, ms.shares, ms.cost_micro, "
                 "m.question, m.options, m.status, m.b_micro "
                 "FROM market_shares ms JOIN markets m ON m.id = ms.market_id "
                 "WHERE ms.tg_id = %s AND ms.shares > 0 AND m.status = 'open' "
-                "ORDER BY ms.market_id DESC",
-                (tg_id,),
+                "ORDER BY ms.market_id DESC LIMIT %s",
+                (tg_id, limit),
             ).fetchall()
         if not rows:
             return []
