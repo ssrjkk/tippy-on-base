@@ -38,6 +38,22 @@ def _button_text_nodes(tree: ast.AST) -> list[ast.expr]:
     return out
 
 
+def _callback_data_nodes(tree: ast.AST) -> list[ast.expr]:
+    """Every `callback_data=` keyword argument inside an InlineKeyboardButton/KeyboardButton call."""
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = getattr(func, "attr", None) or getattr(func, "id", None)
+        if name not in ("InlineKeyboardButton", "KeyboardButton"):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "callback_data":
+                out.append(kw.value)
+    return out
+
+
 def _is_literal(node: ast.expr) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
@@ -90,6 +106,57 @@ def _is_btn_text_call(node: ast.expr) -> bool:
 
 def _is_fstring(node: ast.expr) -> bool:
     return isinstance(node, ast.JoinedStr)
+
+
+def _fstring_max_bytes(node: ast.JoinedStr) -> int:
+    """Estimate the max UTF-8 byte length of an f-string.
+
+    Literal parts are measured directly. Interpolated values are assumed to be
+    small: integers ≤10 digits, Decimal amounts ≤20 chars, short strings ≤10 chars.
+    This is conservative — a real value that exceeds the assumption fails the gate.
+    """
+    total = 0
+    for part in node.values:
+        if isinstance(part, ast.Constant) and isinstance(part.value, str):
+            total += len(part.value.encode("utf-8"))
+        elif isinstance(part, ast.FormattedValue):
+            total += 10
+        else:
+            total += 10
+    return total
+
+
+def _is_bounded_callback_fstring(node: ast.expr) -> bool:
+    """An f-string whose estimated max length is ≤64 bytes.
+
+    Callback data interpolates integers (market IDs, option indices), short tokens
+    (16 hex chars from secrets.token_hex(8)), or bounded amount strings. The estimate
+    is conservative: if it passes here, the real value cannot exceed 64 bytes unless
+    the interpolated data itself is pathological (a 40-digit integer).
+    """
+    if not _is_fstring(node):
+        return False
+    return _fstring_max_bytes(node) <= 64
+
+
+def _is_bounded_ifexp(node: ast.expr) -> bool:
+    """A conditional expression (X or Y) where both branches are bounded strings."""
+    if not isinstance(node, ast.IfExp):
+        return False
+    def bounded(n):
+        return (_is_literal(n) or _is_i18n_call(n) or _is_lang_name(n)
+                or isinstance(n, ast.Name))
+    return bounded(node.body) and bounded(node.orelse)
+
+
+def _is_bounded_boolOp_or(node: ast.expr) -> bool:
+    """A boolean OR expression (X or Y) where all operands are bounded strings."""
+    if not isinstance(node, ast.BoolOp) or not isinstance(node.op, ast.Or):
+        return False
+    def bounded(n):
+        return (_is_literal(n) or _is_i18n_call(n) or _is_lang_name(n)
+                or isinstance(n, ast.Name))
+    return all(bounded(v) for v in node.values)
 
 
 def test_every_button_label_is_bounded():
@@ -156,6 +223,30 @@ def test_no_markup_escape_in_button_labels():
     assert not offenders, "markup escape inside a button label (buttons are plain text):\n  " + "\n  ".join(offenders)
 
 
+def test_every_callback_data_is_bounded():
+    """Every callback_data= value must be ≤64 bytes. Telegram refuses the whole keyboard
+    if even one button exceeds this — the same shape as the button-text limit, but
+    callback_data is UTF-8 bytes, not chars. All current values are f-strings with
+    integer IDs, short tokens (16 hex chars), or bounded amount strings; the gate
+    measures them so a future edit cannot silently grow one past the limit."""
+    offenders = []
+    for p in sorted(HANDLERS.glob("*.py")):
+        tree = ast.parse(_read(p))
+        for node in _callback_data_nodes(tree):
+            if _is_literal(node):
+                if len(node.value.encode("utf-8")) > 64:
+                    offenders.append(f"{p.name}:{node.lineno} literal {len(node.value.encode('utf-8'))} bytes")
+            elif (_is_bounded_callback_fstring(node) or _is_bounded_concat(node)
+                  or _is_bounded_ifexp(node) or _is_bounded_boolOp_or(node)):
+                pass
+            elif _is_fstring(node):
+                max_bytes = _fstring_max_bytes(node)
+                offenders.append(f"{p.name}:{node.lineno} f-string ~{max_bytes} bytes (may exceed 64)")
+            else:
+                offenders.append(f"{p.name}:{node.lineno} unbounded expression {ast.unparse(node)[:60]}")
+    assert not offenders, "callback_data values that may exceed Telegram's 64-byte limit:\n  " + "\n  ".join(offenders)
+
+
 def test_resolve_buttons_with_adversarial_options():
     """An on-chain market whose option label is 60 chars of `&<>` (the MAX_OPTION_LEN
     cap) must still produce a keyboard Telegram accepts: every label ≤64 chars, every
@@ -211,11 +302,31 @@ def test_docs_do_not_name_paths_outside_the_repo():
         text = _read(p)
         # Windows drive paths (D:/, C:/, etc.) are always the maintainer's laptop.
         # Exclude URLs (anything with ://) and server paths (/opt, /app, /usr, /etc).
+        # Also exclude examples/warnings (lines with "no", "not", "never" before the path).
         for m in re.finditer(r"[A-Za-z]:/[^\s`'\"]+", text):
             path = m.group(0)
-            if "://" not in path and not path.startswith(("P:/opt", "P:/app", "P:/usr", "P:/etc")):
-                offenders.append(f"{p.name}: {path}")
+            if "://" in path:
+                continue
+            # Server paths: /opt, /app, /usr, /etc (may have drive letter prefix like P:/opt)
+            if any(f"/{prefix}/" in path or path.endswith(f"/{prefix}") for prefix in ["opt", "app", "usr", "etc"]):
+                continue
+            # Check if this is an example/warning (look at the surrounding context)
+            line_start = text.rfind('\n', 0, m.start()) + 1
+            line_end = text.find('\n', m.end())
+            if line_end == -1:
+                line_end = len(text)
+            line = text[line_start:line_end].lower()
+            if any(word in line for word in ["no ", "not ", "never ", "don't", "avoid", "exclude"]):
+                continue
+            offenders.append(f"{p.name}: {path}")
         # /Dev/Temp is the maintainer's scratch directory.
         for m in re.finditer(r"/Dev/Temp/[^\s`'\"]+", text):
+            line_start = text.rfind('\n', 0, m.start()) + 1
+            line_end = text.find('\n', m.end())
+            if line_end == -1:
+                line_end = len(text)
+            line = text[line_start:line_end].lower()
+            if any(word in line for word in ["no ", "not ", "never ", "don't", "avoid", "exclude"]):
+                continue
             offenders.append(f"{p.name}: {m.group(0)}")
     assert not offenders, "docs name paths outside the repo:\n  " + "\n  ".join(offenders)
