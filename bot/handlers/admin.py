@@ -267,7 +267,11 @@ async def cb_admin(cb: types.CallbackQuery) -> None:
     if chat is None or chat.type != "private":
         await cb.answer(i18n.t(lang, "private_chat_only"), show_alert=True)
         return
-    screen = (cb.data or "").split(":", 1)[1]
+    parts = (cb.data or "").split(":", 1)
+    if len(parts) != 2:
+        await cb.answer()
+        return
+    screen = parts[1]
     if screen not in ("main", *SECTIONS):
         await cb.answer()
         return

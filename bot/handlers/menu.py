@@ -62,7 +62,11 @@ async def cb_setlang(cb: types.CallbackQuery) -> None:
     user = cb.from_user
     if not user:
         return
-    code = cb.data.split(':', 1)[1]
+    parts = cb.data.split(':', 1)
+    if len(parts) != 2:
+        await cb.answer()
+        return
+    code = parts[1]
     if code not in i18n.LANGS:
         await cb.answer()
         return
