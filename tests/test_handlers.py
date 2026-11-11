@@ -2785,6 +2785,43 @@ def test_readme_documents_every_menu_command():
     assert not missing, f"README never mentions: {missing}"
 
 
+def test_every_registered_handler_is_the_coroutine_telegram_calls():
+    """Extracting a shared helper out of a command once left the router decorator
+    attached to the helper: `/oc_create` answered nothing, because aiogram called
+    `def _create_hint(lang)` with a Message. The command inventory above cannot
+    see that — the filter still names the right command, only the function under
+    it is the wrong one. So measure the callable instead: a coroutine, whose first
+    parameter is the event aiogram hands it."""
+    import asyncio
+    import inspect
+
+    from aiogram import types
+
+    from bot.handlers import router
+
+    surfaces = (
+        ('message', router.message.handlers, types.Message),
+        ('callback_query', router.callback_query.handlers, types.CallbackQuery),
+    )
+    for kind, group, event in surfaces:
+        assert group, f"the router registered no {kind} handlers at all"
+        for h in group:
+            func = h.callback
+            assert asyncio.iscoroutinefunction(func), (
+                f"{kind} handler {func.__qualname__} is not a coroutine — "
+                f"aiogram cannot await it"
+            )
+            params = list(inspect.signature(func).parameters.values())
+            assert params and params[0].annotation is not inspect.Parameter.empty, (
+                f"{kind} handler {func.__qualname__} does not declare the event it answers"
+            )
+            first = params[0].annotation
+            assert isinstance(first, type) and issubclass(first, event), (
+                f"{kind} handler {func.__qualname__} is annotated for {first}, "
+                f"not {event.__name__}"
+            )
+
+
 def test_every_menu_button_has_a_handler():
     """The main keyboard is assembled from one list and the callback routes from
     another: «Платные посты» shipped callback_data="paywall" while the handler
