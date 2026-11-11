@@ -225,9 +225,10 @@ happened.
 `/api/mini/withdraw` is the other exception: it is protected by the staged
 single-use token below rather than by a header.
 
-The Mini App keeps one key per unresolved action and replaces it only after
-the server accepts the request
-(`web/static/app.html`, `moneyHeaders` / `resetIdem`).
+The Mini App keeps one key per unresolved action, bound to the payload that
+first used it, and replaces it only after the server accepts the request — a
+retry with different parameters is refused while the original outcome is still
+unknown (`web/static/app.html`, `moneyPost` / `idemKey` / `resetIdem`).
 
 ## Autonomous agent
 
