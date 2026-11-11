@@ -1924,6 +1924,38 @@ def test_alembic_runs_are_serialised_within_one_process(monkeypatch):
     assert peak == [1] * 4, f"overlapping alembic runs: {peak}"
 
 
+@pytest.mark.parametrize("has_trades", [True, False])
+def test_token_trade_downgrade_preserves_financial_history(monkeypatch, has_trades):
+    import importlib.util
+    from pathlib import Path
+    from unittest.mock import MagicMock
+
+    from sqlalchemy.engine import Connection, CursorResult
+
+    filename = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "017_token_trade_kinds.py"
+    spec = importlib.util.spec_from_file_location("token_trade_migration", filename)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    connection = MagicMock(spec=Connection)
+    result = MagicMock(spec=CursorResult)
+    result.scalar.return_value = 1 if has_trades else None
+    connection.execute.return_value = result
+    writes = []
+    monkeypatch.setattr(migration.op, "get_bind", lambda: connection)
+    monkeypatch.setattr(migration.op, "execute", writes.append)
+    if has_trades:
+        with pytest.raises(RuntimeError, match="financial"):
+            migration.downgrade()
+        assert not writes
+    else:
+        migration.downgrade()
+        assert len(writes) == 2
+        assert all("DELETE" not in statement for statement in writes)
+    assert connection.execute.call_count == 1
+    assert "token_buy" in str(connection.execute.call_args.args[0])
+    assert "token_sale" in str(connection.execute.call_args.args[0])
+
+
 def test_env_py_still_reads_database_url_for_a_plain_cli_run(ledger, monkeypatch):
     """`alembic upgrade head` from the docker entrypoint passes no attributes."""
     import pathlib

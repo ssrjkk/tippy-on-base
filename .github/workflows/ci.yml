@@ -26,7 +26,14 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff (same pin as requirements-dev.txt)
-        run: pip install ruff==0.17.2
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+          from pathlib import Path
+          pin = next(line for line in Path('requirements-dev.txt').read_text(encoding='utf-8').splitlines() if line.startswith('ruff=='))
+          subprocess.run([sys.executable, '-m', 'pip', 'install', pin], check=True)
+          PY
       - name: Ruff check (bot web tests deploy agent scripts)
         run: ruff check bot web tests deploy agent scripts
 

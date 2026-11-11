@@ -180,6 +180,21 @@ def _reaction_update(
     return Update.model_validate(d)
 
 
+def test_dispatch_oc_create_reaches_the_command_handler(ledger, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bot import i18n
+    from bot.handlers import _common as common
+
+    monkeypatch.setattr(common.config, "OUTCOME_MARKET_ADDRESS", "")
+    monkeypatch.setattr(common, "user_lang", AsyncMock(return_value="en"))
+    session = RecorderSession()
+    asyncio.run(_mk_dp().feed_update(_mk_bot(session), _message_update("/oc_create")))
+    texts = [payload["text"] for name, payload in session.calls if name == "sendMessage"]
+    assert i18n.t("en", "oc_disabled") in texts
+    assert ledger._conn.execute("SELECT COUNT(*) AS c FROM onchain_markets").fetchone()["c"] == 0
+
+
 def test_dispatch_start_shows_menu(ledger):
     s = RecorderSession()
     asyncio.run(_mk_dp().feed_update(_mk_bot(s), _message_update("/start")))

@@ -171,7 +171,6 @@ async def cmd_oc(message: types.Message) -> None:
     await message.answer('\n'.join(lines))
 
 
-@common.router.message(Command('oc_create'))
 def _create_hint(lang: str) -> str:
     """The `/oc_create` format card, printed with the limits the handler and the
     contract actually apply. As literals they lied the moment an operator moved a
@@ -188,6 +187,7 @@ def _create_hint(lang: str) -> str:
     )
 
 
+@common.router.message(Command('oc_create'))
 async def cmd_oc_create(message: types.Message) -> None:
     """Create an ON-CHAIN market: /oc_create 50 Question | Opt1 | Opt2 [24h].
 

@@ -20,6 +20,9 @@ const fmtUSDC = (x) =>
 // document whose money is written "24,88".
 const fmtPct = (x) =>
   (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
+// Probability display may round, but configured fees must preserve their stated rate.
+const fmtFeePct = (x) =>
+  (x ?? 0).toLocaleString("ru-RU", { maximumSignificantDigits: 15 }) + "%";
 
 /* ---------- reveal-on-scroll ---------- */
 /* threshold 0.1 meant a section taller than ten viewports could never reach
@@ -171,8 +174,8 @@ function renderTerms(info) {
   if (!el || !info.limits || !info.fees) return;
   const L = info.limits, F = info.fees;
   const rows = [
-    ["Комиссия на вывод", fmtPct(F.withdraw_pct)],
-    ["Комиссия с выигрыша", fmtPct(F.win_pct)],
+    ["Комиссия на вывод", fmtFeePct(F.withdraw_pct)],
+    ["Комиссия с выигрыша", fmtFeePct(F.win_pct)],
     ["Максимум чаевых за раз", fmtUSDC(L.max_tip_usdc) + " USDC"],
     ["Максимум ставки за раз", fmtUSDC(L.max_bet_usdc) + " USDC"],
     ["Максимум сделки на рынке", fmtUSDC(L.max_trade_usdc) + " USDC"],

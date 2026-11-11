@@ -89,39 +89,70 @@
   async function api(path, opts) {
     var r = await fetch(path, opts);
     var body = null;
-    try { body = await r.json(); } catch (e) { body = null; }
+    try { body = await r.json(); } catch (e) {
+      if (r.ok) {
+        var incomplete = new Error('Ответ операции не получен полностью. Повторите исходный запрос.');
+        incomplete.code = 'INCOMPLETE_API_RESPONSE';
+        throw incomplete;
+      }
+    }
     if (r.status === 401) {
       signedOut();
-      throw new Error('сессия истекла — войдите заново');
+      var expired = new Error('сессия истекла — войдите заново');
+      expired.httpStatus = r.status;
+      throw expired;
     }
-    if (!r.ok) throw new Error(reason(body));
+    if (!r.ok) {
+      var error = new Error(reason(body));
+      error.httpStatus = r.status;
+      throw error;
+    }
     return body || {};
   }
 
   /* The money endpoints reserve an Idempotency-Key and answer 400 without one.
-     One key per action, kept while the attempt is unresolved — the server rolls
-     the reservation back when the action fails, so a retry replays it instead of
-     spending twice — and dropped once the server accepted the action. Same rule
-     the Mini App follows, same reason. */
+     One key per action, bound to the payload that first used it: an unknown
+     outcome must replay the original operation, never new parameters under its
+     old key. The key is dropped when the server refused the request outright
+     and kept while the outcome is uncertain, so a retry replays instead of
+     spending twice. Same rule the Mini App follows, same reason. */
   var _idemKeys = {};
-  function idemKey(action) {
-    if (!_idemKeys[action]) {
-      _idemKeys[action] = (window.crypto && crypto.randomUUID)
-        ? crypto.randomUUID()
-        : Date.now().toString(36) + Math.random().toString(36).slice(2);
+  function idemKey(action, path, payload) {
+    var serialized = JSON.stringify([path, payload]);
+    var pending = _idemKeys[action];
+    if (pending && pending.payload !== serialized) {
+      var error = new Error('Предыдущая операция не подтверждена. Повторите её исходные параметры; новые не отправлены.');
+      error.code = 'IDEMPOTENCY_PAYLOAD_CHANGED';
+      throw error;
     }
-    return _idemKeys[action];
+    if (!pending) pending = _idemKeys[action] = {
+      key: crypto.randomUUID(), payload: serialized, uncertain: false, promise: null,
+    };
+    return pending.key;
   }
   function resetIdem(action) { delete _idemKeys[action]; }
 
   function post(path, payload, action) {
     var headers = { 'Content-Type': 'application/json' };
-    if (action) headers['Idempotency-Key'] = idemKey(action);
-    return api(path, {
+    if (action) headers['Idempotency-Key'] = idemKey(action, path, payload);
+    var pending = action ? _idemKeys[action] : null;
+    if (pending && pending.promise) return pending.promise;
+    var request = api(path, {
       method: 'POST',
       headers: headers,
       body: JSON.stringify(payload),
+    }).catch(function (error) {
+      if (pending && _idemKeys[action] === pending) {
+        var refused = error.httpStatus >= 400 && error.httpStatus < 500 && error.httpStatus !== 409;
+        if (refused && !pending.uncertain) resetIdem(action);
+        else pending.uncertain = true;
+      }
+      throw error;
+    }).finally(function () {
+      if (pending) pending.promise = null;
     });
+    if (pending) pending.promise = request;
+    return request;
   }
 
   function usd(x) { return fmt(x) + ' USDC'; }

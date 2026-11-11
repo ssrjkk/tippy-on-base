@@ -56,6 +56,7 @@ async def test_buy_updates_holder_and_cost(tmp_path, ledger):
     ledger.credit(BUYER_A, 200_000_000, "deposit")
     registry = CreatorTokenRegistry(tmp_path)
     token = await _make_token(registry)
+    events_before = ledger.global_stats()["transactions"]
 
     success, cost = await registry.buy_tokens(token.token_id, BUYER_A, 400)
     assert success is True
@@ -64,6 +65,11 @@ async def test_buy_updates_holder_and_cost(tmp_path, ledger):
     assert ledger.balance(BUYER_A) == Decimal("160.000000")
     # The price goes to the token's creator, so the trade conserves money.
     assert ledger.balance(CREATOR) == Decimal("40.000000")
+    assert ledger.global_stats()["transactions"] == events_before + 1
+    rows = ledger._conn.execute(
+        "SELECT COUNT(*) AS c FROM tx_log WHERE kind IN ('token_buy', 'token_sale')"
+    ).fetchone()["c"]
+    assert rows == 2
 
     info = await registry.get_holder_info(token.token_id, BUYER_A)
     assert info["balance"] == 400

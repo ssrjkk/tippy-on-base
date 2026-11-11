@@ -79,20 +79,22 @@ def test_service_images_are_not_floating():
             assert ":" in image.split("/")[-1], f"{path.name}: {image} has no tag"
 
 
-def test_ci_ruff_pin_matches_the_local_pin():
-    """The lint job installed ruff 0.16.4 while requirements-dev.txt pinned
-    0.17.2, so `ruff check` could accept locally what CI rejects (or the other
-    way round) on a rule that changed between the two releases. One pin, one
-    version, in both places."""
+def test_ci_ruff_pin_matches_the_local_pin(monkeypatch):
+    import subprocess
+    import sys
+    import textwrap
+
     root = Path(__file__).resolve().parents[1]
     ci = _read(root / ".github" / "workflows" / "ci.yml")
-    ci_pin = re.search(r"pip install ruff==(\S+)", ci)
-    assert ci_pin, "the lint job no longer installs ruff by exact version"
+    installer = re.search(r"python - <<'PY'\n(.*?)\n\s+PY", ci, re.S)
+    assert installer, "the lint job must read its pin from requirements-dev.txt"
     dev_pin = re.search(r"^ruff==(\S+)$", _read(root / "requirements-dev.txt"), re.M)
     assert dev_pin, "requirements-dev.txt no longer pins ruff"
-    assert ci_pin.group(1) == dev_pin.group(1), (
-        f"CI lints with ruff {ci_pin.group(1)}, the local gate with {dev_pin.group(1)}"
-    )
+    calls = []
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(subprocess, "run", lambda args, check: calls.append((args, check)))
+    exec(compile(textwrap.dedent(installer.group(1)), "ci_ruff_installer", "exec"), {})
+    assert calls == [([sys.executable, "-m", "pip", "install", f"ruff=={dev_pin.group(1)}"], True)]
 
 
 def test_ci_runs_on_the_interpreter_the_image_ships():

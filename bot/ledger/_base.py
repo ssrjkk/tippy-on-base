@@ -71,7 +71,7 @@ CREDIT_KINDS = frozenset({
 # sender's debit in the same transaction. They belong in a person's history, but
 # not in a public event counter: one tip would be two "transactions" and one
 # rain of N shares would be 1+N.
-MIRRORED_CREDIT_KINDS = frozenset({'tip_in', 'rain_in'})
+MIRRORED_CREDIT_KINDS = frozenset({'tip_in', 'rain_in', 'token_sale'})
 
 
 def is_credit(kind: str) -> bool:

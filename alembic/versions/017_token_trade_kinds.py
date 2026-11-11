@@ -13,6 +13,7 @@ Create Date: 2026-10-30
 from collections.abc import Sequence
 
 from alembic import op
+from sqlalchemy import text
 
 revision: str = "017"
 down_revision: str | Sequence[str] | None = "016"
@@ -39,9 +40,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Rows of the new kinds would violate the 011 vocabulary; they are derived
-    # from a trade that no longer has a valid label, so they go with it.
-    op.execute("DELETE FROM tx_log WHERE kind IN ('token_buy', 'token_sale');")
+    has_trades = op.get_bind().execute(
+        text("SELECT 1 FROM tx_log WHERE kind IN ('token_buy', 'token_sale') LIMIT 1")
+    ).scalar()
+    if has_trades is not None:
+        raise RuntimeError("Cannot downgrade while creator-token financial history exists")
     op.execute("ALTER TABLE tx_log DROP CONSTRAINT IF EXISTS chk_tx_log_kind;")
     op.execute(
         "ALTER TABLE tx_log ADD CONSTRAINT chk_tx_log_kind CHECK (kind IN ("

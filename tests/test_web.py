@@ -1970,7 +1970,7 @@ def test_both_bundles_send_the_key_every_money_endpoint_requires():
     site = (root / "web" / "static" / "site.js").read_text(encoding="utf-8")
     app = (root / "web" / "static" / "app.html").read_text(encoding="utf-8")
     assert "Idempotency-Key" in site, "site.js has no idempotency helper at all"
-    assert "moneyHeaders" in app, "app.html lost its key helper"
+    assert "function moneyPost" in app, "app.html lost its idempotent request helper"
 
     def windows(text: str, endpoint: str) -> list[str]:
         """Every place the bundle names this endpoint, with the call around it.
@@ -1982,7 +1982,7 @@ def test_both_bundles_send_the_key_every_money_endpoint_requires():
 
     for path, actions in sorted(required.items()):
         for name, text, needs in (("site.js", site, r",\s*(?:'[a-z_]+'|action)\s*\)"),
-                                  ("app.html", app, r"moneyHeaders\(")):
+                                  ("app.html", app, r"moneyPost\(")):
             calls = windows(text, path)
             if not calls:
                 # this surface does not offer the action at all — the Mini App
