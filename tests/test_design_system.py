@@ -6,14 +6,22 @@ that breaks the system cannot pass by looking roughly like what it replaced.
 
 Three deliberate choices:
 
-* **Contrast is measured twice.** Once for the exact `color`/`background` pair a
-  rule declares, and once for every colour used as `color:` against both page
-  canvases. The first finds a broken button; the second finds a muted label that
+* **Contrast is measured twice, in both stylesheets.** Once for the exact
+  `color`/`background` pair a rule declares — on each surface's own boards, since
+  the site alternates canvas with a grey band and the Mini App paints on its
+  cards — and once for every colour used as `color:` against both page canvases.
+  The first finds a broken button; the second finds a muted label that
   was legal on white and unreadable after it moved onto the grey band.
 * **The site and the Mini App must agree on colours by value.** `app.html` carries
   its own palette with its own names (`--text3` where the site says `--muted`), so
   a mapped comparison is the only way drift shows up before a user sees two
-  different greys in one product.
+  different greys in one product. Because that map exists, the rest of the palette
+  laws — raw hex outside the tokens, a token nothing reads, a chain that never
+  terminates, the inverse-text pairs, the coarse-pointer touch floor — are
+  parametrized over both stylesheets rather than only the landing's. Measured this
+  way the Mini App gave up two things: a `--warning` for a state it never painted,
+  and the last declaration of each of its blocks, which a parser that ended
+  declarations at `;` alone hid from every gate (`--safe-b`).
 * **A dead token, an unsubstituted placeholder and a substitution no template
   asks for all fail.** They are the same drift in three costumes.
 """
@@ -62,6 +70,7 @@ SITE_TO_MINI = {
     "--danger-bg": "--danger-bg",
     "--warning": "--warning",
     "--nav-bg": "--nav-bg",
+    "--on-accent": "--on-accent",
 }
 
 PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
@@ -98,14 +107,21 @@ def block_body(css: str, selector: str) -> tuple[int, int]:
     raise AssertionError(f"unbalanced block after {selector}")
 
 
-DECL_RE = re.compile(r"(--[a-z0-9-]+)\s*:\s*([^;]+);")
+DECL_RE = re.compile(r"(--[a-z0-9-]+)\s*:\s*([^;]+?)\s*(?:;|\}|$)")
 
 
 def declarations(css: str, span: tuple[int, int]) -> dict[str, str]:
     out: dict[str, str] = {}
-    for name, value in DECL_RE.findall(css[slice(*span)]):
+    body = css[slice(*span)]
+    for name, value in DECL_RE.findall(body):
         assert name not in out, f"{name} is declared twice in one block"
         out[name] = value.strip()
+    # A semicolon is optional before `}`, so a parser that ends declarations at
+    # `;` alone silently loses the last token of every block — which is how
+    # `--safe-b` sat in the Mini App palette unread by a single gate.
+    dropped = sorted({m.group(1) for m in re.finditer(r"(--[a-z0-9-]+)\s*:", body)
+                      if m.group(1) not in out})
+    assert not dropped, f"declared in a token block but unread by this parser: {dropped}"
     return out
 
 
@@ -118,6 +134,18 @@ MINI_LIGHT_SPAN = block_body(APP_HTML, ":root,[data-theme=\"light\"]")
 MINI_DARK_SPAN = block_body(APP_HTML, "[data-theme=\"dark\"]")
 MINI_LIGHT = declarations(APP_HTML, MINI_LIGHT_SPAN)
 MINI_DARK = {**MINI_LIGHT, **declarations(APP_HTML, MINI_DARK_SPAN)}
+
+
+# The palette laws below are laws about a stylesheet, not about the landing. The
+# Mini App keeps its own palette in its own document, so a gate that read only
+# style.css proved one of the two surfaces and let the same defect ship twice —
+# which is exactly how the 4.27:1 selected chip came back on a board nothing had
+# opened. `readers` is who may consume these tokens: style.css is read by every
+# page and script, app.html is a closed document that reads only itself.
+TOKEN_SURFACES = [
+    pytest.param(CSS, LIGHT, DARK, DARK_SPAN, (*PAGES, *SCRIPTS), id="style_css"),
+    pytest.param(APP_HTML, MINI_LIGHT, MINI_DARK, MINI_DARK_SPAN, (), id="app_html"),
+]
 
 
 def resolve(tokens: dict[str, str], name: str, _seen: frozenset = frozenset()) -> str:
@@ -240,39 +268,54 @@ def test_every_var_referenced_is_declared_somewhere_in_its_own_surface():
         assert not undefined, f"{name} reads undeclared tokens: {undefined}"
 
 
-def test_dark_theme_overrides_no_token_the_light_theme_lacks():
-    extra = sorted(set(declarations(CSS, DARK_SPAN)) - set(LIGHT))
+@pytest.mark.parametrize("css,light,dark,dark_span,readers", TOKEN_SURFACES)
+def test_dark_theme_overrides_no_token_the_light_theme_lacks(css, light, dark, dark_span, readers):
+    extra = sorted(set(declarations(css, dark_span)) - set(light))
     assert not extra, f"[data-theme=dark] invents tokens: {extra}"
 
 
-def test_token_chains_terminate_in_both_themes():
+@pytest.mark.parametrize("css,light,dark,dark_span,readers", TOKEN_SURFACES)
+def test_token_chains_terminate_in_both_themes(css, light, dark, dark_span, readers):
     """An unresolved var() invalidates the whole declaration, so the element falls
     back to the UA default and a colour or a font disappears with no error."""
-    for name in LIGHT:
-        for theme, tokens in (("light", LIGHT), ("dark", DARK)):
+    for name in light:
+        for theme, tokens in (("light", light), ("dark", dark)):
             value = resolve(tokens, name)
             assert "var(" not in value, f"{name} in {theme} resolves to {value}"
 
 
 PRINT_LINE = CSS[: CSS.index("@media print")].count("\n")
 
+COLOUR_SURFACES = [
+    # `print_line` is where paper begins on the site: paper is not a theme, so its
+    # colours are allowed to be literals. `exempt` names the lines on a surface
+    # whose hex is not a paint decision the theme flips.
+    pytest.param(CSS, (LIGHT_SPAN, DARK_SPAN), PRINT_LINE, ("--chevron",), id="style_css"),
+    pytest.param(APP_HTML, (MINI_LIGHT_SPAN, MINI_DARK_SPAN), None,
+                 ('name="theme-color"',), id="app_html"),
+]
 
-def test_no_raw_colour_outside_the_tokens():
+
+@pytest.mark.parametrize("css,token_spans,print_line,exempt", COLOUR_SURFACES)
+def test_no_raw_colour_outside_the_tokens(css, token_spans, print_line, exempt):
     """Every colour the product paints comes from a token, so the theme flip is
     one job and a brand change is one line. `@media print` is exempt on purpose:
     paper is not a theme, and routing paper white through a token would make the
-    dark theme print dark grey."""
+    dark theme print dark grey. The Mini App's `theme-color` metas are exempt for
+    the opposite reason — a browser chrome colour cannot read a CSS variable."""
     offenders = []
     offset = 0
-    for number, line in enumerate(CSS.splitlines(), start=1):
+    for number, line in enumerate(css.splitlines(), start=1):
         stripped = line.strip()
-        inside_tokens = (
-            LIGHT_SPAN[0] < offset < LIGHT_SPAN[1] or DARK_SPAN[0] < offset < DARK_SPAN[1]
-        )
-        offset += len(line) + 1
-        if inside_tokens or stripped.startswith(("*", "/*")) or "--chevron" in line:
+        end = offset + len(line)
+        # Overlap, not containment: the Mini App writes its whole palette on one
+        # line, so the line starts before its own `{` and the token block would
+        # never be recognised from inside the declaration span.
+        inside_tokens = any(offset < span[1] and end > span[0] for span in token_spans)
+        offset = end + 1
+        if inside_tokens or stripped.startswith(("*", "/*")) or any(text in line for text in exempt):
             continue
-        if number > PRINT_LINE:
+        if print_line is not None and number > print_line:
             continue
         if re.search(r"#[0-9a-f]{3,8}\b", line, re.I):
             offenders.append((number, stripped[:90]))
@@ -304,12 +347,16 @@ def test_banned_font_families_are_absent_from_every_font_stack():
     assert not offenders, offenders
 
 
-def test_no_token_is_defined_and_never_read():
-    referenced = set(re.findall(r"var\((--[a-z0-9-]+)\)", CSS))
-    for name in (*PAGES, *SCRIPTS):
+@pytest.mark.parametrize("css,light,dark,dark_span,readers", TOKEN_SURFACES)
+def test_no_token_is_defined_and_never_read(css, light, dark, dark_span, readers):
+    """A token nobody reads is a colour waiting to be edited into disagreement
+    with itself, and it is the same drift in the Mini App's own palette: it
+    carried a `--warning` for a state it never painted."""
+    referenced = set(re.findall(r"var\((--[a-z0-9-]+)\)", css))
+    for name in readers:
         referenced |= set(re.findall(r"var\((--[a-z0-9-]+)\)", read(name)))
-    dead = sorted(set(LIGHT) - referenced)
-    assert not dead, f"defined in style.css but never read anywhere: {dead}"
+    dead = sorted(set(light) - referenced)
+    assert not dead, f"defined but never read: {dead}"
 
 
 def test_site_and_mini_app_palettes_agree_value_for_value():
@@ -343,9 +390,9 @@ def test_the_mini_app_keeps_its_grey_levels_separate():
 # ---------------------------------------------------------------------------
 
 
-def _pairs_in_rules() -> list[tuple[str, str, str, str]]:
+def _pairs_in_rules(css: str) -> list[tuple[str, str, str, str]]:
     out = []
-    for selector, body in rule_selector_and_body(CSS):
+    for selector, body in rule_selector_and_body(css):
         color = re.search(r"(?:^|;)\s*color:\s*([^;]+)", body)
         background = re.search(r"(?:^|;)\s*background(?:-color)?:\s*([^;]+)", body)
         size = re.search(r"font-size:\s*([\d.]+)px", body)
@@ -361,22 +408,33 @@ def _raw_colour(value: str, tokens: dict[str, str]):
     return parse_color(raw.strip()) if raw else None
 
 
-def test_declared_text_on_background_pairs_clear_aa():
+# Each surface carries its own ladder of boards: the site alternates the canvas
+# with a grey band, the Mini App paints its cards, sheets and rows on --card.
+PAIR_SURFACES = [
+    pytest.param(CSS, LIGHT, DARK, "--canvas", "--surface", id="style_css"),
+    pytest.param(APP_HTML, MINI_LIGHT, MINI_DARK, "--bg", "--card", id="app_html"),
+]
+
+
+@pytest.mark.parametrize("css,tokens_light,tokens_dark,canvas,band", PAIR_SURFACES)
+def test_declared_text_on_background_pairs_clear_aa(css, tokens_light, tokens_dark, canvas, band):
     failures = []
-    for selector, color, background, size in _pairs_in_rules():
+    for selector, color, background, size in _pairs_in_rules(css):
         floor = AA_LARGE if (size and float(size) >= LARGE_TEXT_PX) else AA_TEXT
-        for theme, tokens in (("light", LIGHT), ("dark", DARK)):
+        for theme, tokens in (("light", tokens_light), ("dark", tokens_dark)):
             fg = _raw_colour(color, tokens)
             bg = _raw_colour(background, tokens)
             if fg is None or bg is None:
                 continue  # gradients and currentColor are governed by their own rules
-            boards = [("--canvas", _raw_colour("var(--canvas)", tokens))]
+            boards = [(canvas, _raw_colour(f"var({canvas})", tokens))]
             if bg[3] < 1.0:
                 # A translucent fill is only a tint of whatever is behind it, and
-                # .section--band paints half of these rules on --surface instead of
-                # --canvas: the rendered gate measured 4.27:1 on a chip this test
-                # had been passing at 4.5:1 against the white canvas.
-                boards.append(("--surface", _raw_colour("var(--surface)", tokens)))
+                # half of these rules paint on the band instead of the canvas: the
+                # rendered gate measured 4.27:1 on a chip this test had been
+                # passing at 4.5:1 against the white canvas — and it said nothing
+                # about the Mini App at all until its own stylesheet joined, which
+                # is how the same 4.27 came back a second time on a selected chip.
+                boards.append((band, _raw_colour(f"var({band})", tokens)))
             for name, board in boards:
                 laid = composite(bg, board) if bg[3] < 1.0 else bg
                 painted = composite(fg, laid) if fg[3] < 1.0 else fg
@@ -464,20 +522,31 @@ def test_borders_are_visible_but_quiet():
         ), f"{theme}: --border-strong is not stronger than --border"
 
 
-def test_text_on_a_filled_surface_is_a_token_and_clears_aa():
+# Where a page inverts — white on the brand fill, dark on a black button — the
+# text colour is a token of its own, so a theme flip cannot leave white text on
+# a white button. The Mini App has no ink-filled surface: its active tab changes
+# colour and paints an underline, so it contributes the accent pairs only.
+INVERSE_TEXT_SURFACES = [
+    pytest.param(LIGHT, DARK, [("--on-accent", "--blue"), ("--on-accent", "--blue-hover"),
+                               ("--on-ink", "--ink")], id="style_css"),
+    pytest.param(MINI_LIGHT, MINI_DARK, [("--on-accent", "--accent"),
+                                         ("--on-accent", "--accent2")], id="app_html"),
+]
+
+
+@pytest.mark.parametrize("tokens_light,tokens_dark,pairs", INVERSE_TEXT_SURFACES)
+def test_text_on_a_filled_surface_is_a_token_and_clears_aa(tokens_light, tokens_dark, pairs):
     """Buttons and tabs are the two places where the page colour inverts. Those
     text colours are tokens, so the fill/text pairs are checked here instead of
     being decided per rule — and both themes are checked, because the dark theme
     paints its accent lighter, not darker."""
-    assert "--on-accent" in LIGHT and "--on-ink" in LIGHT, "no inverse-text tokens"
-    for theme, tokens in (("light", LIGHT), ("dark", DARK)):
-        accent = as_color("var(--on-accent)", tokens)
-        for fill in ("--blue", "--blue-hover"):
-            measured = ratio(accent, as_color(f"var({fill})", tokens))
-            assert measured >= AA_TEXT, f"{theme}: --on-accent on {fill} = {measured:.2f}:1"
-        ink = as_color("var(--on-ink)", tokens)
-        measured = ratio(ink, as_color("var(--ink)", tokens))
-        assert measured >= AA_TEXT, f"{theme}: --on-ink on --ink = {measured:.2f}:1"
+    for text_token, _fill in pairs:
+        assert text_token in tokens_light, f"no {text_token} token"
+    for theme, tokens in (("light", tokens_light), ("dark", tokens_dark)):
+        for text_token, fill in pairs:
+            measured = ratio(as_color(f"var({text_token})", tokens),
+                             as_color(f"var({fill})", tokens))
+            assert measured >= AA_TEXT, f"{theme}: {text_token} on {fill} = {measured:.2f}:1"
 
 
 # ---------------------------------------------------------------------------
@@ -573,15 +642,23 @@ def test_anything_clickable_is_a_button():
     assert not offenders, offenders
 
 
-def test_touch_floor_exists_and_names_live_classes():
+TOUCH_SURFACES = [
+    pytest.param(CSS, id="style_css"),
+    pytest.param(APP_HTML, id="app_html"),
+]
+
+
+@pytest.mark.parametrize("css", TOUCH_SURFACES)
+def test_touch_floor_exists_and_names_live_classes(css):
     """The 44 px floor is a `@media (pointer: coarse)` block that grows min-height
     only. A selector inside it that exists nowhere else means a control quietly
-    lost its thumb coverage when it was renamed."""
-    body = CSS[slice(*block_body(CSS, "@media (pointer: coarse)"))]
+    lost its thumb coverage when it was renamed. /app is the primary touch
+    surface, so its block is measured with the same law as the site's."""
+    body = css[slice(*block_body(css, "@media (pointer: coarse)"))]
     selectors = set(re.findall(r"([.#][\w-]+)", body))
     assert selectors, "the coarse-pointer block is empty"
     assert re.search(r"min-height:\s*44px", body), "the touch floor is no longer min-height: 44px"
-    rest = CSS.replace(body, "")
+    rest = css.replace(body, "")
     orphans = sorted(s for s in selectors if s not in rest)
     assert not orphans, f"sized for a thumb but defined nowhere else: {orphans}"
 
@@ -1049,10 +1126,16 @@ def test_the_weights_the_ui_asks_for_are_the_weights_that_are_downloaded():
 
 
 def test_an_outline_is_only_erased_where_something_visible_is_drawn():
-    """`outline: none` on `:focus` deletes the keyboard cursor. It is legal only
-    where the same rule paints a replacement — a border colour or a ring — and a
-    blanket `outline: none` on an element type is legal only while a
-    `:focus-visible` rule in the same document brings the ring back."""
+    """`outline: none` on `:focus` deletes the keyboard cursor, and this site's own
+    history says why a tint is not a replacement: the landing's fields erased the
+    ring behind a halo of the brand blue at 16 % alpha, which composites to
+    1.11:1 on the dark canvas while every other indicator is held to 3:1 — and the
+    eraser was more specific than the global `:focus-visible` rule, so nothing
+    brought the ring back.
+
+    So `:focus` never gets to erase it. A blanket `outline: none` on an element
+    type stays legal only while a `:focus-visible` rule in the same document
+    paints the ring, which is exactly how `app.html` reads."""
     offenders = []
     for surface, css in (("style.css", CSS), ("app.html", APP_HTML)):
         rules = rule_selector_and_body(css)
@@ -1064,11 +1147,9 @@ def test_an_outline_is_only_erased_where_something_visible_is_drawn():
             if not OUTLINE_OFF_RE.search(body):
                 continue
             if ":focus" in selector and ":focus-visible" not in selector:
-                assert "box-shadow" in body or "border-color" in body, (
-                    f"{surface}: {selector} erases the ring and paints nothing in its place"
-                )
+                offenders.append((surface, selector, "erases the ring inside a :focus rule"))
             elif ":focus" not in selector and not has_focus_visible_ring:
-                offenders.append((surface, selector))
+                offenders.append((surface, selector, "no :focus-visible ring in the document"))
     assert not offenders, f"{offenders} remove the outline with no :focus-visible ring behind them"
 
 

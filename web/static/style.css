@@ -943,8 +943,13 @@ code {
   font: inherit; font-size: 15px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
+/* The border and the halo say "this field is active"; they are not the focus
+ * indicator. A keyboard visitor needs the 2px accent ring every other control
+ * takes from the global `:focus-visible` rule, and the Mini App's own
+ * `.input:focus` already leaves it in place: the halo is the brand blue at
+ * 16 % alpha, which composites to 1.11:1 on the dark canvas. */
 .input:focus {
-  outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft);
+  border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft);
 }
 .input:disabled { opacity: 0.55; cursor: not-allowed; }
 select.input {
@@ -1311,7 +1316,7 @@ select.input {
    exempts targets whose size is constrained by the line height of the text. */
 @media (pointer: coarse) {
   .btn, .btn-sm, .tab, .amount-chip, .cmd, .hero-badge { min-height: 44px; }
-  .nav-search, .pal-row { min-height: 44px; }
+  .nav-search, .pal-row, .palette-input { min-height: 44px; }
   .theme-toggle { width: 44px; height: 44px; }
   .brand { min-height: 44px; }
   .author-links a, .footer-legal a {

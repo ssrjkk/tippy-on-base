@@ -377,10 +377,14 @@ async function loadWallet() {
   } catch (e) { /* keep placeholders */ }
 }
 
-/* The ring draws the two figures the table beside it prints — free reserve
- * against all liabilities — so a glance and the exact row can never disagree.
- * `reserve_usdc` is read from the chain; when the RPC does not answer there is
- * no coverage to show, and the ring says so instead of drawing a full circle. */
+/* The ring draws the two figures the table beside it prints — what the address
+ * actually holds against all liabilities — so a glance and the exact row can
+ * never disagree. The coverage is a fraction of the *held* balance: `reserve_usdc`
+ * is the free reserve, the difference between held and owed, and a difference is
+ * not a fraction. Dividing by it made an insolvent bot paint a 95% full ring and
+ * print «-94,8%» — a negative percentage that wraps the dash pattern back around.
+ * `reserve_usdc` stays the no-data signal, because the server nulls it exactly
+ * when the chain did not answer. */
 const GAUGE_RADIUS = 52;
 
 function paintSolvency(s) {
@@ -388,9 +392,10 @@ function paintSolvency(s) {
   const ring = $("solvencyGauge");
   const circumference = 2 * Math.PI * GAUGE_RADIUS;
   arc.style.strokeDasharray = circumference + " " + circumference;
-  const reserve = s.reserve_usdc;
+  const free = s.reserve_usdc;
   const owed = s.liabilities_usdc;
-  if (reserve === null || reserve === undefined) {
+  const held = s.reserves_source === "vault" ? s.vault_balance_usdc : s.hot_wallet_balance_usdc;
+  if (free === null || free === undefined) {
     arc.style.strokeDashoffset = circumference;
     arc.classList.remove("gauge-value-low");
     $("gaugePct").textContent = "–";
@@ -399,20 +404,22 @@ function paintSolvency(s) {
     ring.setAttribute("aria-label", "Покрытие резервами неизвестно: RPC не ответил.");
     return;
   }
-  const covered = owed > 0 ? Math.min(reserve / owed, 1) : 1;
+  const covered = owed > 0 ? Math.max(0, Math.min(held / owed, 1)) : 1;
   arc.style.strokeDashoffset = circumference * (1 - covered);
   arc.classList.toggle("gauge-value-low", s.solvent === false);
   $("gaugePct").textContent = fmtPct(covered * 100);
   $("gaugeCap").textContent = "покрытие";
   $("gaugeDetail").innerHTML = owed > 0
-    ? "Свободный резерв <b>" + fmtUSDC(reserve) + "</b> из <b>" + fmtUSDC(owed)
+    ? "На адресе <b>" + fmtUSDC(held) + "</b> USDC при <b>" + fmtUSDC(owed)
       + "</b> USDC обязательств — "
-      + (s.solvent === false ? "покрыто не всё." : "обязательства покрыты.")
-    : "Свободный резерв <b>" + fmtUSDC(reserve) + "</b> USDC, обязательств у бота сейчас нет.";
+      + (s.solvent === false
+        ? "не хватает " + fmtUSDC(Math.abs(free)) + " USDC."
+        : "обязательства покрыты.")
+    : "На адресе <b>" + fmtUSDC(held) + "</b> USDC, обязательств у бота сейчас нет.";
   ring.setAttribute(
     "aria-label",
     "Резервы покрывают " + fmtPct(covered * 100) + " обязательств: "
-    + fmtUSDC(reserve) + " из " + fmtUSDC(owed) + " USDC."
+    + fmtUSDC(held) + " из " + fmtUSDC(owed) + " USDC."
   );
 }
 

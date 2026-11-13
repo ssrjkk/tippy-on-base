@@ -303,6 +303,36 @@ def open_context(browser, *, theme, viewport, xff, touch=False, reduced_motion=N
     return context
 
 
+# The webfonts the stylesheets ask for are the only thing these gates wait for,
+# and `document.fonts.ready` settles on success and on failure alike. Raced
+# against 3 s because a socket the local proxy has stalled never errors: the
+# fallback the page falls back to is what a visitor on that same network reads.
+FONTS_SETTLED_JS = """
+async () => await Promise.race([
+  document.fonts.ready,
+  new Promise((resolve) => setTimeout(resolve, 3000)),
+])
+"""
+
+
+def go(page, path: str):
+    """Navigate to one page of the origin and stop when the page itself is
+    measurable — not when its third-party requests finish.
+
+    `wait_until="load"` made every rendered facet a hostage of fonts.gstatic.com
+    and of the Telegram SDK script the Mini App pulls: on a network that cannot
+    reach either, `load` does not fire, and a whole module of design checks died
+    on a 30 s navigation timeout that said nothing about the design. A parsed
+    document with its fonts settled is the readiness these gates actually read;
+    the data still arrives under the bounded `networkidle`/`wait_for_timeout` the
+    callers already keep, because a `fetch` never blocked `load` in the first
+    place.
+    """
+    response = page.goto(f"{PROD_URL}{path}", wait_until="domcontentloaded")
+    page.evaluate(FONTS_SETTLED_JS)
+    return response
+
+
 def measure(browser, path, theme, viewport, xff, touch=False):
     """One page load, all facets of the rendering returned as data.
 
@@ -344,7 +374,7 @@ def measure(browser, path, theme, viewport, xff, touch=False):
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.on("requestfailed", note_request_failure)
         page.on("response", note_bad_response)
-        response = page.goto(f"{PROD_URL}{path}", wait_until="load")
+        response = go(page, path)
         try:
             page.wait_for_load_state("networkidle", timeout=15000)
         except PlaywrightTimeoutError:
@@ -396,13 +426,19 @@ RING_JS = """
 
 
 def paints_a_ring(ring) -> bool:
-    """A ring is something a keyboard visitor can see: a style, a width, and a
-    colour that is not transparent. `outline: 2px solid transparent` satisfies the
-    first two and shows nothing, which is why all three are checked."""
+    """A ring is something a keyboard visitor can see: an outline with a style, a
+    width of at least 2 px, and a colour that is not transparent — `outline: 2px
+    solid transparent` satisfies the first two and shows nothing, which is why all
+    three are checked.
+
+    A `box-shadow` is deliberately not accepted as a ring any more. The landing's
+    fields answered `outline: none` with a 3 px halo of the brand blue at 16 %
+    alpha, which composites to 1.11:1 on the dark canvas against the 3:1 every
+    other indicator on this site is held to; and read a moment after a real Tab
+    press the same shadow is `rgba(0, 0, 0, 0) 0px 0px 0px 0px` mid-transition,
+    which paints nothing at all. A tint that only a probe can see is not a ring."""
     if ring["style"] in ("none", "hidden"):
         return False
-    if ring["shadow"] not in ("", "none"):
-        return True
     transparent = ring["color"].startswith("rgba(0, 0, 0, 0)") or ring["color"] == "transparent"
     return ring["width"] >= 2.0 and not transparent
 
@@ -433,7 +469,7 @@ def walk_keyboard(browser, path, *, theme, viewport, xff, stops=24):
     context = open_context(browser, theme=theme, viewport=viewport, xff=xff)
     try:
         page = context.new_page()
-        page.goto(f"{PROD_URL}{path}", wait_until="load")
+        go(page, path)
         page.wait_for_timeout(1500)
         seen, rings = set(), []
         for _ in range(stops):
@@ -453,7 +489,7 @@ def under_reduced_motion(browser, path, *, theme, viewport, xff):
                            reduced_motion="reduce")
     try:
         page = context.new_page()
-        page.goto(f"{PROD_URL}{path}", wait_until="load")
+        go(page, path)
         page.wait_for_timeout(1500)
         return page.evaluate(MOTION_JS)
     finally:
@@ -491,7 +527,7 @@ def walk_mini_app(browser, *, theme, viewport, xff):
         if SESSION_COOKIE:
             context.add_cookies([{"name": session_cookie_name(), "value": SESSION_COOKIE, "url": PROD_URL}])
         page = context.new_page()
-        page.goto(f"{PROD_URL}/app", wait_until="load")
+        go(page, "/app")
         page.wait_for_timeout(2500)
         screens = {}
         for tab in MINI_TABS:
@@ -853,10 +889,15 @@ def test_the_card_template_fits_the_phone_it_ships_to(browser, factory, containe
     context = open_context(browser, theme="dark", viewport=MOBILE, xff=XFF_POOL[3], touch=True)
     try:
         page = context.new_page()
-        page.goto(f"{PROD_URL}/", wait_until="load")
+        go(page, "/")
         page.wait_for_function(
             f"() => typeof window['{factory}'] === 'function'", timeout=20000
         )
+        # The page renders its own list from /api/predictions a moment later, and
+        # that render would replace the cards seeded below. Under `load` the
+        # initial fetch had usually landed by itself; the navigation now stops at
+        # the document, so the settle is stated instead of inherited.
+        page.wait_for_timeout(1500)
         painted = page.evaluate(SEED_JS, {
             "factory": factory, "container": container, "market": WORST_MARKET,
         })
@@ -958,7 +999,7 @@ def test_the_market_search_answers_the_keyboard(browser):
     context = open_context(browser, theme="dark", viewport=DESKTOP, xff=XFF_POOL[5])
     try:
         page = context.new_page()
-        page.goto(f"{PROD_URL}/", wait_until="load")
+        go(page, "/")
         page.wait_for_function("() => typeof openSearch === 'function'", timeout=20000)
         seeded = page.evaluate(PALETTE_SEED_JS, {"firstId": 94101, "epoch": 4102444800})
         if seeded.get("error"):
@@ -1011,6 +1052,407 @@ def test_the_market_search_answers_the_keyboard(browser):
         assert filtered["active"] == [kinds[1]], filtered
         page.keyboard.press("Escape")
         assert page.evaluate("() => document.getElementById('searchDialog').open") is False
+    finally:
+        context.close()
+
+
+# ---------------------------------------------------------------------------
+# the two surfaces that only exist once a dialog opens
+# ---------------------------------------------------------------------------
+
+DRAWER_SEED_JS = """
+(market) => {
+  /* The panel paints its option rows from `predictions`, which only the market
+     list fills, and openQuote() reads the same entry. A deployed origin with no
+     market open would hand this gate an empty drawer, so the entry is seeded
+     here — and the id is a real one whenever the origin has it, because that is
+     the only way the quote rows, the figures a trade is decided on, get painted. */
+  if (typeof openQuote !== 'function' || typeof predictions === 'undefined') {
+    return { error: 'the landing exposes no quote panel' };
+  }
+  const options = (market.options || []).length >= 2
+    ? market.options.map((o, i) => ({
+        index: o.index === undefined ? i : o.index,
+        label: o.label || ('Вариант ' + (i + 1)),
+        price_pct: o.price_pct === undefined ? 50 : o.price_pct,
+      }))
+    : [{index: 0, label: 'Да', price_pct: 24.9}, {index: 1, label: 'Нет', price_pct: 75.1}];
+  predictions = [{
+    id: market.id,
+    question: market.question || 'Рынок для замера торговой панели',
+    options,
+  }];
+  openQuote(market.id);
+  return {
+    marketId: market.id,
+    rows: document.querySelectorAll('#quoteOptions .opt-btn').length,
+    chips: document.querySelectorAll('#quoteChips .amount-chip').length,
+  };
+}
+"""
+
+DIALOG_COUNT_JS = """
+(selector) => {
+  const panel = document.querySelector(selector);
+  const controls = [...panel.querySelectorAll('a, button, input, select, summary')];
+  const texts = [...panel.querySelectorAll('*')].filter(
+    (el) => !el.children.length && (el.textContent || '').trim());
+  return {selector, controls: controls.length, texts: texts.length};
+}
+"""
+
+DIALOG_STOP_JS = """
+(selector) => {
+  const el = document.activeElement;
+  const cs = getComputedStyle(el);
+  return {
+    inside: el.closest(selector) !== null,
+    where: el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\\s+/)[0],
+    width: parseFloat(cs.outlineWidth) || 0,
+    style: cs.outlineStyle,
+    color: cs.outlineColor,
+    shadow: cs.boxShadow || 'none',
+  };
+}
+"""
+
+DIALOG_XFF = {("drawer", "dark"): 0, ("drawer", "light"): 1,
+              ("palette", "dark"): 2, ("palette", "light"): 3}
+
+
+def open_dialog(browser, surface, theme):
+    """Open one of the landing's two `<dialog>` surfaces and run the page facet
+    walk over it.
+
+    A closed dialog is `display: none`, so every probe that had ever run on `/`
+    walked straight past the trade panel and the search palette — the two places
+    on this site where a user decides something. That is how a 35.3 px search
+    field got onto a phone: the touch floor simply never saw the element.
+    """
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    context = open_context(browser, theme=theme, viewport=MOBILE,
+                           xff=XFF_POOL[DIALOG_XFF[(surface, theme)]], touch=True)
+    try:
+        page = context.new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        go(page, "/")
+        page.wait_for_function(
+            "() => typeof openQuote === 'function' && typeof searchIndex !== 'undefined'",
+            timeout=20000,
+        )
+        if surface == "drawer":
+            market = page.evaluate(
+                "async () => (await (await fetch('/api/predictions')).json())[0] || {id: 94101}"
+            )
+            seeded = page.evaluate(DRAWER_SEED_JS, market)
+            dialog = "quoteDrawer"
+        else:
+            seeded = page.evaluate(PALETTE_SEED_JS, {"firstId": 94111, "epoch": 4102444800})
+            page.keyboard.press("Control+k")
+            dialog = "searchDialog"
+        if seeded.get("error"):
+            pytest.fail(seeded["error"])
+        try:
+            page.wait_for_function(f"() => document.getElementById('{dialog}').open", timeout=10000)
+        except PlaywrightTimeoutError:
+            pytest.fail(f"{dialog} never opened in {theme}")
+        # slideDown is 0.18 s and it moves the panel: a rect caught mid-animation
+        # is not a size, and a height measured against it would be a number about
+        # nothing.
+        page.wait_for_timeout(400)
+        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/")})
+        data["pageerrors"] = errors
+        data["counted"] = page.evaluate(DIALOG_COUNT_JS, "#" + dialog)
+        data["dialog"] = dialog
+        # `showModal()` traps Tab: inside a dialog a keyboard visitor can neither
+        # leave nor see where they are unless every stop paints a ring, so an
+        # invisible control here costs more than on the page behind the scrim.
+        stops = []
+        for _ in range(8):
+            page.keyboard.press("Tab")
+            stop = page.evaluate(DIALOG_STOP_JS, "#" + dialog)
+            if stop["inside"]:
+                stops.append(stop)
+        data["stops"] = stops
+        return data
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("surface", ["drawer", "palette"])
+def test_a_dialog_paints_as_honestly_as_the_page_behind_it(browser, surface, theme):
+    """The facet list is the one the landing itself is judged by, run with the
+    dialog open: touch targets, composited contrast, text cut without an
+    ellipsis, horizontal overflow. Measured on the document would miss it — the
+    panel paints over the page, and its own scroll container clips its own rows."""
+    probe = open_dialog(browser, surface, theme)
+    counted = probe["counted"]
+    assert counted["controls"] >= 3 and counted["texts"] >= 3, (
+        f"{probe['dialog']} in {theme} opened with nothing to measure: {counted}")
+    assert probe["pageerrors"] == [], probe["pageerrors"]
+    assert probe["controls"] == [], json.dumps(probe["controls"], ensure_ascii=False)
+    assert probe["contrast"] == [], json.dumps(probe["contrast"], ensure_ascii=False)
+    assert probe["clipped"] == [], json.dumps(probe["clipped"], ensure_ascii=False)
+    assert probe["scrollWidth"] <= MOBILE[0], (
+        f"{probe['dialog']} overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
+    distinct = {stop["where"] for stop in probe["stops"]}
+    assert len(distinct) >= 3, (
+        f"{probe['dialog']} in {theme}: Tab reached only {sorted(distinct)} — nothing to judge")
+    naked = [stop for stop in probe["stops"] if not paints_a_ring(stop)]
+    assert not naked, json.dumps(naked, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# the three Mini App sheets that move money
+# ---------------------------------------------------------------------------
+
+SHEET_OPENERS = ("tip", "deposit", "withdraw")
+
+SHEET_SEED_JS = """
+(name) => {
+  /* A bottom sheet is not in the rendering until a thumb taps its button, so the
+     wallet walk that covers /app sees the same empty document an anonymous
+     visitor sees — and the sheets are the only screens on this product where
+     money actually leaves. They are opened here through the very function the
+     tab bar calls, which needs no session: the deposit sheet paints its QR from
+     STATE, and STATE is what the page fills when there is nothing to fill. */
+  const opener = window['open' + name[0].toUpperCase() + name.slice(1) + 'Sheet'];
+  if (typeof opener !== 'function') return {error: 'the Mini App exposes no ' + name + ' sheet'};
+  opener();
+  const sheet = document.getElementById('modalSheet');
+  return {
+    open: document.getElementById('modalOverlay').classList.contains('show'),
+    controls: sheet.querySelectorAll('a[href], button, input, select, textarea').length,
+    modal: sheet.getAttribute('aria-modal'),
+    label: sheet.getAttribute('aria-label') || '',
+  };
+}
+"""
+
+
+def open_sheet(browser, sheet, theme):
+    """One Mini App money sheet, open, walked by a real Tab key on a phone.
+
+    `aria-modal="true"` on `#modalSheet` is a promise to a screen reader that
+    nothing outside the sheet exists. Measured before this helper, the keyboard
+    broke that promise on every one of the three sheets: of ten Tab presses the
+    stops that stayed inside were 0 in the deposit sheet, 2 in the withdraw
+    sheet and 6 in the tip sheet, and the visitor who cannot see the scrim ended
+    up able to activate a button behind it while the accessibility tree said it
+    was gone."""
+    context = open_context(
+        browser, theme=theme, viewport=MOBILE,
+        xff=XFF_POOL[(SHEET_OPENERS.index(sheet) * 2 + (theme == "light")) % len(XFF_POOL)],
+        touch=True,
+    )
+    try:
+        if SESSION_COOKIE:
+            context.add_cookies([{"name": session_cookie_name(), "value": SESSION_COOKIE, "url": PROD_URL}])
+        page = context.new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        go(page, "/app")
+        page.wait_for_timeout(2500)
+        seeded = page.evaluate(SHEET_SEED_JS, sheet)
+        if seeded.get("error"):
+            pytest.fail(seeded["error"])
+        assert seeded["open"], f"the {sheet} sheet never opened in {theme}"
+        # The sheet slides up over 0.3 s; a rect caught mid-transform is not a
+        # size and a contrast sample taken there is not the paint the user sees.
+        page.wait_for_timeout(500)
+        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/app")})
+        data["pageerrors"] = errors
+        data["counted"] = seeded
+        data["sheet"] = sheet
+        stops = []
+        for _ in range(10):
+            page.keyboard.press("Tab")
+            stops.append(page.evaluate(DIALOG_STOP_JS, "#modalSheet"))
+        data["stops"] = stops
+        return data
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("sheet", SHEET_OPENERS)
+def test_the_money_sheet_keeps_the_keyboard_it_promised(browser, sheet, theme):
+    """Every Tab stop stays inside the open sheet and paints a ring, and the
+    sheet is a phone surface like the screen behind it, so it is held to the same
+    touch floor, the same composited contrast and the same clipping rule — the
+    three checks that had never once run against a sheet."""
+    probe = open_sheet(browser, sheet, theme)
+    counted = probe["counted"]
+    assert counted["controls"] >= 1, f"{sheet} in {theme} opened with nothing to tab to"
+    assert counted["modal"] == "true", f"{sheet}: aria-modal says {counted['modal']!r}"
+    assert counted["label"], f"{sheet}: aria-modal with no name is an anonymous dialog"
+    assert probe["pageerrors"] == [], probe["pageerrors"]
+    escaped = [stop for stop in probe["stops"] if not stop["inside"]]
+    assert not escaped, f"{sheet} in {theme}: Tab left the sheet {json.dumps(escaped, ensure_ascii=False)}"
+    inside = [stop for stop in probe["stops"] if stop["inside"]]
+    naked = [stop for stop in inside if not paints_a_ring(stop)]
+    assert not naked, json.dumps(naked, ensure_ascii=False)
+    assert probe["controls"] == [], json.dumps(probe["controls"], ensure_ascii=False)
+    assert probe["contrast"] == [], json.dumps(probe["contrast"], ensure_ascii=False)
+    assert probe["clipped"] == [], json.dumps(probe["clipped"], ensure_ascii=False)
+    assert probe["scrollWidth"] <= MOBILE[0], (
+        f"the {sheet} sheet overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
+
+
+DETAIL_SEED_JS = """
+() => {
+  /* The market detail is the screen a bet is actually placed on, and like the
+     sheets it is not in the rendering until a card is tapped: `#detailView`
+     ships `hidden`, its rows come from STATE.markets, and `openMarketDetail` is
+     the same call the card makes — so the seeded row goes through the real
+     template, not a copy of it. */
+  if (typeof openMarketDetail !== 'function') return {error: 'the Mini App exposes no market detail'};
+  STATE.markets = [{
+    id: 1, question: 'Рынок для замера скрытого экрана', traders: 12,
+    options: [
+      {index: 0, label: 'Да', price_pct: 24.9, pool_usdc: 1250.5},
+      {index: 1, label: 'Нет', price_pct: 75.1, pool_usdc: 3800.25},
+    ],
+  }];
+  openMarketDetail(1);
+  const view = document.getElementById('detailView');
+  return {
+    open: !view.hidden,
+    inert: view.inert === true,
+    appInert: document.getElementById('app').inert === true,
+    controls: view.querySelectorAll('a[href], button, input, select, textarea').length,
+  };
+}
+"""
+
+
+def open_detail(browser, theme):
+    """The Mini App's third full-screen layer, open, walked the same way."""
+    context = open_context(browser, theme=theme, viewport=MOBILE,
+                           xff=XFF_POOL[6 if theme == "dark" else 7], touch=True)
+    try:
+        if SESSION_COOKIE:
+            context.add_cookies([{"name": session_cookie_name(), "value": SESSION_COOKIE, "url": PROD_URL}])
+        page = context.new_page()
+        errors: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        go(page, "/app")
+        page.wait_for_timeout(2500)
+        seeded = page.evaluate(DETAIL_SEED_JS)
+        if seeded.get("error"):
+            pytest.fail(seeded["error"])
+        assert seeded["open"], f"the market detail never opened in {theme}"
+        page.wait_for_timeout(500)
+        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/app")})
+        data["pageerrors"] = errors
+        data["counted"] = seeded
+        stops = []
+        for _ in range(10):
+            page.keyboard.press("Tab")
+            stops.append(page.evaluate(DIALOG_STOP_JS, "#detailView"))
+        data["stops"] = stops
+        return data
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_the_market_detail_keeps_the_keyboard_inside_itself(browser, theme):
+    """A layer painted over every pixel owns the keyboard, whether or not it
+    calls itself a dialog: two of ten Tab presses left this panel before the
+    shell was made inert — onto the document body and onto the header's theme
+    toggle behind it — and a visitor with no mouse can activate a control they
+    cannot see. The shell being `inert` is the other half — it takes the covered
+    screen out of the accessibility tree, which is what makes the sheet's
+    `aria-modal` true instead of decorative."""
+    probe = open_detail(browser, theme)
+    counted = probe["counted"]
+    assert counted["controls"] >= 3, f"the detail opened with nothing to tab to: {counted}"
+    assert counted["appInert"], f"{theme}: the screen under the detail is still in the tab order"
+    assert not counted["inert"], f"{theme}: the detail made itself inert, so nothing in it is reachable"
+    assert probe["pageerrors"] == [], probe["pageerrors"]
+    escaped = [stop for stop in probe["stops"] if not stop["inside"]]
+    assert not escaped, json.dumps(escaped, ensure_ascii=False)
+    naked = [stop for stop in probe["stops"] if not paints_a_ring(stop)]
+    assert not naked, json.dumps(naked, ensure_ascii=False)
+    assert probe["controls"] == [], json.dumps(probe["controls"], ensure_ascii=False)
+    assert probe["contrast"] == [], json.dumps(probe["contrast"], ensure_ascii=False)
+    assert probe["clipped"] == [], json.dumps(probe["clipped"], ensure_ascii=False)
+    assert probe["scrollWidth"] <= MOBILE[0], (
+        f"the market detail overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
+
+
+def test_the_solvency_ring_paints_the_percentage_it_prints(browser):
+    """The ring is a picture of one number: the share of liabilities the address
+    can actually cover. It used to divide the *free reserve* — the difference
+    between what is held and what is owed — by the liabilities, and a difference
+    is not a fraction: on a treasury holding 20.00 USDC against 383.24 USDC of
+    obligations it printed «-94,8%» and, because `stroke-dashoffset` past the dash
+    period wraps, painted 94.7 % of the circle full for a bot the same page calls
+    «недостаточно». So all three are measured against each other: the API, the
+    figure on the screen, and the arc the browser really drew."""
+    geometry = """
+() => {
+  const arc = document.getElementById('gaugeArc');
+  const length = arc.getTotalLength();
+  const dash = parseFloat(getComputedStyle(arc).strokeDasharray.split(/[\\s,]+/)[0]);
+  const offset = parseFloat(getComputedStyle(arc).strokeDashoffset);
+  let painted = 0;
+  for (let t = 0; t < length; t += 0.05) {
+    if (((t + offset) % (2 * dash)) < dash) painted += 0.05;
+  }
+  return {
+    paintedPct: Math.round(painted / length * 10000) / 100,
+    printed: document.getElementById('gaugePct').textContent.trim(),
+    aria: document.getElementById('solvencyGauge').getAttribute('aria-label'),
+    detail: document.getElementById('gaugeDetail').textContent.trim(),
+  };
+}
+"""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    context = open_context(browser, theme="dark", viewport=MOBILE, xff=XFF_POOL[4])
+    try:
+        page = context.new_page()
+        go(page, "/")
+        try:
+            page.wait_for_function(
+                """() => document.getElementById('gaugeCap').textContent === 'нет данных'
+                       || document.getElementById('gaugePct').textContent !== '–'""",
+                timeout=20000,
+            )
+        except PlaywrightTimeoutError:
+            pytest.fail("/api/solvency never reached the ring: the landing still shows its placeholder")
+        # The arc animates its offset for 0.7 s. Reading the dash pattern before
+        # it lands measures a fraction the page is on its way to, not the one it
+        # paints — and a gate that sometimes agrees is worse than no gate.
+        page.wait_for_timeout(900)
+        api = page.evaluate("async () => await (await fetch('/api/solvency')).json()")
+        ring = page.evaluate(geometry)
+        if api["reserve_usdc"] is None:
+            assert ring["printed"] == "–", ring
+            assert ring["paintedPct"] == 0.0, f"no reserve read, yet the ring paints {ring['paintedPct']}%"
+            return
+        owed = api["liabilities_usdc"]
+        held = (api["vault_balance_usdc"] if api["reserves_source"] == "vault"
+                else api["hot_wallet_balance_usdc"])
+        # Nothing owed is fully covered by definition — and it is still a number
+        # the assertions below need, so the branch computes it rather than
+        # skipping them.
+        expected = 100.0 if owed <= 0 else max(0.0, min(held / owed * 100, 100.0))
+        printed = ring["printed"]
+        assert "-" not in printed, f"a coverage cannot be negative: {ring}"
+        match = re.search(r"(\d+(?:[.,]\d+)?)\s*%", printed)
+        assert match, ring
+        shown = float(match.group(1).replace(",", "."))
+        assert abs(shown - expected) <= 0.05, (shown, expected, held, owed)
+        # The arc is the number. 0.2 pp is the width of one dash-period rounding
+        # at r=52: below it the two agree, above it the picture is a second claim.
+        assert abs(ring["paintedPct"] - shown) <= 0.2, ring
+        assert "-" not in ring["aria"], ring["aria"]
     finally:
         context.close()
 
@@ -1120,11 +1562,25 @@ def _get(path: str) -> tuple[int, str, str]:
         return response.status, response.headers.get("content-type", ""), body
 
 
+def require_public_origin() -> None:
+    """The three crawler documents below are written from `MINI_APP_URL` /
+    `WEBHOOK_URL` — the origin the operator tells the world about — and not from
+    the address the probe happens to have used. Point `DESIGN_GATE_URL` at a
+    loopback server and `Sitemap: https://…` cannot agree with
+    `http://127.0.0.1:8000` for any change in the tree: the mismatch is the local
+    config, not the site. Saying so keeps every red in this file meaning a broken
+    crawler document, which is what CI — where the default https origin is what
+    runs — actually needs."""
+    if not PROD_URL.startswith("https://"):
+        pytest.skip(f"{PROD_URL} is not the public origin: the crawler documents name the configured host")
+
+
 def test_robots_txt_is_rules_on_the_deployed_site():
     """The origin had no robots.txt, so the Pages Function answered it from the
     asset bundle and Pages returned the landing page for a path that is not in
     it: 200 and text/html where a robot expected rules. Measured here because
     only the deployed edge decides which of the two answers a visitor gets."""
+    require_public_origin()
     status, content_type, body = _get("/robots.txt")
     assert status == 200
     assert content_type.startswith("text/plain"), f"robots.txt arrived as {content_type!r}"
@@ -1134,6 +1590,7 @@ def test_robots_txt_is_rules_on_the_deployed_site():
 
 
 def test_the_deployed_sitemap_points_back_at_itself_and_resolves():
+    require_public_origin()
     status, content_type, body = _get("/sitemap.xml")
     assert status == 200
     assert content_type.startswith("application/xml"), f"sitemap arrived as {content_type!r}"
@@ -1155,7 +1612,10 @@ def test_the_landing_canonicalizes_the_host_it_is_served_from():
     """The canonical is written by the origin from MINI_APP_URL/WEBHOOK_URL. If
     the operator sets that to the tunnel instead of the Pages origin, every
     page on the public host points at a different host and the crawler follows
-    the hint — so the two hosts being equal is the thing to measure."""
+    the hint — so the two hosts being equal is the thing to measure.
+    `require_public_origin` keeps a loopback probe from reporting that equality
+    as a design failure it has no way to measure."""
+    require_public_origin()
     status, _, body = _get("/")
     assert status == 200
     canonical = re.findall(r'<link rel="canonical" href="([^"]*)"', body)
@@ -1226,3 +1686,46 @@ def test_the_deployed_site_answers_a_dead_link_with_a_page():
     assert moved == 301, f"/index.html answered {moved} at {location!r}"
     assert location == "/", location
     assert "__" not in moved_body, f"the raw template is still served: {moved_body[:120]!r}"
+
+
+def test_the_documented_production_run_size_is_the_size_of_this_run(request):
+    """The ordinary session cannot count this run: its 74 cases are the ones that
+    run deselects, and no nested `pytest --collect-only` can measure it either,
+    because `conftest.py` recreates `tipbot_test` at import and would wipe the
+    database from under the run that spawned it. So each documented run measures
+    itself, and the five places that publish the number are pinned to the
+    collection that is actually happening — which is how a README claim of "66
+    production" survived a tree that collected 74."""
+    root = Path(__file__).resolve().parents[1]
+    markexpr = (request.config.option.markexpr or "").strip().strip('"')
+    if markexpr != "production":
+        pytest.skip(f"-m {markexpr!r} is not the documented production run")
+    if request.config.option.keyword:
+        pytest.skip(f"a `-k {request.config.option.keyword}` run says nothing about "
+                    "the size of the production suite")
+
+    def holds_production_cases(path: Path) -> bool:
+        text = path.read_text(encoding="utf-8-sig")
+        return "pytest.mark.production" in text
+
+    collected = {Path(item.fspath).name for item in request.session.items}
+    expected = {p.name for p in (root / "tests").glob("test_*.py") if holds_production_cases(p)}
+    if collected != expected:
+        pytest.skip(f"this run covers {sorted(collected)}, not the production suite "
+                    f"{sorted(expected)}")
+
+    measured = len(request.session.items)
+    paper = (root / "docs" / "WHITEPAPER.md").read_text(encoding="utf-8")
+    agents = (root / "AGENTS.md").read_text(encoding="utf-8-sig")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    claims = {
+        "whitepaper ru": re.search(r"\d+ обычных тестов \+ (\d+) боевой", paper),
+        "whitepaper en": re.search(r"\d+ ordinary \+ (\d+) production", paper),
+        "whitepaper short": re.search(r"\d+ \+ (\d+) tests", paper),
+        "AGENTS.md": re.search(r"\d+ tests \((\d+) more, marked", agents),
+        "README excluded line": re.search(
+            r"The\s+(\d+) `production`-marked tests are excluded", readme),
+    }
+    assert all(claims.values()), [k for k, v in claims.items() if not v]
+    stated = {key: int(match.group(1)) for key, match in claims.items()}
+    assert set(stated.values()) == {measured}, (measured, stated)

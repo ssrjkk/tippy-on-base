@@ -56,8 +56,8 @@
 /* Tokens copied from /style.css — base.org values: one brand blue, neutral greys,
  * hairline borders, no shadows. --accent paints surfaces, --accent-text paints type,
  * because #224bff is a fill colour and is not readable as text on the dark canvas. */
-:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
-[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65)}
+:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
+[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
 html,body{height:100%;font-family:var(--font-ui);font-size:15px;line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
 a{color:var(--accent-text);text-decoration:none}
 button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit;outline:none}
@@ -112,7 +112,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 /* Buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--pill);font-weight:500;font-size:14px;padding:12px 20px;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease),opacity .2s var(--ease);white-space:nowrap}
 .btn:active{opacity:.8}
-.btn-primary{background:var(--accent);color:#fff}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
 .btn-primary:hover,.btn-primary:active{background:var(--accent2)}
 .btn-secondary{background:transparent;color:var(--text);border-color:var(--border-strong)}
 .btn-secondary:hover{border-color:var(--text);background:var(--card2)}
@@ -129,7 +129,11 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 /* Amount Chips */
 .chips{display:flex;gap:8px;margin:8px 0}
 .chip{background:var(--card2);border:1px solid var(--border);border-radius:var(--pill);padding:8px 16px;font-size:13px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text);cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease),color .2s var(--ease);min-width:48px;text-align:center}
-.chip:active,.chip.active{border-color:var(--accent);background:var(--blue-soft);color:var(--accent-text)}
+/* Same law as the site's `.amount-chip.active`: --blue-soft is translucent, so
+   the label sits on a blend of the tint and the sheet, and --accent-text there
+   measures 4.27:1 — under the 4.5 the same page demands of every other 13 px
+   number. The border and the fill say "active"; the money stays neutral. */
+.chip:active,.chip.active{border-color:var(--accent);background:var(--blue-soft);color:var(--text)}
 .chip-btn{border:1px solid var(--border-strong);border-radius:var(--pill);padding:5px 12px;font-size:12px;font-weight:500;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s var(--ease)}
 .chip-btn:hover,.chip-btn:active{border-color:var(--text)}
 .chip-btn .icon{width:13px;height:13px}
@@ -157,7 +161,9 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 
 /* Status chips */
 .tag{display:inline-flex;align-items:center;border-radius:var(--pill);padding:2px 8px;font-size:10px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
-.tag-open{background:var(--blue-soft);color:var(--accent-text)}
+/* Same law as the site's `.chip-open`: over a translucent tint --accent-text is
+   4.27:1, and this label is 10 px — the furthest thing from a large-text pass. */
+.tag-open{background:var(--blue-soft);color:var(--text)}
 .tag-resolved{background:var(--success-bg);color:var(--success)}
 .tag-cancelled{background:var(--card3);color:var(--text3)}
 
@@ -184,7 +190,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;color:var(--text3);padding:5px 0}
 .wd-row b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
 /* QR readers need a light quiet zone in both themes, so this one box stays white. */
-.deposit-qr{width:80px;height:80px;border-radius:var(--radius);border:1px solid var(--border);background:#fff;padding:4px;flex-shrink:0}
+.deposit-qr{width:80px;height:80px;border-radius:var(--radius);border:1px solid var(--border);background:var(--qr-plate);padding:4px;flex-shrink:0}
 .deposit-qr img{width:100%;height:100%;display:block}
 
 /* Modal / Bottom Sheet */
@@ -275,6 +281,8 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .mini-label.late{margin:10px 0 0}
 .deposit-col{flex:1;min-width:0}
 .sw-state{font-size:13px;color:var(--text2);margin-bottom:8px}
+.sw-state .ok{color:var(--success)}
+.sw-state .warn{color:var(--warning)}
 .sw-addr{font-size:12px;color:var(--text);word-break:break-all}
 .sw-bal{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:10px;font-size:13px;color:var(--text3)}
 .sw-bal .mono{font-size:18px;color:var(--text);letter-spacing:-.02em}
@@ -579,6 +587,40 @@ function syncBackButton() {
   if (open) bb.show(); else bb.hide();
 }
 
+/* The keyboard ring of one full-screen layer, in one list, because the opener
+   has to move focus into it and the trap below has to keep it there: two rules
+   that disagree about what is focusable would make the first Tab land somewhere
+   the visitor cannot see. A link counts — a layer whose only control is a link
+   is still a layer someone has to be able to reach. */
+function focusablesIn(root) {
+  return [...root.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+}
+
+function topLayer() {
+  if (document.getElementById('modalOverlay').classList.contains('show')) {
+    return document.getElementById('modalSheet');
+  }
+  const dv = document.getElementById('detailView');
+  return dv.hidden ? null : dv;
+}
+
+/* Both layers above the app cover it to the last pixel, and a control under a
+   scrim is still in the tab order and still in the accessibility tree until
+   something says otherwise. Measured: of ten Tab presses in the market detail
+   two left it — onto the document body and onto the header's theme toggle
+   behind the panel, a button a keyboard visitor can activate and cannot see.
+   `inert` is the browser's own removal, and it is what the sheet's
+   `aria-modal="true"` already promised; a hand-painted scrim promises and
+   delivers nothing. */
+function syncLayerStack() {
+  const sheet = document.getElementById('modalOverlay').classList.contains('show');
+  const detail = !document.getElementById('detailView').hidden;
+  document.getElementById('app').inert = sheet || detail;
+  document.getElementById('detailView').inert = sheet;
+  syncBackButton();
+}
+
 function openModal(html) {
   const content = document.getElementById('modalContent');
   content.innerHTML = html;
@@ -587,19 +629,22 @@ function openModal(html) {
   if (title) sheet.setAttribute('aria-label', title.textContent.trim());
   sheetReturnFocus = document.activeElement;
   document.getElementById('modalOverlay').classList.add('show');
-  const first = sheet.querySelector('input, select, textarea, button');
+  const first = focusablesIn(sheet)[0];
   if (first) first.focus();
-  syncBackButton();
+  syncLayerStack();
 }
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modalOverlay') && e.type === 'click') return;
   closeModalForce();
 }
 function closeModalForce() {
-  document.getElementById('modalOverlay').classList.remove('show');
-  if (sheetReturnFocus && document.contains(sheetReturnFocus)) sheetReturnFocus.focus();
+  const back = sheetReturnFocus;
   sheetReturnFocus = null;
-  syncBackButton();
+  document.getElementById('modalOverlay').classList.remove('show');
+  // The layer comes out of `inert` before the focus goes back, because
+  // focus() on an inert element is silently refused.
+  syncLayerStack();
+  if (back && document.contains(back)) back.focus();
 }
 /* Topmost layer first: with a sheet open over a market detail, Escape drops the
    sheet and leaves the detail, which is what the stack looks like visually. */
@@ -609,6 +654,26 @@ function dismissTopLayer() {
   if (!dv.hidden) { hideDetail(); return true; }
   return false;
 }
+/* `aria-modal="true"` on the sheet is a promise to a screen reader that nothing
+   else is reachable, and a view painted over the whole screen says the same
+   thing visually. Tab kept neither promise: from the last control the key
+   walked out from under the scrim into the tab bar behind it, where a keyboard
+   visitor can activate a button they cannot see. Measured before this existed,
+   of ten Tab presses the stops that stayed inside were 0 in the deposit sheet,
+   2 in the withdraw sheet and 6 in the tip sheet; the ones that left landed on
+   the header's theme toggle, the balance chip and the four tab buttons. */
+function keepFocusInLayer(e) {
+  const layer = topLayer();
+  if (!layer) return;
+  const items = focusablesIn(layer);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  const outside = !layer.contains(active);
+  if (e.shiftKey && (active === first || outside)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (active === last || outside)) { e.preventDefault(); first.focus(); }
+}
 
 // ─── Detail View ───
 let detailReturnFocus = null;
@@ -617,15 +682,16 @@ function showDetail(html) {
   dv.innerHTML = html;
   dv.hidden = false;
   detailReturnFocus = document.activeElement;
-  const first = dv.querySelector('button, input, select, textarea');
+  const first = focusablesIn(dv)[0];
   if (first) first.focus();
-  syncBackButton();
+  syncLayerStack();
 }
 function hideDetail() {
-  document.getElementById('detailView').hidden = true;
-  if (detailReturnFocus && document.contains(detailReturnFocus)) detailReturnFocus.focus();
+  const back = detailReturnFocus;
   detailReturnFocus = null;
-  syncBackButton();
+  document.getElementById('detailView').hidden = true;
+  syncLayerStack();
+  if (back && document.contains(back)) back.focus();
 }
 
 // ─── Auth + Load ───
@@ -727,7 +793,10 @@ async function loadSmartWallet() {
     addrEl.textContent = d.address;
     addrEl.dataset.addr = d.address;
     document.getElementById('swBalance').textContent = usdc(d.balance_usdc);
-    document.getElementById('swDeployed').textContent = d.deployed ? t('smart_deployed') : t('smart_not_deployed');
+    const deployedEl = document.getElementById('swDeployed');
+    deployedEl.textContent = d.deployed ? t('smart_deployed') : t('smart_not_deployed');
+    deployedEl.classList.toggle('ok', d.deployed);
+    deployedEl.classList.toggle('warn', !d.deployed);
     document.getElementById('swDepositHint').textContent = d.deployed ? t('smart_enabled') : t('smart_deposit_hint');
   } catch(e) {
     card.hidden = true;
@@ -1476,6 +1545,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target && e.target.id === 'aiInput') askAI();
   if (e.key === 'Escape') dismissTopLayer();
+  if (e.key === 'Tab') keepFocusInLayer(e);
 });
 
 // ─── Start ───

@@ -20,7 +20,7 @@ External funding figures are quoted from the programs' own pages and listed in
   (паримутуэл и LMSR-AMM), платный контент, токены авторов с дивидендами,
   рекуррентные подписки, автономный AI-агент и приём платежей от AI-агентов по x402.
 - **Что уже написано:** 47 команд бота, 48 HTTP-маршрутов, 9 контрактов, 21 доменный
-  миксин леджера, 10 модулей агента, 1267 обычных тестов + 61 боевой. Три языка.
+  миксин леджера, 10 модулей агента, 1275 обычных тестов + 75 боевой. Три языка.
 - **Что выключено флагами:** ончейн-рынки (ERC-1155) и gasless-кошельки (ERC-4337).
   Код есть, деплой на mainnet — нет.
 - **Что приносит деньги сегодня:** ровно одна строка — комиссия 1% с вывода.
@@ -143,7 +143,12 @@ wraps it into `BotCommand`) and the web process (which publishes it through
 Interface rules are enforced by tests, not by review: touch targets ≥ 44 px, no
 horizontal overflow at 360 px, dark theme default, one `<h1>` per page, focus ring
 ≥ 3:1 on both canvases, pinch zoom allowed, every clickable element a real
-`<button data-act>`, percentages formatted in the interface locale.
+`<button data-act>`, percentages formatted in the interface locale. A screen that
+exists only after a tap is measured by opening it: both landing dialogs, the three
+Mini App money sheets and the market detail are rendered, sampled for contrast and
+clipping, and walked by a real Tab key that must stay inside the layer — the
+screen under a full-width panel is made `inert`, which is the only mechanism that
+removes it from the tab order and the accessibility tree at the same time.
 
 ### 4.3 Prediction markets — two engines (Live) plus a third (Built, off)
 
@@ -296,7 +301,7 @@ data through `bot/ai_data.py` and says that it did.
 
 | Measure | Value |
 | --- | --- |
-| Tests | 1267 ordinary + 61 production (rendered-page and live-site gates) |
+| Tests | 1275 ordinary + 75 production (rendered-page and live-site gates) |
 | Languages | ru / en / zh, two independent catalogs, key sets gated equal |
 | Ledger domain mixins | 21 |
 | Agent modules | 10 |
@@ -489,7 +494,7 @@ repository today):
 5. An autonomous agent with spend caps, a circuit breaker, stop-loss and EAS
    attestations, which also sells its analysis through the same paywall rail.
 6. Published solvency across six liability categories, an append-only audit trail,
-   and 1267 + 61 tests including structural gates that fail the build when a
+   and 1275 + 75 tests including structural gates that fail the build when a
    documented claim stops being true.
 7. Three languages, with the Mini App as the primary mobile surface.
 

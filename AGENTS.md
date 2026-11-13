@@ -23,12 +23,21 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~11 min, 1267 tests (61 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~11 min, 1275 tests (75 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
   Never start a second pytest session against `tipbot_test` while one runs: `conftest.py`
   recreates that database per session, and the in-flight run reports errors it did not cause.
+  Each documented size is instead measured by **the run that is happening** —
+  `test_the_documented_suite_size_is_the_size_of_this_run` (ordinary) and
+  `test_the_documented_production_run_size_is_the_size_of_this_run` (`production`) compare
+  `len(request.session.items)` to README, AGENTS.md and the three WHITEPAPER statements. The older
+  `test_web.py` block only proves those five agree with *each other*, which is how they all kept
+  saying "66 production" while the run deselected 74. Measuring by a nested `pytest --collect-only`
+  is not available here: `conftest.py` recreates `tipbot_test` **at import**, so the child would
+  destroy the database of the run that spawned it (verified — a sentinel table written before such a
+  subprocess was gone when it finished).
 - Run targeted files first (`pytest tests/test_web.py -q --timeout=60`), the whole suite last.
   `--timeout=60 --timeout-method=thread` makes a hung test print its stack instead of freezing.
 - `python scripts/check_i18n.py` checks that every key in `bot/i18n.py` exists in ru/en/zh. The Mini
@@ -64,13 +73,27 @@
   paths, but server paths like `P:/opt/tipbot` and examples/warnings are allowed). The helper `btn_text()`
   in `bot/handlers/_common.py` is the one way to build a dynamic button label — it truncates with `…` at 64.
 - `tests/test_design_system.py` is the design contract, measured from the files: contrast of every
-  declared `color`/`background` pair **and** of every text colour against both canvases, "mono implies
-  tabular digits" **in both stylesheets**, no raw hex outside the token blocks, the site and Mini App
-  palettes equal value for value, inline styles limited to clamped geometry, no unsubstituted
+  declared `color`/`background` pair **and** of every text colour against both canvases — the pair gate
+  runs against `style.css` **and** the Mini App's own stylesheet, each on its own boards (canvas plus
+  the band/cards it paints on), because it measured only the site until this wave and the same 4.27:1
+  selected-chip defect then came back a second time on a surface the gate had never read; "mono implies
+  tabular digits" **in both stylesheets**, the site and Mini App palettes equal value for value, and the
+  palette laws — no raw hex outside the token blocks, no token nothing reads, every `var()` chain
+  terminates, `[data-theme="dark"]` invents no token the light block lacks, the inverse-text fill pairs
+  clear AA, the `@media (pointer: coarse)` 44 px floor names only live classes — parametrized over
+  **both** stylesheets instead of only the landing's. Reading the Mini App's own stylesheet gave up two
+  defects the same day: it declared `--warning` for a state nothing painted (the SmartAccount line now
+  carries `.ok`/`.warn` for it), and a parser that ended a declaration only at `;` silently lost the
+  **last** token of each block, so `--safe-b` had been read by no gate at all — `declarations()` now
+  asserts every `--name:` it can see in a block it also parsed. Inline styles are limited to clamped
+  geometry, no unsubstituted
   `__PLACEHOLDER__`, no `@import` of a webfont (link it in `<head>` and preconnect), the weights the CSS
   asks for are the weights the font URL downloads, no viewport that blocks pinch zoom, `theme-color`
-  present for both schemes and equal to the canvas token, `outline: none` legal only where a ring is
-  painted in its place, the focus ring ≥ 3:1 on both canvases, every page with exactly one `<h1>` and no
+  present for both schemes and equal to the canvas token, `outline: none` refused inside any `:focus`
+  rule — a `box-shadow` halo is a tint, not a ring: the site's own field glow is the brand blue at
+  16 % alpha, which measures 1.11:1 against the dark canvas and 1.16:1 against the light one — and legal
+  on an element type only while the same document paints a `:focus-visible` ring,
+  the focus ring ≥ 3:1 on both canvases, every page with exactly one `<h1>` and no
   skipped heading levels, no dead `<symbol>` in the icon sprite, every `skeleton` owned by code that
   replaces it, every painted percentage taking the interface locale (a `${x.toFixed(1)}%` template is a
   failure), and the **edge maintenance card** in `functions/[[path]].js` held to the same document
@@ -79,18 +102,38 @@
 - `tests/test_production_design.py` measures the **rendered** page (Playwright, marked
   `production`, runs in `prod-health-check.yml`) across five surfaces — landing dark/light, a market
   page, `/app` on a phone with touch, and `/agent` — and taps **all four Mini App tabs** in one load,
-  because a screen behind `display: none` is a screen no gate used to see. It asserts painted contrast,
+  because a screen behind `display: none` is a screen no gate used to see. It also **opens every layer
+  that only exists after a tap** — both landing `<dialog>`s (the quote drawer and the ⌘K palette), the
+  **three Mini App money sheets** and the **market detail**, each in both themes on a phone: a closed
+  dialog is `display: none` and a sheet is an empty `innerHTML`, so nothing used to measure the surfaces
+  where a user actually decides something — which is how a 35.3 px search field and an amount input
+  whose `:focus` rule deleted its own ring reached a thumb. Every opened layer is then walked by a real
+  Tab key: eight presses in the dialogs (`showModal()` already contains the key, so what is judged there
+  is the ring each stop paints) and ten in the sheets and the detail, where **every stop must stay inside
+  it** — measured before the shell was made `inert`, the stops that stayed inside were 0 in the deposit
+  sheet, 2 in the withdraw sheet, 6 in the tip sheet and 8 in
+  the market detail, and the rest were the theme toggle, the balance chip and the tab bar behind a scrim
+  whose own `aria-modal="true"` said they did not exist. It asserts painted contrast,
   horizontal overflow at 390/1440, 44 px touch targets (inline links sharing a text line are the
-  measured exception), bar width against the percentage the same row prints and against the API, page
+  measured exception), bar width against the percentage the same row prints and against the API, the
+  solvency ring's painted arc against the percentage it prints and against `/api/solvency`, page
   errors and same-origin 4xx (401/403 excluded — an anonymous probe is meant to be refused), no
   skeleton still shimmering after load, no text clipped without an ellipsis, one `<h1>` and two
-  `theme-color` metas in the DOM, a ring on every element a real Tab key stops on, and nothing hidden
+  `theme-color` metas in the DOM, a ring on every element a real Tab key stops on — counted only when
+  an `outline` of ≥2 px in a non-transparent colour paints it, because the field glow read mid-transition
+  is `rgba(0, 0, 0, 0) 0px 0px 0px 0px`, and nothing hidden
   when `prefers-reduced-motion` is set. Point it at a local origin with
   `DESIGN_GATE_URL=http://127.0.0.1:8000`, and add `DESIGN_GATE_SESSION=<signed tippy_session>`
   (`web.auth.make_session(user_id)`) to measure the Mini App's real lists instead of its empty states —
-  without it the bar-vs-number gate skips with that reason printed.
+  without it the bar-vs-number gate skips with that reason printed. The three crawler gates
+  (`robots.txt`, `sitemap.xml`, the landing canonical) skip on a non-https `DESIGN_GATE_URL`: those
+  documents are written from `MINI_APP_URL`/`WEBHOOK_URL`, so a loopback origin cannot agree with them
+  for any change in the tree, and CI measures them against the host they describe.
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
-  unused by any page.
+  unused by any page. `app.html` is measured against **its own** `<style>` block, never against
+  `style.css` — the two documents are served separately, and the Mini App's own classes
+  (`sw-state`, its `.ok`/`.warn` state colours) were invisible to the site's stylesheet while the
+  gate called that parity.
 - `web/static` is the site's source **and** the Pages build output, so anything added there is a
   URL. The origin refuses its own plumbing: `/_*` (`_headers`, `_redirects`) is a JSON 404 from
   the middleware because Pages reads those files itself and no browser is at that address, and
@@ -232,6 +275,19 @@
   `display:block;width:100%;text-align:left` (`.market-card`, `.detail-opt`) — a button shrinks to
   its content and centres text by default. The only div with `data-act` is `#modalOverlay`, which is
   a dismissal scrim, not a control.
+- A translucent brand tint is a **fill, not a colour**: `background: var(--blue-soft)` under
+  `color: var(--accent-text)` measures 4.65:1 on the `#111111` canvas and **4.27:1** on the `#1a1a1a`
+  card/band — it passes on one board and fails on the other, and the label is 10-13 px, nowhere near a
+  large-text pass. So a selected chip, tag or option keeps the **neutral text token** and lets the border
+  plus the fill say "selected" — `.amount-chip.active` and `.chip-open` on the site, `.chip.active` and
+  `.tag-open` in the Mini App all read `--text`/`--ink`.
+- A layer that covers the screen owns the keyboard. `syncLayerStack()` in `web/static/app.html` is the
+  only writer of `inert`: `#app` goes inert while a sheet or the market detail is open, and `#detailView`
+  goes inert under a sheet. `inert` is what makes the sheet's `aria-modal="true"` and the detail's
+  full-screen paint true — it removes the covered controls from the tab order **and** from the
+  accessibility tree, which a painted scrim does not. Two consequences: a layer's opener takes focus
+  through the same `focusablesIn()` list the Tab trap uses, and `syncLayerStack()` runs **before**
+  restoring focus on close, because `focus()` on an element that is still inert is silently refused.
 - `/tos` renders `web/static/tos.md` through `_legal_html()` into the site chrome. That renderer
   handles only the subset the file uses (ATX headings, `- ` bullets, `**bold**`, `` `code` ``); new
   Markdown constructs there will show up as raw markers.

@@ -1310,27 +1310,41 @@ def test_mini_app_dictionary_is_complete_across_languages():
     assert not used - dicts["ru"], sorted(used - dicts["ru"])
 
 
-def test_every_class_in_the_page_templates_is_defined_in_style_css():
+def test_every_class_a_page_paints_is_defined_in_the_stylesheet_that_serves_it():
     """AGENTS.md requires class parity in the direction a rename breaks: markup
     carrying a class no rule defines renders unstyled and looks intentional until
     someone compares two screens. The unused direction is not machine-checkable
-    without a long exception list (the Mini App keeps its own stylesheet, and
-    several classes arrive through f-strings), so this pins the one that can be
-    checked without guessing — and it covers the JS renderers, because that is
-    where the templates actually live: `cmd-group` was emitted from app.js and no
-    HTML file mentioned it."""
+    without a long exception list (several classes arrive through f-strings), so
+    this pins the one that can be checked without guessing — and it covers the JS
+    renderers, because that is where the templates actually live: `cmd-group` was
+    emitted from app.js and no HTML file mentioned it.
+
+    The Mini App is measured against its own `<style>` rather than skipped: it is
+    one self-contained document, so `style.css` says nothing about a class its JS
+    toggles — which is the same hole that let the 4.27:1 chip through, in the one
+    direction a typo in `classList.toggle('warn')` would have landed unstyled."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "web" / "static"
+
+    def painted(text: str) -> set[str]:
+        used = {c for m in re.finditer(r'class="([^"]+)"', text) for c in m.group(1).split()
+                if re.fullmatch(r"[a-zA-Z][\w-]*", c)}
+        used |= set(re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)['\"]", text))
+        return used
+
     css = (root / "style.css").read_text(encoding="utf-8-sig")
     defined = set(re.findall(r"\.([a-zA-Z][\w-]*)", css))
     for name in ("index.html", "market.html", "oc.html", "user.html", "agent.html",
                  "app.js", "site.js"):
         text = (root / name).read_text(encoding="utf-8-sig")
-        used = {c for m in re.finditer(r'class="([^"]+)"', text) for c in m.group(1).split()
-                if re.fullmatch(r"[a-zA-Z][\w-]*", c)}
-        used |= set(re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)['\"]", text))
-        assert used <= defined, f"{name}: {sorted(used - defined)}"
+        assert painted(text) <= defined, f"{name}: {sorted(painted(text) - defined)}"
+
+    app = (root / "app.html").read_text(encoding="utf-8-sig")
+    style = re.search(r"<style>(.*?)</style>", app, re.S).group(1)
+    own = set(re.findall(r"\.([a-zA-Z][\w-]*)", style))
+    used = painted(app.replace(style, ""))
+    assert used <= own, f"app.html: {sorted(used - own)}"
 
 
 def test_command_groups_match_the_website_renderer():
@@ -1405,11 +1419,11 @@ def test_the_whitepaper_counts_the_routes_the_web_process_registers():
     assert int(summary.group(1)) == len(BOT_COMMAND_SPECS), summary.group(1)
     assert int(summary.group(2)) == total, summary.group(2)
 
-    # The size of the suite is stated in three files. Re-measuring it means starting
-    # a second pytest session against tipbot_test, which conftest recreates per
-    # session, so this refuses the statements disagreeing with each other — the same
-    # drift that let a retired #0052FF live in prose for weeks, and the reason the
-    # README promised "four production-marked tests" while the run excluded 61.
+    # The size of the suite is stated in three files, and all three are pinned to
+    # the *run itself* by test_the_documented_suite_size_is_the_size_of_this_run:
+    # agreement alone is not truth — these statements said "66 production" while
+    # the run deselected 74, and every gate stayed green because each only
+    # compared the documents to each other. Here they must still agree.
     readme = (root / "README.md").read_text(encoding="utf-8")
     stated = [
         re.search(r"(\d+) обычных тестов \+ (\d+) боевой", paper),
@@ -1428,6 +1442,49 @@ def test_the_whitepaper_counts_the_routes_the_web_process_registers():
     assert readme_run and readme_prod, "the README stopped counting the run it documents"
     assert readme_run.group(1) == ordinary, (readme_run.group(1), ordinary)
     assert readme_prod.group(1) == production, (readme_prod.group(1), production)
+
+
+def test_the_documented_suite_size_is_the_size_of_this_run(request):
+    """`conftest.py` drops and recreates `tipbot_test` **at import**, which happens
+    during collection — so a nested `pytest --collect-only` would destroy the
+    database of the run that spawned it, and no gate could re-measure the suite
+    from inside it. (Measured: a sentinel table written before such a subprocess
+    was gone when it finished.)
+
+    The number is therefore taken from the run that is already happening. When
+    this session is the documented whole-tree ordinary run, its collected count
+    *is* the size the README, AGENTS.md and the whitepaper publish, and a stale
+    claim fails here instead of agreeing with itself in five places. A targeted
+    file, a `-k` expression or another marker says nothing about the suite, so
+    those runs skip and print why."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    markexpr = (request.config.option.markexpr or "").strip().strip('"')
+    reason = None
+    if request.config.getoption("file_or_dir"):
+        reason = f"a partial run over {request.config.getoption('file_or_dir')}"
+    elif request.config.option.keyword:
+        reason = f"a `-k {request.config.option.keyword}` run"
+    elif markexpr != "not production":
+        reason = f"-m {markexpr!r} is not the documented ordinary run"
+    if reason:
+        pytest.skip(f"{reason} — it says nothing about the size of the suite")
+
+    measured = len(request.session.items)
+    paper = (root / "docs" / "WHITEPAPER.md").read_text(encoding="utf-8")
+    agents = (root / "AGENTS.md").read_text(encoding="utf-8-sig")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    claims = {
+        "whitepaper ru": re.search(r"(\d+) обычных тестов \+ \d+ боевой", paper),
+        "whitepaper en": re.search(r"(\d+) ordinary \+ \d+ production", paper),
+        "whitepaper short": re.search(r"(\d+) \+ \d+ tests", paper),
+        "AGENTS.md": re.search(r"(\d+) tests \((\d+) more, marked", agents),
+        "README run line": re.search(r'-m "not production"\s+# (\d+) passed', readme),
+    }
+    assert all(claims.values()), [k for k, v in claims.items() if not v]
+    stated = {key: int(match.group(1)) for key, match in claims.items()}
+    assert set(stated.values()) == {measured}, (measured, stated)
 
 
 def test_prod_health_workflow_fails_instead_of_skipping():
