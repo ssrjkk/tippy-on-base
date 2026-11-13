@@ -173,6 +173,23 @@ def test_no_document_prints_an_address_the_tree_does_not_define():
     assert not invented, f"{invented} are addresses no file in the repo defines"
 
 
+def test_the_readme_counts_the_suites_it_advertises():
+    """The README advertises "14 end-to-end scenarios" and "13 TipBotVault
+    tests" as proof of what is tested for real, and the fifteenth scenario landed
+    while the sentence stayed. Both numbers are countable from the files they
+    name, so there is no reason for either to be remembered."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8-sig")
+    claims = {
+        "end-to-end scenarios": ROOT / "tests" / "test_e2e.py",
+        "TipBotVault tests": ROOT / "tests" / "test_vault.py",
+    }
+    for phrase, path in claims.items():
+        measured = len(re.findall(r"^def test_", path.read_text(encoding="utf-8-sig"), re.M))
+        stated = re.search(rf"(\d+) {re.escape(phrase)}\b", readme)
+        assert stated, f"the README no longer advertises its {phrase}"
+        assert int(stated.group(1)) == measured, (phrase, stated.group(1), measured)
+
+
 ENUMERATED = ("bot", "bot/ledger", "bot/handlers", "bot/chain", "web", "contracts")
 # These folders are described by their purpose in one line, not file by file —
 # that is a choice, and the gate only requires the line to stay.

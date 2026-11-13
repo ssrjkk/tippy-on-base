@@ -155,7 +155,7 @@
             <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
           </div>`;
         }).join("");
-        $("m-pot").innerHTML = "Пул: <b>" + fmtUSDC(m.pot_usdc) + " USDC</b> · " + esc(String(m.total_backers)) + " чел.";
+        $("m-pot").innerHTML = "Пул: <b>" + fmtUSDC(m.pot_usdc) + " USDC</b> · " + esc(String(m.total_backers)) + "&nbsp;чел.";
         $("m-creator").innerHTML = 'Автор: <a class="m-link" href="/u/' + encodeURIComponent(m.creator.id) + '">' +
           esc(handle(m.creator.username, m.creator.id)) + "</a>";
 

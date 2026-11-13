@@ -93,6 +93,21 @@ def _x402_receive_address() -> str | None:
     return None
 
 
+def x402_info() -> dict:
+    """What the landing has to know to speak about the handshake truthfully.
+
+    The bounds are the ones `_parse_amount` enforces and the TTL is the one the
+    invoice headers print, so the page cannot advertise a range its own
+    endpoint refuses — the same reason `/api/info` serves the tip and bet caps.
+    """
+    return {
+        'enabled': bool(config.X402_ENABLED and _x402_receive_address()),
+        'min_usdc': float(config.X402_MIN_USDC),
+        'max_usdc': float(config.MAX_TIP_USDC),
+        'invoice_ttl_seconds': PAYMENT_TTL_SECONDS,
+    }
+
+
 def _invoice_headers(amount_micro: int, pay_addr: str | None = None, invoice_id: str = '') -> dict:
     receive = pay_addr or (_x402_receive_address() or hot_wallet())
     headers = {
@@ -187,25 +202,34 @@ def _verify_payment(tx_hash: str, expected_micro: int, pay_to: str) -> dict | No
         return None
     return {'sender': sender, 'amount_micro': total}
 
-def _parse_amount(raw_amount: str) -> int | None:
-    """Parse a USDC amount from the query string into micro-units or None.
+def _parse_amount(raw_amount: str) -> tuple[int | None, str | None]:
+    """Parse a USDC amount from the query string into (micro-units, refusal).
 
-    Decimal (not float): no binary rounding surprises; fractional micros are
-    rounded up like everywhere else in the bot (_to_micro). Capped by the SAME
-    config.MAX_TIP_USDC the Telegram handlers use (an operator lowering the
-    cap must not be silently bypassed on the HTTP path), and floored so a
-    payment too small to cover its own settlement gas is never quoted.
+    Exactly one member is set. Decimal (not float): no binary rounding
+    surprises; fractional micros are rounded up like everywhere else in the bot
+    (_to_micro). Capped by the SAME config.MAX_TIP_USDC the Telegram handlers
+    use (an operator lowering the cap must not be silently bypassed on the HTTP
+    path), and floored so a payment too small to cover its own settlement gas is
+    never quoted.
+
+    The refusal names the bound it broke, with the number in it. Collapsing
+    every bad amount into "recipient and amount are required" told a client to
+    add a parameter it had already sent, so an agent over the cap fixed nothing
+    and resent the identical request forever.
     """
     try:
         amount = Decimal(raw_amount)
     except InvalidOperation:
-        return None
-    if not amount.is_finite() or amount <= 0 or amount > config.MAX_TIP_USDC:
-        return None
-    micro = int((amount * MICRO).to_integral_value(rounding=ROUND_CEILING))
-    if micro < int(getattr(config, "X402_MIN_USDC", Decimal("0.01")) * MICRO):
-        return None
-    return micro
+        return None, 'amount is not a number'
+    if not amount.is_finite():
+        return None, 'amount is not a finite number'
+    if amount <= 0:
+        return None, 'amount must be greater than 0'
+    if amount > config.MAX_TIP_USDC:
+        return None, f'amount is over the {config.MAX_TIP_USDC} USDC limit of this site'
+    if amount < config.X402_MIN_USDC:
+        return None, f'amount is under the {config.X402_MIN_USDC} USDC minimum of this site'
+    return int((amount * MICRO).to_integral_value(rounding=ROUND_CEILING)), None
 
 def _invoice_response(amount_micro: int, resource: str = '', description: str = '', error: str = 'payment required',
                       pay_addr: str | None = None, invoice_id: str = '', **extra) -> JSONResponse:
@@ -384,9 +408,11 @@ async def x402_tip(request: Request) -> JSONResponse:
         return JSONResponse(status_code=503, content={'detail': 'x402 payments are disabled (set X402_RECEIVE_ADDRESS)'})
     q = request.query_params
     recipient = (q.get('recipient') or '').strip()
-    amount_micro = _parse_amount((q.get('amount') or '').strip())
-    if not recipient or amount_micro is None:
-        return JSONResponse(status_code=400, content={'detail': 'recipient and amount are required'})
+    amount_micro, amount_refusal = _parse_amount((q.get('amount') or '').strip())
+    if not recipient:
+        return JSONResponse(status_code=400, content={'detail': 'recipient is required'})
+    if amount_refusal:
+        return JSONResponse(status_code=400, content={'detail': amount_refusal})
     tg_id = await _resolve_recipient(recipient)
     if tg_id is None:
         return JSONResponse(status_code=404, content={'detail': 'unknown recipient'})
@@ -481,9 +507,11 @@ async def x402_paywall(request: Request) -> JSONResponse:
     """
     q = request.query_params
     raw_item = (q.get('item') or '').strip()
-    amount_micro = _parse_amount((q.get('amount') or '').strip())
-    if not raw_item.isdigit() or amount_micro is None:
-        return JSONResponse(status_code=400, content={'detail': 'item and amount are required'})
+    amount_micro, amount_refusal = _parse_amount((q.get('amount') or '').strip())
+    if not raw_item.isdigit():
+        return JSONResponse(status_code=400, content={'detail': 'item must be the numeric id of a paywall item'})
+    if amount_refusal:
+        return JSONResponse(status_code=400, content={'detail': amount_refusal})
     item = await ledger.paywall_item(int(raw_item))
     if item is None:
         return JSONResponse(status_code=404, content={'detail': 'unknown item'})

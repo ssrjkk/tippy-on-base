@@ -19,8 +19,8 @@ External funding figures are quoted from the programs' own pages and listed in
   денежную экономику на Base: чаевые в USDC, два движка рынков прогнозов
   (паримутуэл и LMSR-AMM), платный контент, токены авторов с дивидендами,
   рекуррентные подписки, автономный AI-агент и приём платежей от AI-агентов по x402.
-- **Что уже написано:** 47 команд бота, 47 HTTP-маршрутов, 9 контрактов, 21 доменный
-  миксин леджера, 10 модулей агента, 1262 обычных теста + 58 боевых. Три языка.
+- **Что уже написано:** 47 команд бота, 48 HTTP-маршрутов, 9 контрактов, 21 доменный
+  миксин леджера, 10 модулей агента, 1267 обычных тестов + 61 боевой. Три языка.
 - **Что выключено флагами:** ончейн-рынки (ERC-1155) и gasless-кошельки (ERC-4337).
   Код есть, деплой на mainnet — нет.
 - **Что приносит деньги сегодня:** ровно одна строка — комиссия 1% с вывода.
@@ -120,14 +120,17 @@ The catalog is plain data in `bot/commands_catalog.py`, read by both the bot (wh
 wraps it into `BotCommand`) and the web process (which publishes it through
 `/api/info`), so the menu and the website cannot drift apart.
 
-### 4.2 Web and Mini App — 47 HTTP routes (Live)
+### 4.2 Web and Mini App — 48 HTTP routes (Live)
 
-- **34 routes in `web/server.py`**: the landing page with a working workspace
-  (balance, tip, withdraw, markets, bets, create, onchain, history), `/app`,
+- **35 routes in `web/server.py`**: the landing page with a working workspace
+  (balance, tip, withdraw, markets, bets, create, onchain, history), a slide-over
+  trade drawer that quotes LMSR prices from the server, a ⌘K market search over the
+  lists already on screen, the x402 handshake sandbox, `/app`,
   `/agent`, `/me`, `/u/{tg_id}`, `/m/{bet_id}`, `/m/oc/{market_id}`, `/tos`,
   `/metrics`, `/qr`, `robots.txt`, `sitemap.xml`, the Farcaster manifest, and the
   public API: `stats`, `volume_history`, `markets`, `market/{id}`, `predictions`,
-  `prediction/{id}`, `onchain/markets`, `onchain/market/{id}`, `leaderboard`,
+  `prediction/{id}`, `prediction/{id}/quote`, `onchain/markets`,
+  `onchain/market/{id}`, `leaderboard`,
   `user/{id}`, `info`, `health`, `solvency`, `ai/status`, `wallet`, `agent/status`,
   `agent/audit`, `POST /ask`, the x402 endpoints `POST /api/x402/tip` and
   `POST /api/x402/paywall`, and `POST /api/webhook-miniaction`.
@@ -191,14 +194,34 @@ brings liquidity and resolves the market honestly is paid by the market itself.
 ### 4.5 Agent-native payments (Live)
 
 **x402.** An AI agent POSTs `/api/x402/tip?recipient=…&amount=…` with no payment
-header and receives `402 Payment Required` plus `x-402-*` headers describing the
-invoice (recipient address, amount in micro-units, expiry). It pays USDC on Base,
-repeats the request with `x-402-payment: <tx_hash>`, and the endpoint verifies the
-Transfer on-chain before crediting the Telegram recipient. The transaction hash is
-the primary key of `x402_payments` and the deposit scanner skips it, so a payment
-is never credited twice and liabilities stay exact. A repeated hash answers 409.
-The same rail sells paywall content through `POST /api/x402/paywall`. Minimum
-invoice 0.01 USDC; invoice TTL 300 s.
+header and receives `402 Payment Required` in both shapes at once: the `x-402-*`
+headers and the flat JSON keys (`detail`, `amount_usdc`, `pay_to`) that
+first-generation clients read, and the official `accepts[]` envelope (x402 v1,
+scheme `exact`) that an x402-spec agent reads. Each invoice carries its own
+deposit address, minted from (recipient, amount, kind), so funds sent for one tip
+can never be redeemed for another. Two payment paths then unlock the same credit.
+
+* **Standard path** — repeat with `X-PAYMENT: <base64 EIP-3009 authorization>`.
+  The endpoint recovers the signer from the authorization (which must name this
+  invoice's address and amount), broadcasts `transferWithAuthorization` itself,
+  credits the Telegram recipient and answers 200 with an `X-PAYMENT-RESPONSE`
+  receipt. One HTTP round trip, no waiting for the payer to mine a transaction.
+  An authorization that signs for more than the quote is credited at the quote;
+  the rest stays in the receive pool.
+* **Legacy path** — repeat with `x-402-payment: <tx_hash>`. The endpoint verifies
+  the Transfer on-chain before crediting. The transaction hash is the primary key
+  of `x402_payments` and the deposit scanner skips it, so a payment is never
+  credited twice and liabilities stay exact. A repeated hash answers 409.
+
+Either rail also sells paywall content through `POST /api/x402/paywall`. Minimum
+invoice 0.01 USDC, maximum 1000 USDC (the same `MAX_TIP_USDC` the Telegram
+handlers enforce), invoice TTL 300 s. An amount outside that range answers 400
+naming the bound it broke — `amount is over the 1000 USDC limit of this site` —
+because a generic "recipient and amount are required" tells an agent to add a
+parameter it already sent, and it resends the identical request forever. The
+landing runs this handshake against the site that serves it — the section
+«Счёт за один HTTP-запрос»: a real 402, the invoice's own address and amount
+filled into both request forms, and the refusal paths next to it.
 
 **Autonomous agent** (`agent/`, 10 modules). A perceive → decide → act → attest
 loop: RSS news ingestion (CryptoPanic with a token, plus free public fallbacks),
@@ -273,7 +296,7 @@ data through `bot/ai_data.py` and says that it did.
 
 | Measure | Value |
 | --- | --- |
-| Tests | 1262 ordinary + 58 production (rendered-page and live-site gates) |
+| Tests | 1267 ordinary + 61 production (rendered-page and live-site gates) |
 | Languages | ru / en / zh, two independent catalogs, key sets gated equal |
 | Ledger domain mixins | 21 |
 | Agent modules | 10 |
@@ -466,7 +489,7 @@ repository today):
 5. An autonomous agent with spend caps, a circuit breaker, stop-loss and EAS
    attestations, which also sells its analysis through the same paywall rail.
 6. Published solvency across six liability categories, an append-only audit trail,
-   and 1262 + 58 tests including structural gates that fail the build when a
+   and 1267 + 61 tests including structural gates that fail the build when a
    documented claim stops being true.
 7. Three languages, with the Mini App as the primary mobile surface.
 
@@ -537,7 +560,7 @@ Every internal figure above can be re-measured from a clean checkout:
 # command inventory (47 commands, 7 groups)
 python -c "import ast,pathlib,collections;t=ast.parse(pathlib.Path('bot/commands_catalog.py').read_text(encoding='utf-8-sig'));r=[ast.literal_eval(e) for n in ast.walk(t) if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='BOT_COMMAND_SPECS' for e in n.value.elts];print(len(r),dict(collections.Counter(x[2] for x in r)))"
 
-# HTTP routes (34 + 12 + 1)
+# HTTP routes (35 + 12 + 1)
 python -c "import re,pathlib;[print(f,len(re.findall(r'@(?:app|router)\.(get|post|put|delete)\(',pathlib.Path(f).read_text(encoding='utf-8-sig')))) for f in ['web/server.py','web/mini.py','web/frame.py']]"
 
 # the only platform revenue line

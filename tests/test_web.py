@@ -65,6 +65,46 @@ def test_info(client):
     assert "bot_username" in r.json()
 
 
+def test_info_publishes_the_x402_terms_the_sandbox_prints(client, monkeypatch):
+    """/api/info's x402 block is what the handshake sandbox puts into the amount
+    field's `min`/`max` and into the sentence about the range it accepts. If the
+    page advertised a wider range than `_parse_amount` enforces, an agent would
+    follow the documentation, pay an amount the endpoint then refuses, and the
+    money would sit in an invoice nobody can redeem."""
+    from bot import config as cfg
+    from web import x402
+
+    body = client.get("/api/info").json()["x402"]
+    assert set(body) == {"enabled", "min_usdc", "max_usdc", "invoice_ttl_seconds"}
+    assert body["min_usdc"] == float(cfg.X402_MIN_USDC)
+    assert body["max_usdc"] == float(cfg.MAX_TIP_USDC)
+    assert body["invoice_ttl_seconds"] == x402.PAYMENT_TTL_SECONDS
+
+    # Anything inside the advertised range is an amount the endpoint will quote.
+    assert x402._parse_amount(str(body["min_usdc"]))[0] is not None
+    assert x402._parse_amount(str(body["max_usdc"]))[0] is not None
+    assert x402._parse_amount(str(body["max_usdc"] + 1))[0] is None
+    assert x402._parse_amount(str(body["min_usdc"] / 100))[0] is None
+
+    # A refusal an agent can act on: the sentence carries the number to fix.
+    # "recipient and amount are required" for an over-cap amount told the client
+    # to add a parameter it had already sent, so it resent the same request.
+    for query, needle in [
+        ("amount=99999", str(cfg.MAX_TIP_USDC)),
+        ("amount=0.0001", str(cfg.X402_MIN_USDC)),
+        ("amount=abc", "not a number"),
+        ("amount=0", "greater than 0"),
+    ]:
+        r = client.post(f"/api/x402/tip?recipient=777&{query}")
+        assert r.status_code == 400, query
+        assert needle in r.json()["detail"], (query, r.json())
+    assert "recipient" in client.post("/api/x402/tip?amount=1").json()["detail"]
+
+    # The switch the page reports is the switch the endpoint reads.
+    monkeypatch.setattr(cfg, "X402_ENABLED", False)
+    assert client.get("/api/info").json()["x402"]["enabled"] is False
+
+
 def test_info_network_labels_follow_the_signing_config(client, monkeypatch):
     """The site reads its chain name and explorer from here, so both have to come
     from the config the bot signs with rather than constants baked into the pages.
@@ -1328,6 +1368,68 @@ def test_docs_do_not_advertise_a_palette_or_entrypoint_that_does_not_exist():
     assert "deploy/run.py" in readme
 
 
+def test_the_whitepaper_counts_the_routes_the_web_process_registers():
+    """Appendix A of the whitepaper publishes the recipe for its own numbers, and
+    `/api/prediction/{id}/quote` landed in `web/server.py` while the document kept
+    saying 34. A reader who is about to apply for a grant counts what the site
+    answers, not what a doc remembers, so this re-runs that recipe and refuses a
+    paper that no longer matches the tree it describes."""
+    from pathlib import Path
+
+    from bot.commands_catalog import BOT_COMMAND_SPECS
+
+    root = Path(__file__).resolve().parents[1]
+    counted = {
+        rel: len(re.findall(
+            r"@(?:app|router)\.(get|post|put|delete)\(",
+            (root / rel).read_text(encoding="utf-8-sig")))
+        for rel in ("web/server.py", "web/mini.py", "web/frame.py")
+    }
+    total = sum(counted.values())
+    paper = (root / "docs" / "WHITEPAPER.md").read_text(encoding="utf-8")
+
+    heading = re.search(r"### 4\.2 Web and Mini App — (\d+) HTTP routes", paper)
+    assert heading, "§4.2 no longer states its route count"
+    assert int(heading.group(1)) == total, (heading.group(1), counted, total)
+    for rel, n in counted.items():
+        # The count is the first thing each bullet bolds; "1 Farcaster frame
+        # route" and "35 routes in" are the same claim in two wordings.
+        bullet = re.search(rf"^- \*\*(\d+)[^\n]*`{re.escape(rel)}`", paper, re.M)
+        assert bullet, (rel, "no §4.2 bullet states a route count for this file")
+        assert int(bullet.group(1)) == n, (rel, bullet.group(1), n)
+    assert (f"# HTTP routes ({counted['web/server.py']} + "
+            f"{counted['web/mini.py']} + {counted['web/frame.py']})") in paper
+
+    summary = re.search(r"(\d+) команд бота, (\d+) HTTP-маршрутов", paper)
+    assert summary, "the Russian summary no longer counts commands and routes"
+    assert int(summary.group(1)) == len(BOT_COMMAND_SPECS), summary.group(1)
+    assert int(summary.group(2)) == total, summary.group(2)
+
+    # The size of the suite is stated in three files. Re-measuring it means starting
+    # a second pytest session against tipbot_test, which conftest recreates per
+    # session, so this refuses the statements disagreeing with each other — the same
+    # drift that let a retired #0052FF live in prose for weeks, and the reason the
+    # README promised "four production-marked tests" while the run excluded 61.
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    stated = [
+        re.search(r"(\d+) обычных тестов \+ (\d+) боевой", paper),
+        re.search(r"(\d+) ordinary \+ (\d+) production", paper),
+        re.search(r"(\d+) \+ (\d+) tests", paper),
+        re.search(r"(\d+) tests \((\d+) more, marked",
+                  (root / "AGENTS.md").read_text(encoding="utf-8-sig")),
+    ]
+    assert all(stated), "a document stopped stating its test counts"
+    pairs = {tuple(t.groups()) for t in stated}
+    assert len(pairs) == 1, [t.groups() for t in stated]
+    ordinary, production = pairs.pop()
+
+    readme_run = re.search(r'-m "not production"\s+# (\d+) passed', readme)
+    readme_prod = re.search(r"The\s+(\d+) `production`-marked tests are excluded", readme)
+    assert readme_run and readme_prod, "the README stopped counting the run it documents"
+    assert readme_run.group(1) == ordinary, (readme_run.group(1), ordinary)
+    assert readme_prod.group(1) == production, (readme_prod.group(1), production)
+
+
 def test_prod_health_workflow_fails_instead_of_skipping():
     """`Prod Health Check & Validation` ran on a cron and reported *green* while
     the origin answered 503: two curl steps turned "site is down" into a
@@ -1384,6 +1486,69 @@ def _no_provider(monkeypatch):
 def _one_market(ledger):
     ledger.credit(4101, 200 * 10**6, "deposit")
     return ledger.create_market(4101, "Перепишет ли Tippy 1000 чаевых?", ["Да", "Нет"], 20 * 10**6)
+
+
+def test_the_trade_panel_quotes_the_numbers_the_write_path_books(client, ledger):
+    """The landing asks the server for a quote instead of recomputing LMSR in
+    float64, which only buys anything if the quote *is* the trade: the share
+    count must be the one `buy_shares` books, the two odds must be the ones the
+    cards print before and after it, and every refusal the panel can draw has to
+    be a refusal the endpoint really makes."""
+    from bot import config as cfg
+
+    mid = _one_market(ledger)
+    ledger.credit(4102, 200 * 10**6, "deposit")
+
+    r = client.get(f"/api/prediction/{mid}/quote", params={"option": 0, "amount": "5"})
+    assert r.status_code == 200, r.text
+    q = r.json()
+    assert q["market_id"] == mid and q["label"] == "Да"
+    assert q["amount_usdc"] == 5.0
+    assert 0 < q["cost_usdc"] <= q["amount_usdc"]
+    assert q["shares"] > 0 and q["payout_usdc"] == q["shares_usdc"]
+    assert q["max_trade_usdc"] == float(cfg.MARKET_MAX_TRADE_USDC)
+
+    before = next(m for m in client.get("/api/predictions").json() if m["id"] == mid)
+    assert before["options"][0]["price_pct"] == q["price_before_pct"]
+
+    status, info = ledger.buy_shares(mid, 4102, 0, 5 * 10**6)
+    assert status == "ok", status
+    assert info["shares"] == q["shares"], (info["shares"], q["shares"])
+    after = next(m for m in client.get("/api/predictions").json() if m["id"] == mid)
+    assert after["options"][0]["price_pct"] == q["price_after_pct"]
+
+    # refusals: the same bounds the panel's own chips are built from
+    assert client.get(
+        f"/api/prediction/{mid}/quote", params={"option": 7, "amount": "5"}
+    ).status_code == 400
+    dust = client.get(f"/api/prediction/{mid}/quote", params={"option": 0, "amount": "0.001"})
+    assert dust.status_code == 400
+    assert client.get(
+        f"/api/prediction/{mid}/quote", params={"option": 0, "amount": "abc"}
+    ).status_code == 400
+    over = client.get(
+        f"/api/prediction/{mid}/quote",
+        params={"option": 0, "amount": str(float(cfg.MARKET_MAX_TRADE_USDC) + 1)},
+    )
+    assert over.status_code == 400
+    assert any(ch.isdigit() for ch in over.json()["detail"]), over.json()
+    assert client.get(
+        "/api/prediction/999999/quote", params={"option": 0, "amount": "5"}
+    ).status_code == 404
+
+    from time import time
+
+    # A market the ledger has closed is a market the panel must refuse, not a
+    # curve it keeps pricing — and `mid` cannot be resolved before its deadline.
+    closed = ledger.create_market(
+        4101, "Рынок, который уже закрыт?", ["Да", "Нет"], 20 * 10**6,
+        close_at=int(time()) - 1,
+    )
+    ok, msg = ledger.cancel_market(closed, 4101)
+    assert ok, msg
+    assert client.get(
+        f"/api/prediction/{closed}/quote", params={"option": 0, "amount": "5"}
+    ).status_code == 409
 
 
 def test_api_ask_answers_from_the_ledger_with_no_model(client, ledger, monkeypatch):

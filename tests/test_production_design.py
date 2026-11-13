@@ -767,6 +767,121 @@ def test_painted_text_is_never_cut_without_a_mark(request, facet):
     assert data["clipped"] == [], json.dumps(data["clipped"], ensure_ascii=False)
 
 
+SEED_JS = """
+(args) => {
+  const box = document.querySelector(args.container);
+  if (!box) return {error: args.container + ' is not on the page'};
+  if (typeof window[args.factory] !== 'function') {
+    return {error: args.factory + ' is not a function the page exposes'};
+  }
+  box.innerHTML = window[args.factory](args.market, 0) + window[args.factory](args.market, 1);
+  box.querySelectorAll('.market-card').forEach((c) => { c.style.animation = 'none'; });
+
+  const clipped = [];
+  for (const el of [box, ...box.querySelectorAll('*')]) {
+    const cs = getComputedStyle(el);
+    // No `overflow: visible` exemption here, unlike the page-level facet: this
+    // grid clips with `overflow: hidden`, so content wider than its box is cut
+    // by the container whether or not the element itself reports a scrollbar.
+    if (el.scrollWidth <= el.clientWidth + 1) continue;
+    const text = (el.textContent || '').trim();
+    if (text.length < 3 || cs.textOverflow === 'ellipsis') continue;
+    clipped.push({
+      where: el.tagName.toLowerCase() + '.' + (el.className || '').toString().trim().split(/\\s+/)[0],
+      text: text.slice(0, 40),
+      over: el.scrollWidth - el.clientWidth,
+    });
+  }
+  return {
+    innerWidth: window.innerWidth,
+    docScrollWidth: document.documentElement.scrollWidth,
+    boxClientWidth: box.clientWidth,
+    boxScrollWidth: box.scrollWidth,
+    cards: [...box.querySelectorAll('.market-card')].map(
+      (c) => Math.round(c.getBoundingClientRect().width)),
+    clipped,
+  };
+}
+"""
+
+# The widest market the product can hand the page: a question at the 200-char
+# ceiling bot/handlers/markets.py enforces, option labels at the 64-char ceiling
+# tests/test_telegram_limits.py pins for a button, a Telegram username at 32, and
+# money big enough to carry every group separator.
+WORST_MARKET = {
+    "id": 987654321,
+    "question": "Кто станет лидером по чаевым за эту неделю среди всех участников сообщества, "
+                "которые наблюдают за ончейн-историей Base и ставят на каждый рынок одновременно?",
+    "status": "open",
+    "winner": None,
+    "expired": False,
+    "close_at": 4102444800,
+    "pot_usdc": 1234567890.12,
+    "liquidity_usdc": 1234567890.12,
+    "volume_usdc": 987654321.98,
+    "total_backers": 999999,
+    "traders": 999999,
+    "creator": {"id": 397602448, "username": "abcdefghijklmnopqrstuvwxyz0123"},
+    "options": [
+        {
+            "index": i,
+            "label": "abcdefghijklmnopqrstuvwxyz_0123456789_abcdefghijk_lmnopqrstuvwx",
+            "pool_usdc": 1234567890.12,
+            "probability": 33.3,
+            "price_pct": 33.3,
+            "backers": 999999,
+        }
+        for i in range(4)
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    "factory,container",
+    [("marketCard", "#markets-list"), ("predictionCard", "#predictions-list")],
+)
+def test_the_card_template_fits_the_phone_it_ships_to(browser, factory, container):
+    """The clipping gate above measures whatever the deployed database holds, and
+    an empty list holds nothing: a market card 117px wider than the 390px page
+    stayed green in CI because nobody had opened a market there.
+
+    So the page renders its own template — the real `marketCard()`/`predictionCard()`
+    it already ships — with the widest legal market the ledger can produce, and the
+    layout engine answers whether the card still fits. A rigid line inside a card
+    that pushes the grid track past the viewport fails here with or without data."""
+    findings = []
+    context = open_context(browser, theme="dark", viewport=MOBILE, xff=XFF_POOL[3], touch=True)
+    try:
+        page = context.new_page()
+        page.goto(f"{PROD_URL}/", wait_until="load")
+        page.wait_for_function(
+            f"() => typeof window['{factory}'] === 'function'", timeout=20000
+        )
+        painted = page.evaluate(SEED_JS, {
+            "factory": factory, "container": container, "market": WORST_MARKET,
+        })
+        if painted.get("error"):
+            pytest.fail(painted["error"])
+        widest = max(painted["cards"], default=0)
+        findings.append({
+            "factory": factory,
+            "clipped": painted["clipped"],
+            "cardWidth": widest,
+            "boxWidth": painted["boxClientWidth"],
+            "boxScrollWidth": painted["boxScrollWidth"],
+            "docScrollWidth": painted["docScrollWidth"],
+            "innerWidth": painted["innerWidth"],
+        })
+    finally:
+        context.close()
+
+    for one in findings:
+        assert one["clipped"] == [], json.dumps(one, ensure_ascii=False)
+        assert one["cardWidth"] <= one["boxWidth"], json.dumps(one, ensure_ascii=False)
+        assert one["boxScrollWidth"] <= one["boxWidth"], json.dumps(one, ensure_ascii=False)
+        assert one["docScrollWidth"] <= one["innerWidth"], json.dumps(one, ensure_ascii=False)
+
+
 @pytest.mark.parametrize("facet", FACETS)
 def test_the_document_names_its_own_heading_and_chrome(request, facet):
     data = request.getfixturevalue(facet)
@@ -808,6 +923,96 @@ def test_every_keyboard_stop_paints_a_ring(browser, path):
     assert len(ours) >= 3, f"{path}: the keyboard found {len(ours)} of our stops — nothing to measure"
     invisible = [ring for ring in ours if not paints_a_ring(ring)]
     assert not invisible, json.dumps(invisible, ensure_ascii=False)
+
+
+PALETTE_SEED_JS = """
+(args) => {
+  if (typeof searchIndex === 'undefined' || typeof SEARCH_KINDS === 'undefined') {
+    return { error: 'the landing carries no search index to seed' };
+  }
+  Object.keys(SEARCH_KINDS).forEach((kind, i) => {
+    searchIndex[kind] = [{
+      id: args.firstId + i,
+      question: 'Рынок ' + (args.firstId + i) + ' — seeding for the keyboard gate',
+      liquidity_usdc: 1000 + i,
+      pot_usdc: 2000 + i,
+      close_at: args.epoch,
+    }];
+  });
+  return { kinds: Object.keys(SEARCH_KINDS) };
+}
+"""
+
+
+def test_the_market_search_answers_the_keyboard(browser):
+    """The palette is the only landing control with no pointer path at all: it
+    opens on a key, moves on arrows and leaves on Escape, so nothing but a real
+    browser can tell whether it works. Two of those were broken in the shape this
+    gate now pins — a row was reachable by mouse but Enter never fired its
+    handler, and Escape with text in the field was eaten by `input type=search`,
+    which clears itself first, so the panel stayed on screen until a second press.
+
+    The index is seeded here rather than read from the deployed database, because
+    an environment with no markets open gives the palette zero rows and every
+    keyboard assertion would pass by measuring nothing."""
+    context = open_context(browser, theme="dark", viewport=DESKTOP, xff=XFF_POOL[5])
+    try:
+        page = context.new_page()
+        page.goto(f"{PROD_URL}/", wait_until="load")
+        page.wait_for_function("() => typeof openSearch === 'function'", timeout=20000)
+        seeded = page.evaluate(PALETTE_SEED_JS, {"firstId": 94101, "epoch": 4102444800})
+        if seeded.get("error"):
+            pytest.fail(seeded["error"])
+        kinds = seeded["kinds"]
+        assert kinds, "the landing indexes no market lists at all"
+
+        page.keyboard.press("Control+k")
+        state = page.evaluate(
+            "() => ({open: document.getElementById('searchDialog').open,"
+            " focus: document.activeElement.tagName + '#' + document.activeElement.id,"
+            " rows: document.querySelectorAll('#searchResults .pal-row').length,"
+            " chips: document.querySelectorAll('#searchKinds button').length})"
+        )
+        assert state["open"] is True, state
+        assert state["focus"] == "INPUT#searchInput", state
+        assert state["rows"] == len(kinds), f"one row per list, not {state}"
+        assert state["chips"] == len(kinds) + 1, f"'Все' plus one per kind, not {state}"
+
+        page.keyboard.type("94102")
+        matched = page.evaluate(
+            "() => [...document.querySelectorAll('#searchResults .pal-row')].map("
+            "r => r.querySelector('.pal-q').textContent.trim())"
+        )
+        assert len(matched) == 1, matched
+
+        # Escape with a non-empty field is the case the search input used to eat.
+        page.keyboard.press("Escape")
+        assert page.evaluate("() => document.getElementById('searchDialog').open") is False
+
+        page.keyboard.press("Control+k")
+        page.keyboard.press("ArrowDown")
+        focused = page.evaluate(
+            "() => document.activeElement.tagName + '|' + document.activeElement.className"
+        )
+        assert focused.startswith("BUTTON|") and "pal-row" in focused, focused
+        page.keyboard.press("Enter")
+        assert page.evaluate("() => document.getElementById('searchDialog').open") is False
+
+        page.keyboard.press("Control+k")
+        page.click(f'#searchKinds button[data-kind="{kinds[1]}"]')
+        filtered = page.evaluate(
+            "() => ({rows: document.querySelectorAll('#searchResults .pal-row').length,"
+            " kinds: [...document.querySelectorAll('#searchResults .pal-kind')]"
+            " .map(k => k.textContent.trim()),"
+            " active: [...document.querySelectorAll('#searchKinds button.active')]"
+            " .map(c => c.dataset.kind)})"
+        )
+        assert filtered["rows"] == 1, filtered
+        assert filtered["active"] == [kinds[1]], filtered
+        page.keyboard.press("Escape")
+        assert page.evaluate("() => document.getElementById('searchDialog').open") is False
+    finally:
+        context.close()
 
 
 def test_reduced_motion_leaves_nothing_invisible(browser):

@@ -364,14 +364,14 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts
-python -m pytest -q -m "not production"   # 1184 passed
+python -m pytest -q -m "not production"   # 1267 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password
 `tipbot`): `tests/conftest.py` drops and recreates `tipbot_test` once per
 session, so the dev database is never touched. Point `TEST_DATABASE_URL` and
 `TEST_ADMIN_DATABASE_URL` elsewhere if your server listens somewhere else. The
-four `production`-marked tests are excluded from this run — they check the
+61 `production`-marked tests are excluded from this run — they check the
 deployed site and belong to the `Prod Health Check` workflow.
 
 What is tested *for real* (not mocked): money conservation across every flow
@@ -379,7 +379,7 @@ What is tested *for real* (not mocked): money conservation across every flow
 — balances + escrows always sum to deposits), deposit-security (claiming
 someone else's tx is rejected), fee math, real signature recovery, the full
 aiogram dispatcher with real Update objects, USDC ABI decoding, the FastAPI
-dashboard against a real ledger, background watchers, 14 end-to-end scenarios,
+dashboard against a real ledger, background watchers, 15 end-to-end scenarios,
 and 13 TipBotVault tests on a local EVM (eth-tester + py-evm, real compiled
 bytecode). Only external networks are mocked (Telegram transport, RPC) —
 `tests/conftest.py` pins the chain endpoint to a refused port, because a test

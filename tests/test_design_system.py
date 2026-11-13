@@ -354,22 +354,38 @@ def _pairs_in_rules() -> list[tuple[str, str, str, str]]:
     return out
 
 
+def _raw_colour(value: str, tokens: dict[str, str]):
+    """Declared value as painted, with its alpha intact — `as_color` flattens
+    rgba() onto the canvas, which is exactly the assumption that hid the band."""
+    raw = resolve(tokens, value[4:-1]) if value.startswith("var(") else value
+    return parse_color(raw.strip()) if raw else None
+
+
 def test_declared_text_on_background_pairs_clear_aa():
     failures = []
     for selector, color, background, size in _pairs_in_rules():
         floor = AA_LARGE if (size and float(size) >= LARGE_TEXT_PX) else AA_TEXT
         for theme, tokens in (("light", LIGHT), ("dark", DARK)):
-            fg = as_color(color, tokens)
-            bg = as_color(background, tokens)
+            fg = _raw_colour(color, tokens)
+            bg = _raw_colour(background, tokens)
             if fg is None or bg is None:
                 continue  # gradients and currentColor are governed by their own rules
+            boards = [("--canvas", _raw_colour("var(--canvas)", tokens))]
             if bg[3] < 1.0:
-                bg = composite(bg, as_color(tokens["--canvas"], tokens))
-            measured = ratio(composite(fg, bg), bg)
-            if measured < floor:
-                failures.append(
-                    f"{theme} {selector}: {color} on {background} = {measured:.2f}:1 (floor {floor})"
-                )
+                # A translucent fill is only a tint of whatever is behind it, and
+                # .section--band paints half of these rules on --surface instead of
+                # --canvas: the rendered gate measured 4.27:1 on a chip this test
+                # had been passing at 4.5:1 against the white canvas.
+                boards.append(("--surface", _raw_colour("var(--surface)", tokens)))
+            for name, board in boards:
+                laid = composite(bg, board) if bg[3] < 1.0 else bg
+                painted = composite(fg, laid) if fg[3] < 1.0 else fg
+                measured = ratio(painted, laid)
+                if measured < floor:
+                    failures.append(
+                        f"{theme} {selector}: {color} on {background} over {name} "
+                        f"= {measured:.2f}:1 (floor {floor})"
+                    )
     assert not failures, sorted(set(failures))
 
 
@@ -1366,6 +1382,35 @@ def test_every_element_that_ships_hidden_can_appear():
 # ---------------------------------------------------------------------------
 # what the deploy files tell the operator to publish, and what the edge sends
 # ---------------------------------------------------------------------------
+
+
+def test_the_market_search_reaches_every_list_it_indexes():
+    """The palette is one index over the lists the page already painted, so the
+    two halves have to stay in step: a fifth list no kind names is a market nobody
+    can find, and a kind whose `list` or `section` id is not in the document is a
+    search result that scrolls to nothing — the same shape `/#onchain` had, where
+    the landing named the section `#onchain-markets` and the link went to the top
+    of the page instead of the list it promised."""
+    code = page_code("index.html")
+    table = re.search(r"const SEARCH_KINDS = \{(.*?)\n\};", code, re.S)
+    assert table, "SEARCH_KINDS is not in the code the landing runs"
+    kinds = re.findall(
+        r'(\w+): \{ label: "[^"]*", list: "([^"]*)", section: "([^"]*)" \}',
+        table.group(1),
+    )
+    assert kinds, "SEARCH_KINDS names no kind with a list and a section"
+
+    ids = set(re.findall(r'\bid="([^"]+)"', read("index.html")))
+    dead = [
+        f"{kind}: {field} #{target} is not a node the landing has"
+        for kind, lst, section in kinds
+        for field, target in (("list", lst), ("section", section))
+        if target not in ids
+    ]
+    assert not dead, dead
+
+    indexed = set(re.findall(r"searchIndex\.(\w+) =", code))
+    assert indexed == {kind for kind, _, _ in kinds}, sorted(indexed ^ {k for k, _, _ in kinds})
 
 MANIFEST = ROOT / "deploy" / "farcaster_manifest.example.json"
 EDGE_HEADERS = STATIC / "_headers"

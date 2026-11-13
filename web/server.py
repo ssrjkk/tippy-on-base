@@ -40,7 +40,7 @@ from bot import base, config, fees, i18n
 from bot import qr as qrlib
 from bot.base import hot_balance, hot_wallet, vault_balance
 from bot.commands_catalog import BOT_COMMAND_SPECS
-from bot.ledger import IdempotencyDuplicate
+from bot.ledger import IdempotencyDuplicate, lmsr_buy_shares, lmsr_cost, lmsr_prices
 from bot.ledger import async_ledger as ledger
 from bot.tx_view import rows_view
 from web.auth import COOKIE_NAME, attach_login_state, login_failed, parse_session
@@ -50,7 +50,7 @@ from web.hook import router as tg_webhook
 from web.mini import SHARE_IMAGE, public_base_url
 from web.mini import router as mini_router
 from web.refusals import lang_of, refuse
-from web.x402 import x402_paywall, x402_tip
+from web.x402 import x402_info, x402_paywall, x402_tip
 
 _ENABLE_OPENAPI: bool = os.environ.get('ENABLE_OPENAPI', '0') == '1'
 
@@ -478,6 +478,78 @@ async def api_prediction(market_id: int) -> dict:
     view['volume_usdc'] = _usdc(view['volume_micro'])
     return view
 
+@app.get('/api/prediction/{market_id}/quote', tags=['markets'])
+async def api_prediction_quote(market_id: int, option: int, amount: str) -> dict:
+    """What buying `option` for `amount` USDC would cost right now.
+
+    The landing's trade panel asks instead of recomputing. LMSR here is a
+    40-digit Decimal cost function with a binary search floored to whole
+    micro-shares (`lmsr_buy_shares`); JavaScript in float64 cannot reproduce
+    that bit for bit, and a panel that promises 1.209 shares for a trade that
+    settles at 1.208 is worse than no panel. So the numbers a visitor sees are
+    the numbers `buy_shares` will book.
+
+    Read-only: nothing is reserved, debited or locked, and the quote is priced
+    against the curve as it is at this instant — a trade a minute later moves.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        spend_micro = int(Decimal(amount) * MICRO)
+    except InvalidOperation:
+        raise refuse(None, 400, 'api_amount_positive')
+    if spend_micro <= 0:
+        raise refuse(None, 400, 'api_amount_positive')
+    cap_micro = int(config.MARKET_MAX_TRADE_USDC * MICRO)
+    if spend_micro > cap_micro:
+        raise refuse(None, 400, 'api_cap_trade', cap=_usdc(cap_micro))
+
+    m = await ledger.get_market(market_id)
+    if not m:
+        raise refuse(None, 404, 'api_prediction_missing')
+    if m['status'] != 'open':
+        raise refuse(None, 409, 'api_market_closed')
+    options = json.loads(m['options'])
+    if option < 0 or option >= len(options):
+        raise refuse(None, 400, 'api_no_such_option')
+    b_micro = int(m['b_micro'])
+    q = await ledger.market_quantities(market_id)
+    # Dust trades are rejected by the write path for the same reason, so the
+    # panel must not quote a share count of zero and call it a trade.
+    if spend_micro < 10_000:
+        raise refuse(None, 400, 'api_amount_positive')
+    shares = lmsr_buy_shares(q, b_micro, option, spend_micro)
+    if shares <= 0:
+        raise refuse(None, 400, 'api_amount_positive')
+    after = [*q[:option], q[option] + shares, *q[option + 1:]]
+    price_before = lmsr_prices(q, b_micro)[option]
+    price_after = lmsr_prices(after, b_micro)[option]
+    # The cost actually booked is the curve's own delta, not the typed amount:
+    # shares are floored, so the tail of the quote stays in the escrow.
+    cost_micro = int(lmsr_cost(after, b_micro) - lmsr_cost(q, b_micro))
+    cost_micro = min(cost_micro, spend_micro)
+    # Percentages take the rounder `amm_market_view` gives the same market's
+    # cards: a panel showing 24,88 next to a card showing 24,89 is two odds for
+    # one curve, and the reader has no way to know which one the ledger holds.
+    from bot import onchain_market as om
+
+    return {
+        'market_id': market_id,
+        'option': option,
+        'label': options[option],
+        'amount_usdc': _usdc(spend_micro),
+        'cost_usdc': _usdc(cost_micro),
+        'shares': shares,
+        'shares_usdc': _usdc(shares),
+        'avg_price_usdc': float((Decimal(cost_micro) / Decimal(shares)).quantize(Decimal('0.000001'))),
+        'price_before_pct': om.price_pct(price_before),
+        'price_after_pct': om.price_pct(price_after),
+        'payout_usdc': _usdc(shares),
+        'profit_usdc': _usdc(shares - cost_micro),
+        'roi_pct': float(round(Decimal(shares - cost_micro) / Decimal(cost_micro) * 100, 2)),
+        'max_trade_usdc': _usdc(cap_micro),
+    }
+
 @app.get('/api/leaderboard', tags=['users'])
 async def api_leaderboard() -> list[dict]:
     from bot import tip_targets
@@ -735,6 +807,9 @@ def api_info() -> dict:
         # ledger. The Mini App labels its answer bubbles with it, so it stops
         # offering a panel that can only fail.
         'ai_mode': 'llm' if _ai_has_llm() else 'data',
+        # The x402 handshake the landing demonstrates: whether this origin takes
+        # agent payments at all, and the bounds its own parser enforces.
+        'x402': x402_info(),
     }
 
 @app.get('/api/ai/status', tags=['stats'])

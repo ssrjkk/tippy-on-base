@@ -91,6 +91,13 @@ async function loadInfo() {
     renderTerms(info);
     renderCommands(info);
     applyNetInfo(info);
+    setupX402(info);
+    /* The cap is configuration, not a property of one market, so the drawer can
+     * state it and size its quick amounts before any quote has been asked. */
+    if (info.limits && info.limits.max_trade_usdc != null) {
+      quoteCap = info.limits.max_trade_usdc;
+      renderQuoteChips();
+    }
   } catch (e) { /* keep original links */ }
 }
 
@@ -167,6 +174,23 @@ function setMsg(id, text, ok) {
   el.className = "msg " + (ok ? "ok" : "err");
 }
 
+/* Clipboard access is refused without warning — over http://, in a
+ * cross-origin frame, or when the visitor declines — and a copy button that
+ * silently does nothing is worse than one that says what to do instead. */
+async function copyToClipboard(text, msgId, what) {
+  try {
+    await navigator.clipboard.writeText(text);
+    setMsg(msgId, "Скопировано: " + text, true);
+  } catch (err) {
+    setMsg(
+      msgId,
+      "Браузер не дал доступ к буферу обмена — выделите " + what
+      + " и скопируйте вручную.",
+      false
+    );
+  }
+}
+
 /* Terms are read from the same endpoint the write handlers enforce against,
  * so the page cannot drift away from the configured limits. */
 function renderTerms(info) {
@@ -227,25 +251,84 @@ function fmtDay(day) {
 
 async function loadVolumeChart() {
   try {
-    const r = await fetch("/api/volume_history?days=14");
+    const r = await fetch("/api/volume_history?days=" + chartDays);
+    if (!r.ok) throw new Error("volume_history " + r.status);
     const days = await r.json();
+    chartSeries = days;
+    chartTotal = days.reduce((sum, d) => sum + d.volume_usdc, 0);
     const el = $("volume-chart");
     const max = Math.max(...days.map((d) => d.volume_usdc), 0);
     if (max <= 0) {
+      chartSummaryTotal();
       el.innerHTML = '<div class="empty">Пока нет данных — объём появится после первых операций</div>';
       return;
     }
     // A zero day draws no bar: `.chart-bar` has a 2px min-height, so a bar
     // element would paint volume the ledger does not hold.
-    el.innerHTML = days.map((d, i) => `
-      <div class="chart-col" title="${fmtDay(d.day)}: ${fmtUSDC(d.volume_usdc)} USDC">
+    // Past twenty columns the axis cannot fit a label per day; the label still
+    // ships (visibility, not absence) so every bar keeps one baseline.
+    const labelStep = days.length > 20 ? 5 : 1;
+    el.innerHTML = days.map((d, i) => {
+      const dayClass = i % labelStep === 0 ? "chart-day" : "chart-day chart-day-off";
+      return `
+      <div class="chart-col" data-day="${d.day}" data-volume="${d.volume_usdc}" title="${fmtDay(d.day)}: ${fmtUSDC(d.volume_usdc)} USDC">
         <div class="chart-plot">${d.volume_usdc > 0 ? `<div class="chart-bar" aria-hidden="true" style="height:${Math.max(d.volume_usdc / max * 100, 2)}%;animation-delay:${Math.min(i * 60, 600)}ms"></div>` : ""}</div>
-        <div class="chart-day">${fmtDay(d.day)}</div>
-      </div>`).join("");
+        <div class="${dayClass}">${fmtDay(d.day)}</div>
+      </div>`;
+    }).join("");
+    chartSummaryTotal();
   } catch (e) {
+    chartSeries = [];
+    chartTotal = 0;
     $("volume-chart").innerHTML = '<div class="empty">Не удалось загрузить график</div>';
+    $("chart-summary").textContent = "Не удалось загрузить график.";
   }
 }
+
+/* The summary line is one element with two voices: the period's totals, and —
+ * while the pointer is on a column — that day. A floating tooltip would cover
+ * the plot the reader is comparing, and a native `title` cannot be styled or
+ * read next to the numbers it explains. */
+function chartSummaryTotal() {
+  const el = $("chart-summary");
+  if (!chartSeries.length || chartTotal <= 0) {
+    el.textContent = "Наводите на столбцы, чтобы увидеть день и его объём.";
+    return;
+  }
+  const peak = chartSeries.reduce((best, d) => (d.volume_usdc > best.volume_usdc ? d : best));
+  el.innerHTML =
+    `Всего <b>${fmtUSDC(chartTotal)} USDC</b> · в среднем за день <b>${fmtUSDC(chartTotal / chartSeries.length)}</b>` +
+    ` · максимум <b>${fmtUSDC(peak.volume_usdc)}</b> ${fmtDay(peak.day)}`;
+}
+
+function chartSummaryDay(col) {
+  const vol = Number(col.dataset.volume);
+  const share = chartTotal > 0 ? (vol / chartTotal) * 100 : 0;
+  $("chart-summary").innerHTML =
+    `${fmtDay(col.dataset.day)}: <b>${fmtUSDC(vol)} USDC</b> · ${fmtPct(share)} объёма периода`;
+}
+
+$("chart-ranges").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-days]");
+  if (!btn) return;
+  const days = Number(btn.dataset.days);
+  if (days === chartDays) return;
+  chartDays = days;
+  $("chart-title").textContent = "Последние " + days + " дней";
+  for (const chip of $("chart-ranges").children) {
+    const on = chip === btn;
+    chip.classList.toggle("active", on);
+    chip.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  loadVolumeChart();
+});
+
+const volumeChartEl = $("volume-chart");
+volumeChartEl.addEventListener("pointerover", (e) => {
+  const col = e.target.closest(".chart-col");
+  if (col) chartSummaryDay(col);
+});
+volumeChartEl.addEventListener("pointerleave", chartSummaryTotal);
 
 async function loadWallet() {
   try {
@@ -289,8 +372,84 @@ async function loadWallet() {
           : fmtUSDC(s.vault_balance_usdc) + " USDC";
       $("wallet-vault-addr").textContent = "Vault: " + s.vault_address;
     }
+    paintSolvency(s);
+    paintExplorerLinks();
   } catch (e) { /* keep placeholders */ }
 }
+
+/* The ring draws the two figures the table beside it prints — free reserve
+ * against all liabilities — so a glance and the exact row can never disagree.
+ * `reserve_usdc` is read from the chain; when the RPC does not answer there is
+ * no coverage to show, and the ring says so instead of drawing a full circle. */
+const GAUGE_RADIUS = 52;
+
+function paintSolvency(s) {
+  const arc = $("gaugeArc");
+  const ring = $("solvencyGauge");
+  const circumference = 2 * Math.PI * GAUGE_RADIUS;
+  arc.style.strokeDasharray = circumference + " " + circumference;
+  const reserve = s.reserve_usdc;
+  const owed = s.liabilities_usdc;
+  if (reserve === null || reserve === undefined) {
+    arc.style.strokeDashoffset = circumference;
+    arc.classList.remove("gauge-value-low");
+    $("gaugePct").textContent = "–";
+    $("gaugeCap").textContent = "нет данных";
+    $("gaugeDetail").textContent = "Баланс кошелька не прочитан — покрытие посчитать нельзя.";
+    ring.setAttribute("aria-label", "Покрытие резервами неизвестно: RPC не ответил.");
+    return;
+  }
+  const covered = owed > 0 ? Math.min(reserve / owed, 1) : 1;
+  arc.style.strokeDashoffset = circumference * (1 - covered);
+  arc.classList.toggle("gauge-value-low", s.solvent === false);
+  $("gaugePct").textContent = fmtPct(covered * 100);
+  $("gaugeCap").textContent = "покрытие";
+  $("gaugeDetail").innerHTML = owed > 0
+    ? "Свободный резерв <b>" + fmtUSDC(reserve) + "</b> из <b>" + fmtUSDC(owed)
+      + "</b> USDC обязательств — "
+      + (s.solvent === false ? "покрыто не всё." : "обязательства покрыты.")
+    : "Свободный резерв <b>" + fmtUSDC(reserve) + "</b> USDC, обязательств у бота сейчас нет.";
+  ring.setAttribute(
+    "aria-label",
+    "Резервы покрывают " + fmtPct(covered * 100) + " обязательств: "
+    + fmtUSDC(reserve) + " из " + fmtUSDC(owed) + " USDC."
+  );
+}
+
+/* The explorer base comes from /api/info like every other network string, and
+ * the link stays hidden until it names a real 0x… address: on a page whose
+ * balance call failed there is nothing to open. */
+/* A control that would link or copy the placeholder text has to know the
+ * difference: the balance call can fail and leave "загрузка…" on screen. */
+const isAddress = (a) => /^0x[0-9a-fA-F]{40}$/.test(a);
+
+function paintExplorerLinks() {
+  const hot = $("wallet-address").textContent.trim();
+  const hotLink = $("walletExplorer");
+  if (NET.explorer && isAddress(hot)) {
+    hotLink.href = NET.explorer + "/address/" + hot;
+    hotLink.hidden = false;
+  } else {
+    hotLink.hidden = true;
+  }
+  const vault = $("wallet-vault-addr").textContent.replace(/^Vault:\s*/, "").trim();
+  const vaultLink = $("vaultExplorer");
+  if (NET.explorer && isAddress(vault)) {
+    vaultLink.href = NET.explorer + "/address/" + vault;
+    vaultLink.hidden = false;
+  } else {
+    vaultLink.hidden = true;
+  }
+}
+
+$("copyWalletAddress").addEventListener("click", () => {
+  const addr = $("wallet-address").textContent.trim();
+  if (!isAddress(addr)) {
+    setMsg("walletMsg", "Адрес ещё не прочитан — обновите страницу.", false);
+    return;
+  }
+  copyToClipboard(addr, "walletMsg", "адрес");
+});
 
 function statusBadge(status) {
   if (status === "open") return '<span class="chip chip-open">открыт</span>';
@@ -327,7 +486,7 @@ function marketCard(m, i) {
     <div class="option${isWinner ? " option-winner" : ""}">
       <div class="option-top">
         <span class="option-label">${escapeHtml(o.label)}</span>
-        <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${fmtPct(o.probability)} · ${escapeHtml(String(o.backers))} чел.</span>
+        <span class="option-val">${fmtUSDC(o.pool_usdc)}&nbsp;USDC · ${fmtPct(o.probability)} · ${escapeHtml(String(o.backers))}&nbsp;чел.</span>
       </div>
       <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
@@ -341,7 +500,7 @@ function marketCard(m, i) {
       </div>
       ${options}
       <div class="market-footer">
-        <span class="pot">Пул: <b>${fmtUSDC(m.pot_usdc)} USDC</b> · ${escapeHtml(String(m.total_backers))} чел.</span>
+        <span class="pot">Пул: <b>${fmtUSDC(m.pot_usdc)} USDC</b> · ${escapeHtml(String(m.total_backers))}&nbsp;чел.</span>
         <span class="pot">
           <a class="m-link" href="/m/${m.id}">Подробнее →</a>
           <span class="market-author">@${escapeHtml(m.creator.username || ("id" + m.creator.id))}</span>
@@ -354,6 +513,7 @@ async function loadMarkets() {
   try {
     const r = await fetch("/api/markets");
     const markets = await r.json();
+    searchIndex.pool = markets;
     const el = $("markets-list");
     if (!markets.length) {
       el.innerHTML = '<div class="empty">Открытых рынков пока нет — создай первый в боте: /bet create</div>';
@@ -361,6 +521,7 @@ async function loadMarkets() {
     }
     el.innerHTML = markets.map(marketCard).join("");
   } catch (e) {
+    searchIndex.pool = [];
     $("markets-list").innerHTML = '<div class="empty">Не удалось загрузить рынки</div>';
   }
 }
@@ -369,6 +530,7 @@ async function loadClosedMarkets() {
   try {
     const r = await fetch("/api/markets?status=resolved");
     const markets = await r.json();
+    searchIndex.closed = markets;
     const el = $("closed-markets-list");
     if (!markets.length) {
       el.innerHTML = '<div class="empty">Закрытых рынков пока нет</div>';
@@ -376,6 +538,7 @@ async function loadClosedMarkets() {
     }
     el.innerHTML = markets.map(marketCard).join("");
   } catch (e) {
+    searchIndex.closed = [];
     $("closed-markets-list").innerHTML = '<div class="empty">Не удалось загрузить</div>';
   }
 }
@@ -405,8 +568,8 @@ function predictionCard(m, i) {
       </div>
       ${options}
       <div class="market-footer">
-        <span class="pot">Ликвидность: <b>${fmtUSDC(m.liquidity_usdc)} USDC</b></span>
-        <span class="pot">Оборот долей: ${fmtUSDC(m.volume_usdc)} USDC · ${escapeHtml(String(m.traders))} чел.</span>
+        <span class="pot">Ликвидность: <b>${fmtUSDC(m.liquidity_usdc)} USDC</b> · оборот долей <b>${fmtUSDC(m.volume_usdc)} USDC</b> · ${escapeHtml(String(m.traders))}&nbsp;чел.</span>
+        <button class="btn btn-ghost btn-sm" type="button" data-quote="${m.id}">Котировка</button>
       </div>
     </div>`;
 }
@@ -435,7 +598,7 @@ function renderHeroSpot(markets) {
         <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%"></div></div>
       </div>`).join("")}
     <div class="spot-foot">
-      <span class="pot">Ликвидность: <b>${fmtUSDC(top.liquidity_usdc)} USDC</b> · ${escapeHtml(String(top.traders))} чел.</span>
+      <span class="pot">Ликвидность: <b>${fmtUSDC(top.liquidity_usdc)} USDC</b> · ${escapeHtml(String(top.traders))}&nbsp;чел.</span>
       <a class="m-link" href="#predictions">Все рынки →</a>
     </div>`;
   box.hidden = false;
@@ -445,6 +608,8 @@ async function loadPredictions() {
   try {
     const r = await fetch("/api/predictions");
     const markets = await r.json();
+    predictions = markets;
+    searchIndex.lmsr = markets;
     const el = $("predictions-list");
     if (!markets.length) {
       el.innerHTML = '<div class="empty">Рынков с открытым торгом пока нет</div>';
@@ -453,9 +618,535 @@ async function loadPredictions() {
     el.innerHTML = markets.map(predictionCard).join("");
     renderHeroSpot(markets);
   } catch (e) {
+    searchIndex.lmsr = [];
     $("predictions-list").innerHTML = '<div class="empty">Не удалось загрузить рынки</div>';
   }
 }
+
+/* ---------- LMSR quote drawer ---------- */
+
+/* Every number here is the server's own: `/api/prediction/{id}/quote` runs the
+ * same 40-digit LMSR and the same floor-to-micro-share search that `buy_shares`
+ * books with, so the panel cannot promise a share count the ledger will not
+ * hand out. Nothing is reserved — this is a price, not an order. */
+let predictions = [];
+let quoteMarket = null;
+let quoteOption = 0;
+let quoteSeq = 0;          // a slow answer must not overwrite a newer one
+let quoteTimer = null;
+let quoteCap = null;
+const quoteDrawer = $("quoteDrawer");
+
+/* The drawer is where a trade is decided, so it keeps six decimals where the
+ * dash rounds to two: `fmtUSDC` would print a cost of 9.999999 as 10 and the
+ * reader would conclude the tail was debited too. */
+const fmtMicro = (x) =>
+  (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 6, minimumFractionDigits: 0 });
+
+function quoteRowsEmpty() {
+  for (const id of ["quoteShares", "quoteAvg", "quoteCost", "quotePrice", "quotePayout", "quoteRoi"]) {
+    const el = $(id);
+    el.textContent = "–";
+    el.className = "row-v mono";
+  }
+}
+
+function quoteMsgClear() {
+  const el = $("quoteMsg");
+  el.className = "msg";
+  el.textContent = "";
+}
+
+function renderQuoteChips() {
+  $("quoteChips").innerHTML = [1, 5, 10, 50, 100]
+    .filter((v) => quoteCap === null || v <= quoteCap)
+    .map((v) => `<button class="amount-chip" type="button" data-amount="${v}">${v} USDC</button>`)
+    .join("");
+  $("quoteLimit").textContent = quoteCap === null
+    ? ""
+    : "От 0,01 до " + fmtUSDC(quoteCap) + " USDC за одну сделку.";
+}
+
+async function requestQuote() {
+  if (!quoteMarket) return;
+  const seq = ++quoteSeq;
+  const amount = $("quoteAmount").value.trim();
+  if (!amount) {
+    quoteRowsEmpty();
+    quoteMsgClear();
+    return;
+  }
+  const url = "/api/prediction/" + quoteMarket.id + "/quote"
+    + "?option=" + quoteOption + "&amount=" + encodeURIComponent(amount);
+  let q = null;
+  let refusal = "";
+  try {
+    const r = await fetch(url);
+    if (r.ok) q = await r.json();
+    else refusal = (await r.json()).detail || "Котировка недоступна.";
+  } catch (e) {
+    refusal = "Сервер не ответил — котировки нет.";
+  }
+  if (seq !== quoteSeq) return;
+  if (!q) {
+    quoteRowsEmpty();
+    setMsg("quoteMsg", refusal, false);
+    return;
+  }
+  if (q.max_trade_usdc !== quoteCap) {
+    quoteCap = q.max_trade_usdc;
+    renderQuoteChips();
+  }
+  $("quoteShares").textContent = fmtMicro(q.shares_usdc) + " шт.";
+  $("quoteAvg").textContent = fmtMicro(q.avg_price_usdc) + " USDC";
+  $("quoteCost").textContent = fmtMicro(q.cost_usdc) + " USDC";
+  $("quotePrice").textContent = fmtPct(q.price_before_pct) + " → " + fmtPct(q.price_after_pct);
+  $("quotePayout").textContent = fmtMicro(q.payout_usdc) + " USDC";
+  const roi = $("quoteRoi");
+  roi.textContent = sign(q.profit_usdc) + fmtMicro(q.profit_usdc) + " USDC · "
+    + sign(q.roi_pct) + fmtPct(q.roi_pct);
+  roi.className = "row-v mono " + (q.profit_usdc >= 0 ? "pos" : "neg");
+  quoteMsgClear();
+}
+
+/* A number that can only be a gain or a loss reads ambiguous as "0,04": the
+ * drawer is a comparison, so the sign is part of the figure. */
+const sign = (x) => (x >= 0 ? "+" : "");
+
+function quoteRequestedSoon() {
+  clearTimeout(quoteTimer);
+  quoteTimer = setTimeout(requestQuote, 250);
+}
+
+function paintQuoteOptions() {
+  $("quoteOptions").innerHTML = quoteMarket.options.map((o) => {
+    const on = o.index === quoteOption;
+    return `
+    <button class="${on ? "opt-btn selected" : "opt-btn"}" type="button"
+            data-option="${o.index}" aria-pressed="${on}">
+      <span class="opt-label">${escapeHtml(o.label)}</span>
+      <span class="opt-price">${fmtPct(o.price_pct)}</span>
+    </button>`;
+  }).join("");
+}
+
+function openQuote(marketId) {
+  const m = predictions.find((x) => x.id === marketId);
+  if (!m) return;
+  quoteMarket = m;
+  quoteOption = m.options.length ? m.options[0].index : 0;
+  $("quoteQuestion").textContent = "#" + m.id + " " + m.question;
+  paintQuoteOptions();
+  $("quoteAmount").value = "10";
+  quoteMsgClear();
+  $("quoteTrade").textContent = $("workspace").hidden
+    ? "Войти, чтобы торговать"
+    : "Перенести в терминал";
+  quoteDrawer.showModal();
+  requestQuote();
+}
+
+function closeQuote() {
+  quoteDrawer.close();
+  quoteMarket = null;
+  clearTimeout(quoteTimer);
+  ++quoteSeq;
+}
+
+quoteDrawer.addEventListener("click", (e) => {
+  // The dialog is the full-viewport layer, so a click that reaches it rather
+  // than the panel is the pointer missing the card — the backdrop gesture.
+  if (e.target === quoteDrawer) closeQuote();
+});
+$("quoteClose").addEventListener("click", closeQuote);
+$("quoteAmount").addEventListener("input", quoteRequestedSoon);
+$("quoteChips").addEventListener("click", (e) => {
+  const chip = e.target.closest("button[data-amount]");
+  if (!chip) return;
+  $("quoteAmount").value = chip.dataset.amount;
+  requestQuote();
+});
+$("quoteOptions").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-option]");
+  if (!btn) return;
+  quoteOption = Number(btn.dataset.option);
+  paintQuoteOptions();
+  requestQuote();
+});
+$("predictions-list").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-quote]");
+  if (btn) openQuote(Number(btn.dataset.quote));
+});
+
+/* Handing the same intent to the workspace instead of asking for it twice:
+ * tab, market and outcome are clicked in the order a person would click them,
+ * so `site.js` stays the only writer of a pending trade and the drawer never
+ * grows a second money path. */
+$("quoteTrade").addEventListener("click", () => {
+  if (!$("workspace").hidden) {
+    handToTerminal();
+    return;
+  }
+  closeQuote();
+  $("workspace-section").scrollIntoView({ behavior: REDUCED_MOTION ? "auto" : "smooth", block: "start" });
+});
+
+function handToTerminal() {
+  const select = $("tradeMarket");
+  const tab = document.querySelector('.tab[data-tab="markets"]');
+  if (!select || !tab) return;
+  const id = String(quoteMarket.id);
+  select.value = id;
+  if (select.value !== id) {
+    setMsg("quoteMsg", "Этого рынка уже нет в списке — обновите страницу.", false);
+    return;
+  }
+  tab.click();
+  select.dispatchEvent(new Event("change"));
+  const option = document.querySelector('#tradeOptions .opt-btn[data-option="' + quoteOption + '"]');
+  if (option) option.click();
+  $("tradeAmount").value = $("quoteAmount").value;
+  closeQuote();
+}
+
+/* ---------- x402 handshake ---------- */
+/* The page signs nothing and pays nothing. It asks this same server for a real
+ * invoice — the numbers on screen are the ones an agent would be held to — and
+ * prints the two headers that answer it. An invoice is a DB row bound to
+ * (recipient, amount), so the only request is the one behind the button; the
+ * page never asks for a invoice on its own. */
+let x402Invoice = null;
+
+const HTTP_REASON = {
+  200: "OK", 400: "Bad Request", 402: "Payment Required",
+  404: "Not Found", 409: "Conflict", 500: "Internal Server Error",
+  502: "Bad Gateway", 503: "Service Unavailable",
+};
+
+const X402_MEANING = {
+  400: "Запрос непонятен: получатель должен существовать, а сумма — попасть в пределы ниже.",
+  404: "Бот не нашёл такого получателя — счёт не выдаётся, платить не за что.",
+  409: "Такая оплата уже прошла: счёт не оплачивают повторно.",
+  503: "Приём x402 на этом сайте выключен, поэтому счёта и не будет.",
+};
+
+function x402Field(id) {
+  return $(id).value.trim();
+}
+
+function x402Target() {
+  const recipient = x402Field("x402Recipient");
+  const amount = x402Field("x402Amount");
+  return "/api/x402/tip?recipient=" + encodeURIComponent(recipient || "@username")
+    + "&amount=" + encodeURIComponent(amount || "0.10");
+}
+
+function x402Curl(path) {
+  return "curl -i -X POST '" + location.origin + x402Target() + "'" + (path ? " \\\n  -H '" + path + "'" : "");
+}
+
+/* The envelope is what goes into X-PAYMENT base64-encoded. Before an invoice
+ * exists its fields are named placeholders; after one, they are the invoice's
+ * own values, so a developer can read the amount, the payTo and the network
+ * off the page instead of decoding the header by hand. */
+function x402Envelope() {
+  const a = x402Invoice && x402Invoice.accept;
+  return [
+    "{",
+    '  "x402Version": ' + (x402Invoice ? x402Invoice.body.x402Version : 1) + ",",
+    '  "scheme": "' + (a ? a.scheme : "exact") + '",',
+    '  "networkId": "' + (a ? a.networkId : "base") + '",',
+    '  "payload": {',
+    '    "authorization": {',
+    '      "from": "<адрес плательщика USDC>",',
+    '      "to": "' + (a ? a.payTo : "<payTo из счёта>") + '",',
+    '      "value": ' + (a ? a.maxAmountRequired : "<микро-USDC из счёта>") + ",",
+    '      "validAfter": 0,',
+    '      "validBefore": "<unix-время now + ' + (a ? a.maxTimeoutSeconds : 60) + ' с>",',
+    '      "nonce": "<32 байта>"',
+    "    },",
+    '    "signature": "<0x… подпись EIP-3009>"',
+    "  }",
+    "}",
+  ].join("\n");
+}
+
+function renderX402Curl() {
+  $("x402CurlAsk").textContent = x402Curl("");
+  $("x402CurlSpec").textContent = x402Curl("X-PAYMENT: <base64 объекта ниже>")
+    + "\n\n" + x402Envelope();
+  $("x402CurlLegacy").textContent = x402Curl(
+    "x-402-payment: 0x<хэш перевода USDC на адрес счёта>"
+  );
+}
+
+function hsRow(k, v) {
+  return '<div class="row"><span class="row-k">' + k + '</span>'
+    + '<span class="row-v">' + v + "</span></div>";
+}
+
+function paintX402Answer(status, body) {
+  const el = $("x402Answer");
+  const links = $("x402AnswerLinks");
+  const rows = [hsRow("Ответ", status + " " + (HTTP_REASON[status] || ""))];
+  const a = status === 402 && Array.isArray(body.accepts) ? body.accepts[0] : null;
+  x402Invoice = a ? { body, accept: a } : null;
+  if (a) {
+    rows.push(hsRow("Схема", "exact · x402 v" + escapeHtml(body.x402Version)
+      + " · " + escapeHtml(a.networkId)));
+    rows.push(hsRow("К оплате", fmtMicroUSDC(a.maxAmountRequired) + " USDC"));
+    rows.push(hsRow("Адрес счёта", escapeHtml(a.payTo)));
+    rows.push(hsRow("Контракт USDC", escapeHtml(a.asset)));
+    rows.push(hsRow("Окно подписи", a.maxTimeoutSeconds + " с"));
+    if (body.expires_in_seconds) {
+      rows.push(hsRow("Счёт живёт", body.expires_in_seconds + " с"));
+    }
+    if (body["x-402-invoice-id"]) {
+      rows.push(hsRow("id счёта", escapeHtml(body["x-402-invoice-id"])));
+    }
+    rows.push(hsRow("Ресурс", escapeHtml(a.resource)));
+    links.hidden = false;
+  } else {
+    links.hidden = true;
+    if (body.detail) {
+      rows.push(hsRow("Сообщение сервера", escapeHtml(body.detail)));
+    }
+  }
+  el.innerHTML = rows.join("");
+}
+
+function fmtMicroUSDC(micro) {
+  return fmtUSDC(Number(micro) / 1e6);
+}
+
+function setupX402(info) {
+  const cfg = info.x402;
+  if (!cfg) return;
+  const amount = $("x402Amount");
+  amount.min = cfg.min_usdc;
+  amount.max = cfg.max_usdc;
+  amount.step = "0.01";
+  $("x402Bounds").textContent = "Этот сайт выставляет счета от "
+    + fmtUSDC(cfg.min_usdc) + " до " + fmtUSDC(cfg.max_usdc) + " USDC, счёт живёт "
+    + cfg.invoice_ttl_seconds + " с."
+    + (cfg.enabled ? "" : " Приём x402 здесь выключен, поэтому запрос ответит 503.");
+  const chips = [cfg.min_usdc, 1, cfg.max_usdc].filter((v, i, all) =>
+    v >= cfg.min_usdc && v <= cfg.max_usdc && all.indexOf(v) === i);
+  $("x402Amounts").innerHTML = chips.map((v) =>
+    '<button class="amount-chip" type="button" data-amt="' + v + '">'
+    + fmtUSDC(v) + " USDC</button>").join("");
+}
+
+$("x402Amounts").addEventListener("click", (e) => {
+  const chip = e.target.closest(".amount-chip");
+  if (!chip) return;
+  $("x402Amount").value = chip.dataset.amt;
+  renderX402Curl();
+});
+
+for (const id of ["x402Recipient", "x402Amount"]) {
+  $(id).addEventListener("input", renderX402Curl);
+}
+
+$("x402Ask").addEventListener("click", async () => {
+  const recipient = x402Field("x402Recipient");
+  const amount = x402Field("x402Amount");
+  if (!recipient || !amount) {
+    setMsg("x402Msg", "Нужны оба поля: счёт привязан к паре (получатель, сумма).", false);
+    return;
+  }
+  const btn = $("x402Ask");
+  btn.disabled = true;
+  try {
+    const r = await fetch("/api/x402/tip?recipient=" + encodeURIComponent(recipient)
+      + "&amount=" + encodeURIComponent(amount), { method: "POST" });
+    const body = await r.json().catch(() => ({}));
+    paintX402Answer(r.status, body);
+    renderX402Curl();
+    const meaning = r.status === 402
+      ? "Счёт выдан. Теперь агент подписывает перевод на адрес счёта и повторяет запрос."
+      : (X402_MEANING[r.status] || "Сервер ответил кодом " + r.status + ".");
+    setMsg("x402Msg", meaning, r.status === 402);
+  } catch (e) {
+    $("x402Answer").innerHTML = '<div class="empty">Запрос не дошёл до сервера.</div>';
+    setMsg("x402Msg", "Соединение не прошло: " + e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("x402CopyPay").addEventListener("click", () => {
+  const a = x402Invoice && x402Invoice.accept;
+  if (!a) { setMsg("x402Msg", "Сначала запросите счёт — адрес появляется из ответа.", false); return; }
+  copyToClipboard(a.payTo, "x402Msg", "адрес счёта");
+});
+
+for (const [btnId, preId] of [["x402CopyAsk", "x402CurlAsk"],
+  ["x402CopySpec", "x402CurlSpec"], ["x402CopyLegacy", "x402CurlLegacy"]]) {
+  $(btnId).addEventListener("click", () => {
+    copyToClipboard($(preId).textContent, "x402Msg", "команду");
+  });
+}
+
+renderX402Curl();
+
+/* ---------- market search ---------- */
+
+/* One index over the four public lists the page already loads. Search fetches
+ * nothing: a palette that went to the server would put a rate limit between a
+ * visitor and a market that is already on screen. A row keeps the list it came
+ * from and its position there, because these cards carry no per-market URL on
+ * the landing — the answer to a search is the card, not another page. */
+const SEARCH_KINDS = {
+  lmsr: { label: "LMSR", list: "predictions-list", section: "predictions" },
+  pool: { label: "Пул", list: "markets-list", section: "markets" },
+  closed: { label: "Закрыт", list: "closed-markets-list", section: "closed-markets" },
+  onchain: { label: "Ончейн", list: "onchain-markets-list", section: "onchain-markets" },
+};
+const searchIndex = { lmsr: [], pool: [], closed: [], onchain: [] };
+
+/* Each list prints one figure on its own card, and the row prints that same
+ * figure rather than a second number to compare: the pool lists show the escrow
+ * or the liquidity they hold, the chain lists show the clock they run on. */
+const SEARCH_META = {
+  lmsr: (m) => fmtUSDC(m.liquidity_usdc) + " USDC",
+  pool: (m) => fmtUSDC(m.pot_usdc) + " USDC",
+  closed: (m) => fmtUSDC(m.pot_usdc) + " USDC",
+  onchain: (m) => (m.close_at ? relDeadline(m.close_at) : ""),
+};
+
+const SEARCH_LIMIT = 40;
+const searchDialog = $("searchDialog");
+let searchKind = "";
+
+function searchRows() {
+  const needle = $("searchInput").value.trim().toLowerCase();
+  const rows = [];
+  for (const kind of Object.keys(SEARCH_KINDS)) {
+    if (searchKind && kind !== searchKind) continue;
+    searchIndex[kind].forEach((m, idx) => {
+      const hay = ("#" + m.id + " " + m.question).toLowerCase();
+      let rank = 0;
+      if (needle) {
+        const at = hay.indexOf(needle);
+        if (at < 0) return;
+        rank = needle === "#" + m.id ? -1 : at;
+      }
+      rows.push({ kind, idx, m, rank });
+    });
+  }
+  /* The sort is stable, so equal ranks keep the order the lists arrived in —
+   * which is why an empty query reads as a browse of what is on the page. */
+  return rows.sort((a, b) => a.rank - b.rank);
+}
+
+function paintSearchKinds() {
+  $("searchKinds").innerHTML = [["", "Все"]]
+    .concat(Object.keys(SEARCH_KINDS).map((k) => [k, SEARCH_KINDS[k].label]))
+    .map(([id, label]) => {
+      const on = id === searchKind;
+      return `<button class="amount-chip${on ? " active" : ""}" type="button"
+                      data-kind="${id}" aria-pressed="${on}">${label}</button>`;
+    }).join("");
+}
+
+function paintSearch() {
+  const query = $("searchInput").value.trim();
+  const rows = searchRows();
+  const shown = rows.slice(0, SEARCH_LIMIT);
+  $("searchResults").innerHTML = shown.length
+    ? shown.map((r) => `
+      <button class="pal-row" type="button" data-kind="${r.kind}" data-idx="${r.idx}">
+        <span class="pal-q">#${r.m.id} ${escapeHtml(r.m.question)}</span>
+        <span class="pal-meta">${escapeHtml(SEARCH_META[r.kind](r.m))}</span>
+        <span class="pal-kind">${SEARCH_KINDS[r.kind].label}</span>
+      </button>`).join("")
+    : '<div class="empty">Ничего не найдено</div>';
+  const foot = $("searchFoot");
+  if (!rows.length) {
+    foot.textContent = query ? "Ничего не найдено." : "Открытых рынков на странице пока нет.";
+    return;
+  }
+  foot.textContent = (query ? "Совпадений: " : "На странице: ") + rows.length
+    + (rows.length > shown.length ? " — показано " + shown.length + ", уточните запрос."
+      : ". Стрелки — выбор, Enter — к карточке.");
+}
+
+function gotoMarket(kind, idx) {
+  const where = SEARCH_KINDS[kind];
+  /* The index is a position in the same array the list was rendered from, so a
+   * refresh between opening the panel and clicking can move the card. Falling
+   * back to the section is the honest answer to that: closer, not nowhere. */
+  const card = $(where.list).querySelectorAll(".market-card")[idx] || $(where.section);
+  searchDialog.close();
+  card.scrollIntoView({ behavior: REDUCED_MOTION ? "auto" : "smooth", block: "center" });
+  if (card !== $(where.section)) {
+    card.classList.add("is-found");
+    setTimeout(() => card.classList.remove("is-found"), 1400);
+  }
+}
+
+function openSearch() {
+  paintSearchKinds();
+  paintSearch();
+  searchDialog.showModal();
+  const input = $("searchInput");
+  input.focus();
+  input.select();
+}
+
+$("searchOpen").addEventListener("click", openSearch);
+$("searchClose").addEventListener("click", () => searchDialog.close());
+searchDialog.addEventListener("click", (e) => {
+  // The dialog is the full-viewport layer, so a click that reaches it rather
+  // than the panel is the pointer missing the card — the backdrop gesture.
+  if (e.target === searchDialog) searchDialog.close();
+});
+$("searchInput").addEventListener("input", paintSearch);
+$("searchKinds").addEventListener("click", (e) => {
+  const chip = e.target.closest("button[data-kind]");
+  if (!chip) return;
+  searchKind = chip.dataset.kind;
+  paintSearchKinds();
+  paintSearch();
+  $("searchInput").focus();
+});
+$("searchResults").addEventListener("click", (e) => {
+  const row = e.target.closest(".pal-row");
+  if (row) gotoMarket(row.dataset.kind, Number(row.dataset.idx));
+});
+searchDialog.addEventListener("keydown", (e) => {
+  /* A search field takes the first Escape for itself and clears its text, so
+   * the palette used to stay on screen until a second press — and the reader
+   * had no way to know the box, not the panel, was the reason. */
+  if (e.key === "Escape") {
+    searchDialog.close();
+    return;
+  }
+  const rows = Array.prototype.slice.call($("searchResults").querySelectorAll(".pal-row"));
+  if (!rows.length) return;
+  const at = rows.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const last = rows.length - 1;
+    rows[e.key === "ArrowDown"
+      ? (at < 0 ? 0 : (at + 1) % rows.length)
+      : (at < 0 ? last : (at - 1 + rows.length) % rows.length)].focus();
+  } else if (e.key === "Enter" && document.activeElement === $("searchInput")) {
+    e.preventDefault();
+    rows[0].click();
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.code !== "KeyK") return;
+  e.preventDefault();
+  if (searchDialog.open) searchDialog.close(); else openSearch();
+});
+
+/* The hint has to name the key the visitor actually presses; a Mac keyboard
+ * has no Ctrl to point at. */
+$("searchKey").textContent =
+  /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent || "") ? "⌘K" : "Ctrl K";
 
 async function loadLeaderboard() {
   try {
@@ -494,9 +1185,11 @@ async function loadOnchainMarkets() {
     if (!section || !el) return;
     if (!markets.length) {
       // Contract not deployed or nothing created yet — hide the section.
+      searchIndex.onchain = [];
       section.hidden = true;
       return;
     }
+    searchIndex.onchain = markets;
     section.hidden = false;
     /* Reveal only un-hides on intersection, and this section can be unhidden
        after the user has already scrolled past it — then it would never
@@ -555,16 +1248,7 @@ if (commandsGrid) {
     const btn = e.target.closest(".cmd");
     if (!btn) return;
     const cmd = "/" + btn.dataset.cmd;
-    try {
-      await navigator.clipboard.writeText(cmd);
-      setMsg("commands-msg", "Скопировано: " + cmd, true);
-    } catch (err) {
-      setMsg(
-        "commands-msg",
-        "Браузер не дал доступ к буферу обмена — выделите команду и скопируйте вручную.",
-        false
-      );
-    }
+    copyToClipboard(cmd, "commands-msg", "команду");
   });
 }
 
