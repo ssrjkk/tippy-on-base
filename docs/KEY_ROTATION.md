@@ -56,8 +56,17 @@ print('Private key:', acct.key.hex())
 
 1. Generate new key
 2. Update `.env` with new relayer key
-3. Transfer ownership on TipBotVault: call `transferOwnership(newRelayer)` (requires 24h timelock)
-4. After timelock: `acceptOwnership()` from new relayer
+3. From the **owner** key, call `setRelayer(newAddress)` on TipBotVault. The relayer
+   is a separate role: rotating it does not transfer ownership.
+4. Verify: `batchDistribute` succeeds from the new relayer and `spentTodayView()`
+   still reports the current rolling 24h window.
+
+Ownership is a different operation. `transferOwnership(newOwner)` sets
+`pendingOwner`, and `acceptOwnership()` from that address completes it —
+**two-step, with no delay enforced by the contract**: both calls can land in the
+same block. `cancelOwnershipTransfer()` clears a pending transfer. If a waiting
+period is required, it has to come from the owner's own policy (a Safe module) or
+from a contract change; the vault does not provide one.
 
 ## 3. Compromise Response
 

@@ -13,6 +13,9 @@ accounting backed by public proof-of-reserves.
 
 **Links:** [Telegram Bot](https://t.me/tippy_on_base_bot)
 
+**Whitepaper:** [docs/WHITEPAPER.md](docs/WHITEPAPER.md) — the full function inventory,
+the growth roadmap, and what the product can earn (grants, subscriptions, fees).
+
 ---
 
 ## Screenshots
