@@ -493,6 +493,7 @@
     var box = $('smartWalletBox');
     try {
       var w = await api('/api/mini/smartwallet');
+      if (!w.enabled) { box.hidden = true; return; }
       box.hidden = false;
       $('swStatus').textContent = w.deployed ? 'развёрнут' : 'ещё не развёрнут';
       $('swAddress').textContent = w.address;
@@ -501,7 +502,7 @@
         ? 'Газ оплачивает paymaster — комиссия за транзакцию с вас не берётся.'
         : 'Газ оплачивает ваш кошелёк.';
     } catch (e) {
-      box.hidden = true;   // 503: stack not configured — nothing to show
+      box.hidden = true;   // unreachable origin or no data — nothing to show
     }
   }
 

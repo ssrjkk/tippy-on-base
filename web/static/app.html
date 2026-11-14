@@ -6,9 +6,7 @@
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
 <meta name="robots" content="noindex">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=Golos+Text:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/fonts.css">
 <title>Tippy</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E">
 <meta name="fc:miniapp" content='{"version":"1","imageUrl":"__PUBLIC_URL__/miniapp-hero.png","button":{"title":"Открыть Tippy","action":{"type":"launch_miniapp","url":"__PUBLIC_URL__/app"}}}'>
@@ -28,6 +26,7 @@
   } catch(e) {}
 </script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/chain.js"></script>
 <script>
 /* Theme and the Telegram handshake have to land before first paint: without
    telegram-web-app.js there is no WebApp.initData, so /api/mini/auth never runs
@@ -56,9 +55,21 @@
 /* Tokens copied from /style.css — base.org values: one brand blue, neutral greys,
  * hairline borders, no shadows. --accent paints surfaces, --accent-text paints type,
  * because #224bff is a fill colour and is not readable as text on the dark canvas. */
-:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
-[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
-html,body{height:100%;font-family:var(--font-ui);font-size:15px;line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
+:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--warning-bg:rgba(138,90,0,.08);--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius-sm:6px;--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--measure:68ch;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--t-micro:10px;--t-chip:11px;--t-meta:12px;--t-small:13px;--t-ui:14px;--t-lead:15px;--t-body:16px;--t-h4:18px;--t-h2:24px;--t-h1:28px;--t-xl:32px;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
+[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--warning-bg:rgba(217,154,43,.14);--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
+html,body{height:100%;font-family:var(--font-ui);font-size:var(--t-lead);line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
+/* The heading floor, the same law the site's reset states: a heading never takes
+its size from the browser's own sheet, where h3 is 1.17em — 18.72px, a value on no
+token, and a different number wherever the root font is not exactly 16px. Sizes,
+weight and tracking only: line-height stays the body's, because every heading here
+already sits in a box measured for it. */
+h1,h2,h3,h4,h5,h6{font-family:var(--font-ui);font-weight:500;letter-spacing:-.025em;color:var(--text)}
+h1{font-size:var(--t-h1)}
+h2{font-size:var(--t-h2)}
+h3{font-size:var(--t-h4)}
+h4{font-size:var(--t-lead)}
+h5{font-size:var(--t-ui)}
+h6{font-size:var(--t-small)}
 a{color:var(--accent-text);text-decoration:none}
 button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit;outline:none}
 input,textarea{font-family:inherit;outline:none;color:inherit}
@@ -72,9 +83,14 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 
 /* Header */
 .header{position:sticky;top:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);min-height:54px}
-.header-logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600;letter-spacing:-.02em}
-.header-logo .base-mark{width:22px;height:22px;border-radius:6px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.header-logo{display:flex;align-items:center;gap:8px;font-size:var(--t-h4);font-weight:600;letter-spacing:-.02em}
+.header-logo .base-mark{width:22px;height:22px;border-radius:var(--radius-sm);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .header-logo .base-mark svg{width:14px;height:14px}
+/* The glyph is an SVG <text>, so its size is the 24-unit box, not a CSS
+ * font-size; what it does need from the stylesheet is the palette and the
+ * interface family — with neither the letter paints in the browser's default
+ * serif, which the computed-style sweep measured on 12 nodes. */
+.header-logo .base-mark svg text{fill:var(--on-accent);font-family:var(--font-ui);font-weight:700}
 .header-logo .dot{color:var(--accent-text)}
 .header-right{display:flex;align-items:center;gap:8px}
 .theme-toggle{width:34px;height:34px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text3);transition:color .2s var(--ease),border-color .2s var(--ease)}
@@ -83,7 +99,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 [data-theme="dark"] .theme-toggle .icon-moon{display:none}
 .theme-toggle .icon-sun{display:none}
 .theme-toggle .icon-moon{display:inline}
-.balance-chip{border:1px solid var(--border-strong);border-radius:var(--pill);padding:6px 12px;font-size:13px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:7px;transition:border-color .2s var(--ease)}
+.balance-chip{border:1px solid var(--border-strong);border-radius:var(--pill);padding:6px 12px;font-size:var(--t-small);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:8px;transition:border-color .2s var(--ease)}
 .balance-chip:hover{border-color:var(--text)}
 .balance-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex-shrink:0}
 
@@ -96,7 +112,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 
 /* Tab Bar */
 .tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:var(--safe-b)}
-.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 8px;font-size:11px;color:var(--text4);transition:color .2s var(--ease);position:relative}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 8px;font-size:var(--t-chip);color:var(--text4);transition:color .2s var(--ease);position:relative}
 .tab-item.active{color:var(--accent-text)}
 .tab-item .icon{width:20px;height:20px}
 .tab-item::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:2px;border-radius:var(--pill);background:var(--accent-text);opacity:0;transition:opacity .2s var(--ease)}
@@ -105,89 +121,92 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 /* Cards */
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
 .card-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
-.card-title{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.08em}
-.big-number{font-size:30px;font-weight:500;letter-spacing:-.03em;line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-.big-number .currency{font-size:14px;color:var(--text3);font-weight:500;margin-left:6px;letter-spacing:0}
+.card-title{font-size:var(--t-chip);color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.08em}
+.big-number{font-size:var(--t-xl);font-weight:500;letter-spacing:-.03em;line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.big-number .currency{font-size:var(--t-ui);color:var(--text3);font-weight:500;margin-left:6px;letter-spacing:0}
 
 /* Buttons */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--pill);font-weight:500;font-size:14px;padding:12px 20px;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease),opacity .2s var(--ease);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--pill);font-weight:500;font-size:var(--t-ui);padding:12px 20px;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease),opacity .2s var(--ease);white-space:nowrap}
 .btn:active{opacity:.8}
 .btn-primary{background:var(--accent);color:var(--on-accent)}
 .btn-primary:hover,.btn-primary:active{background:var(--accent2)}
 .btn-secondary{background:transparent;color:var(--text);border-color:var(--border-strong)}
 .btn-secondary:hover{border-color:var(--text);background:var(--card2)}
-.btn-sm{padding:9px 14px;font-size:13px}
+.btn-sm{padding:10px 14px;font-size:var(--t-small)}
 .btn-full{width:100%}
 .btn .icon{width:15px;height:15px}
 
 /* Action Row */
 .action-row{display:flex;gap:8px;margin:14px 0}
-.action-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--text);transition:border-color .2s var(--ease),background-color .2s var(--ease)}
+.action-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:var(--t-meta);font-weight:500;color:var(--text);transition:border-color .2s var(--ease),background-color .2s var(--ease)}
 .action-btn:hover,.action-btn:active{border-color:var(--accent-text)}
 .action-btn .icon{width:20px;height:20px;color:var(--accent-text)}
 
 /* Amount Chips */
 .chips{display:flex;gap:8px;margin:8px 0}
-.chip{background:var(--card2);border:1px solid var(--border);border-radius:var(--pill);padding:8px 16px;font-size:13px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text);cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease),color .2s var(--ease);min-width:48px;text-align:center}
+.chip{background:var(--card2);border:1px solid var(--border);border-radius:var(--pill);padding:8px 16px;font-size:var(--t-small);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text);cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease),color .2s var(--ease);min-width:48px;text-align:center}
 /* Same law as the site's `.amount-chip.active`: --blue-soft is translucent, so
    the label sits on a blend of the tint and the sheet, and --accent-text there
    measures 4.27:1 — under the 4.5 the same page demands of every other 13 px
    number. The border and the fill say "active"; the money stays neutral. */
 .chip:active,.chip.active{border-color:var(--accent);background:var(--blue-soft);color:var(--text)}
-.chip-btn{border:1px solid var(--border-strong);border-radius:var(--pill);padding:5px 12px;font-size:12px;font-weight:500;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s var(--ease)}
+.chip-btn{border:1px solid var(--border-strong);border-radius:var(--pill);padding:6px 12px;font-size:var(--t-meta);font-weight:500;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s var(--ease)}
 .chip-btn:hover,.chip-btn:active{border-color:var(--text)}
 .chip-btn .icon{width:13px;height:13px}
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 
 /* Input */
-.input{width:100%;background:var(--card2);border:1px solid var(--border-strong);border-radius:var(--radius);padding:11px 14px;font-size:14px;color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+.input{width:100%;background:var(--card2);border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 16px;font-size:var(--t-body);color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
 .input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--blue-soft)}
 .input::placeholder{color:var(--text4)}
 .input-group{margin-bottom:12px}
-.input-label{font-size:12px;color:var(--text3);margin-bottom:6px;display:block;font-weight:500}
-.hint{font-size:12px;color:var(--text3);line-height:1.5}
+.input-label{font-size:var(--t-meta);color:var(--text3);margin-bottom:6px;display:block;font-weight:500}
+.hint{max-width:var(--measure);font-size:var(--t-meta);color:var(--text3);line-height:1.5}
 
 /* Market / Bet Card */
 .market-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease);display:block;width:100%;text-align:left}
 .market-card:hover,.market-card:active{border-color:var(--border-strong);background:var(--card2)}
-.market-question{font-size:15px;font-weight:500;margin-bottom:10px;line-height:1.4;letter-spacing:-.01em}
-.market-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.03em;margin-top:8px}
+.market-question{max-width:var(--measure);font-size:var(--t-lead);font-weight:500;margin-bottom:10px;line-height:1.4;letter-spacing:-.01em}
+.market-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:var(--t-chip);color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.03em;margin-top:8px}
 .prob-bars{display:flex;flex-direction:column;gap:8px}
 .prob-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
 .prob-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
-.prob-bar-label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;color:var(--text2);margin-bottom:5px}
+.prob-bar-label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:var(--t-meta);color:var(--text2);margin-bottom:6px}
 .prob-bar-label .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .prob-bar-label .win{color:var(--accent-text);font-weight:600}
 
 /* Status chips */
-.tag{display:inline-flex;align-items:center;border-radius:var(--pill);padding:2px 8px;font-size:10px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;border-radius:var(--pill);padding:2px 8px;font-size:var(--t-micro);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
 /* Same law as the site's `.chip-open`: over a translucent tint --accent-text is
    4.27:1, and this label is 10 px — the furthest thing from a large-text pass. */
 .tag-open{background:var(--blue-soft);color:var(--text)}
 .tag-resolved{background:var(--success-bg);color:var(--success)}
+/* The same fourth state as the site's `.chip-awaiting`: a market whose
+   deadline passed and nobody resolved is not open. */
+.tag-awaiting{background:var(--warning-bg);color:var(--warning)}
 .tag-cancelled{background:var(--card3);color:var(--text3)}
 
 /* Transaction History */
-.tx-item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
 .tx-item:last-child{border-bottom:none}
 .tx-icon{width:30px;height:30px;border-radius:var(--pill);border:1px solid var(--border);background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
 .tx-icon .icon{width:14px;height:14px}
 .tx-icon.in{background:var(--success-bg);border-color:transparent;color:var(--success)}
 .tx-icon.out{background:var(--danger-bg);border-color:transparent;color:var(--danger)}
 .tx-details{flex:1;min-width:0}
-.tx-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tx-time{font-size:11px;color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-.tx-amount{font-size:14px;font-weight:500;white-space:nowrap;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.tx-title{font-size:var(--t-small);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-time{font-size:var(--t-chip);color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.tx-amount{font-size:var(--t-ui);font-weight:500;white-space:nowrap;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .tx-amount.pos{color:var(--success)}
 .tx-amount.neg{color:var(--danger)}
 /* Not a button: it names a command the user types in the bot, so it must not
    look tappable here. */
-.tx-more{padding:12px 0 2px;font-size:12px;color:var(--text3)}
+.tx-more{padding:12px 0 2px;font-size:var(--t-meta);color:var(--text3)}
 
 /* Deposit Section */
 .deposit-box{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;gap:12px;margin-top:8px}
-.deposit-addr{font-size:12px;color:var(--text2);word-break:break-all;flex:1;user-select:all;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:13px;color:var(--text3);padding:5px 0}
+.deposit-addr{font-size:var(--t-meta);color:var(--text2);word-break:break-all;flex:1;user-select:all;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:var(--t-small);color:var(--text3);padding:6px 0}
 .wd-row b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
 /* QR readers need a light quiet zone in both themes, so this one box stays white. */
 .deposit-qr{width:80px;height:80px;border-radius:var(--radius);border:1px solid var(--border);background:var(--qr-plate);padding:4px;flex-shrink:0}
@@ -199,10 +218,10 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .modal-sheet{background:var(--card);border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:14px 16px calc(20px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
 .modal-overlay.show .modal-sheet{transform:translateY(0)}
 .modal-handle{width:32px;height:3px;background:var(--border-strong);border-radius:var(--pill);margin:0 auto 16px}
-.modal-title{font-size:17px;font-weight:600;letter-spacing:-.02em;margin-bottom:14px}
+.modal-title{font-size:var(--t-h4);font-weight:600;letter-spacing:-.02em;margin-bottom:14px}
 
 /* Toast */
-.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--card);border:1px solid var(--border-strong);border-radius:var(--pill);padding:10px 18px;font-size:13px;font-weight:500;z-index:300;transition:transform .3s cubic-bezier(.32,.72,0,1);pointer-events:none;max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--card);border:1px solid var(--border-strong);border-radius:var(--pill);padding:10px 18px;font-size:var(--t-small);font-weight:500;z-index:300;transition:transform .3s cubic-bezier(.32,.72,0,1);pointer-events:none;max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.success{border-color:var(--success);color:var(--success)}
 .toast.error{border-color:var(--danger);color:var(--danger)}
@@ -213,15 +232,15 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .detail-back{width:32px;height:32px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text);flex-shrink:0;cursor:pointer;transition:border-color .2s var(--ease)}
 .detail-back:hover,.detail-back:active{border-color:var(--text)}
 .detail-back .icon{width:16px;height:16px}
-.detail-title{font-size:15px;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
+.detail-title{font-size:var(--t-lead);font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
 .detail-body{padding:16px}
-.detail-question{font-size:19px;font-weight:600;line-height:1.35;letter-spacing:-.02em;margin-bottom:14px}
+.detail-question{max-width:var(--measure);font-size:var(--t-h4);font-weight:600;line-height:1.35;letter-spacing:-.02em;margin-bottom:14px}
 .detail-options{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
 .detail-opt{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:block;width:100%;text-align:left}
 .detail-opt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
-.detail-opt-name{font-weight:500;font-size:14px}
+.detail-opt-name{font-weight:500;font-size:var(--t-ui)}
 .detail-opt-name.win{color:var(--accent-text);font-weight:600}
-.detail-opt-pct{font-size:18px;font-weight:500;color:var(--accent-text);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.detail-opt-pct{font-size:var(--t-h4);font-weight:500;color:var(--accent-text);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .detail-opt-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
 .detail-opt-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
 .detail-opt.pickable{cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease)}
@@ -236,15 +255,15 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .create-opt-row .input{flex:1}
 .create-opt-rm{width:32px;height:32px;border-radius:var(--pill);background:var(--danger-bg);display:flex;align-items:center;justify-content:center;color:var(--danger);cursor:pointer;flex-shrink:0}
 .create-opt-rm .icon{width:14px;height:14px}
-.create-add{background:none;border:1px dashed var(--border-strong);border-radius:var(--radius);padding:10px;color:var(--text3);font-size:13px;font-weight:500;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .2s var(--ease),color .2s var(--ease)}
+.create-add{background:none;border:1px dashed var(--border-strong);border-radius:var(--radius);padding:10px;color:var(--text3);font-size:var(--t-small);font-weight:500;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .2s var(--ease),color .2s var(--ease)}
 .create-add:hover,.create-add:active{border-color:var(--accent-text);color:var(--accent-text)}
 .create-add .icon{width:13px;height:13px}
 
 /* Language items */
-.lang-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--radius);cursor:pointer;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease)}
+.lang-item{display:flex;align-items:center;gap:10px;padding:12px 12px;border-radius:var(--radius);cursor:pointer;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease)}
 .lang-item:active{background:var(--card2)}
 .lang-item.active{background:var(--blue-soft);border-color:var(--accent)}
-.lang-name{font-size:14px;font-weight:500}
+.lang-name{font-size:var(--t-ui);font-weight:500}
 .lang-check{margin-left:auto;color:var(--accent-text);display:none}
 .lang-item.active .lang-check{display:block}
 .lang-check .icon{width:16px;height:16px}
@@ -252,22 +271,22 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 /* Top users */
 .top-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
 .top-item:last-child{border-bottom:none}
-.top-rank{width:22px;font-size:13px;font-weight:500;color:var(--text4);text-align:center;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.top-rank{width:22px;font-size:var(--t-small);font-weight:500;color:var(--text4);text-align:center;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .top-rank.lead{color:var(--accent-text)}
-.top-name{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.top-vol{font-size:13px;color:var(--text2);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.top-name{flex:1;font-size:var(--t-ui);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-vol{font-size:var(--t-small);color:var(--text2);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* Stats */
 .stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0}
 .stat-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 8px;text-align:center}
-.stat-val{font-size:18px;font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.stat-label{font-size:10px;color:var(--text3);margin-top:3px;letter-spacing:.06em;text-transform:uppercase}
+.stat-val{font-size:var(--t-h4);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat-label{font-size:var(--t-micro);color:var(--text3);margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
 
 /* Section title */
-.section-title{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.09em;margin:18px 0 8px}
+.section-title{font-size:var(--t-chip);color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.09em;margin:18px 0 8px}
 
 /* Empty state */
-.empty{text-align:center;padding:30px 16px;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:var(--radius)}
+.empty{text-align:center;padding:30px 16px;color:var(--text3);font-size:var(--t-small);border:1px dashed var(--border);border-radius:var(--radius)}
 
 /* Page-local layout helpers (they replace per-element style="" attributes) */
 [hidden]{display:none!important}
@@ -275,42 +294,42 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .sheet-gap{margin-bottom:14px}
 .gap-top{margin-top:12px}
 .gap-top-sm{margin-top:8px}
-.sheet-note{font-size:13px;color:var(--text2);margin:0 0 12px}
+.sheet-note{font-size:var(--t-small);color:var(--text2);margin:0 0 12px}
 .hint-block{margin:0 0 12px}
-.mini-label{font-size:11px;color:var(--text3);margin:0 0 4px}
+.mini-label{font-size:var(--t-chip);color:var(--text3);margin:0 0 4px}
 .mini-label.late{margin:10px 0 0}
 .deposit-col{flex:1;min-width:0}
-.sw-state{font-size:13px;color:var(--text2);margin-bottom:8px}
+.sw-state{font-size:var(--t-small);color:var(--text2);margin-bottom:8px}
 .sw-state .ok{color:var(--success)}
 .sw-state .warn{color:var(--warning)}
-.sw-addr{font-size:12px;color:var(--text);word-break:break-all}
-.sw-bal{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:10px;font-size:13px;color:var(--text3)}
-.sw-bal .mono{font-size:18px;color:var(--text);letter-spacing:-.02em}
+.sw-addr{font-size:var(--t-meta);color:var(--text);word-break:break-all}
+.sw-bal{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:10px;font-size:var(--t-small);color:var(--text3)}
+.sw-bal .mono{font-size:var(--t-h4);color:var(--text);letter-spacing:-.02em}
 .sw-card .hint{margin-top:8px}
-.ai-chat{max-height:200px;overflow-y:auto;margin-bottom:10px;font-size:13px;color:var(--text2)}
+.ai-chat{max-height:200px;overflow-y:auto;margin-bottom:10px;font-size:var(--t-small);color:var(--text2)}
 .ai-row{display:flex;gap:8px}
 .ai-row .input{flex:1}
 .ai-item{margin-bottom:6px}
 /* The assistant is the one card that renders as an empty box until someone types, so it says what it answers. */
-.ai-hint{color:var(--text3);font-size:13px;margin-bottom:6px}
+.ai-hint{color:var(--text3);font-size:var(--t-small);margin-bottom:6px}
 .ai-item .who{font-weight:500;color:var(--accent-text)}
 .ai-item.ans .who{color:var(--success)}
 .ai-item.pending{color:var(--text4)}
 .ai-item.err{color:var(--danger)}
-.market-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:13px}
+.market-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:var(--t-small)}
 .market-line .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--accent-text);font-weight:500}
-.pot-line{font-size:13px;color:var(--text3);margin-bottom:8px}
+.pot-line{font-size:var(--t-small);color:var(--text3);margin-bottom:8px}
 .pot-line b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
-.won-line{font-size:13px;font-weight:600;color:var(--accent-text);margin-bottom:8px}
+.won-line{font-size:var(--t-small);font-weight:600;color:var(--accent-text);margin-bottom:8px}
 .oc-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.oc-title .q{font-size:15px;font-weight:500;line-height:1.4;letter-spacing:-.01em}
-.shares{margin-top:6px;font-size:12px;color:var(--accent-text)}
-.deadline{font-size:13px;color:var(--text3);margin-bottom:10px}
+.oc-title .q{font-size:var(--t-lead);font-weight:500;line-height:1.4;letter-spacing:-.01em}
+.shares{margin-top:6px;font-size:var(--t-meta);color:var(--accent-text)}
+.deadline{font-size:var(--t-small);color:var(--text3);margin-bottom:10px}
 .action-card{margin-top:12px;cursor:pointer;display:flex;align-items:center;gap:8px}
 .action-card .icon{width:16px;height:16px;color:var(--accent-text);flex-shrink:0}
-.about{font-size:14px;line-height:1.6;color:var(--text2)}
+.about{font-size:var(--t-ui);line-height:1.6;color:var(--text2)}
 .about b{color:var(--text);font-weight:600}
-.about .by{margin-top:6px;color:var(--text3);font-size:13px}
+.about .by{margin-top:6px;color:var(--text3);font-size:var(--t-small)}
 
 /* Thumb targets. The Mini App is a phone surface but it also opens in the
    desktop Base App, so the 44px floor is keyed to the pointer, not the width. */
@@ -351,10 +370,10 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 </svg>
 <div id="app">
   <!-- Header -->
-  <div class="header">
-    <h1 class="header-logo"><span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" fill="white">b</text></svg></span><span>Tippy<span class="dot">.</span></span></h1>
+  <header class="header">
+    <h1 class="header-logo"><span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span><span>Tippy<span class="dot">.</span></span></h1>
     <div class="header-right">
-      <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+      <button class="theme-toggle" data-act="toggleTheme" data-i18n-label="theme_toggle">
         <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
         <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
       </button>
@@ -363,10 +382,10 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
         <span id="balanceDisplay">--</span>
       </button>
     </div>
-  </div>
+  </header>
 
   <!-- Content -->
-  <div class="content" id="contentArea">
+  <main class="content" id="contentArea">
     <!-- TAB 0: Wallet -->
     <div class="tab-page active" id="tab0">
       <div class="card">
@@ -485,10 +504,10 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
         <span data-i18n="add_app">Add to Base App</span>
       </button>
     </div>
-  </div>
+  </main>
 
   <!-- Tab Bar -->
-  <div class="tab-bar">
+  <nav class="tab-bar" data-i18n-label="nav_tabs">
     <button class="tab-item active" data-act="switchTab" data-tab="0" aria-current="true">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wallet"/></svg>
       <span data-i18n="wallet">Wallet</span>
@@ -505,7 +524,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-more"/></svg>
       <span data-i18n="more">More</span>
     </button>
-  </div>
+  </nav>
 </div>
 
 <!-- Modal Overlay -->
@@ -517,16 +536,16 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 </div>
 
 <!-- Toast -->
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- Detail View -->
-<div class="detail-view" id="detailView" hidden></div>
+<section class="detail-view" id="detailView" data-i18n-label="market_detail" hidden></section>
 
 <script>
 const I18N = {
-  ru: { wallet: "Кошелёк", balance: "Баланс", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", option: "Вариант", amount: "Сумма", username: "Никнейм", address: "Адрес", qr_alt: "QR-код адреса пополнения", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", deposit_note: "Отправь USDC на этот адрес (сеть __CHAIN_NAME__)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн, часы (по умолчанию __DEFAULT_DEADLINE_HOURS__)", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут — пополните USDC для активации", smart_deposit_hint: "Пополните USDC на __CHAIN_NAME__ по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", wd_hint: "__WITHDRAW_FEE_PCT__% комиссия, минимум __MIN_WITHDRAW_USDC__ USDC, не более __MAX_WITHDRAWS_PER_DAY__ в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "Подтвердить", wd_cancel_btn: "Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе", ai: "AI-ассистент", ai_placeholder: "Спроси о рынках…", ai_you: "Вы", ai_ai: "ИИ", ai_data_who: "Данные бота", ai_no_answer: "Ответ не найден", ai_hint: "Спроси про рынок, чаевые или кошелёк.", stats: "Статистика", stat_users: "Пользователи", stat_volume: "Объём", stat_tips: "Чаевые", about_text: "Чаевые, рынки предсказаний и ставки в USDC на Base.", tos: "Условия использования", pot: "Пот", traders: "Трейдеры", deadline: "Завершение", st_open: "открыт", st_resolved: "завершён", st_cancelled: "отменён", add_option: "Добавить вариант", remove: "Удалить", kind_market: "Рынок", kind_bet: "Ставка", add_app: "Добавить в Base App", add_app_error: "Не удалось добавить", buy_ok: "Куплено за {amt} USDC", bet_ok: "Ставка принята: {amt} USDC", market_created: "Рынок создан", bet_created: "Ставка создана", network_error: "Сеть недоступна", pending_parameters: "Предыдущая операция не подтверждена. Повторите исходные параметры; новые не отправлены.", response_incomplete: "Ответ операции получен не полностью. Повторите исходный запрос.", load_error: "Не удалось загрузить", error_generic: "Ошибка", dup_request: "Такой запрос уже отправлен", connect_wallet: "Сначала подключи кошелёк", open_in_app: "Открой в Telegram или Base App — так видно твой баланс", auth_stale: "Сессия истекла — закрой и снова открой приложение из чата", back: "Назад", no_top: "Топ пуст", tip_recent: "Кому ты кидал", history_more: "Показаны последние операции — вся история в боте: /history" },
-  en: { wallet: "Wallet", balance: "Balance", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", option: "Option", amount: "Amount", username: "Username", address: "Address", qr_alt: "Deposit address QR code", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", deposit_note: "Send USDC to this address (__CHAIN_NAME__ network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline, hours (default __DEFAULT_DEADLINE_HOURS__)", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed — deposit USDC to activate", smart_deposit_hint: "Deposit USDC on __CHAIN_NAME__ to this address to trade gasless", smart_enabled: "Gasless trading is ON", wd_hint: "__WITHDRAW_FEE_PCT__% fee, min __MIN_WITHDRAW_USDC__ USDC, up to __MAX_WITHDRAWS_PER_DAY__ per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "Confirm", wd_cancel_btn: "Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance", ai: "AI Assistant", ai_placeholder: "Ask about markets...", ai_you: "You", ai_ai: "AI", ai_data_who: "Bot data", ai_no_answer: "No answer", ai_hint: "Ask about a market, a tip or your wallet.", stats: "Stats", stat_users: "Users", stat_volume: "Volume", stat_tips: "Tips", about_text: "Tips, prediction markets and pool bets in USDC on Base.", tos: "Terms of Service", pot: "Pot", traders: "Traders", deadline: "Closes", st_open: "open", st_resolved: "resolved", st_cancelled: "cancelled", add_option: "Add option", remove: "Remove", kind_market: "Market", kind_bet: "Bet", add_app: "Add to Base App", add_app_error: "Could not add the app", buy_ok: "Bought for {amt} USDC", bet_ok: "Bet placed: {amt} USDC", market_created: "Market created", bet_created: "Bet created", network_error: "Network error", pending_parameters: "The previous operation is unconfirmed. Retry its original parameters; new ones were not sent.", response_incomplete: "The operation response is incomplete. Retry the original request.", load_error: "Failed to load", error_generic: "Error", dup_request: "That request has already been sent", connect_wallet: "Connect the wallet first", open_in_app: "Open in Telegram or Base App to see your balance", auth_stale: "Session expired — close the app and reopen it from the chat", back: "Back", no_top: "No leaders yet", tip_recent: "People you tip", history_more: "Showing the latest entries — the full history is in the bot: /history" },
-  zh: { wallet: "钱包", balance: "余额", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", option: "选项", amount: "金额", username: "用户名", address: "地址", qr_alt: "充值地址二维码", copied: "已复制！", copy: "复制", fill_fields: "请填写所有字段", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", deposit_note: "将 USDC 发送到此地址（__CHAIN_NAME__ 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，默认 __DEFAULT_DEADLINE_HOURS__）", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署，存入 USDC 即可激活", smart_deposit_hint: "在 __CHAIN_NAME__ 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", wd_hint: "手续费 __WITHDRAW_FEE_PCT__%，最低 __MIN_WITHDRAW_USDC__ USDC，每天最多 __MAX_WITHDRAWS_PER_DAY__ 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "确认", wd_cancel_btn: "取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中", ai: "AI 助手", ai_placeholder: "询问市场…", ai_you: "你", ai_ai: "AI", ai_data_who: "机器人数据", ai_no_answer: "未找到答案", ai_hint: "可以问市场、打赏或你的钱包。", stats: "统计", stat_users: "用户", stat_volume: "交易量", stat_tips: "打赏", about_text: "在 Base 上用 USDC 打赏、预测市场和奖池投注。", tos: "服务条款", pot: "奖池", traders: "交易者", deadline: "截止", st_open: "进行中", st_resolved: "已结算", st_cancelled: "已取消", add_option: "添加选项", remove: "删除", kind_market: "市场", kind_bet: "投注", add_app: "添加到 Base App", add_app_error: "添加失败", buy_ok: "已买入 {amt} USDC", bet_ok: "投注成功：{amt} USDC", market_created: "市场已创建", bet_created: "投注已创建", network_error: "网络不可用", pending_parameters: "上一次操作尚未确认。请使用原始参数重试；新参数未发送。", response_incomplete: "操作响应不完整。请重试原始请求。", load_error: "加载失败", error_generic: "错误", dup_request: "该请求已发送", connect_wallet: "请先连接钱包", open_in_app: "在 Telegram 或 Base App 中打开即可查看余额", auth_stale: "会话已过期——请关闭应用后从聊天中重新打开", back: "返回", no_top: "暂无排行", tip_recent: "你常打赏的人", history_more: "仅显示最近的记录——完整历史请在机器人里查看：/history" }
+  ru: { wallet: "Кошелёк", balance: "Баланс", theme_toggle: "Переключить тему", nav_tabs: "Разделы приложения", market_detail: "Карточка рынка", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", option: "Вариант", amount: "Сумма", username: "Никнейм", address: "Адрес", qr_alt: "QR-код адреса пополнения", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", deposit_note: "Отправь USDC на этот адрес (сеть __CHAIN_NAME__)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн, часы (по умолчанию __DEFAULT_DEADLINE_HOURS__)", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут — пополните USDC для активации", smart_deposit_hint: "Пополните USDC на __CHAIN_NAME__ по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", wd_hint: "__WITHDRAW_FEE_PCT__% комиссия, минимум __MIN_WITHDRAW_USDC__ USDC, не более __MAX_WITHDRAWS_PER_DAY__ в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "Подтвердить", wd_cancel_btn: "Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе", ai: "AI-ассистент", ai_placeholder: "Спроси о рынках…", ai_you: "Вы", ai_ai: "ИИ", ai_data_who: "Данные бота", ai_no_answer: "Ответ не найден", ai_hint: "Спроси про рынок, чаевые или кошелёк.", stats: "Статистика", stat_users: "Пользователи", stat_volume: "Объём", stat_tips: "Чаевые", about_text: "Чаевые, рынки предсказаний и ставки в USDC на Base.", tos: "Условия использования", pot: "Пот", traders: "Трейдеры", deadline: "Завершение", st_open: "открыт", st_awaiting: "ждёт решения", st_resolved: "завершён", st_cancelled: "отменён", add_option: "Добавить вариант", remove: "Удалить", kind_market: "Рынок", kind_bet: "Ставка", add_app: "Добавить в Base App", add_app_error: "Не удалось добавить", buy_ok: "Куплено за {amt} USDC", bet_ok: "Ставка принята: {amt} USDC", market_created: "Рынок создан", bet_created: "Ставка создана", network_error: "Сеть недоступна", pending_parameters: "Предыдущая операция не подтверждена. Повторите исходные параметры; новые не отправлены.", response_incomplete: "Ответ операции получен не полностью. Повторите исходный запрос.", load_error: "Не удалось загрузить", error_generic: "Ошибка", dup_request: "Такой запрос уже отправлен", connect_wallet: "Сначала подключи кошелёк", open_in_app: "Открой в Telegram или Base App — так видно твой баланс", auth_stale: "Сессия истекла — закрой и снова открой приложение из чата", back: "Назад", no_top: "Топ пуст", tip_recent: "Кому ты кидал", history_more: "Показаны последние операции — вся история в боте: /history" },
+  en: { wallet: "Wallet", balance: "Balance", theme_toggle: "Switch theme", nav_tabs: "App sections", market_detail: "Market detail", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", option: "Option", amount: "Amount", username: "Username", address: "Address", qr_alt: "Deposit address QR code", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", deposit_note: "Send USDC to this address (__CHAIN_NAME__ network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline, hours (default __DEFAULT_DEADLINE_HOURS__)", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed — deposit USDC to activate", smart_deposit_hint: "Deposit USDC on __CHAIN_NAME__ to this address to trade gasless", smart_enabled: "Gasless trading is ON", wd_hint: "__WITHDRAW_FEE_PCT__% fee, min __MIN_WITHDRAW_USDC__ USDC, up to __MAX_WITHDRAWS_PER_DAY__ per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "Confirm", wd_cancel_btn: "Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance", ai: "AI Assistant", ai_placeholder: "Ask about markets...", ai_you: "You", ai_ai: "AI", ai_data_who: "Bot data", ai_no_answer: "No answer", ai_hint: "Ask about a market, a tip or your wallet.", stats: "Stats", stat_users: "Users", stat_volume: "Volume", stat_tips: "Tips", about_text: "Tips, prediction markets and pool bets in USDC on Base.", tos: "Terms of Service", pot: "Pot", traders: "Traders", deadline: "Closes", st_open: "open", st_awaiting: "awaiting resolution", st_resolved: "resolved", st_cancelled: "cancelled", add_option: "Add option", remove: "Remove", kind_market: "Market", kind_bet: "Bet", add_app: "Add to Base App", add_app_error: "Could not add the app", buy_ok: "Bought for {amt} USDC", bet_ok: "Bet placed: {amt} USDC", market_created: "Market created", bet_created: "Bet created", network_error: "Network error", pending_parameters: "The previous operation is unconfirmed. Retry its original parameters; new ones were not sent.", response_incomplete: "The operation response is incomplete. Retry the original request.", load_error: "Failed to load", error_generic: "Error", dup_request: "That request has already been sent", connect_wallet: "Connect the wallet first", open_in_app: "Open in Telegram or Base App to see your balance", auth_stale: "Session expired — close the app and reopen it from the chat", back: "Back", no_top: "No leaders yet", tip_recent: "People you tip", history_more: "Showing the latest entries — the full history is in the bot: /history" },
+  zh: { wallet: "钱包", balance: "余额", theme_toggle: "切换主题", nav_tabs: "应用分区", market_detail: "卡片市场", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", option: "选项", amount: "金额", username: "用户名", address: "地址", qr_alt: "充值地址二维码", copied: "已复制！", copy: "复制", fill_fields: "请填写所有字段", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", deposit_note: "将 USDC 发送到此地址（__CHAIN_NAME__ 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，默认 __DEFAULT_DEADLINE_HOURS__）", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署，存入 USDC 即可激活", smart_deposit_hint: "在 __CHAIN_NAME__ 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", wd_hint: "手续费 __WITHDRAW_FEE_PCT__%，最低 __MIN_WITHDRAW_USDC__ USDC，每天最多 __MAX_WITHDRAWS_PER_DAY__ 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "确认", wd_cancel_btn: "取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中", ai: "AI 助手", ai_placeholder: "询问市场…", ai_you: "你", ai_ai: "AI", ai_data_who: "机器人数据", ai_no_answer: "未找到答案", ai_hint: "可以问市场、打赏或你的钱包。", stats: "统计", stat_users: "用户", stat_volume: "交易量", stat_tips: "打赏", about_text: "在 Base 上用 USDC 打赏、预测市场和奖池投注。", tos: "服务条款", pot: "奖池", traders: "交易者", deadline: "截止", st_open: "进行中", st_awaiting: "等待结算", st_resolved: "已结算", st_cancelled: "已取消", add_option: "添加选项", remove: "删除", kind_market: "市场", kind_bet: "投注", add_app: "添加到 Base App", add_app_error: "添加失败", buy_ok: "已买入 {amt} USDC", bet_ok: "投注成功：{amt} USDC", market_created: "市场已创建", bet_created: "投注已创建", network_error: "网络不可用", pending_parameters: "上一次操作尚未确认。请使用原始参数重试；新参数未发送。", response_incomplete: "操作响应不完整。请重试原始请求。", load_error: "加载失败", error_generic: "错误", dup_request: "该请求已发送", connect_wallet: "请先连接钱包", open_in_app: "在 Telegram 或 Base App 中打开即可查看余额", auth_stale: "会话已过期——请关闭应用后从聊天中重新打开", back: "返回", no_top: "暂无排行", tip_recent: "你常打赏的人", history_more: "仅显示最近的记录——完整历史请在机器人里查看：/history" }
 };
 
 let STATE = { lang: window.__seedLang || 'en', balance_usdc: 0, deposit_address: '', markets: [], bets: [], onchain_markets: [], history: [], history_truncated: false, top: [], recent_tips: [], stats: null, username: '', tg_id: null, linked_address: '', authStale: false };
@@ -783,11 +802,11 @@ async function loadSmartWallet() {
   if (!card) return;
   try {
     const r = await fetch('/api/mini/smartwallet', { credentials: 'same-origin' });
-    if (r.status === 503 || !r.ok) {
+    const d = r.ok ? await r.json().catch(() => ({})) : {};
+    if (!d.enabled) {
       card.hidden = true;
       return;
     }
-    const d = await r.json();
     card.hidden = false;
     const addrEl = document.getElementById('swAddress');
     addrEl.textContent = d.address;
@@ -831,8 +850,10 @@ function timeLabel(epochSec) {
 }
 
 function statusTag(m) {
-  if (m.cancelled) return `<span class="tag tag-cancelled">${t('st_cancelled')}</span>`;
-  if (m.resolved) return `<span class="tag tag-resolved">${t('st_resolved')}</span>`;
+  const state = marketState(m);
+  if (state === "cancelled") return `<span class="tag tag-cancelled">${t('st_cancelled')}</span>`;
+  if (state === "resolved") return `<span class="tag tag-resolved">${t('st_resolved')}</span>`;
+  if (state === "awaiting") return `<span class="tag tag-awaiting">${t('st_awaiting')}</span>`;
   return `<span class="tag tag-open">${t('st_open')}</span>`;
 }
 
@@ -895,7 +916,11 @@ function ocBlock() {
 }
 
 function ocCard(m) {
-  const close = m.close_at && !m.resolved && !m.cancelled ? timeLabel(m.close_at) : '';
+  /* The flags say what the contract decided, not whether the market is still
+   * tradable — only `marketState` answers that, and the deadline line reads the
+   * same answer as the tag beside it. */
+  const state = marketState(m);
+  const close = (state === "open" || state === "awaiting") && m.close_at ? timeLabel(m.close_at) : '';
   return `<button class="market-card" data-act="openOcDetail" data-id="${m.id}">
     <div class="oc-title"><span class="q">#${m.id} ${esc(m.question)}</span>${statusTag(m)}</div>
     ${probBars(m.options || [], 'price_pct', m.resolved ? m.winner : null)}
@@ -934,7 +959,8 @@ async function openOcDetail(id) {
     if (!r.ok) throw new Error();
     const mk = await r.json();
     const opts = mk.options || [];
-    const close = mk.close_at && !mk.resolved && !mk.cancelled ? timeLabel(mk.close_at) : '';
+    const state = marketState(mk);
+    const close = (state === "open" || state === "awaiting") && mk.close_at ? timeLabel(mk.close_at) : '';
     const rows = opts.map(o => {
       const pct = Number(o.price_pct || 0);
       const win = mk.resolved && mk.winner === o.index;
@@ -951,7 +977,10 @@ async function openOcDetail(id) {
     const heldWinner = mk.resolved && opts.some(o => o.index === mk.winner && o.shares > 0);
     let actions = '';
     if (heldWinner) actions = `<div class="won-line">${t('you_won')}</div>` + actionCard('i-check', t('oc_redeem_hint').replace('{id}', id));
-    else if (!mk.resolved && !mk.cancelled) actions = actionCard('i-send', ocTradeHint(id));
+    /* The trade hint is a promise about a bot command, and /oc_buy refuses a
+     * market whose deadline has passed — so it goes with the state, not with the
+     * two flags that say nobody has decided the outcome yet. */
+    else if (state === "open") actions = actionCard('i-send', ocTradeHint(id));
     showDetail(detailShell('#' + mk.id, `
       <div class="detail-question">${esc(mk.question)}</div>
       ${close ? `<div class="deadline">${t('deadline')}: ${close}</div>` : ''}

@@ -83,6 +83,12 @@ Key tables:
   its stages — see `tests/test_ledger.py` for the gate that keeps it that way.
 - `markets` — LMSR prediction markets (escrow, options, status)
 - `market_shares` — per-user share positions
+- Market states: `open`, `resolved` and `cancelled` are what the `status` column of
+  `bets` and `markets` holds; the interface adds `awaiting` for the market whose
+  `close_at` has passed while nobody has resolved it — the state in which stakes sit
+  on the site and can be handed back. `web/static/chain.js` is the only place that
+  answer is worked out, and a page that works it out again is what the design gates
+  in `tests/test_design_system.py` refuse.
 - `user_wallets` — encrypted custodial wallet keys/seeds
 - `wallet_links` — on-chain address ↔ Telegram user binding
 

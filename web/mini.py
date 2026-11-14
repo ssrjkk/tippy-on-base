@@ -296,12 +296,18 @@ async def mini_smartwallet(request: Request) -> dict:
 
     Returns the counterfactual address, whether it is deployed, the on-chain
     USDC balance (0 when not deployed), and the paymaster sponsorship flag.
-    Gated: only when SMART_WALLET_ENABLED and factory+paymaster are configured;
-    otherwise a 503 so the Mini App can hide the section.
+    A stack this origin has not configured (`SMART_WALLET_ENABLED`, or the
+    factory/paymaster addresses missing) is a state of the deployment, not a
+    failure of this request: the answer is `200 {'enabled': False}` and the
+    client hides the card. It used to answer 503, which made every signed-in
+    page load carry a server error — and a page load that always errors is a
+    page load whose errors nobody reads any more. An *action* that cannot be
+    performed still refuses: `POST /api/mini/smartbuy` answers 503, because
+    there the visitor asked for something and got nothing.
     """
     tg_id = await _user(request)
     if not _smart_wallet_enabled():
-        raise refuse(request, 503, 'api_smart_disabled')
+        return {'enabled': False}
     from bot import smart_wallet as sw
 
     address = await asyncio.to_thread(sw.predict_address, tg_id)

@@ -22,7 +22,16 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from test_design_system import APP_HTML, CSS, mono_class_tokens
+from test_design_system import (
+    APP_HTML,
+    BADGE_FAMILIES,
+    CSS,
+    LIGHT,
+    MINI_LIGHT,
+    mono_class_tokens,
+    resolve,
+    state_vocabulary,
+)
 
 pytestmark = pytest.mark.production
 
@@ -39,15 +48,29 @@ XFF_POOL = ["203.0.113.201", "203.0.113.202", "203.0.113.203", "203.0.113.204",
 MOBILE = (390, 844)
 DESKTOP = (1440, 900)
 
-# Every surface one page load each, shared by all the facet gates below.
-FACETS = ["landing_phone", "landing_desktop", "market_page", "mini_app", "agent_dashboard"]
+# Every surface, one page load each, shared by all the facet gates below. The
+# list is the site's own inventory, not the pages that were convenient when the
+# first gate was written: `/tos` used to be assembled in a Python f-string and
+# was therefore painted by no check at all until its own defects were measured.
+FACETS = ["landing_phone", "landing_desktop", "market_page", "mini_app", "agent_dashboard",
+          "tos_page", "user_page", "oc_market_page", "dead_end_page"]
+
+# The subset opened under a coarse pointer. The 44 px floor is a touch rule and
+# lives in `@media (pointer: coarse)`, so a facet measured with a mouse cannot
+# answer it: the browser reports the fine pointer, the CSS never grows the
+# target, and the walk would be judging the desktop layout against a thumb.
+TOUCH_FACETS = ["landing_touch", "mini_app", "tos_page", "user_page",
+                "oc_market_page", "dead_end_page"]
 
 MEASURE_JS = """
-async ({tokens}) => {
+async ({tokens, sizes}) => {
   /* Class names the stylesheet draws in the mono face, passed in per surface:
      the law is "whatever the CSS calls monospaced computes as monospaced with
      tabular digits", and /app has its own stylesheet, so it has its own list. */
   const MONO_TOKENS = tokens;
+  /* Every size the type scale can paint at this viewport, computed in Python from
+     the tokens of the stylesheet serving this page. */
+  const SIZES = sizes;
   const parse = (s) => {
     const m = String(s).match(/rgba?\\(([^)]+)\\)/);
     if (!m) return null;
@@ -257,10 +280,44 @@ async ({tokens}) => {
     }
   }
 
+  /* Every size the browser really painted. The source gate can only read what a
+     stylesheet says; this reads what the cascade resolves, so a size arriving from
+     an inherited `em`, from a UA default no reset covers, or from an inline style
+     has nowhere to hide. */
+  const typeScale = [];
+  const scaleSeen = new Set();
+  for (const el of document.querySelectorAll('body *')) {
+    const direct = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+    if (!direct) continue;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    const size = Math.round(parseFloat(cs.fontSize) * 100) / 100;
+    if (SIZES.some((step) => Math.abs(step - size) < 0.01)) continue;
+    const key = path(el) + '|' + size;
+    if (scaleSeen.has(key)) continue;
+    scaleSeen.add(key);
+    typeScale.push({where: path(el), size: size, text: (el.textContent || '').trim().slice(0, 28)});
+  }
+
+  /* A section the reveal observer never reached is `opacity: 0`, and every law
+     above skips transparent pixels — so an unscrolled walk measures the hero and
+     calls that the page. This counts what the walk left unseen; the gate under it
+     refuses to let the other laws go blind. A section the page itself hides
+     because it has no data paints nothing for a reason the reader can see, and
+     the source gate `test_every_element_that_ships_hidden_can_appear` owns that
+     case; a section left transparent while nothing hides it is this law's case. */
+  const unrevealed = [...document.querySelectorAll('.reveal')]
+    .filter((el) => parseFloat(getComputedStyle(el).opacity) < 0.99)
+    .filter((el) => !el.hidden && !el.closest('[hidden]'))
+    .map((el) => (el.id || (el.className || '').toString().trim().split(/\\s+/)[0])
+                  + '@' + Math.round(parseFloat(getComputedStyle(el).opacity) * 100) / 100);
+
   const body = document.body.innerText || '';
   return {
     contrast, numeric, controls, bars, optionRows, probBars, api,
-    skeletons, clipped, headings, images, themeColors,
+    skeletons, clipped, headings, images, themeColors, typeScale, unrevealed,
     marketId: marketId ? Number(marketId) : null,
     title: document.title,
     theme: document.documentElement.dataset.theme || getComputedStyle(document.body).backgroundColor,
@@ -280,6 +337,41 @@ MONO_TOKENS = {"site": mono_class_tokens(CSS), "mini": mono_class_tokens(APP_HTM
 
 def mono_tokens_for(path: str) -> list[str]:
     return MONO_TOKENS["mini"] if path == "/app" else MONO_TOKENS["site"]
+
+
+FIXED_STEP_RE = re.compile(r"(\d+(?:\.\d+)?)px")
+FLUID_STEP_RE = re.compile(r"clamp\(\s*(\d+(?:\.\d+)?)px\s*,\s*([\d.]+)vw\s*,\s*(\d+(?:\.\d+)?)px\s*\)")
+
+
+def scale_sizes(tokens: dict[str, str], width: int) -> list[float]:
+    """Every size the type scale can paint in one stylesheet at this viewport.
+
+    The twelve fixed steps are px literals; the two display sizes are `clamp()`, so
+    their answer belongs to the window — evaluated here rather than hard-coded, which
+    is what lets the same law hold a 390 px phone (40 and 30) and a 1440 px desktop
+    (76 and 44) without either one being written into the test twice."""
+    sizes = []
+    for name in tokens:
+        if not name.startswith("--t-"):
+            continue
+        value = resolve(tokens, name)
+        fixed = FIXED_STEP_RE.fullmatch(value)
+        if fixed:
+            sizes.append(float(fixed.group(1)))
+            continue
+        fluid = FLUID_STEP_RE.fullmatch(value)
+        if fluid:
+            low, per_vw, high = (float(fluid.group(1)), float(fluid.group(2)), float(fluid.group(3)))
+            sizes.append(max(low, min(high, per_vw * width / 100)))
+    assert sizes, "no --t-* step resolved, so the type-scale law would measure nothing"
+    return sorted(sizes)
+
+
+def measure_arguments(path: str, width: int) -> dict:
+    """What one surface's walk needs: the mono classes and the type scale of the
+    stylesheet that actually serves it. `/app` ships its own of both."""
+    tokens = MINI_LIGHT if path == "/app" else LIGHT
+    return {"tokens": mono_tokens_for(path), "sizes": scale_sizes(tokens, width)}
 
 
 def open_context(browser, *, theme, viewport, xff, touch=False, reduced_motion=None):
@@ -333,7 +425,7 @@ def go(page, path: str):
     return response
 
 
-def measure(browser, path, theme, viewport, xff, touch=False):
+def measure(browser, path, theme, viewport, xff, touch=False, expect=200):
     """One page load, all facets of the rendering returned as data.
 
     Every facet used to have its own test with its own goto, so a check cost the
@@ -345,6 +437,10 @@ def measure(browser, path, theme, viewport, xff, touch=False):
     suite runs on, not of the product, and treating it as a design failure would
     train everyone to ignore the red.
 
+    `expect` is the answer this path is supposed to give. The dead-end page is the
+    first surface whose own status is 404, and without it the walk would report
+    the document it was sent to read as a broken request.
+
     `playwright` is imported inside the function on purpose: the ordinary CI job
     has no playwright installed and collects this module to deselect it, and a
     module-level import turned that collection into an ImportError.
@@ -353,9 +449,10 @@ def measure(browser, path, theme, viewport, xff, touch=False):
 
     page_errors = []
     broken = []
+    target = f"{PROD_URL}{path}"
 
     def note_request_failure(request):
-        if request.url.startswith(PROD_URL):
+        if request.url.startswith(PROD_URL) and request.url != target:
             broken.append(f"{request.url} {request.failure}")
 
     def note_bad_response(response):
@@ -365,6 +462,7 @@ def measure(browser, path, theme, viewport, xff, touch=False):
             response.url.startswith(PROD_URL)
             and response.status >= 400
             and response.status not in (401, 403)
+            and not (response.url == target and response.status == expect)
         ):
             broken.append(f"{response.url} HTTP {response.status}")
 
@@ -382,10 +480,13 @@ def measure(browser, path, theme, viewport, xff, touch=False):
             # keeps a handshake open — never goes quiet, and waiting forever for it
             # would measure nothing. The document and its first data have landed.
             pass
-        assert response is not None and response.status == 200, (
-            f"{path} не отдал 200 в {theme}/{viewport[0]}px: {response.status if response else 'нет ответа'}"
+        assert response is not None and response.status == expect, (
+            f"{path} не отдал {expect} в {theme}/{viewport[0]}px: "
+            f"{response.status if response else 'нет ответа'}"
         )
-        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for(path)})
+        page.evaluate(REVEAL_ALL_JS)
+        data = page.evaluate(MEASURE_JS, measure_arguments(path, viewport[0]))
+        data["states"] = page.evaluate(STATE_ENUM_JS)
         data["pageerrors"] = page_errors
         data["brokenrequests"] = broken
         data["status"] = response.status
@@ -397,10 +498,113 @@ def measure(browser, path, theme, viewport, xff, touch=False):
 CACHE: dict = {}
 
 
-def cached(browser, path, theme, viewport, index, touch=False):
-    key = (path, theme, viewport, touch)
+# The landing animates its sections in with an IntersectionObserver, and the
+# observer unobserves each element the first time it appears: a page measured at
+# scroll 0 keeps nine of its thirteen `.reveal` sections at `opacity: 0`, and
+# every law in MEASURE_JS skips transparent pixels. Scrolling through the document
+# is what a reader does, so it is what a measurement has to do too — the walk
+# below is the only reason the contrast, mono, touch-target and clipping laws can
+# see the leaderboard at all.
+REVEAL_ALL_JS = """async () => {
+  // `html { scroll-behavior: smooth }` retargets every scrollTo, so a loop that
+  // steps faster than the animation is allowed to travel never reaches the bottom:
+  // measured, nine sections stayed transparent with the animation left on. The walk
+  // turns it off, walks, and hands the document back as it found it. The height is
+  // re-read on each step because the landing fills its market rows after load.
+  const html = document.documentElement;
+  const was = html.style.scrollBehavior;
+  html.style.scrollBehavior = 'auto';
+  const step = Math.max(240, Math.floor(window.innerHeight * 0.6));
+  for (let y = 0; y < html.scrollHeight; y += step) {
+    window.scrollTo(0, y);
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  window.scrollTo(0, 0);
+  html.style.scrollBehavior = was;
+  await new Promise((r) => setTimeout(r, 700));
+}"""
+
+
+# The badge families come from the same map the source gate walks, so «both
+# families» means the same thing in both layers.
+BADGE_CLASS = re.compile(rf"\b({'|'.join(BADGE_FAMILIES)})-([a-z]+)\b")
+
+
+# The state a market is in is derived once, in `web/static/chain.js`, and the
+# defect it replaced was visible on three surfaces at once: a pool past its
+# deadline still read «открыт» with «дедлайн прошёл» in the same line. Only a
+# browser can answer the two questions this leaves — is the shared source really
+# the one loaded, and does its answer survive the shapes the API actually returns
+# (a `status`, two booleans from the contract, a clock already passed) — so the
+# enum is walked in each page's own scope. The rows are inputs, not data: no
+# market has to be in a given state on the site for the law to be measured.
+STATE_ENUM_JS = """
+() => {
+  const chain = !!document.querySelector('script[src="/chain.js"]');
+  if (typeof marketState !== "function") return { chain: chain, derived: false, painted: false, rows: [] };
+  const now = Math.floor(Date.now() / 1000);
+  const day = 86400;
+  const cases = [
+    ["open, deadline ahead", { status: "open", close_at: now + day }],
+    ["open, deadline passed", { status: "open", close_at: now - day }],
+    ["open, the server says expired", { status: "open", close_at: now + day, expired: true }],
+    ["open, no clock at all", { status: "open" }],
+    ["resolved after its deadline", { status: "resolved", close_at: now - day }],
+    ["cancelled before its deadline", { status: "cancelled", close_at: now + day }],
+    ["contract flags it resolved", { resolved: true }],
+    ["contract flags it cancelled", { cancelled: true }],
+    ["contract flags it disputed", { resolved: true, disputed: true, close_at: now + day }],
+    ["a row carrying only a passed clock", { close_at: now - day }],
+  ];
+  // Each surface names its own badge painter; the probe tries what is in scope
+  // rather than being told which page it is reading. A map declared inside a
+  // render function is not in scope, and `painted: false` says so honestly.
+  let painter = null;
+  try {
+    painter =
+      typeof statusBadge === "function" ? (m) => statusBadge(m) :
+      typeof statusTag === "function" ? (m) => statusTag(m) :
+      typeof CHIP === "object" && CHIP ? (m) => CHIP[marketState(m)] || "" :
+      typeof STATUS === "object" && STATUS ? (m) => STATUS[marketState(m)] || "" :
+      null;
+  } catch (e) { painter = null; }
+  return {
+    chain: chain,
+    derived: true,
+    painted: painter !== null,
+    rows: cases.map(([label, row]) => ({
+      label: label,
+      state: marketState(row),
+      line: typeof deadlineLine === "function" ? deadlineLine(row) : null,
+      chip: painter ? painter(row) : null,
+      past: row.close_at ? row.close_at * 1000 <= Date.now() : false,
+    })),
+  };
+}
+"""
+
+# What each of those ten rows has to answer. The two that used to lie are the
+# third and the last: `expired` is the server's own word for a pool nobody has
+# resolved, and a row whose only field is a clock in the past is the same market.
+STATE_ANSWERS = {
+    "open, deadline ahead": "open",
+    "open, deadline passed": "awaiting",
+    "open, the server says expired": "awaiting",
+    "open, no clock at all": "open",
+    "resolved after its deadline": "resolved",
+    "cancelled before its deadline": "cancelled",
+    "contract flags it resolved": "resolved",
+    "contract flags it cancelled": "cancelled",
+    "contract flags it disputed": "resolved",
+    "a row carrying only a passed clock": "awaiting",
+}
+
+
+def cached(browser, path, theme, viewport, index, touch=False, expect=200):
+    key = (path, theme, viewport, touch, expect)
     if key not in CACHE:
-        CACHE[key] = measure(browser, path, theme, viewport, XFF_POOL[index % len(XFF_POOL)], touch)
+        CACHE[key] = measure(browser, path, theme, viewport,
+                             XFF_POOL[index % len(XFF_POOL)], touch, expect)
     return CACHE[key]
 
 
@@ -539,7 +743,7 @@ def walk_mini_app(browser, *, theme, viewport, xff):
                 # failure than a stack from a click.
                 pass
             page.wait_for_timeout(1200)
-            screens[tab] = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/app")})
+            screens[tab] = page.evaluate(MEASURE_JS, measure_arguments("/app", viewport[0]))
             # Without this the walk could tap a dead selector, measure the wallet
             # card four times, and every gate below would pass over one screen.
             screens[tab]["active"] = page.evaluate(
@@ -550,7 +754,25 @@ def walk_mini_app(browser, *, theme, viewport, xff):
         context.close()
 
 
-# Landing, both themes, phone and desktop: four page loads shared by all below.
+def api_rows(endpoint: str) -> list:
+    """Rows of one public list on the surface under test.
+
+    An empty list is the answer for an unreachable site, a non-list body and a
+    database with nothing in it, and every caller turns it into a skip with that
+    reason printed: a facet that needs data is not allowed to fail because the
+    network or the demo site is quiet."""
+    try:
+        request = urllib.request.Request(f"{PROD_URL}{endpoint}", headers={"user-agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            rows = json.loads(response.read().decode())
+    except (urllib.error.URLError, json.JSONDecodeError):
+        return []
+    return rows if isinstance(rows, list) else []
+
+
+# One page load per surface, shared by every gate below: the landing on a phone
+# and on a desktop, a market page, the terms, a profile, an on-chain market, the
+# dead end, the Mini App and the operator dashboard.
 @pytest.fixture(scope="module")
 def landing_phone(browser):
     return cached(browser, "/", "dark", MOBILE, 0)
@@ -563,20 +785,55 @@ def landing_desktop(browser):
 
 @pytest.fixture(scope="module")
 def market_page(browser):
-    first = None
-    try:
-        request = urllib.request.Request(
-            f"{PROD_URL}/api/predictions", headers={"user-agent": USER_AGENT}
-        )
-        with urllib.request.urlopen(request, timeout=30) as response:
-            rows = json.loads(response.read().decode())
-        if rows:
-            first = rows[0].get("id") or rows[0].get("market_id")
-    except (urllib.error.URLError, KeyError, TypeError, json.JSONDecodeError):
-        first = None
+    rows = [row for row in api_rows("/api/predictions") if isinstance(row, dict)]
+    first = (rows[0].get("id") or rows[0].get("market_id")) if rows else None
     if first is None:
         pytest.skip("no market on the site to render — there is nothing to measure")
     return cached(browser, f"/m/{first}", "dark", MOBILE, 2)
+
+
+@pytest.fixture(scope="module")
+def tos_page(browser):
+    """The terms, as served. Everything the site asks a user to agree to before
+    the first deposit was assembled in a Python f-string and measured by nothing:
+    no webfont (so Helvetica), no theme-color check, and a favicon whose attribute
+    the browser closed early. A phone in daylight is where it is read."""
+    return cached(browser, "/tos", "light", MOBILE, 3, touch=True)
+
+
+@pytest.fixture(scope="module")
+def user_page(browser):
+    """/u/{tg_id} — the page a tip recipient is linked to, and the only surface
+    that answers 200 whether or not the person has ever used the bot."""
+    return cached(browser, "/u/777777777", "dark", MOBILE, 4, touch=True)
+
+
+@pytest.fixture(scope="module")
+def oc_market_page(browser):
+    """The on-chain market page — a different template (oc.html), a different
+    currency (USDC shares) and the only surface with an external explorer link."""
+    rows = [row for row in api_rows("/api/onchain/markets") if isinstance(row, dict)]
+    first = rows[0].get("id") if rows else None
+    if first is None:
+        pytest.skip("no on-chain market on the site to render")
+    return cached(browser, f"/m/oc/{first}", "dark", MOBILE, 5, touch=True)
+
+
+@pytest.fixture(scope="module")
+def dead_end_page(browser):
+    """The 404 document, which `web/server.py` builds for any unknown path.
+
+    It is the only page a visitor reaches through a typo or a stale bookmark, and
+    the only one whose own status is not 200 — so it is measured with `expect=404`
+    and still walked by every gate below."""
+    return cached(browser, "/no-such-page-9e1", "dark", MOBILE, 6, touch=True, expect=404)
+
+
+@pytest.fixture(scope="module")
+def landing_touch(browser):
+    """The landing under a thumb — the same document as `landing_phone`, with the
+    coarse pointer that makes the 44 px floor apply."""
+    return cached(browser, "/", "dark", MOBILE, 3, touch=True)
 
 
 @pytest.fixture(scope="module")
@@ -606,17 +863,8 @@ def agent_dashboard(browser):
 # contrast
 # ---------------------------------------------------------------------------
 
-def test_painted_text_clears_aa_on_the_landing_phone(landing_phone):
-    assert landing_phone["contrast"] == [], json.dumps(
-        landing_phone["contrast"], ensure_ascii=False
-    )
-
-
-def test_painted_text_clears_aa_on_the_landing_desktop(landing_desktop):
-    assert landing_desktop["contrast"] == [], json.dumps(
-        landing_desktop["contrast"], ensure_ascii=False
-    )
-
+# `test_painted_text_clears_aa_on_every_surface` walks the whole FACETS list; the
+# gate here only proves that walk was not green over a blank page.
 
 def test_the_contrast_pass_actually_measured_something(landing_phone):
     """A walk that returns no failures because it never found any text would be a
@@ -644,8 +892,12 @@ def test_no_horizontal_overflow(request, facet):
 # ---------------------------------------------------------------------------
 
 
-def test_every_control_on_the_phone_is_big_enough(browser):
-    data = cached(browser, "/", "dark", MOBILE, 3, touch=True)
+@pytest.mark.parametrize("facet", TOUCH_FACETS)
+def test_every_control_on_the_phone_is_big_enough(request, facet):
+    """The 44 px floor was set for thumbs, and a thumb lives on every page a phone
+    opens — not only on the landing and on /app. Mini App first, because AGENTS.md
+    calls it the primary surface and it is where the money is actually spent."""
+    data = request.getfixturevalue(facet)
     assert data["controls"] == [], json.dumps(data["controls"], ensure_ascii=False)
 
 
@@ -654,9 +906,46 @@ def test_every_control_on_the_phone_is_big_enough(browser):
 # ---------------------------------------------------------------------------
 
 
-def test_painted_money_is_mono_and_tabular(landing_phone, market_page):
-    offenders = landing_phone["numeric"] + market_page["numeric"]
-    assert offenders == [], json.dumps(offenders, ensure_ascii=False)
+@pytest.mark.parametrize("facet", FACETS)
+def test_painted_money_is_mono_and_tabular(request, facet):
+    """"mono implies tabular digits", measured on the pixels of every surface. The
+    class list comes from the stylesheet that serves the page — the Mini App has
+    its own — so `mono_tokens_for()` is what makes this one gate cover both."""
+    data = request.getfixturevalue(facet)
+    assert data["numeric"] == [], json.dumps(data["numeric"], ensure_ascii=False)
+
+
+def assert_on_the_scale(probe: dict, surface: str) -> None:
+    """No painted text size that the scale cannot account for.
+
+    The source gate reads what a stylesheet declares; this reads what the cascade
+    resolved. The difference is how the defect that named this law arrived: the
+    landing's heading reset stopped after colour, so four panel titles in
+    `index.html` took their size from the browser's own sheet and painted at
+    18.72 px — a number no token holds, between `--t-h4` and `--t-h3`, visible in
+    the screenshot and invisible to anyone diffing CSS. `em` inheritance and inline
+    styles land in the same trap, and only a rendered walk can see them."""
+    offenders = probe["typeScale"]
+    assert offenders == [], f"{surface}: {json.dumps(offenders, ensure_ascii=False)}"
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_no_painted_text_sits_off_the_type_scale(request, facet):
+    """Every facet, both themes where the fixture pair runs them: the set of sizes
+    a real browser paints has to be a subset of the sizes the tokens describe."""
+    assert_on_the_scale(request.getfixturevalue(facet), facet)
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_the_walk_saw_every_section_the_page_hides(request, facet):
+    """The law that keeps the other laws honest. A section the reveal observer
+    never reached paints nothing, and a probe that skips transparent pixels reports
+    a clean page — so `contrast`, `numeric`, `controls` and `clipped` used to
+    measure the hero of the landing and call the document verified, while nine of
+    the thirteen `.reveal` sections below the fold had been read by nothing. The
+    walk scrolls the whole document first; this asserts it worked."""
+    data = request.getfixturevalue(facet)
+    assert data["unrevealed"] == [], f"{facet}: still transparent — {data['unrevealed']}"
 
 
 # ---------------------------------------------------------------------------
@@ -722,63 +1011,144 @@ def test_a_bar_never_paints_an_impossible_number(landing_phone, market_page):
 
 
 # ---------------------------------------------------------------------------
+# the market state, as a browser answers it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_the_state_a_page_reads_is_the_shared_derivation(request, facet):
+    """`marketState` lives in one classic script, so it is in scope on exactly the
+    documents that ship the tag and on none other. The two answers disagreeing
+    means a page carries its own copy — which is the shape the site shipped while
+    the landing hero, `/m/{id}` and `/oc/{id}` each read whichever of `status`,
+    `expired` and `close_at` they happened to have, and called one expired market
+    «открыт» in the same line as «дедлайн прошёл»."""
+    states = request.getfixturevalue(facet)["states"]
+    assert states["chain"] == states["derived"], (
+        f"{facet}: "
+        + ("names a market state without loading /chain.js"
+           if states["derived"] else "loads /chain.js yet has no marketState in scope")
+    )
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_a_market_state_never_contradicts_its_own_clock(request, facet):
+    """Ten shapes the API really returns — a `status`, the two booleans the
+    contract sets, a server `expired`, a clock already passed, a row with nothing
+    but a passed clock — walked in the page's own scope, where a fallback the
+    Python side cannot see would show up as a different word. Two invariants hold
+    on every one of them: a clock in the past never answers `open`, and a market
+    that is not `open` never prints a countdown."""
+    states = request.getfixturevalue(facet)["states"]
+    if not states["derived"]:
+        pytest.skip(f"{facet} loads no derivation, so it has no state to contradict")
+    rows = {row["label"]: row for row in states["rows"]}
+    assert set(rows) == set(STATE_ANSWERS), (
+        f"{facet}: the enum walked {sorted(rows)} — not the shapes this law measures"
+    )
+    wrong = [
+        f"{label}: ответ {rows[label]['state']}, ожидалось {want}"
+        for label, want in STATE_ANSWERS.items()
+        if rows[label]["state"] != want
+    ]
+    assert not wrong, f"{facet}: " + "; ".join(wrong)
+    contradicting = [
+        f"{row['label']} → {row['state']}, строка «{row['line']}»"
+        for row in states["rows"]
+        if (row["past"] and row["state"] == "open")
+        or (row["state"] != "open" and row["line"] != "")
+    ]
+    assert not contradicting, f"{facet}: дедлайн и состояние разошлись — {contradicting}"
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_the_badge_names_the_state_the_derivation_answers(request, facet):
+    """A chip is the same answer written in markup. Where the page's own scope
+    holds the badge map, every row has to be painted with the class of that row's
+    state: a map that still says `open` for a market the derivation moved to
+    `awaiting` is the drift the four surfaces fell into, and the class is what the
+    stylesheet's colour hangs on."""
+    states = request.getfixturevalue(facet)["states"]
+    if not states["painted"]:
+        pytest.skip(f"{facet} keeps its badge map inside a render function")
+    mismatched = []
+    for row in states["rows"]:
+        match = BADGE_CLASS.search(row["chip"] or "")
+        if match is None or match.group(2) != row["state"]:
+            mismatched.append(f"{row['label']} → {row['state']} нарисовано как {row['chip']}")
+    assert not mismatched, f"{facet}: " + "; ".join(mismatched)
+
+
+def test_the_states_the_browser_answers_are_the_states_the_contract_defines(request):
+    """One vocabulary, three independent witnesses: the states the DDL allows plus
+    the deadline the shared derivation adds, the answers the rendered rows really
+    produced, and the badge classes each family painted on a real page. A state
+    nothing paints is a market shown with no chip; a chip painted for a state no
+    row answers is a colour waiting for a bug that has not arrived yet.
+
+    A facet whose page has no data to render is not a pass and not a failure — it
+    is nothing — so it is left out of the walk rather than skipping the law, which
+    is how this test kept a green board while measuring no surface at all."""
+    vocabulary = state_vocabulary()
+    answered: set[str] = set()
+    painted: dict[str, set[str]] = {}
+    for name in FACETS:
+        try:
+            states = request.getfixturevalue(name)["states"]
+        except pytest.skip.Exception:
+            continue
+        answered |= {row["state"] for row in states["rows"]}
+        for row in states["rows"]:
+            match = BADGE_CLASS.search(row["chip"] or "")
+            if match:
+                painted.setdefault(match.group(1), set()).add(match.group(2))
+    assert set(STATE_ANSWERS.values()) == vocabulary, sorted(
+        STATE_ANSWERS.values() ^ vocabulary)
+    assert answered, "no facet in the run derived a market state: this law measured nothing"
+    assert answered == vocabulary, sorted(answered ^ vocabulary)
+    assert set(painted) == set(BADGE_FAMILIES), (
+        f"the run painted {sorted(painted)}, the stylesheets define {sorted(BADGE_FAMILIES)}")
+    empty = [f"{family}: painted {sorted(painted[family])}"
+             for family in painted if painted[family] != vocabulary]
+    assert not empty, empty
+
+
+@pytest.mark.parametrize("facet", FACETS)
+def test_painted_text_clears_aa_on_every_surface(request, facet):
+    """The landing page is not the product. AGENTS.md calls the Mini App the
+    primary surface, and every facet in the list is one page load of something a
+    visitor actually reads, so the contrast walk runs on all of them — including
+    the terms and the dead end, which no browser gate used to open."""
+    data = request.getfixturevalue(facet)
+    assert data["contrast"] == [], json.dumps(data["contrast"], ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
 # the page is not quietly broken
 # ---------------------------------------------------------------------------
 
 
-def test_no_placeholder_or_nan_reaches_the_rendered_text(
-    landing_phone, landing_desktop, market_page, mini_app, agent_dashboard
-):
-    for name, data in (
-        ("phone", landing_phone),
-        ("desktop", landing_desktop),
-        ("market", market_page),
-        ("app", mini_app),
-        ("agent", agent_dashboard),
-    ):
-        assert not data["placeholders"], f"{name}: подстановка не сработала — {data['placeholders']}"
-        assert not data["leaked"], f"{name}: в тексте виден {data['leaked']}"
+@pytest.mark.parametrize("facet", FACETS)
+def test_no_placeholder_or_nan_reaches_the_rendered_text(request, facet):
+    data = request.getfixturevalue(facet)
+    assert not data["placeholders"], f"{facet}: подстановка не сработала — {data['placeholders']}"
+    assert not data["leaked"], f"{facet}: в тексте виден {data['leaked']}"
 
 
-def test_the_page_broke_nothing_while_loading(landing_phone, landing_desktop):
-    for name, data in (("phone", landing_phone), ("desktop", landing_desktop)):
-        assert not data["pageerrors"], f"{name}: {data['pageerrors'][:3]}"
-        assert not data["brokenrequests"], f"{name}: {data['brokenrequests'][:3]}"
+@pytest.mark.parametrize("facet", FACETS)
+def test_the_page_broke_nothing_while_loading(request, facet):
+    """Third-party scripts (the Telegram bridge, the Base App SDK, Google Fonts)
+    are the network's business: only this origin's own 4xx and request failures
+    count, and the navigated document is exempt when its status is the one the
+    facet asked for — a 404 page is supposed to answer 404."""
+    data = request.getfixturevalue(facet)
+    assert not data["pageerrors"], f"{facet}: {data['pageerrors'][:3]}"
+    assert not data["brokenrequests"], f"{facet}: {data['brokenrequests'][:3]}"
 
 
 def test_the_landing_paints_a_real_title_not_a_placeholder(landing_phone):
     title = landing_phone["title"]
     assert title and "__" not in title and "undefined" not in title.lower()
-
-
-# ---------------------------------------------------------------------------
-# the other two surfaces: the Mini App and the operator dashboard
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("facet", ["mini_app", "agent_dashboard"])
-def test_painted_text_clears_aa_on_every_surface(request, facet):
-    """The landing page is not the product. AGENTS.md calls the Mini App the
-    primary surface, and it is the one page the earlier gates never opened."""
-    data = request.getfixturevalue(facet)
-    assert data["contrast"] == [], json.dumps(data["contrast"], ensure_ascii=False)
-
-
-def test_every_mini_app_control_is_big_enough(mini_app):
-    """The 44 px floor was set for thumbs, and a thumb lives on /app, not on /."""
-    assert mini_app["controls"] == [], json.dumps(mini_app["controls"], ensure_ascii=False)
-
-
-def test_mini_app_numbers_are_mono_and_tabular(mini_app):
-    assert mini_app["numeric"] == [], json.dumps(mini_app["numeric"], ensure_ascii=False)
-
-
-def test_the_mini_app_broke_nothing_of_its_own(mini_app, agent_dashboard):
-    """Third-party scripts (the Telegram bridge, the Base App SDK) are the
-    network's business; a 404 on this origin or a broken request to it is ours."""
-    for name, data in (("app", mini_app), ("agent", agent_dashboard)):
-        assert not data["brokenrequests"], f"{name}: {data['brokenrequests'][:3]}"
-        assert data["status"] == 200
 
 
 # ---------------------------------------------------------------------------
@@ -1162,7 +1532,7 @@ def open_dialog(browser, surface, theme):
         # is not a size, and a height measured against it would be a number about
         # nothing.
         page.wait_for_timeout(400)
-        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/")})
+        data = page.evaluate(MEASURE_JS, measure_arguments("/", MOBILE[0]))
         data["pageerrors"] = errors
         data["counted"] = page.evaluate(DIALOG_COUNT_JS, "#" + dialog)
         data["dialog"] = dialog
@@ -1198,6 +1568,7 @@ def test_a_dialog_paints_as_honestly_as_the_page_behind_it(browser, surface, the
     assert probe["clipped"] == [], json.dumps(probe["clipped"], ensure_ascii=False)
     assert probe["scrollWidth"] <= MOBILE[0], (
         f"{probe['dialog']} overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
+    assert_on_the_scale(probe, f"{probe['dialog']} in {theme}")
     distinct = {stop["where"] for stop in probe["stops"]}
     assert len(distinct) >= 3, (
         f"{probe['dialog']} in {theme}: Tab reached only {sorted(distinct)} — nothing to judge")
@@ -1263,7 +1634,7 @@ def open_sheet(browser, sheet, theme):
         # The sheet slides up over 0.3 s; a rect caught mid-transform is not a
         # size and a contrast sample taken there is not the paint the user sees.
         page.wait_for_timeout(500)
-        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/app")})
+        data = page.evaluate(MEASURE_JS, measure_arguments("/app", MOBILE[0]))
         data["pageerrors"] = errors
         data["counted"] = seeded
         data["sheet"] = sheet
@@ -1300,6 +1671,7 @@ def test_the_money_sheet_keeps_the_keyboard_it_promised(browser, sheet, theme):
     assert probe["clipped"] == [], json.dumps(probe["clipped"], ensure_ascii=False)
     assert probe["scrollWidth"] <= MOBILE[0], (
         f"the {sheet} sheet overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
+    assert_on_the_scale(probe, f"the {sheet} sheet in {theme}")
 
 
 DETAIL_SEED_JS = """
@@ -1346,7 +1718,7 @@ def open_detail(browser, theme):
             pytest.fail(seeded["error"])
         assert seeded["open"], f"the market detail never opened in {theme}"
         page.wait_for_timeout(500)
-        data = page.evaluate(MEASURE_JS, {"tokens": mono_tokens_for("/app")})
+        data = page.evaluate(MEASURE_JS, measure_arguments("/app", MOBILE[0]))
         data["pageerrors"] = errors
         data["counted"] = seeded
         stops = []
@@ -1383,6 +1755,7 @@ def test_the_market_detail_keeps_the_keyboard_inside_itself(browser, theme):
     assert probe["clipped"] == [], json.dumps(probe["clipped"], ensure_ascii=False)
     assert probe["scrollWidth"] <= MOBILE[0], (
         f"the market detail overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
+    assert_on_the_scale(probe, f"the market detail in {theme}")
 
 
 def test_the_solvency_ring_paints_the_percentage_it_prints(browser):
@@ -1502,6 +1875,14 @@ def test_every_mini_app_screen_keeps_its_controls_thumb_sized(mini_screens):
 
 def test_every_mini_app_screen_sets_its_numbers_in_tabular_digits(mini_screens):
     bad = findings(mini_screens, "numeric")
+    assert not bad, json.dumps(bad, ensure_ascii=False)
+
+
+def test_no_mini_app_screen_paints_a_size_off_the_scale(mini_screens):
+    """All four tabs in one load, the same law the pages are held to — and the Mini
+    App is the surface whose stylesheet was written twice over, so a size that
+    exists in `style.css` and not in `app.html` is exactly what this catches."""
+    bad = findings(mini_screens, "typeScale")
     assert not bad, json.dumps(bad, ensure_ascii=False)
 
 

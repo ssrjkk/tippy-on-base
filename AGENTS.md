@@ -23,7 +23,7 @@
 
 - `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~11 min, 1275 tests (75 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~11 min, 1292 tests (169 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -72,7 +72,12 @@
   instead of swallowing them silently; docs name no paths outside the repo (no `D:/Dev/Temp/...` laptop
   paths, but server paths like `P:/opt/tipbot` and examples/warnings are allowed). The helper `btn_text()`
   in `bot/handlers/_common.py` is the one way to build a dynamic button label — it truncates with `…` at 64.
-- `tests/test_design_system.py` is the design contract, measured from the files: contrast of every
+- `tests/test_design_system.py` is the design contract, measured from the files. **The files it
+  reads are the directory**: `PAGES = glob("*.html")`, `SCRIPTS = glob("*.js")`, and the two lists
+  of laws that used to be hand-written tuples are derived from them (`INDEXABLE_PAGES` is the pages
+  minus `app.html`, the launch card, and `not_found.html`, the dead end). `legal.html` appeared in
+  the directory while the tuple still named seven pages, and every law below would have kept walking
+  past it — which is the same hole `cmd-group` fell through. Contrast of every
   declared `color`/`background` pair **and** of every text colour against both canvases — the pair gate
   runs against `style.css` **and** the Mini App's own stylesheet, each on its own boards (canvas plus
   the band/cards it paints on), because it measured only the site until this wave and the same 4.27:1
@@ -87,9 +92,20 @@
   **last** token of each block, so `--safe-b` had been read by no gate at all — `declarations()` now
   asserts every `--name:` it can see in a block it also parsed. Inline styles are limited to clamped
   geometry, no unsubstituted
-  `__PLACEHOLDER__`, no `@import` of a webfont (link it in `<head>` and preconnect), the weights the CSS
-  asks for are the weights the font URL downloads, no viewport that blocks pinch zoom, `theme-color`
-  present for both schemes and equal to the canvas token, `outline: none` refused inside any `:focus`
+  `__PLACEHOLDER__`, the webfaces served **by this origin** (`/fonts.css` is linked first in every
+  document, no `@import`, no font host in any shipped byte and none left allowed by the CSP, every
+  declared `.woff2` on disk and every file on disk declared), the weights the CSS asks for inside the
+  ranges those faces declare, and **every Cyrillic codepoint the site ships inside the `unicode-range`
+  of a face its own stack names** — 57 of them, measured over the shipped `*.html` and `*.js`, because a
+  stack that merely *names* a Cyrillic face still paints the operating system's font when the subset that
+  face declares does not cover the block, and per-glyph fallback walks the stack silently. No viewport that blocks pinch zoom, `theme-color`
+  present for both schemes and equal to the canvas token, and the **favicon read the way a browser
+  reads an attribute**: an attribute value ends at the first matching quote, so `x="50"` inside
+  `href="data:image/svg+xml,…"` truncated the drawing — `not_found.html` and the terms chrome that
+  used to be an f-string in `server.py` both shipped that mark, and the seven pages that spelled the same
+  attributes with `'` looked identical in review. The payload has to percent-decode, parse as one `<svg>` with an `xmlns`, carry
+  no raw `#` (a fragment drops the rest), be byte-identical across every page, and paint only the
+  `--blue` / `--on-accent` pair, `outline: none` refused inside any `:focus`
   rule — a `box-shadow` halo is a tint, not a ring: the site's own field glow is the brand blue at
   16 % alpha, which measures 1.11:1 against the dark canvas and 1.16:1 against the light one — and legal
   on an element type only while the same document paints a `:focus-visible` ring,
@@ -99,9 +115,34 @@
   failure), and the **edge maintenance card** in `functions/[[path]].js` held to the same document
   contract as the pages — it is served without the origin, so nothing else measures it.
   It reads files only — no browser, no database, so it runs in ordinary CI.
+- **A market state is one word, and each of the layers that carries it is measured.**
+  `bets.status` and `markets.status` store `open | resolved | cancelled` — read off the
+  DDL's own comments (`schema_states()`), not typed here — and the interface answers a
+  fourth, `awaiting`: a deadline that passed while nobody resolved the market, the state
+  in which stakes sit on the site and can be handed back. `chain.js`'s `marketState()` is
+  the only place that word is worked out. The laws: the vocabulary is
+  `schema_states() | derived_states()` with `awaiting` belonging to the second; **both**
+  badge families paint exactly it — the site's `.chip-*` in `style.css`, the Mini App's
+  `.tag-*` in `app.html`, compared per family through `BADGE_FAMILIES` rather than as a
+  union, which is how an `app.js` whose `CHIP` had no `awaiting` key passed the union law
+  while the page answered «завершён» for it; every document calling `marketState` paints
+  every state it can get back from it; the Mini App's `st_*` ru words each appear in every
+  surface's own markup; no surface asks `!row.resolved && !row.cancelled` whether a market
+  is tradable (the Mini App did, and offered `/oc_buy` on a market the bot refuses at
+  `close_at`); and `docs/ARCHITECTURE.md`, the only place the stored/derived split is
+  written down, names as stored exactly `schema_states()` and as added exactly the rest.
 - `tests/test_production_design.py` measures the **rendered** page (Playwright, marked
-  `production`, runs in `prod-health-check.yml`) across five surfaces — landing dark/light, a market
-  page, `/app` on a phone with touch, and `/agent` — and taps **all four Mini App tabs** in one load,
+  `production`, runs in `prod-health-check.yml`) across **nine facets** — landing dark/light, a
+  market page, `/tos`, `/u/{id}`, an on-chain market, the 404 document, `/app` on a phone with
+  touch, and `/agent` — one page load each, and the laws are driven by that list rather than by
+  which pages someone remembered: contrast, "mono implies tabular", horizontal overflow, a
+  skeleton still shimmering, text clipped without a mark, one `<h1>` plus two `theme-color` metas,
+  no unsubstituted placeholder in the painted text, and no same-origin 4xx or page error. The
+  44 px floor is parametrized over the subset opened under a coarse pointer (`TOUCH_FACETS`),
+  because `@media (pointer: coarse)` is what makes it apply and a facet measured with a mouse
+  cannot answer a thumb rule. `/no-such-page` is loaded with `expect=404`: the dead end is a real
+  surface whose own status is the answer, and without that the walk reported the document it was
+  sent to read as a broken request. It taps **all four Mini App tabs** in one load,
   because a screen behind `display: none` is a screen no gate used to see. It also **opens every layer
   that only exists after a tap** — both landing `<dialog>`s (the quote drawer and the ⌘K palette), the
   **three Mini App money sheets** and the **market detail**, each in both themes on a phone: a closed
@@ -113,7 +154,17 @@
   it** — measured before the shell was made `inert`, the stops that stayed inside were 0 in the deposit
   sheet, 2 in the withdraw sheet, 6 in the tip sheet and 8 in
   the market detail, and the rest were the theme toggle, the balance chip and the tab bar behind a scrim
-  whose own `aria-modal="true"` said they did not exist. It asserts painted contrast,
+  whose own `aria-modal="true"` said they did not exist. It also **answers the market state as a
+  browser does**: `STATE_ENUM_JS` walks every market row a facet really paints and calls that page's own
+  `marketState()` in that page's scope over the ten shapes of `STATE_ANSWERS`, and four laws refuse a page
+  that reads the answer from somewhere other than `/chain.js`, a state that contradicts its own clock
+  (`awaiting` only once `close_at` has passed, and no countdown line on a market that is not `open`), a
+  badge whose class is not the class of that row's state, and any vocabulary drift between the DDL, the
+  derivation, the four answers and **both** badge families painted on real pages. The aggregate used to
+  walk every facet with `request.getfixturevalue`, and a facet that skips inside its fixture — a local
+  origin with no on-chain market to render — skipped the law too, so a green board could mean nothing was
+  measured; it now steps over those facets and asserts the set it collected is not empty.
+  It asserts painted contrast,
   horizontal overflow at 390/1440, 44 px touch targets (inline links sharing a text line are the
   measured exception), bar width against the percentage the same row prints and against the API, the
   solvency ring's painted arc against the percentage it prints and against `/api/solvency`, page
@@ -130,7 +181,13 @@
   documents are written from `MINI_APP_URL`/`WEBHOOK_URL`, so a loopback origin cannot agree with them
   for any change in the tree, and CI measures them against the host they describe.
 - `web/static/style.css` must have no class used in HTML without being defined and no defined class
-  unused by any page. `app.html` is measured against **its own** `<style>` block, never against
+  unused by any page. **Which files are read is the directory's answer** — every `*.html` except
+  `app.html` plus every `*.js` — because the hand-written list left the new legal shell outside the
+  gate for a wave. A word sitting between two string literals in a JS template is code, not markup:
+  `agent.js` builds `'…class="bar-fill' + cls + '"…'`, and the parser that read that as a class named
+  `cls` reported a defined-class failure for a variable. What the gate therefore cannot see is a class
+  that arrives only through a variable (`bar-fill-over`, inside `cls`) — stated here rather than hidden
+  behind an exception list. `app.html` is measured against **its own** `<style>` block, never against
   `style.css` — the two documents are served separately, and the Mini App's own classes
   (`sw-state`, its `.ok`/`.warn` state colours) were invisible to the site's stylesheet while the
   gate called that parity.
@@ -140,10 +197,10 @@
   every `*.html` / `*.md` source is refused **in the mount** (`BundleFiles.get_response`), not
   in the middleware: only there does the answer pass back through the layer that stamps the
   nonce, the CSP and `nosniff`. `TEMPLATE_PAGES` and `MARKDOWN_PAGES` 301 a source to the page
-  that renders it (`/index.html` -> `/`, `/tos.md` -> `/tos`); `/user.html` is a shell whose id
-  comes from a path it does not have, so anything not in the maps is the dead-end page. Both
-  maps are compared against the directory by the plumbing gate. Share images live at the bundle
-  root: `/miniapp-hero.png`, never `/static/miniapp-hero.png`.
+  that renders it (`/index.html` -> `/`, `/tos.md` -> `/tos`, `/legal.html` -> `/tos`); `/user.html`
+  is a shell whose id comes from a path it does not have, so anything not in the maps is the dead-end
+  page. Both maps are compared against the directory by the plumbing gate. Share images live at the
+  bundle root: `/miniapp-hero.png`, never `/static/miniapp-hero.png`.
 - A browser navigation never gets a JSON body. `not_found.html` is rendered with `noindex`, **no
   canonical and no share card** (`canonical=False` — a URL that 404s must not name itself as a
   page), for any 404 outside `/api/`; a `RequestValidationError` on a page path is the same dead
@@ -288,6 +345,12 @@
   accessibility tree, which a painted scrim does not. Two consequences: a layer's opener takes focus
   through the same `focusablesIn()` list the Tab trap uses, and `syncLayerStack()` runs **before**
   restoring focus on close, because `focus()` on an element that is still inert is silently refused.
-- `/tos` renders `web/static/tos.md` through `_legal_html()` into the site chrome. That renderer
+- `/tos` fills the shell `web/static/legal.html` through `_static_page(..., replacements={...})`:
+  `__LEGAL_LANG__` from the script the Markdown is actually written in, `__LEGAL_H1__` from its first
+  `#` (the title is the `<h1>`, so the renderer consumes that heading instead of emitting a second
+  one), `__LEGAL_BODY__` from `_legal_html()` and `__CHAIN_NAME__` from `chain_label()`. That renderer
   handles only the subset the file uses (ATX headings, `- ` bullets, `**bold**`, `` `code` ``); new
-  Markdown constructs there will show up as raw markers.
+  Markdown constructs there will show up as raw markers. Being a file is the point: while the chrome
+  was an f-string in `server.py`, no gate read the document a user reads before depositing — its
+  `theme-color`, heading outline and classes were measured by nothing and it linked no webfont, so the
+  terms set themselves in Helvetica while every other page used the contract's face.

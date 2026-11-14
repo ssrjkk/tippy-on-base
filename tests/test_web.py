@@ -947,6 +947,52 @@ def test_tos_renders_as_a_document_not_raw_markdown(client):
         assert 'href="/tos"' in client.get(path).text
 
 
+def test_the_served_terms_document_is_a_document(client):
+    """`/tos` is assembled at request time, so the shell gate in
+    `test_design_system.py` measures the file but not the answer: the body comes
+    out of `tos.md` through `_legal_html()`, and a marker the server forgets, a
+    second `<h1>` from a second level-1 heading, or a Russian document announcing
+    itself as `lang="en"` all exist only in the bytes a user actually reads.
+
+    `lang` is the one with no visual symptom. A screen reader reads the page in
+    the language of that attribute, so the English terms wrapped in `lang="ru"`
+    were spelled out in the wrong alphabet by the very software a low-vision user
+    depends on — while the footer link that opens them is Russian either way."""
+    from itertools import pairwise
+    from pathlib import Path
+
+    from test_design_system import PLACEHOLDER_RE
+
+    body = client.get("/tos").text
+    text = re.sub(r"<script.*?</script>", "", body, flags=re.S)
+
+    levels = [int(level) for level in re.findall(r"<h([1-6])\b", text)]
+    assert levels.count(1) == 1, f"{levels.count(1)} h1 in the served terms"
+    assert levels[0] == 1, f"the served terms open at h{levels[0]}"
+    jumps = [(a, b) for a, b in pairwise(levels) if b - a > 1]
+    assert not jumps, f"the served terms skip heading levels {jumps} ({levels})"
+
+    # Every marker in the shell must be consumed, including the ones only the
+    # legal route passes: an unsubstituted `__LEGAL_BODY__` is the whole document
+    # missing, and it renders as a sentence a lawyer would have to explain.
+    leaked = set(PLACEHOLDER_RE.findall(body))
+    assert not leaked, f"unsubstituted markers in the served terms: {sorted(leaked)}"
+
+    md = (Path(__file__).resolve().parents[1] / "web" / "static" / "tos.md").read_text(
+        encoding="utf-8")
+    assert len(re.findall(r"^#\s+\S", md, re.MULTILINE)) == 1, (
+        "tos.md carries a second level-1 heading — the document gets two h1 or a heading "
+        "the outline does not count"
+    )
+    assert not re.findall(r"^```", md, re.MULTILINE), (
+        "tos.md uses a fenced block, which _legal_html() does not render"
+    )
+
+    declared = re.search(r'<html lang="([a-z]+)"', body).group(1)
+    want = "ru" if re.search(r"[а-яё]", md) else "en"
+    assert declared == want, f"the served terms say lang={declared}, the text is {want}"
+
+
 @pytest.mark.parametrize(
     "path,static_tg_link",
     [("/", True), ("/u/777", True), ("/m/oc/1", True), ("/m/1", False)],
@@ -1317,7 +1363,10 @@ def test_every_class_a_page_paints_is_defined_in_the_stylesheet_that_serves_it()
     without a long exception list (several classes arrive through f-strings), so
     this pins the one that can be checked without guessing — and it covers the JS
     renderers, because that is where the templates actually live: `cmd-group` was
-    emitted from app.js and no HTML file mentioned it.
+    emitted from app.js and no HTML file mentioned it. What it cannot see is a
+    class arriving through a variable (`agent.js` builds `bar-fill-over` that way,
+    inside `cls`) — a word in code position is not evidence of markup, and the
+    gate stays honest about that instead of keeping a list of exceptions.
 
     The Mini App is measured against its own `<style>` rather than skipped: it is
     one self-contained document, so `style.css` says nothing about a class its JS
@@ -1328,15 +1377,31 @@ def test_every_class_a_page_paints_is_defined_in_the_stylesheet_that_serves_it()
     root = Path(__file__).resolve().parents[1] / "web" / "static"
 
     def painted(text: str) -> set[str]:
-        used = {c for m in re.finditer(r'class="([^"]+)"', text) for c in m.group(1).split()
-                if re.fullmatch(r"[a-zA-Z][\w-]*", c)}
+        """Class names the document or a renderer writes into markup.
+
+        A JS template closes the attribute to concatenate — `'<div class="bar-fill' +
+        cls + '" aria-hidden…'` — so the raw value alternates string and code. Even
+        segments (counted from the opening string) are the literal markup; a bare
+        word in an odd segment is a variable name, not a class, and `agent.js`
+        proved the difference: `cls` failed this gate as an undefined class while
+        the real `bar-fill-over` it holds was defined all along."""
+        used = set()
+        for match in re.finditer(r'class="([^"]+)"', text):
+            for i, segment in enumerate(match.group(1).split("'")):
+                if i % 2 == 0:
+                    used |= {c for c in segment.split() if re.fullmatch(r"[a-zA-Z][\w-]*", c)}
         used |= set(re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)['\"]", text))
         return used
 
     css = (root / "style.css").read_text(encoding="utf-8-sig")
     defined = set(re.findall(r"\.([a-zA-Z][\w-]*)", css))
-    for name in ("index.html", "market.html", "oc.html", "user.html", "agent.html",
-                 "app.js", "site.js"):
+    # Every file the directory holds, not a list someone has to remember: the
+    # legal shell arrived as a new page and would have been outside this gate for
+    # the whole time it was on the site, which is the same hole `cmd-group` fell
+    # through — a page nobody thought to name is a page nobody measures.
+    surfaces = sorted(p.name for p in root.glob("*.html") if p.name != "app.html") \
+        + sorted(p.name for p in root.glob("*.js"))
+    for name in surfaces:
         text = (root / name).read_text(encoding="utf-8-sig")
         assert painted(text) <= defined, f"{name}: {sorted(painted(text) - defined)}"
 
@@ -2080,6 +2145,70 @@ def test_the_bundle_directory_does_not_publish_its_own_plumbing(client):
         r = client.get(template, follow_redirects=False)
         assert r.status_code == 301, (template, r.status_code)
         assert r.headers["location"] == page, (template, r.headers["location"])
+
+
+def test_no_asset_the_bundle_serves_arrives_as_undifferentiated_bytes(client):
+    """`web/static` is the build output, so every file in it is a URL and the
+    `Content-Type` the origin stamps is the only thing a browser learns about it.
+    The self-hosted faces shipped a whole wave as `application/octet-stream` — the
+    type the guard above already calls a refused file — because no Windows registry
+    entry names `.woff2`, `mimetypes.guess_type` answers None, and on Linux the
+    answer depends on whether that box happens to ship a system `mime.types` that
+    knows the extension. One file, two machines, two types: the same class of defect
+    the `.js` pin was written for, on the other side of the table.
+
+    The walk is the directory itself, not a list of asset names, so the next file
+    anyone drops into `fonts/` is measured the day it lands. A source the mount
+    refuses is not an asset and is not counted: the plumbing gate above owns it."""
+    root = Path(__file__).resolve().parents[1] / "web" / "static"
+    assets = sorted(str(p.relative_to(root)).replace("\\", "/")
+                    for p in root.rglob("*")
+                    if p.is_file() and p.suffix and not p.name.endswith((".html", ".md")))
+    kinds = {Path(name).suffix for name in assets}
+    assert ".woff2" in kinds, f"the walk saw {sorted(kinds)} — no font to measure, so no gate"
+    offenders = []
+    for name in assets:
+        served = client.get(f"/{name}")
+        declared = served.headers.get("content-type", "")
+        if served.status_code != 200 or not declared or declared.startswith("application/octet-stream"):
+            offenders.append((f"/{name}", served.status_code, declared or "<no content-type>"))
+    assert not offenders, json.dumps(offenders, ensure_ascii=False)
+
+
+def test_a_disabled_stack_is_a_state_the_page_reads_not_an_error_it_catches(client):
+    """A GET that reports whether a feature exists has no business answering 5xx
+    because the deployment chose not to turn it on. `GET /api/mini/smartwallet`
+    used to `raise refuse(request, 503, 'api_smart_disabled')`, so every signed-in
+    load of the Mini App carried a server error, and the client decided the shape
+    of the wallet card from `r.status === 503` — a transport code read as a product
+    flag. A stack this origin has not configured is now `200 {'enabled': False}`.
+
+    The other half is the point: `POST /api/mini/smartbuy` still answers 503. There
+    the visitor asked for something to happen and nothing can happen, which is what
+    a refusal is for."""
+    from web import mini
+
+    assert mini._smart_wallet_enabled() is False, (
+        "this deployment has the gasless stack on, so the disabled answer is not measurable here"
+    )
+    _auth(client, 777)
+    state = client.get("/api/mini/smartwallet")
+    assert state.status_code == 200, state.status_code
+    assert state.json() == {"enabled": False}
+
+    refused = client.post("/api/mini/smartbuy",
+                          json={"market_id": 1, "outcome": 0, "shares": 10,
+                                "max_cost_usdc": "1.00"},
+                          headers={"Idempotency-Key": "gate-disabled-stack"})
+    assert refused.status_code == 503, refused.status_code
+    assert refused.json()["detail"], "a refusal has to carry the text the user sees"
+
+    # And no client may read the feature out of a status code again.
+    root = Path(__file__).resolve().parents[1] / "web" / "static"
+    for name in ("app.html", "site.js"):
+        assert "503" not in (root / name).read_text(encoding="utf-8-sig"), (
+            f"{name} still decides a surface from an HTTP status"
+        )
 
 
 def test_the_commands_the_site_publishes_are_the_ones_the_bot_installs(client):

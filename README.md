@@ -364,14 +364,14 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts
-python -m pytest -q -m "not production"   # 1275 passed
+python -m pytest -q -m "not production"   # 1292 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password
 `tipbot`): `tests/conftest.py` drops and recreates `tipbot_test` once per
 session, so the dev database is never touched. Point `TEST_DATABASE_URL` and
 `TEST_ADMIN_DATABASE_URL` elsewhere if your server listens somewhere else. The
-75 `production`-marked tests are excluded from this run — they check the
+169 `production`-marked tests are excluded from this run — they check the
 deployed site and belong to the `Prod Health Check` workflow.
 
 What is tested *for real* (not mocked): money conservation across every flow

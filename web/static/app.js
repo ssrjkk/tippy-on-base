@@ -120,6 +120,17 @@ function renderTelegramWidget(username) {
   s.setAttribute("data-size", "large");
   s.setAttribute("data-auth-url", "/api/auth/telegram");
   s.setAttribute("data-request-access", "write");
+  /* Telegram writes its own <iframe> and names it nothing: a screen reader
+   * reading the page reaches an unlabelled frame and a keyboard user cannot
+   * tell what the box signs them up for, which axe scores as a serious
+   * violation. The observer names the frame the moment the widget script
+   * inserts it — a load handler would miss the case where the script is
+   * inserted while the observer is already watching an empty box. */
+  new MutationObserver(() => {
+    box.querySelectorAll("iframe:not([title])").forEach((frame) => {
+      frame.setAttribute("title", "Вход через Telegram");
+    });
+  }).observe(box, { childList: true, subtree: true });
   box.appendChild(s);
 }
 
@@ -458,10 +469,18 @@ $("copyWalletAddress").addEventListener("click", () => {
   copyToClipboard(addr, "walletMsg", "адрес");
 });
 
-function statusBadge(status) {
-  if (status === "open") return '<span class="chip chip-open">открыт</span>';
-  if (status === "resolved") return '<span class="chip chip-resolved">завершён</span>';
-  return '<span class="chip chip-cancelled">отменён</span>';
+/* One literal per state `marketState` can answer with. A lookup rather than an
+ * `if`-chain with a fallthrough: an unmapped state paints nothing and the gate
+ * that walks the states refuses, instead of quietly calling it «отменён». */
+const CHIP = {
+  open: '<span class="chip chip-open">открыт</span>',
+  awaiting: '<span class="chip chip-awaiting">ждёт решения</span>',
+  resolved: '<span class="chip chip-resolved">завершён</span>',
+  cancelled: '<span class="chip chip-cancelled">отменён</span>',
+};
+
+function statusBadge(m) {
+  return CHIP[marketState(m)] || "";
 }
 
 /* Cards carry an optional deadline and a status chip, and either can be empty.
@@ -470,22 +489,37 @@ function metaLine(...parts) {
   return parts.filter(Boolean).join(" · ");
 }
 
-function relDeadline(ts) {
-  const left = ts * 1000 - Date.now();
-  if (left <= 0) return "дедлайн прошёл";
-  const s = Math.floor(left / 1000);
-  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
-  if (d) return "осталось " + d + "д " + h + "ч";
-  if (h) return "осталось " + h + "ч " + m + "м";
-  return "осталось " + m + "м";
+/* The text beside the chip. Once the deadline has passed the countdown stops
+ * speaking (chain.js `deadlineLine`) and the chip names the state; a surface
+ * whose money the ledger can still hand back passes its own note, and the
+ * on-chain cards pass none — there the contract decides, and the page must not
+ * promise a refund it cannot perform. */
+function deadlineNote(m, note) {
+  return marketState(m) === "awaiting" ? (note || "") : deadlineLine(m);
+}
+
+const REFUND_NOTE = "можно вернуть деньги";
+
+/* The markup for the deadline half of a meta line: a ticking span only while
+ * there is time left, plain text for what a finished clock leaves behind. */
+function deadlineHtml(m, note) {
+  const text = deadlineNote(m, note);
+  if (!text) return "";
+  return marketState(m) === "open"
+    ? '<span data-close-at="' + parseInt(m.close_at) + '" data-close-note="' + (note || "") + '">'
+      + text + "</span>"
+    : text;
+}
+
+/* The chip's word without the chip: a ⌘K row has no room for a pill, and an
+ * empty column is what the countdown leaves once the clock has run out. Cut
+ * from the same literal, so a surface can never name a state differently. */
+function statusWord(m) {
+  return (CHIP[marketState(m)] || "").replace(/<[^>]*>/g, "");
 }
 
 function marketCard(m, i) {
-  const deadline = m.expired
-    ? "истёк — можно вернуть деньги"
-    : m.close_at
-      ? "<span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
-      : "";
+  const deadline = deadlineHtml(m, REFUND_NOTE);
   const winnerIdx = m.status === "resolved" && m.winner !== null && m.winner !== undefined ? m.winner : null;
   const options = m.options.map((o, j) => {
     const isWinner = winnerIdx !== null && o.index === winnerIdx;
@@ -503,7 +537,7 @@ function marketCard(m, i) {
     <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
       <div class="market-head">
         <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
-        <span class="market-meta">${metaLine(deadline, statusBadge(m.status))}</span>
+        <span class="market-meta">${metaLine(deadline, statusBadge(m))}</span>
       </div>
       ${options}
       <div class="market-footer">
@@ -552,9 +586,7 @@ async function loadClosedMarkets() {
 
 function predictionCard(m, i) {
   const winner = m.status === "resolved" && m.winner != null ? m.winner : null;
-  const deadline = m.close_at
-    ? "<span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
-    : "";
+  const deadline = deadlineHtml(m, REFUND_NOTE);
   const options = m.options.map((o, j) => {
     const isWinner = winner !== null && o.index === winner;
     return `
@@ -571,7 +603,7 @@ function predictionCard(m, i) {
     <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
       <div class="market-head">
         <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
-        <span class="market-meta">${metaLine(deadline, statusBadge(m.status))}</span>
+        <span class="market-meta">${metaLine(deadline, statusBadge(m))}</span>
       </div>
       ${options}
       <div class="market-footer">
@@ -593,9 +625,7 @@ function renderHeroSpot(markets) {
   if (!top) { box.hidden = true; return; }
   body.innerHTML = `
     <div class="spot-question">#${top.id} ${escapeHtml(top.question)}</div>
-    <div class="spot-meta">${metaLine(top.close_at
-      ? '<span data-close-at="' + parseInt(top.close_at) + '">' + relDeadline(top.close_at) + '</span>'
-      : "", statusBadge(top.status))}</div>
+    <div class="spot-meta">${metaLine(deadlineHtml(top, REFUND_NOTE), statusBadge(top))}</div>
     ${top.options.slice(0, 3).map(o => `
       <div class="option">
         <div class="option-top">
@@ -1019,7 +1049,7 @@ const SEARCH_META = {
   lmsr: (m) => fmtUSDC(m.liquidity_usdc) + " USDC",
   pool: (m) => fmtUSDC(m.pot_usdc) + " USDC",
   closed: (m) => fmtUSDC(m.pot_usdc) + " USDC",
-  onchain: (m) => (m.close_at ? relDeadline(m.close_at) : ""),
+  onchain: (m) => deadlineNote(m) || statusWord(m),
 };
 
 const SEARCH_LIMIT = 40;
@@ -1204,16 +1234,8 @@ async function loadOnchainMarkets() {
     section.classList.add("is-visible");
     el.innerHTML = markets.map((m, i) => {
       const winnerIdx = m.resolved ? m.winner : null;
-      const badge = m.cancelled
-        ? '<span class="chip chip-cancelled">отменён</span>'
-        : m.resolved
-          ? '<span class="chip chip-resolved">завершён</span>'
-          : "";
-      const deadline = m.resolved || m.cancelled
-        ? ""
-        : m.close_at
-          ? "<span data-close-at=\"" + parseInt(m.close_at) + "\">" + relDeadline(m.close_at) + "</span>"
-          : "";
+      const badge = statusBadge(m);
+      const deadline = deadlineHtml(m);
       const options = m.options.map((o, j) => {
         const isWinner = winnerIdx !== null && o.index === winnerIdx;
         return `
@@ -1288,7 +1310,20 @@ setInterval(tickCountdowns, 10000);
 function tickCountdowns() {
   document.querySelectorAll("[data-close-at]").forEach((el) => {
     const ts = parseInt(el.dataset.closeAt, 10);
-    el.textContent = relDeadline(ts);
+    if (ts * 1000 <= Date.now()) {
+      /* A reader may be looking at the card when the clock runs out. The chip
+       * changes with it and the span stops ticking — otherwise the line would
+       * call the market «открыт» until the next list reload, which is the
+       * contradiction the state function exists to remove. */
+      el.removeAttribute("data-close-at");
+      const meta = el.closest(".market-meta");
+      const chip = meta && meta.querySelector(".chip");
+      if (chip) chip.outerHTML = statusBadge({ status: "open", close_at: ts });
+      if (el.dataset.closeNote) el.textContent = el.dataset.closeNote;
+      else el.remove();
+      return;
+    }
+    el.textContent = deadlineLine({ status: "open", close_at: ts });
     el.classList.toggle("countdown-urgent", ts * 1000 - Date.now() < 3600 * 1000);
   });
 }

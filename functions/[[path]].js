@@ -36,9 +36,7 @@ const MAINTENANCE = `<!doctype html>
 <title>Tippy — временно недоступен</title>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=Golos+Text:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/fonts.css">
 <style>
   :root {
     --blue: #0000ff; --blue-hover: #0000cc; --blue-soft: rgba(0, 0, 255, .07);

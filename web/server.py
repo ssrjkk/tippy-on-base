@@ -82,7 +82,8 @@ app.include_router(mini_router)
 # bookmark or a crawler guesses for `/`), and each has one address that
 # renders it. The id-carrying templates have no home without an id, so they
 # are refused and the dead-end page answers instead.
-TEMPLATE_PAGES = {'/index.html': '/', '/app.html': '/app', '/agent.html': '/agent'}
+TEMPLATE_PAGES = {'/index.html': '/', '/app.html': '/app', '/agent.html': '/agent',
+                '/legal.html': '/tos'}
 # A Markdown file in the bundle is the source of a page, and the URL for it
 # is that page: `/tos.md` used to answer the terms a second time with no
 # canonical back. Both maps are compared against the directory by
@@ -344,8 +345,8 @@ async def rate_limit(request: Request, call_next):
     response.headers.setdefault('Cache-Control', 'no-store, no-cache, must-revalidate')
     response.headers.setdefault('Content-Security-Policy',
         f"default-src 'self'; script-src 'self' 'nonce-{nonce}' {_CSP_SCRIPT_WHITELIST}; "
-        f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        f"font-src 'self' https://fonts.gstatic.com; "
+        f"style-src 'self' 'unsafe-inline'; "
+        f"font-src 'self'; "
         f"img-src 'self' data: https:; "
         f"connect-src 'self'; frame-src {_CSP_FRAME_WHITELIST}; "
         "frame-ancestors 'self' https://web.telegram.org")
@@ -1118,7 +1119,8 @@ def _landing_json_ld() -> str:
 def _static_page(page: str, request: Request | None = None, *, path: str,
                  title: str | None = None, description: str | None = None,
                  robots: str | None = None, json_ld: str | None = None,
-                 status_code: int = 200, canonical: bool = True) -> Response:
+                 status_code: int = 200, canonical: bool = True,
+                 replacements: dict[str, str] | None = None) -> Response:
     """Serve a static page with the running config and the document's own
     identity rendered into it.
 
@@ -1133,8 +1135,16 @@ def _static_page(page: str, request: Request | None = None, *, path: str,
 
     ``path`` is the page's own path: a canonical has to name the URL the visitor
     asked for, and ``/m/12`` and ``/m/13`` render from the same file.
+
+    ``replacements`` is the same contract for a page whose body is not in the
+    file — ``legal.html`` carries the chrome and ``/tos`` pours the rendered
+    Markdown into it. A document assembled here instead would answer the visitor
+    with a page no design contract reads: the file is what the contrast,
+    heading, font and placeholder gates measure, so every page has to be one.
     """
     html = (STATIC / page).read_text(encoding='utf-8')
+    for marker, value in (replacements or {}).items():
+        html = html.replace(marker, value)
     html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
     html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
@@ -1370,6 +1380,7 @@ def _legal_html(md: str) -> str:
 
     out: list[str] = []
     bullets: list[str] = []
+    title_taken = False
 
     def flush() -> None:
         if bullets:
@@ -1389,6 +1400,13 @@ def _legal_html(md: str) -> str:
         if heading:
             flush()
             level = len(heading.group(1))
+            if level == 1 and not title_taken:
+                # The first `#` is the document's title, not a section: `legal.html`
+                # prints it as the one `<h1>`, and the route reads it for `<title>`
+                # and the share card. A second `#` stays in the body and the outline
+                # gate on the served page refuses it.
+                title_taken = True
+                continue
             out.append(f'<h{level}>{inline(heading.group(2))}</h{level}>')
             continue
         if s.startswith('- '):
@@ -1400,21 +1418,22 @@ def _legal_html(md: str) -> str:
     return ''.join(out)
 
 
-_TOS_ICON = (
-    '<span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true">'
-    '<text x="12" y="17" font-size="15" font-weight="800" text-anchor="middle" '
-    'fill="white">b</text></svg></span>'
-)
-
-
 @app.get('/tos', tags=['legal'])
 async def tos() -> Response:
-    """Terms of Service, rendered out of ``web/static/tos.md``."""
+    """Terms of Service, rendered out of ``web/static/tos.md`` into ``legal.html``.
+
+    The chrome used to be an f-string in here, which put the one Python-built
+    document outside every gate: `tests/test_design_system.py` and the class
+    parity check read `web/static/*`, so its `theme-color`, its headings and its
+    classes were measured by nothing — and it linked no webfont, so the terms a
+    user reads before depositing were set in Helvetica while every other page of
+    the site set them in the contract's face. `legal.html` is a page now, and the
+    terms arrive through the same marker substitution every other page uses.
+    """
     tos_file = STATIC / 'tos.md'
     if not tos_file.exists():
         return PlainTextResponse('Terms of Service not found.', status_code=404)
     md = tos_file.read_text(encoding='utf-8')
-    body = _legal_html(md)
     first_heading = re.search(r'^#\s+(.*)', md, re.MULTILINE)
     title = first_heading.group(1) if first_heading else 'Terms of Service'
     # The document declares which language it is written in. A screen reader
@@ -1422,48 +1441,12 @@ async def tos() -> Response:
     # language, so the English legal file wrapped in lang="ru" was read wrong by
     # both — the footer link that opens it is Russian either way.
     lang = 'ru' if re.search(r'[а-яё]', md, re.I) else 'en'
-    html_doc = f"""<!DOCTYPE html>
-<html lang="{lang}">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111" />
-  <title>{_esc(title)}</title>
-  <meta name="description" content="Terms of Service for Tippy: custodial USDC on Base, the fees and limits that apply, how a pool bet is settled and what the operator is not liable for." />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="/style.css" />
-  <script src="/theme.js"></script>
-</head>
-<body>
-  <header class="nav">
-    <div class="nav-inner">
-      <a class="brand" href="/">
-        {_TOS_ICON}
-        <span class="brand-name"><b>Tippy</b></span>
-      </a>
-      <div class="nav-actions">
-        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
-          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
-          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
-        </button>
-        <a class="btn btn-ghost btn-sm" href="/">Назад</a>
-      </div>
-    </div>
-  </header>
-  <main>
-    <article class="page legal">
-{body}
-    </article>
-  </main>
-  <footer class="footer">
-    <p>Tippy · USDC на {_esc(chain_label())}</p>
-  </footer>
-</body>
-</html>
-"""
-    return Response(content=_document_meta(html_doc, path='/tos').encode('utf-8'),
-                    media_type='text/html')
+    return _static_page('legal.html', path='/tos', title=title, replacements={
+        '__LEGAL_LANG__': lang,
+        '__LEGAL_H1__': _esc(title),
+        '__LEGAL_BODY__': _legal_html(md),
+        '__CHAIN_NAME__': chain_label(),
+    })
 
 @app.get('/metrics', tags=['monitoring'])
 async def metrics(request: Request) -> Response:
@@ -1491,7 +1474,17 @@ async def metrics(request: Request) -> Response:
 # depends on the machine that happens to run the process. Pinning it keeps a
 # developer's box and CI sending the same bytes, and keeps the script tag
 # executing the same way on both.
+#
+# `.woff2` is the same bug in the other direction: no Windows registry entry
+# names it and `mimetypes.guess_type` answers None, so every font left here as
+# `application/octet-stream` — the type the middleware already refuses for its
+# own plumbing. On Linux the answer depends on whether the box happens to ship a
+# system mime.types that knows the extension, so the same bundle reports two
+# different types for one file.
 mimetypes.add_type('text/javascript', '.js')
+mimetypes.add_type('font/woff2', '.woff2')
+
+
 class BundleFiles(StaticFiles):
     """The bundle directory is the web root — so its source is refused.
 

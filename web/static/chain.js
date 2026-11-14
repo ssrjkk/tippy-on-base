@@ -48,3 +48,33 @@ async function netInfo() {
   }
   return NET;
 }
+
+/* One state per market row, named in one place. `status` is not the state: a
+ * pool whose deadline has passed and that nobody has resolved is no longer
+ * open, and the four surfaces that paint a chip each derived the answer from
+ * whichever of the two fields it happened to have — so the landing hero, /m/{id}
+ * and /oc/{id} all printed «дедлайн прошёл» in the same line as «открыт».
+ * "awaiting" is the word the bot already uses for it (истёк — /cancel). */
+function marketState(row) {
+  if (!row) return "cancelled";
+  const status = row.status
+    || (row.cancelled ? "cancelled" : row.resolved ? "resolved" : "open");
+  if (status !== "open") return status;
+  const closed = row.expired === true
+    || (row.close_at ? Number(row.close_at) * 1000 <= Date.now() : false);
+  return closed ? "awaiting" : "open";
+}
+
+/* The countdown is the only deadline text, and once the deadline is gone it has
+ * nothing to count: the chip says that. Returning "" here rather than a
+ * "прошёл" string is what makes a contradictory line impossible to build. */
+function deadlineLine(row) {
+  if (!row || marketState(row) !== "open" || !row.close_at) return "";
+  const left = Math.max(0, Math.floor(Number(row.close_at)) - Math.floor(Date.now() / 1000));
+  const d = Math.floor(left / 86400);
+  const h = Math.floor((left % 86400) / 3600);
+  const m = Math.floor((left % 3600) / 60);
+  if (d) return "осталось " + d + "д " + h + "ч";
+  if (h) return "осталось " + h + "ч " + m + "м";
+  return "осталось " + m + "м";
+}
