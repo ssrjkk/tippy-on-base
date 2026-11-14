@@ -80,6 +80,7 @@ scripts/*
 !scripts/deploy_smart_wallet.py
 !scripts/smoke_smart_buy.py
 !scripts/backup_db.sh
+!scripts/pg_env.sh
 !scripts/restore_db.sh
 !scripts/backup_and_monitor.sh
 !scripts/final_release_check.sh

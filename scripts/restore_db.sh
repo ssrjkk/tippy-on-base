@@ -8,6 +8,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# shellcheck source=./pg_env.sh
+source "$SCRIPT_DIR/pg_env.sh"
+
 # Load .env if present
 if [ -f "$PROJECT_ROOT/.env" ]; then
     set -a
@@ -33,6 +36,23 @@ fi
 # Validate DATABASE_URL
 if [ -z "${DATABASE_URL:-}" ]; then
     echo "ERROR: DATABASE_URL not set"
+    exit 1
+fi
+
+# An archive is only worth restoring if it contains a dump. A `pg_dump` that died
+# mid-pipe leaves a valid gzip of nothing, and piping that into psql answers
+# "Restore completed successfully" having restored no rows. This is checked before
+# anything is asked of the operator and before a client binary has to be found.
+if ! pg_archive_is_real "$BACKUP_FILE"; then
+    echo "ERROR: $BACKUP_FILE holds no PostgreSQL dump: nothing would be restored" >&2
+    exit 1
+fi
+
+# psql is nowhere on PATH on a Windows host with a service install of PostgreSQL,
+# which the backup script knew and this one did not: the recovery command died on
+# "command not found" only when an operator actually needed it.
+if ! pg_path_probe psql; then
+    echo "ERROR: psql is not on PATH and no PostgreSQL install was found" >&2
     exit 1
 fi
 

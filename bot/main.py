@@ -194,23 +194,57 @@ async def housekeeping_watcher() -> None:
         await asyncio.sleep(getattr(config, "HOUSEKEEPING_INTERVAL_SECONDS", 86400))
 
 
+async def recurring_pass(store) -> int:
+    """One pass over the due recurring payments; returns the slots it executed.
+
+    Split out of the loop so the ordering below is testable: a scheduled payment
+    that pays twice takes money the product cannot hand back.
+    """
+    due = await store.get_due(time.time())
+    executed = 0
+    for payment in due:
+        # The claim is what makes one scheduled slot pay once: it compare-and-sets
+        # next_execution, so a second pass — or a second process — cannot take the
+        # same slot. Debiting first and recording after was the other order, and
+        # there a bookkeeping failure left the slot due while the money had
+        # already moved, so the next pass paid the payer a second time.
+        try:
+            claimed = await store.mark_executed(payment.id)
+        except Exception as e:
+            # One unreadable row must not stop the payments behind it for good.
+            log.error('recurring payment %s could not be claimed: %s', payment.id, e, exc_info=True)
+            continue
+        if not claimed:
+            continue
+        try:
+            paid = await ledger.transfer(
+                payment.from_tg_id, payment.to_tg_id, payment.amount_micro,
+                payment.memo or "Recurring payment")
+        except Exception as e:
+            log.error('recurring payment %s claimed but its transfer raised: %s',
+                      payment.id, e, exc_info=True)
+            continue
+        if not paid:
+            # Nothing moved. The slot stays spent rather than retried, because the
+            # debit that eventually lands would pay for a period the payer did not
+            # agree to; the next interval is still theirs to claim.
+            log.warning('recurring payment %s refused: %s cannot cover %s micro',
+                        payment.id, payment.from_tg_id, payment.amount_micro)
+            continue
+        executed += 1
+        log.info('executed recurring payment %s: %s → %s $%s',
+                 payment.id, payment.from_tg_id, payment.to_tg_id,
+                 float(Decimal(payment.amount_micro) / Decimal(10**6)))
+    return executed
+
+
 async def recurring_payment_executor() -> None:
     """Execute due recurring payments (subscriptions)."""
     from .recurring import store
 
     while True:
         try:
-            now = time.time()
-            due = await store.get_due(now)
-            for payment in due:
-                try:
-                    await ledger.transfer(payment.from_tg_id, payment.to_tg_id, payment.amount_micro, payment.memo or "Recurring payment")
-                    await store.mark_executed(payment.id)
-                    log.info('executed recurring payment %s: %s → %s $%s',
-                             payment.id, payment.from_tg_id, payment.to_tg_id,
-                             float(Decimal(payment.amount_micro) / Decimal(10**6)))
-                except Exception as e:
-                    log.warning('recurring payment %s failed: %s', payment.id, e)
+            await recurring_pass(store)
         except Exception as e:
             log.warning('recurring executor failed: %s', e)
         await asyncio.sleep(3600)  # Check every hour

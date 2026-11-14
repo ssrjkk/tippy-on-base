@@ -8,11 +8,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# shellcheck source=./pg_env.sh
+source "$SCRIPT_DIR/pg_env.sh"
+
 # Ensure pg_dump is on PATH (Windows/PostgreSQL installs)
-if ! command -v pg_dump &>/dev/null; then
-    for d in "/c/Program Files/PostgreSQL"/*/bin; do
-        [ -x "$d/pg_dump" ] && export PATH="$d:$PATH" && break
-    done
+if ! pg_path_probe pg_dump; then
+    echo "ERROR: pg_dump is not on PATH and no PostgreSQL install was found" >&2
+    exit 1
 fi
 
 # Load .env if present
@@ -37,18 +39,25 @@ mkdir -p "$BACKUP_DIR"
 
 echo "Backing up database to $BACKUP_FILE..."
 
-# Dump database (exclude large binary tables if any)
-pg_dump -d "$DATABASE_URL" \
+# Dump database (exclude large binary tables if any). The failure of pg_dump
+# inside a pipe used to abort the script and leave the archive it had already
+# opened on disk — a 20-byte gzip of nothing that every later check accepted.
+if ! pg_dump -d "$DATABASE_URL" \
     --clean \
     --if-exists \
     --no-owner \
     --no-privileges \
     --schema=public \
-    | gzip > "$BACKUP_FILE"
+    | gzip > "$BACKUP_FILE"; then
+    rm -f "$BACKUP_FILE"
+    echo "ERROR: pg_dump failed; no backup written" >&2
+    exit 1
+fi
 
-# Verify backup
-if [ ! -s "$BACKUP_FILE" ]; then
-    echo "ERROR: Backup file is empty"
+# Verify the payload, not the file size.
+if ! pg_archive_is_real "$BACKUP_FILE"; then
+    rm -f "$BACKUP_FILE"
+    echo "ERROR: $BACKUP_FILE holds no PostgreSQL dump; discarded" >&2
     exit 1
 fi
 

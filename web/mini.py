@@ -432,11 +432,18 @@ async def mini_trade(body: TradeBody, request: Request) -> dict:
     micro = _to_micro(body.amount)
     if micro <= 0:
         raise refuse(request, 400, 'api_amount_positive')
+    if micro < config.MARKET_MIN_TRADE_MICRO:
+        raise refuse(request, 400, 'api_amount_dust', min=_exact(config.MARKET_MIN_TRADE_MICRO))
     max_micro = _cap_micro(config.MARKET_MAX_TRADE_USDC)
     if micro > max_micro:
         raise refuse(request, 400, 'api_cap_trade', cap=_fmt(max_micro))
     async with _idempotent(request, 'trade', tg_id) as op:
         status, info = await ledger.buy_shares(body.market_id, tg_id, body.option, micro, idem=op.key)
+        if status == 'toosmall':
+            # The floor was already refused above, so the ledger reaching this
+            # path with `toosmall` means the curve priced one share above what
+            # was offered. `api_error_generic` used to answer that here.
+            raise refuse(request, 400, 'api_amount_one_share')
         if status != 'ok':
             raise refuse(request, 400, _ERR_MSG.get(status, 'api_error_generic'))
         bal = float(await ledger.balance(tg_id))

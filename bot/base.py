@@ -411,7 +411,7 @@ def _check_pending_withdrawn_sync() -> None:
             continue
         if tx_hash is None:
             if now - int(row["created_at"]) > config.WITHDRAW_STUCK_TIMEOUT_SECONDS:
-                ledger.refund_withdraw(wd_id, int(row["tg_id"]), total_micro)
+                _refund_row(wd_id, int(row["tg_id"]), total_micro, "no hash past the stuck timeout")
             continue
         try:
             receipt = core.get_transaction_receipt(tx_hash, first=w3)
@@ -434,11 +434,12 @@ def _check_pending_withdrawn_sync() -> None:
                 continue  # RPC down for get_transaction: keep pending, re-check later
             if live_tx is not None:
                 continue  # still pending in the mempool — could still land
-            ledger.refund_withdraw(wd_id, int(row["tg_id"]), total_micro)
+            _refund_row(wd_id, int(row["tg_id"]), total_micro,
+                        "no receipt and no node has seen the tx")
         elif bool(receipt.get("status")):
             ledger.mark_withdraw_done(wd_id, tx_hash)
         else:
-            ledger.refund_withdraw(wd_id, int(row["tg_id"]), total_micro)
+            _refund_row(wd_id, int(row["tg_id"]), total_micro, "receipt says the tx failed")
 
 
 async def check_pending_withdraws() -> None:
@@ -551,12 +552,25 @@ def _row_fee_micro(row: dict) -> int:
     return 0
 
 
+def _refund_row(wd_id: int, tg_id: int, total_micro: int, why: str) -> bool:
+    """Refund a withdraw row and record whether the ledger actually moved money.
+
+    `refund_withdraw` returns False when the row was already terminal, so a line
+    that said "refunding" either way would tell an operator about a credit that
+    never happened — the one fact a double-pay investigation turns on."""
+    applied = ledger.refund_withdraw(wd_id, tg_id, total_micro)
+    if applied:
+        log.info("withdraw %s refunded (%s)", wd_id, why)
+    else:
+        log.warning("withdraw %s was already terminal, nothing refunded (%s)", wd_id, why)
+    return applied
+
+
 def _refund_rows(rows: list[dict]) -> None:
     """Refund claimed rows that can never be sent (vault failure, no fallback)."""
     for r in rows:
-        ledger.refund_withdraw(
-            int(r["id"]), int(r["tg_id"]), int(r["amount"]) + _row_fee_micro(r)
-        )
+        _refund_row(int(r["id"]), int(r["tg_id"]),
+                    int(r["amount"]) + _row_fee_micro(r), "row could never be sent")
 
 
 def _batch_must_flush(queue: list[dict], now: int) -> bool:
@@ -634,8 +648,9 @@ def _flush_direct(rows: list[dict]) -> dict:
             sent += 1
             continue
         except Exception as e:
-            log.warning("direct batch withdraw %s failed (%s); refunding", wd_id, e)
-            ledger.refund_withdraw(wd_id, int(r["tg_id"]), amt + _row_fee_micro(r))
+            log.warning("direct batch withdraw %s failed (%s)", wd_id, e)
+            _refund_row(wd_id, int(r["tg_id"]), amt + _row_fee_micro(r),
+                        "direct send raised")
             continue
         try:
             ledger.mark_withdraw_done(wd_id, tx_hash)

@@ -217,6 +217,10 @@ def _parse_amount(raw_amount: str) -> tuple[int | None, str | None]:
     add a parameter it had already sent, so an agent over the cap fixed nothing
     and resent the identical request forever.
     """
+    if not raw_amount:
+        # `Decimal('')` raises, so an absent parameter used to be answered as an
+        # unparseable number — the one refusal the client could not act on.
+        return None, 'amount is required'
     try:
         amount = Decimal(raw_amount)
     except InvalidOperation:

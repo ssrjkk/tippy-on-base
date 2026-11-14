@@ -498,7 +498,7 @@ async def api_prediction_quote(market_id: int, option: int, amount: str) -> dict
     try:
         spend_micro = int(Decimal(amount) * MICRO)
     except InvalidOperation:
-        raise refuse(None, 400, 'api_amount_positive')
+        raise refuse(None, 400, 'api_amount_number')
     if spend_micro <= 0:
         raise refuse(None, 400, 'api_amount_positive')
     cap_micro = int(config.MARKET_MAX_TRADE_USDC * MICRO)
@@ -516,12 +516,14 @@ async def api_prediction_quote(market_id: int, option: int, amount: str) -> dict
     b_micro = int(m['b_micro'])
     q = await ledger.market_quantities(market_id)
     # Dust trades are rejected by the write path for the same reason, so the
-    # panel must not quote a share count of zero and call it a trade.
-    if spend_micro < 10_000:
-        raise refuse(None, 400, 'api_amount_positive')
+    # panel must not quote a share count of zero and call it a trade. The word
+    # has to be the floor's own: «Сумма должна быть больше нуля» for an amount
+    # that is positive tells the reader the parser broke, not the boundary.
+    if spend_micro < config.MARKET_MIN_TRADE_MICRO:
+        raise refuse(None, 400, 'api_amount_dust', min=_usdc(config.MARKET_MIN_TRADE_MICRO))
     shares = lmsr_buy_shares(q, b_micro, option, spend_micro)
     if shares <= 0:
-        raise refuse(None, 400, 'api_amount_positive')
+        raise refuse(None, 400, 'api_amount_one_share')
     after = [*q[:option], q[option] + shares, *q[option + 1:]]
     price_before = lmsr_prices(q, b_micro)[option]
     price_after = lmsr_prices(after, b_micro)[option]
@@ -549,6 +551,7 @@ async def api_prediction_quote(market_id: int, option: int, amount: str) -> dict
         'profit_usdc': _usdc(shares - cost_micro),
         'roi_pct': float(round(Decimal(shares - cost_micro) / Decimal(cost_micro) * 100, 2)),
         'max_trade_usdc': _usdc(cap_micro),
+        'min_trade_usdc': _usdc(config.MARKET_MIN_TRADE_MICRO),
     }
 
 @app.get('/api/leaderboard', tags=['users'])
@@ -793,6 +796,7 @@ def api_info() -> dict:
             'max_tip_usdc': float(config.MAX_TIP_USDC),
             'max_bet_usdc': float(config.MAX_BET_USDC),
             'max_trade_usdc': float(config.MARKET_MAX_TRADE_USDC),
+            'min_trade_usdc': _usdc(config.MARKET_MIN_TRADE_MICRO),
             'min_withdraw_usdc': float(config.MIN_WITHDRAW_USDC),
             'max_withdraws_per_day': config.MAX_WITHDRAWS_PER_DAY,
             'min_subsidy_usdc': float(config.MARKET_MIN_SUBSIDY_USDC),

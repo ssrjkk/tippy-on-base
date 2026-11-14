@@ -34,8 +34,8 @@ jobs:
           pin = next(line for line in Path('requirements-dev.txt').read_text(encoding='utf-8').splitlines() if line.startswith('ruff=='))
           subprocess.run([sys.executable, '-m', 'pip', 'install', pin], check=True)
           PY
-      - name: Ruff check (bot web tests deploy agent scripts)
-        run: ruff check bot web tests deploy agent scripts
+      - name: Ruff check (bot web tests deploy agent scripts alembic)
+        run: ruff check bot web tests deploy agent scripts alembic
 
   # The Dockerfile has moved to python:3.14 while the suite runs on 3.12, so a
   # dependency without a 3.14 wheel and a syntax the new interpreter rejects

@@ -100,6 +100,22 @@ def test_info_publishes_the_x402_terms_the_sandbox_prints(client, monkeypatch):
         assert needle in r.json()["detail"], (query, r.json())
     assert "recipient" in client.post("/api/x402/tip?amount=1").json()["detail"]
 
+    # A parameter the client never sent is not a parameter it sent badly:
+    # `Decimal('')` raised inside the parser, so an omitted `amount` was answered
+    # «amount is not a number» — a fix nobody could apply to a request that had
+    # no number in it. Both routes that parse an amount share the answer, and a
+    # blank one arrives at the parser the same way because each route strips.
+    for url in ("/api/x402/tip?recipient=777", "/api/x402/paywall?item=1"):
+        missing = client.post(url)
+        assert missing.status_code == 400, url
+        detail = missing.json()["detail"]
+        assert "required" in detail, (url, detail)
+        assert "not a number" not in detail, (url, detail)
+    blank = client.post("/api/x402/tip?recipient=777&amount=%20%20")
+    assert "required" in blank.json()["detail"], blank.json()
+    assert x402._parse_amount("")[1] == "amount is required"
+    assert x402._parse_amount("abc")[1] == "amount is not a number"
+
     # The switch the page reports is the switch the endpoint reads.
     monkeypatch.setattr(cfg, "X402_ENABLED", False)
     assert client.get("/api/info").json()["x402"]["enabled"] is False
@@ -1671,6 +1687,212 @@ def test_the_trade_panel_quotes_the_numbers_the_write_path_books(client, ledger)
     assert client.get(
         f"/api/prediction/{closed}/quote", params={"option": 0, "amount": "5"}
     ).status_code == 409
+
+
+def test_a_config_name_written_into_a_ledger_docstring_resolves_on_config():
+    """`buy_shares` documented that it rejects dust «below MARKET_MIN_TRADE_MICRO»
+    while nothing in the repository defined that name: the reader could not find
+    the floor, and the number that enforced it was copied into a second file. The
+    same class as the ledger call sites that were never written — a promise in a
+    docstring that the tree cannot answer."""
+    import inspect
+
+    from bot import config as cfg
+    from bot.ledger import Ledger
+
+    doc = inspect.getdoc(Ledger.buy_shares) or ""
+    named = set(re.findall(r"\b(MARKET_[A-Z0-9_]{3,})\b", doc))
+    assert named, "the docstring names no bound — this gate has stopped measuring"
+    unresolvable = {name for name in named if not hasattr(cfg, name)}
+    assert not unresolvable, f"{sorted(unresolvable)} are documented but not configured"
+
+
+def test_the_dust_floor_is_one_number_read_from_that_name_everywhere():
+    """Three files enforced the same boundary by comparing against a literal, so
+    an operator raising the floor would have to find all three — and the panel
+    that copied it also copied the wrong word for it."""
+    import ast
+
+    from bot import config as cfg
+
+    floor = cfg.MARKET_MIN_TRADE_MICRO
+    root = Path(__file__).resolve().parents[1]
+    offenders, readers = [], []
+    for rel in ("bot/ledger/_markets.py", "web/server.py", "web/mini.py"):
+        tree = ast.parse((root / rel).read_text(encoding="utf-8-sig"))
+        uses_name = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Compare):
+                continue
+            comparators = [c for c in node.comparators if isinstance(c, ast.Constant)]
+            for comp in comparators:
+                if comp.value == floor and isinstance(comp.value, int):
+                    offenders.append(f"{rel}:{node.lineno} compares against the literal {comp.value}")
+            if any(
+                isinstance(c, ast.Attribute) and c.attr == "MARKET_MIN_TRADE_MICRO"
+                for c in node.comparators
+            ):
+                uses_name = True
+        if not uses_name:
+            offenders.append(f"{rel} enforces no floor read from config.MARKET_MIN_TRADE_MICRO")
+    assert not offenders, offenders
+
+
+def test_the_dust_floor_answers_the_same_word_below_and_above_it(client, ledger):
+    """The reader of a refusal has to learn which bound broke. Below the floor the
+    answer is the floor with its number; at the floor the order is not dust any
+    more, and «Минимальная сумма — 0.01 USDC» would be a sentence about an amount
+    the user just typed."""
+    from bot import config as cfg
+
+    mid = _one_market(ledger)
+    ledger.credit(4103, 200 * 10**6, "deposit")
+    dust_url = f"/api/prediction/{mid}/quote"
+    floor = cfg.MARKET_MIN_TRADE_MICRO
+    floor_usdc = f"{floor / 10**6:g}"
+    below_usdc = f"{(floor - 1) / 10**6}"
+
+    below = client.get(dust_url, params={"option": 0, "amount": below_usdc})
+    assert below.status_code == 400
+    detail = below.json()["detail"]
+    assert f"{floor_usdc} USDC" in detail, detail
+    assert "больше нуля" not in detail, detail
+    assert "числом" not in detail, detail
+
+    at = client.get(dust_url, params={"option": 0, "amount": floor_usdc})
+    assert f"{floor_usdc} USDC" not in at.json().get("detail", ""), (at.status_code, at.json())
+
+    # the write path refuses the amount just below the name's value
+    assert ledger.buy_shares(mid, 4103, 0, floor - 1)[0] == "toosmall"
+
+    typed = client.get(dust_url, params={"option": 0, "amount": "abc"})
+    assert typed.status_code == 400
+    assert "числом" in typed.json()["detail"], typed.json()
+    assert "больше нуля" not in typed.json()["detail"], typed.json()
+
+
+def _dust_refusing_routes():
+    """The paths whose handler answers `api_amount_dust`, read off the decorators."""
+    import ast
+
+    root = Path(__file__).resolve().parents[1]
+    found = set()
+    for rel in ("web/server.py", "web/mini.py"):
+        tree = ast.parse((root / rel).read_text(encoding="utf-8-sig"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            keys = {
+                call.args[2].value
+                for call in ast.walk(node)
+                if isinstance(call, ast.Call)
+                and call.func.__class__.__name__ == "Name"
+                and call.func.id == "refuse"
+                and len(call.args) > 2
+                and isinstance(call.args[2], ast.Constant)
+                and isinstance(call.args[2].value, str)
+            }
+            if "api_amount_dust" not in keys:
+                continue
+            for dec in node.decorator_list:
+                first = dec.args[0] if isinstance(dec, ast.Call) and dec.args else None
+                if (isinstance(first, ast.Constant) and isinstance(first.value, str)
+                        and first.value.startswith("/")):
+                    found.add(first.value)
+    return sorted(found)
+
+
+def _route_call_matcher(path):
+    """A regex for the way a shipped script spells a route: whole path in one
+    string, or the part before the first `{placeholder}` quoted and the id
+    appended by concatenation."""
+    head, *rest = re.split(r"\{[^}]+\}", path)
+    if not rest:
+        return r"""["']""" + re.escape(path) + r"""["']"""
+    tail = "".join(re.escape(piece) for piece in rest)
+    return (
+        r"""["']""" + re.escape(head) + r"[^'\"]+" + tail + r"""["']"""
+        + "|"
+        + r"""["']""" + re.escape(head) + r"""["']"""
+    )
+
+
+def _enclosing_function(text, idx):
+    """The top-level `function` block a byte offset falls inside, so an amount
+    is read from the code that actually sends it and not from the whole file."""
+    starts = [m.start() for m in re.finditer(r"^[ \t]*(?:async[ \t]+)?function[ \t]+\w+", text, re.M)]
+    before = [s for s in starts if s <= idx]
+    if not before:
+        return ""
+    after = [s for s in starts if s > idx]
+    return text[before[-1]: after[0] if after else len(text)]
+
+
+def test_the_floor_a_dust_refusal_names_is_the_floor_the_inputs_ship(client, ledger):
+    """A bound the server refuses with has to be the bound the page blocks.
+    Three surfaces typed it (two `min` attributes and one Russian sentence), so
+    raising the floor would have left the panel quoting a trade the ledger then
+    refused — and the sentence the reader saw was written by a different hand
+    than the number the API answers."""
+    from decimal import Decimal
+
+    from bot import config as cfg
+
+    floor_usdc = Decimal(cfg.MARKET_MIN_TRADE_MICRO) / Decimal(10**6)
+    routes = _dust_refusing_routes()
+    assert routes, "no route answers api_amount_dust — this gate has stopped measuring"
+
+    # `/api/info` publishes it, so a page never has to remember the number.
+    limits = client.get("/api/info").json()["limits"]
+    assert Decimal(str(limits["min_trade_usdc"])) == floor_usdc
+
+    # …and so does the quote endpoint the drawer reads its own bounds from.
+    mid = _one_market(ledger)
+    quote = client.get(
+        f"/api/prediction/{mid}/quote", params={"option": 0, "amount": "5"}
+    ).json()
+    assert Decimal(str(quote["min_trade_usdc"])) == floor_usdc
+
+    static = Path(__file__).resolve().parents[1] / "web" / "static"
+    pages = sorted(static.glob("*.html"))
+    scripts = sorted(static.glob("*.js"))
+    sources = {p.name: p.read_text(encoding="utf-8-sig") for p in pages + scripts}
+
+    typed_into = {}
+    for name, text in sources.items():
+        for route in routes:
+            for hit in re.finditer(_route_call_matcher(route), text):
+                body = _enclosing_function(text, hit.start())
+                for read in re.finditer(
+                    r"""(?:num\(\s*['"](\w+)['"]\s*\)"""
+                    r"""|(?:getElementById|\$)\(\s*['"](\w+)['"]\s*\)\s*\.value)""",
+                    body,
+                ):
+                    typed_into.setdefault(read.group(1) or read.group(2), name)
+    assert typed_into, f"nothing in web/static types an amount into {routes}"
+
+    for input_id, origin in sorted(typed_into.items()):
+        mins = [
+            m.group(1)
+            for name, text in sources.items()
+            if name.endswith(".html")
+            for m in [re.search(
+                r"<input\b[^>]*id=[\"']" + re.escape(input_id) + r"[\"'][^>]*?\bmin=[\"']([^\"']*)[\"']",
+                text,
+            )]
+            if m
+        ]
+        assert mins, f"{origin} types into #{input_id}, whose markup states no floor"
+        assert all(Decimal(m) == floor_usdc for m in mins), (input_id, mins)
+
+    # …and a bounds sentence is built from the published number, never typed:
+    # the drawer used to write the lower bound out itself in Russian.
+    offenders = [
+        f"{name}: {m.group(0)}"
+        for name, text in sources.items()
+        for m in re.finditer(r"От\s+\d+(?:[.,]\d+)?\s+до", text)
+    ]
+    assert not offenders, offenders
 
 
 def test_api_ask_answers_from_the_ledger_with_no_model(client, ledger, monkeypatch):

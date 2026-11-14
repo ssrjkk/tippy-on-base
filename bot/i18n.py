@@ -2740,6 +2740,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "The amount must be greater than zero.",
         "zh": "金额必须大于零。",
     },
+    "api_amount_number": {
+        "ru": "Сумма должна быть числом.",
+        "en": "The amount must be a number.",
+        "zh": "金额必须是数字。",
+    },
+    "api_amount_dust": {
+        "ru": "Минимальная сумма — {min} USDC.",
+        "en": "The minimum amount is {min} USDC.",
+        "zh": "最低金额为 {min} USDC。",
+    },
+    "api_amount_one_share": {
+        "ru": "Этой суммы не хватает даже на одну долю.",
+        "en": "That amount does not buy even one share.",
+        "zh": "该金额不足以购买一股。",
+    },
     "api_insufficient": {
         "ru": "Недостаточно средств на балансе.",
         "en": "Not enough balance.",

@@ -98,6 +98,9 @@ async function loadInfo() {
       quoteCap = info.limits.max_trade_usdc;
       renderQuoteChips();
     }
+    if (info.limits && info.limits.min_trade_usdc != null) {
+      applyQuoteFloor(info.limits.min_trade_usdc);
+    }
   } catch (e) { /* keep original links */ }
 }
 
@@ -672,6 +675,7 @@ let quoteOption = 0;
 let quoteSeq = 0;          // a slow answer must not overwrite a newer one
 let quoteTimer = null;
 let quoteCap = null;
+let quoteFloor = null;
 const quoteDrawer = $("quoteDrawer");
 
 /* The drawer is where a trade is decided, so it keeps six decimals where the
@@ -699,9 +703,19 @@ function renderQuoteChips() {
     .filter((v) => quoteCap === null || v <= quoteCap)
     .map((v) => `<button class="amount-chip" type="button" data-amount="${v}">${v} USDC</button>`)
     .join("");
-  $("quoteLimit").textContent = quoteCap === null
+  $("quoteLimit").textContent = quoteCap === null || quoteFloor === null
     ? ""
-    : "От 0,01 до " + fmtUSDC(quoteCap) + " USDC за одну сделку.";
+    : "От " + fmtUSDC(quoteFloor) + " до " + fmtUSDC(quoteCap) + " USDC за одну сделку.";
+}
+
+/* Both bounds are the server's. The drawer used to type the lower one by hand
+ * next to a number it had just fetched, so a change to the ledger's dust floor
+ * left the sentence promising a trade the quote endpoint then refused. */
+function applyQuoteFloor(usdc) {
+  if (usdc == null || usdc === quoteFloor) return;
+  quoteFloor = usdc;
+  $("quoteAmount").min = usdc;
+  renderQuoteChips();
 }
 
 async function requestQuote() {
@@ -734,6 +748,7 @@ async function requestQuote() {
     quoteCap = q.max_trade_usdc;
     renderQuoteChips();
   }
+  applyQuoteFloor(q.min_trade_usdc);
   $("quoteShares").textContent = fmtMicro(q.shares_usdc) + " шт.";
   $("quoteAvg").textContent = fmtMicro(q.avg_price_usdc) + " USDC";
   $("quoteCost").textContent = fmtMicro(q.cost_usdc) + " USDC";

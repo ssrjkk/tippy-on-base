@@ -18,12 +18,19 @@ kinds are welcome: code, docs, bug reports, feature ideas.
 3. **Add tests.** Every bug fix or feature needs coverage in `tests/`.
    We test real behavior: real PostgreSQL, real aiogram dispatcher, real
    crypto. Only external networks (Telegram transport, RPC) are mocked.
-4. **Run the quality gates locally:**
+4. **Run the quality gates locally** — the same two commands CI runs:
    ```bash
-   docker compose up -d db          # PostgreSQL on localhost:5433
-   python -m pytest tests -q        # all tests must pass
-   python -m ruff check bot web tests scripts
+   python -m pytest -q -m "not production"
+   python -m ruff check bot web tests deploy agent scripts alembic
    ```
+   The suite needs a PostgreSQL 16 answering on `localhost:5432` with the
+   `tipbot` role; `tests/conftest.py` drops and recreates `tipbot_test` once per
+   session, so the dev database is never touched. `docker compose up -d db` is
+   the deployable stack, not this: the compose files publish no ports, so that
+   PostgreSQL answers only to the `app` service on the compose network. The
+   `production`-marked tests probe the deployed site and belong to the
+   `Prod Health Check` workflow — a local run that includes them fails for a
+   reason this checkout did not cause.
 5. **Commit** with a clear message (`feat:`, `fix:`, `docs:`, `refactor:`)
    and open a Pull Request against `main`.
 

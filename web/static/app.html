@@ -1290,7 +1290,7 @@ function buyPanel() {
     `<button class="chip${v === 5 ? ' active' : ''}" data-act="pickChip" data-target="tradeAmt" data-val="${v}">${v}</button>`).join('');
   return `<div class="buy-panel">
     <div class="chips">${chips}</div>
-    <input class="input" id="tradeAmt" type="number" step="0.01" min="0" value="5" placeholder="5" inputmode="decimal" aria-label="${esc(t('amount'))}">
+    <input class="input" id="tradeAmt" type="number" step="0.01" min="0.01" value="5" placeholder="5" inputmode="decimal" aria-label="${esc(t('amount'))}">
     <button class="btn btn-primary btn-full" id="buyBtn" data-act="buy"></button>
   </div>`;
 }

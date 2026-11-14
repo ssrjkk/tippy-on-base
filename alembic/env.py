@@ -61,8 +61,19 @@ print(f"[alembic] migrating {_safe_url}", file=_sys.stderr)
 # `lock_not_available` instead; the caller (Ledger._run_alembic) treats that
 # as "schema already being migrated" and falls back to ensure_schema().
 # statement_timeout guards against pathological long-held locks.
-LOCK_TIMEOUT_MS = os.environ.get("ALEMBIC_LOCK_TIMEOUT_MS", "15000")
-STATEMENT_TIMEOUT_MS = os.environ.get("ALEMBIC_STATEMENT_TIMEOUT_MS", "60000")
+def _milliseconds(name: str, default: str) -> str:
+    """A `SET` takes no bind parameter, so these two knobs are written into SQL as
+    text: a value that is not a whole number is SQL arriving from the environment,
+    and it is refused before a connection opens. An empty value means the same as
+    an absent one — `NAME=` in a template would reach the driver as `SET x = `."""
+    raw = os.environ.get(name, default) or default
+    if not (raw.isascii() and raw.isdigit()):
+        raise SystemExit(f"alembic: {name} must be a whole number of milliseconds, got {raw!r}")
+    return raw
+
+
+LOCK_TIMEOUT_MS = _milliseconds("ALEMBIC_LOCK_TIMEOUT_MS", "15000")
+STATEMENT_TIMEOUT_MS = _milliseconds("ALEMBIC_STATEMENT_TIMEOUT_MS", "60000")
 
 
 def run_migrations_offline() -> None:

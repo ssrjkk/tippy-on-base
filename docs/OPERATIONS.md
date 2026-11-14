@@ -23,7 +23,9 @@ Available metrics:
 - `tipbot_markets_open` — Open prediction markets (gauge)
 - `tipbot_volume_usdc` — Total volume (counter)
 
-Example Prometheus config:
+Example Prometheus config (Prometheus is not part of the stack: the compose
+files publish no ports, so scrape it from a Prometheus attached to the compose
+network, where the app answers on its service name and `WEB_PORT`):
 ```yaml
 scrape_configs:
   - job_name: 'tipbot'
@@ -32,7 +34,7 @@ scrape_configs:
     authorization:
       credentials: <METRICS_TOKEN>
     static_configs:
-      - targets: ['localhost:8080']
+      - targets: ['app:8000']
 ```
 
 ### Health Check
@@ -78,22 +80,41 @@ suppression has an author.
 
 ## Backup
 
+Two scripts produce the same `tipbot_YYYYMMDD_HHMMSS.sql.gz` archives, and they
+are not interchangeable — the retention differs, so say which one cron runs:
+
+| Script | Retention | Also does |
+|---|---|---|
+| `./scripts/backup_db.sh [dir]` | last **7** archives | nothing else; the plain manual backup |
+| `./scripts/backup_and_monitor.sh [dir]` | last **14** archives, max **30** days | `ALERT_WEBHOOK` on any failure, `rsync` to `BACKUP_REMOTE`, prints how many `users` rows the dump carries |
+
+Both pass `--clean --if-exists --no-owner --no-privileges --schema=public` and
+both verify the archive by **payload, not size** through `scripts/pg_env.sh`:
+`pg_archive_is_real` gunzips the first 20 lines and requires the
+`PostgreSQL database dump` banner, because a `pg_dump` that dies mid-pipe leaves
+a valid, non-empty gzip of nothing — 20 bytes that every size check accepted and
+that restores "successfully" having restored no rows. A dump that fails or
+carries no dump is deleted, not left in `backups/` looking like a backup.
+
+`scripts/pg_env.sh` also holds `pg_path_probe`, which finds `pg_dump` / `psql`
+when the PostgreSQL service install is not on `PATH` (true on a Windows host
+with the service layout, and the reason a recovery died on "command not found"
+at the moment it was needed).
+
 ### Manual Backup
 
 ```bash
-./scripts/backup_db.sh [backup_dir]
+./scripts/backup_db.sh [backup_dir]      # default: ./backups
 ```
-
-Creates `tipbot_YYYYMMDD_HHMMSS.sql.gz` in `backups/` (default).
-
-Retention: Keeps last 7 backups automatically.
 
 ### Automated Backup (cron)
 
-Add to crontab:
+`backup_and_monitor.sh` is the one meant for cron — it alerts, and it keeps
+twice as many copies as the manual script:
+
 ```bash
-# Daily backup at 2 AM
-0 2 * * * /path/to/scripts/backup_db.sh /path/to/backups >> /var/log/tipbot-backup.log 2>&1
+# Every 6 hours, with the retention and alerting above
+0 */6 * * * /path/to/scripts/backup_and_monitor.sh /path/to/backups >> /var/log/tippy-backup.log 2>&1
 ```
 
 ### Restore
@@ -101,6 +122,13 @@ Add to crontab:
 ```bash
 ./scripts/restore_db.sh <backup_file>
 ```
+
+The archive is validated **before** the operator is asked anything: a file with
+no dump inside is refused with `holds no PostgreSQL dump: nothing would be
+restored`, so the confirmation prompt is never spent on an archive that cannot
+work. `psql` is probed next, then the restore runs
+`--single-transaction --variable=ON_ERROR_STOP=1` — a statement that fails rolls
+the whole restore back instead of leaving half a database.
 
 **WARNING**: Restore overwrites the current database. Confirm before proceeding.
 
@@ -116,13 +144,16 @@ Test restore regularly:
 # Create test database
 createdb tipbot_test_restore
 
-# Restore the newest backup (scripts/backup_db.sh writes tipbot_YYYYMMDD_HHMMSS.sql.gz)
+# Restore the newest backup (both scripts write tipbot_YYYYMMDD_HHMMSS.sql.gz)
 DATABASE_URL=postgresql://user:pass@localhost:5432/tipbot_test_restore \
   ./scripts/restore_db.sh "$(ls -t backups/tipbot_*.sql.gz | head -1)"
 
 # Verify
 psql $DATABASE_URL -c "SELECT count(*) FROM users;"
 ```
+
+The row count is the only proof that matters: an archive can pass every
+structural check and still be a dump of an empty schema.
 
 ## Audit Logs
 
@@ -185,7 +216,8 @@ GROUP BY action;
 
 1. Check RPC node status: `base.w3.eth.block_number`
 2. Verify RPC endpoint is responsive
-3. Check deposit watcher logs: `docker logs tipbot | grep deposit_watcher`
+3. Check the deposit watcher: `docker compose logs app | grep -i "deposit poll failed"`
+   (the watcher logs its failures under the `tipbot` logger; a healthy scanner prints nothing)
 4. Restart bot if lag persists > 100 blocks
 
 ### Database Failure

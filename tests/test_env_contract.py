@@ -10,13 +10,14 @@ repository is measured.
 """
 
 import ast
+import os
 import re
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_DIRS = ("bot", "web", "agent", "scripts", "deploy", "functions")
+APP_DIRS = ("bot", "web", "agent", "scripts", "deploy", "functions", "alembic")
 TEMPLATES = (".env.example", "deploy/prod.env.example")
 
 # Read by the test suite and the rendered-design harness, never by the running
@@ -32,6 +33,12 @@ HARNESS_ONLY = {
 
 ENV_READ = re.compile(r"""os\.(?:environ\.get|getenv)\(\s*['"]([A-Z][A-Z0-9_]{2,})['"]""")
 ENV_INDEX = re.compile(r"""os\.environ\[\s*['"]([A-Z][A-Z0-9_]{2,})['"]""")
+# A name handed to a validating wrapper is still a name the code reads: the
+# alternative would be a knob this scanner cannot see, which is how `alembic/env.py`
+# looked like it invented two of them the moment its timeouts gained a guard. The
+# wrapper is pinned on the other side by
+# test_every_number_alembic_writes_into_a_set_statement_comes_from_the_guard.
+ENV_GUARDED_READ = re.compile(r"""_milliseconds\(\s*['"]([A-Z][A-Z0-9_]{2,})['"]""")
 TEMPLATE_LINE = re.compile(r"^#?([A-Z][A-Z0-9_]{2,})=(.*)$", re.M)
 SECRET_NAME = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSPHRASE)$")
 PLACEHOLDER = re.compile(r"^(0x0+|123456:ABC-|change[-_]me|CHANGE_ME|<.*>|\.\.\.|xxx+$)|"
@@ -52,7 +59,7 @@ def _read_by_code() -> set[str]:
     names: set[str] = set()
     for path in _sources():
         text = path.read_text(encoding="utf-8-sig", errors="ignore")
-        names |= set(ENV_READ.findall(text)) | set(ENV_INDEX.findall(text))
+        names |= set(ENV_READ.findall(text)) | set(ENV_INDEX.findall(text)) | set(ENV_GUARDED_READ.findall(text))
     return names
 
 
@@ -161,3 +168,54 @@ def test_the_templates_carry_no_plausible_secret():
                 if not commented and SECRET_NAME.search(name) and value.strip()
                 and not PLACEHOLDER.search(value.strip())]
     assert not suspects, f"{suspects} look like real secrets in a committed template"
+
+
+# ---------- the knobs a migration writes into SQL as text ----------
+
+ENV_PY = ROOT / "alembic" / "env.py"
+
+
+def _milliseconds_guard():
+    """The guard is read out of `alembic/env.py` and executed here. Importing that
+    file runs a migration, and no test should migrate a database to check that a
+    string is a number."""
+    source = ENV_PY.read_text(encoding="utf-8")
+    block = re.search(r"^def _milliseconds\(.*?(?=\n\S)", source, re.M | re.S)
+    assert block, "alembic/env.py has no _milliseconds() to measure — the scan is blind"
+    namespace: dict[str, object] = {"os": os}
+    exec(compile(block.group(0), "alembic/env.py:_milliseconds", "exec"), namespace)
+    return namespace["_milliseconds"]
+
+
+def test_a_knob_written_into_a_set_statement_refuses_a_value_that_is_not_a_number(monkeypatch):
+    """`SET lock_timeout = {LOCK_TIMEOUT_MS}` is text, not a bind parameter: without
+    the guard, an operator's typo or a poisoned environment writes SQL."""
+    guard = _milliseconds_guard()
+
+    monkeypatch.setenv("ALEMBIC_LOCK_TIMEOUT_MS", "15000; DROP TABLE tx_log")
+    with pytest.raises(SystemExit):
+        guard("ALEMBIC_LOCK_TIMEOUT_MS", "15000")
+
+    monkeypatch.setenv("ALEMBIC_LOCK_TIMEOUT_MS", "1٥00")  # isdigit(), not a SQL number
+    with pytest.raises(SystemExit):
+        guard("ALEMBIC_LOCK_TIMEOUT_MS", "15000")
+
+    monkeypatch.setenv("ALEMBIC_LOCK_TIMEOUT_MS", "25000")
+    assert guard("ALEMBIC_LOCK_TIMEOUT_MS", "15000") == "25000"
+
+    monkeypatch.setenv("ALEMBIC_LOCK_TIMEOUT_MS", "")
+    assert guard("ALEMBIC_LOCK_TIMEOUT_MS", "15000") == "15000", "a blank template line must not reach the server"
+
+    monkeypatch.delenv("ALEMBIC_LOCK_TIMEOUT_MS")
+    assert guard("ALEMBIC_LOCK_TIMEOUT_MS", "15000") == "15000"
+
+
+def test_every_number_alembic_writes_into_a_set_statement_comes_from_the_guard():
+    source = ENV_PY.read_text(encoding="utf-8")
+    interpolated = set(re.findall(r"SET\s+\w+\s*=\s*\{([A-Z_]+)\}", source))
+    assert interpolated, "no interpolated SET in alembic/env.py — the scan is blind"
+    unguarded = sorted(
+        name for name in interpolated
+        if not re.search(rf"^{name} = _milliseconds\(", source, re.M)
+    )
+    assert not unguarded, f"{unguarded} reach a SQL statement without being read as a number first"

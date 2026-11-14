@@ -194,6 +194,10 @@ MARKET_DEFAULT_SECONDS: int = MARKET_DEFAULT_HOURS * 3600
 MARKET_MIN_SUBSIDY_USDC: Decimal = Decimal(os.environ.get("MARKET_MIN_SUBSIDY_USDC", "10"))
 MARKET_MAX_SUBSIDY_USDC: Decimal = Decimal(os.environ.get("MARKET_MAX_SUBSIDY_USDC", "1000"))
 MARKET_MAX_TRADE_USDC: Decimal = Decimal(os.environ.get("MARKET_MAX_TRADE_USDC", "500"))
+# The dust floor is not a knob: the quote panel has to refuse exactly the
+# amounts `buy_shares` refuses, so the boundary lives in one place instead of
+# being copied into each path.
+MARKET_MIN_TRADE_MICRO: int = 10_000  # 0.01 USDC
 
 # AI assistant (/ask): any OpenAI-compatible chat-completions endpoint works
 # (OpenAI, OpenRouter, Groq, local vLLM/llama.cpp server, ...). With no usable

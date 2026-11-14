@@ -19,6 +19,7 @@ import os
 import re
 import urllib.error
 import urllib.request
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -1536,6 +1537,33 @@ def open_dialog(browser, surface, theme):
         data["pageerrors"] = errors
         data["counted"] = page.evaluate(DIALOG_COUNT_JS, "#" + dialog)
         data["dialog"] = dialog
+        if dialog == "quoteDrawer":
+            # The drawer is the one surface that tells a visitor what they may
+            # spend, so its sentence is read as painted text against the limits
+            # this origin publishes — the number the page says and the number the
+            # server refuses with have to be the same number.
+            try:
+                page.wait_for_function(
+                    "() => document.getElementById('quoteLimit').textContent.length > 0",
+                    timeout=10000,
+                )
+            except PlaywrightTimeoutError:
+                pytest.fail("the quote drawer painted no bounds sentence in "
+                            + theme + " — /api/info publishes nothing for it to show")
+            data["bounds"] = page.evaluate("""
+                async () => {
+                  const info = await (await fetch('/api/info')).json();
+                  const limit = document.getElementById('quoteLimit');
+                  const field = document.getElementById('quoteAmount');
+                  const L = info.limits || {};
+                  return {
+                    sentence: limit ? limit.textContent.trim() : null,
+                    min: field ? field.min : null,
+                    floor: L.min_trade_usdc ?? null,
+                    cap: L.max_trade_usdc ?? null,
+                  };
+                }
+            """)
         # `showModal()` traps Tab: inside a dialog a keyboard visitor can neither
         # leave nor see where they are unless every stop paints a ring, so an
         # invisible control here costs more than on the page behind the scrim.
@@ -1574,6 +1602,32 @@ def test_a_dialog_paints_as_honestly_as_the_page_behind_it(browser, surface, the
         f"{probe['dialog']} in {theme}: Tab reached only {sorted(distinct)} — nothing to judge")
     naked = [stop for stop in probe["stops"] if not paints_a_ring(stop)]
     assert not naked, json.dumps(naked, ensure_ascii=False)
+
+
+def _painted_decimals(text):
+    """Every money figure in a painted Russian sentence, as a number.
+
+    `toLocaleString('ru-RU')` separates thousands with U+00A0 and writes the
+    comma as the decimal mark, so the reader's «1 000,00» is the API's 1000.0 —
+    compared as numbers, because comparing strings would judge the formatter
+    rather than the figure."""
+    spaced = text.replace("\u00a0", " ").replace("\u202f", " ")
+    return [Decimal(tok.replace(" ", "").replace(",", "."))
+            for tok in re.findall(r"\d[\d  ]*(?:[.,]\d+)?", spaced)]
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_the_open_drawer_states_the_bounds_this_origin_publishes(browser, theme):
+    """The drawer promised a range it had typed itself: the cap came from the
+    server, the floor came from whoever last edited the sentence. Only the
+    painted text carries both, so this is the one place that can see the two
+    disagree — and a visitor told one bound and refused at another has been
+    misled by the page they were trusting with money."""
+    bounds = open_dialog(browser, "drawer", theme)["bounds"]
+    assert bounds["floor"] is not None, f"/api/info publishes no trade floor: {bounds}"
+    assert Decimal(str(bounds["min"])) == Decimal(str(bounds["floor"])), bounds
+    painted = _painted_decimals(bounds["sentence"])
+    assert painted == [Decimal(str(bounds["floor"])), Decimal(str(bounds["cap"]))], bounds
 
 
 # ---------------------------------------------------------------------------

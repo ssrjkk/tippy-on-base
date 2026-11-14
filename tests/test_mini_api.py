@@ -469,6 +469,29 @@ def test_mini_trade_enforces_max_cap(client, ledger, monkeypatch):
     assert "не больше" in r.json()["detail"] and "USDC" in r.json()["detail"]
 
 
+def test_mini_trade_enforces_the_dust_floor_the_ledger_defines(client, ledger):
+    """The floor is `config.MARKET_MIN_TRADE_MICRO`, and the Mini App has to name
+    it: `buy_shares` answers one word (`toosmall`) for both dust and a quote that
+    rounds below one share, and the old map had no key for either, so an order of
+    0.001 USDC was answered «Запрос не выполнен» — the reader could not tell
+    whether to type more or try again."""
+    from bot import config
+
+    ledger.ensure_user(TG_USER, "alice")
+    ledger.credit(TG_USER, 10_000_000, "deposit")
+    _auth(client, TG_USER)
+
+    dust = client.post("/api/mini/trade", json={
+        "market_id": 99999, "option": 0,
+        "amount": float(config.MARKET_MIN_TRADE_MICRO - 1) / 10**6,
+    }, headers=_IDEM)
+    assert dust.status_code == 400
+    detail = dust.json()["detail"]
+    assert "0.01 USDC" in detail, detail
+    assert "больше нуля" not in detail, detail
+    assert "не выполнен" not in detail, detail
+
+
 def test_mini_create_enforces_subsidy_caps(client, ledger, monkeypatch):
     """Markets must respect MARKET_MIN/MAX_SUBSIDY_USDC (previously any
     micro-positive subsidy passed, bypassing the Telegram handler's range)."""

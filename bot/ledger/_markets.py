@@ -415,7 +415,7 @@ class LedgerMarketsMixin:
         trade rolls it back with everything else, a duplicate raises
         IdempotencyDuplicate before the market row is even locked.
         """
-        if spend_micro < 10_000:  # 0.01 USDC
+        if spend_micro < config.MARKET_MIN_TRADE_MICRO:
             return "toosmall", {}
         with self._lock:
             committed = False

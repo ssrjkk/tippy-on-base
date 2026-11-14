@@ -50,27 +50,36 @@ PASS=0
 FAIL=0
 WARN=0
 
+CHECK_LOG="$(mktemp "${TMPDIR:-/tmp}/tippy-gate-XXXXXX.log")"
+trap 'rm -f "$CHECK_LOG"' EXIT
+
+# A gate that answers "[FAIL] pytest suite passes" and throws the command's output
+# away sends the operator to rediscover the failure by hand — which is the one job
+# this script exists to save. The output is captured per check and replayed only
+# when the check fails.
 check() {
     local name="$1"
     shift
-    if "$@" >/dev/null 2>&1; then
+    if "$@" >"$CHECK_LOG" 2>&1; then
         echo "  [PASS] $name"
         PASS=$((PASS + 1))
     else
-        echo "  [FAIL] $name"
         FAIL=$((FAIL + 1))
+        echo "  [FAIL] $name"
+        tail -n 25 "$CHECK_LOG" | sed 's/^/          | /'
     fi
 }
 
 warn_check() {
     local name="$1"
     shift
-    if "$@" >/dev/null 2>&1; then
+    if "$@" >"$CHECK_LOG" 2>&1; then
         echo "  [PASS] $name"
         PASS=$((PASS + 1))
     else
-        echo "  [WARN] $name"
         WARN=$((WARN + 1))
+        echo "  [WARN] $name"
+        tail -n 25 "$CHECK_LOG" | sed 's/^/          | /'
     fi
 }
 

@@ -208,13 +208,16 @@ class RecurringPaymentStore:
         rows = await self._led().recurring_get_due(int(now))
         return [self._row_to_payment(r) for r in rows]
 
-    async def mark_executed(self, payment_id: str) -> None:
+    async def mark_executed(self, payment_id: str) -> bool:
+        """Claim the payment's due slot. False means the slot was not claimable —
+        another pass already advanced it, or the row is gone — and the caller must
+        not debit for it."""
         await self._ensure_migrated()
         row = await self._led().recurring_get(payment_id)
         if not row:
-            return
+            return False
         interval = RecurrenceInterval(row["interval"])
-        await self._led().recurring_mark_executed(payment_id, INTERVAL_SECONDS[interval])
+        return await self._led().recurring_mark_executed(payment_id, INTERVAL_SECONDS[interval])
 
     async def list_for_user(self, tg_id: int) -> list[RecurringPayment]:
         await self._ensure_migrated()

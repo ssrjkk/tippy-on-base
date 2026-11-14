@@ -267,7 +267,13 @@
       $('tipLimit').textContent = 'Максимум за один перевод — ' + usd(L.max_tip_usdc) + '.';
     }
     if (L.max_trade_usdc) {
-      $('tradeLimit').textContent = 'Максимум за одну сделку — ' + usd(L.max_trade_usdc) + '.';
+      $('tradeLimit').textContent = L.min_trade_usdc
+        ? 'От ' + fmt(L.min_trade_usdc) + ' до ' + usd(L.max_trade_usdc) + ' за одну сделку.'
+        : 'Максимум за одну сделку — ' + usd(L.max_trade_usdc) + '.';
+    }
+    if (L.min_trade_usdc) {
+      // The floor the ledger enforces, not the one the markup remembered.
+      $('tradeAmount').min = L.min_trade_usdc;
     }
     if (L.max_bet_usdc) {
       $('betLimit').textContent = 'Максимум на одну ставку — ' + usd(L.max_bet_usdc) + '.';

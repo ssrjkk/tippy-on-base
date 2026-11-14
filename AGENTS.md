@@ -21,9 +21,11 @@
 
 ## Gate
 
-- `python -m ruff check bot web tests deploy agent scripts` — **directories only**. Passing
-  `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding.
-- `python -m pytest -q -m "not production"` — ~11 min, 1292 tests (169 more, marked `production`, run
+- `python -m ruff check bot web tests deploy agent scripts alembic` — **directories only**. Passing
+  `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding. `alembic/` joined the
+  list with a live `I001` already sitting in it: a directory no command names is a directory no lint
+  has ever read.
+- `python -m pytest -q -m "not production"` — ~14 min, 1336 tests (171 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -44,7 +46,69 @@
   App keeps a separate dictionary inline in `web/static/app.html` (`I18N.ru/en/zh`) — a new `t('key')`
   has to be added to all three, and a key whose last reference is removed has to be removed too.
   `tests/test_web.py::test_mini_app_dictionaries_have_identical_key_sets` is that rule as a gate.
-- Two AST gates read the runtime tree, because prose review missed both:
+- `tests/test_db_scripts.py` runs the operator shell scripts with bash — the recovery
+  procedure was measured by nothing before it, and measuring found a `pg_dump` that dies
+  mid-pipe leaving a valid 20-byte gzip of nothing, a `gzip -t` whose failure branch
+  `set -e` never let run, and a row count read from a `pg_dump` option that does not exist.
+  The laws: an archive is judged by its **payload** (`pg_archive_is_real`, never a byte
+  count), a probe failing must not kill the run (`pg_path_probe` tests `"$d/$tool"` **and**
+  `"$d/$tool.exe"` — `command -v psql` is false on a Windows service install), restore
+  refuses a dump-less archive **before** the overwrite prompt and before it looks for
+  `psql`, and `scripts/pg_env.sh` is the only place the `PostgreSQL/*/bin` glob may be
+  written. The release gate is measured the same way: `check`/`warn_check` must replay the
+  failing command's own output — a bare `[FAIL] pytest suite passes` with `>/dev/null`
+  sends the operator to rediscover by hand what the gate exists to report — and the
+  mktemp capture file is proven cleaned up from a **second** process, because the `EXIT`
+  trap has not fired by the end of the script body. Every `*.sh` under `scripts/` and
+  `deploy/` is parsed with `bash -n` and read for `\r` **by directory glob**, not by a
+  hand-written list.
+- `tests/test_docs.py::test_every_operator_script_is_named_by_something_a_human_reads`
+  requires each `scripts/*.sh` and `deploy/*.sh` to be named by a doc, a CI job, the image
+  or a calling script, and
+  `test_every_operator_script_reaches_the_server_that_runs_it` requires it in `git ls-files`
+  too: `.gitignore` says `scripts/*` with a hand-maintained whitelist of the production
+  files, so `scripts/pg_env.sh` — the library all three database scripts `source` as their
+  first executable statement — was invisible to git. Under `set -euo pipefail` an ignored
+  library is not an inconvenience, it is every backup dying on a server built from the clone.
+- Seven more `tests/test_docs.py` laws read the **commands and promises** out of every
+  tracked `*.md`, because an operator types what a runbook says during an incident and a
+  contributor runs what a contributing guide says before a push. `MARKDOWN` is
+  `git ls-files *.md` minus the vendored trees, not a hand-written list, because the list
+  used to be `README.md` plus `docs/*.md` and the three policy files at the repository root
+  were therefore read by no law at all — and GitHub renders exactly those root files as the
+  project's policy. What the scan found once it could see them: `SECURITY.md` sent
+  vulnerability reports to `security@ezoffer.ru`, a domain in no other file in the tree (a
+  USDC custody bug mailed there is a bug nobody received), `CODE_OF_CONDUCT.md` still carried
+  the Contributor Covenant's unfilled contact blank, and the root `CONTRIBUTING.md` told a
+  contributor a gate command that is not what CI runs. The laws: every
+  `docker compose <verb> <service>` names a service `docker-compose.yml` defines
+  (`docs/DEPLOY.md` documented a `backup` service and a `backups_data` volume that never
+  existed — there is no backup service in the stack, the crontab line is the automation);
+  every `-U`/`-d` on a documented `psql`/`pg_dump`/`pg_isready` equals `POSTGRES_USER` /
+  `POSTGRES_DB` from that same file, which are `tippy`/`tippy` — `tipbot` is the **test**
+  role, and two recovery commands would have answered `database "tipbot" does not exist`;
+  no document addresses a container by name — no bare `stop`, `restart` or `logs` against a
+  container — because compose sets no `container_name`, so those names are a function of the
+  checkout directory; no tracked policy document still carries a template blank
+  (`_TEMPLATE_FILL` matches a square bracket whose words include INSERT, YOUR, TBD, FIXME or
+  REPLACE_WITH, and the [FEATURE]/[ERROR] labels in issue templates and command comments are
+  real output, so they are not blanks); where a policy exists in both places, the root copy may
+  not name a contact the long one never mentions, and for `SECURITY.md`/`CODE_OF_CONDUCT.md` —
+  documents whose purpose *is* a channel — the two copies must share one (`_CONTACT` reads
+  emails and `t.me`/`x.com` handles); every documented gate command equals what CI actually
+  runs (`_ci_gate_commands()` reads the ruff directory list and the pytest selection out of
+  `.github/workflows/ci.yml`, so a lint line missing three of the seven directories and a suite
+  line that pulls in the 171 `production` tests both fail, while a targeted-file run that still
+  states its `-m` is allowed); and no document tells a human to reach this host on a port the
+  tree does not listen on (`_ports_the_stack_answers_on()` derives the live set from the
+  `postgresql://` authorities and `WEB_PORT`, measured this wave as 5432 and 8000 —
+  `docs/CONTRIBUTING.md` promised a published database port of its own and `docs/OPERATIONS.md`
+  had Prometheus scrape the app on a port that is not `WEB_PORT`; neither compose file has a
+  ports key at all, so the stack answers on the compose network and `app:8000` is what a
+  Prometheus attached to it reaches). Commands
+  are read from fenced blocks and backtick spans only, and the argument list is cut at the
+  first `# | < >` — prose after a closing backtick is not a service name.
+- Three AST gates read the runtime tree, because prose review missed all three:
   `test_every_ledger_call_site_resolves_on_the_real_class` (every `ledger.<method>()` call in
   `bot|web|agent|deploy|scripts` has to exist on `Ledger` — `bot/credit.py` called five methods
   that were never written, so `/credit` answered every user with `AttributeError`) and
@@ -59,6 +123,13 @@
   rounder: `onchain_market.price_pct` (Decimal ROUND_HALF_UP) — the market list rounded with the
   builtin (banker's, over a float) while the market page used HALF_UP, so `0.00105` printed 0.1 in one
   place and 0.11 in the other (`test_onchain_list_and_market_page_print_the_same_price`).
+  The third of them reads the ledger package itself: the methods whose own SQL writes a `tx_log` row **and**
+  whose answer is a `bool` are the ones whose return value *is* the fact "the money moved" — measured this
+  wave as `transfer`, `refund_withdraw`, `credit_x402`, `finalize_x402_credit`, `finalize_x402_paywall` —
+  and a bare statement call of one in `bot|web|agent|deploy|scripts` fails. Six sites were exactly that:
+  five `refund_withdraw()` in `bot/base.py`, where the sweep and the direct batch logged "refunding" for a
+  row that was already terminal and had credited nobody, and the `ledger.transfer()` in `bot/main.py` that
+  let a recurring payment record itself as executed when the payer could not cover the amount.
 - `tests/test_telegram_limits.py` measures Telegram's hard limits: button text ≤64 chars, callback_data
   ≤64 bytes, message ≤4096 chars. Eight gates: every `InlineKeyboardButton(text=...)` is either a
   literal ≤64, an i18n call, a `LANG_NAME` lookup, or wrapped in `common.btn_text()` (an f-string that
@@ -115,6 +186,24 @@
   failure), and the **edge maintenance card** in `functions/[[path]].js` held to the same document
   contract as the pages — it is served without the origin, so nothing else measures it.
   It reads files only — no browser, no database, so it runs in ordinary CI.
+- **The dust floor is one number, and the layers that carry it are read from the tree.**
+  `config.MARKET_MIN_TRADE_MICRO` in `bot/config.py` is deliberately not an env knob: it is the only
+  place the value is written. Both refusal paths compare against it and answer `api_amount_dust`
+  naming that bound, `/api/info` and the quote response both publish it as `min_trade_usdc`, and the
+  two landing surfaces build their bounds sentence and their amount input's `min` from that response
+  instead of typing it. `test_the_dust_floor_is_one_number_read_from_that_name_everywhere` fails a
+  comparison against the literal; `tests/test_mini_api.py::test_mini_trade_enforces_the_dust_floor_the_ledger_defines`
+  holds the Mini App's `POST /api/mini/trade` to the same boundary; and
+  `test_the_floor_a_dust_refusal_names_is_the_floor_the_inputs_ship` derives the route-to-input
+  mapping from the directory — the routes are the handlers whose own AST answers `api_amount_dust`,
+  the inputs are the ids that every `*.js` and `*.html` under `web/static` types an amount into — so a
+  new trade surface joins the law without anyone adding it to a list, and a shipped sentence that
+  states a floor the API does not publish is a failure. The rendered half is
+  `tests/test_production_design.py::test_the_open_drawer_states_the_bounds_this_origin_publishes`
+  (`production`): the painted bounds sentence, the input's own `min` and that origin's `/api/info` are
+  read in one pass, because only the rendered text can show the two bounds disagreeing — and an origin
+  that publishes no floor makes the drawer paint no bounds sentence, which the gate reports as itself
+  instead of passing on an empty panel.
 - **A market state is one word, and each of the layers that carries it is measured.**
   `bets.status` and `markets.status` store `open | resolved | cancelled` — read off the
   DDL's own comments (`schema_states()`), not typed here — and the interface answers a
@@ -244,10 +333,23 @@
   `docs/ARCHITECTURE.md` says "written once" rather than "immutable" — and
   `test_the_audit_trail_keeps_the_properties_the_architecture_documents` reads the SQL to keep the
   two from drifting.
+- A recurring payment **claims its slot before it debits**. `recurring_mark_executed()` is a
+  compare-and-set on `next_execution` that answers whether the claim was won, `bot/recurring.py`
+  passes that verdict up, and `bot/main.py::recurring_pass()` skips a payment whose claim it lost.
+  Debiting first and recording after left the slot due whenever anything failed in between, and the
+  next pass paid the same period a second time — money the product cannot hand back. A refused debit
+  spends the slot too: the payer's next interval is still theirs to claim, and retrying a period that
+  already passed is the other way to pay twice. `tests/test_breakthrough_features.py` measures both
+  halves (`test_a_recurring_pass_debits_only_for_a_slot_it_claimed`,
+  `test_a_refused_recurring_transfer_is_not_counted_as_executed`).
 - Custody has one wording. The hot wallet is custodial by design (`docs/SECURITY.md`), so
   "non-custodial" must not appear while `smart_wallet._owner()` derives from `HOT_WALLET_KEY`, and
   "trustless" must not appear while `bot/handlers/onchain.py` falls back to `owner_resolve` with the
-  same key when `ORACLE_PRIVATE_KEY` is unset. Both are gated in `tests/test_docs.py`, and both
+  same key when `ORACLE_PRIVATE_KEY` is unset. Both are gated in `tests/test_docs.py` over every
+  tracked `*.md` — which includes this file, so the gate reads a quoted word as the thing being
+  banned (`_uncited()` strips `“…”`, `"…"` and backtick spans) rather than keeping a list of files
+  it is allowed to skip; what it cannot see is a false claim written inside quotes, stated here
+  instead of hidden in an exception list. Both
   gates flip: if a user key ever really does sign, the docs are required to say which model applies.
 - The solvency number is `total_liabilities()` (`bot/ledger/_withdraw.py`) — SIX categories: user
   balances, open market escrow, open bet pools, community treasuries, unswept x402 credit, unclaimed

@@ -12,8 +12,9 @@ Create Date: 2026-10-30
 """
 from collections.abc import Sequence
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision: str = "017"
 down_revision: str | Sequence[str] | None = "016"

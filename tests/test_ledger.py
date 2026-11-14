@@ -2257,3 +2257,75 @@ def test_every_ledger_call_site_resolves_on_the_real_class():
         f"Ledger has no {sorted(unresolved)} — "
         + "; ".join(f"{m}() called from {', '.join(set(sites))}" for m, sites in sorted(unresolved.items()))
     )
+
+
+def _money_verdict_methods() -> set[str]:
+    """Public Ledger methods that both write a `tx_log` row and answer with a
+    bool — the shape whose return value IS the fact 'the money moved'."""
+    import ast
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    names: set[str] = set()
+    for dirpath, _dirs, files in os.walk(os.path.join(root, "bot", "ledger")):
+        for fname in files:
+            if not fname.endswith(".py"):
+                continue
+            path = os.path.join(dirpath, fname)
+            with open(path, encoding="utf-8-sig") as handle:
+                text = handle.read()
+            for fn in ast.walk(ast.parse(text)):
+                if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+                    continue
+                if fn.name.startswith("_"):
+                    continue
+                source = ast.get_source_segment(text, fn) or ""
+                if "INSERT INTO tx_log" not in source:
+                    continue
+                answers_bool = (isinstance(fn.returns, ast.Name) and fn.returns.id == "bool") or any(
+                    isinstance(r, ast.Return)
+                    and isinstance(r.value, ast.Constant)
+                    and isinstance(r.value.value, bool)
+                    for r in ast.walk(fn)
+                )
+                if answers_bool:
+                    names.add(fn.name)
+    return names
+
+
+def test_no_verdict_of_a_money_writing_ledger_call_is_thrown_away():
+    """`transfer()` answers False when the payer cannot cover the amount, and the
+    recurring executor called it as a statement and then recorded the payment as
+    executed — a subscription that silently never paid, and a recipient who was
+    never credited. The same discard on `refund_withdraw()` made the withdraw
+    sweep log 'refunding' for a row that was already terminal and had not been
+    credited at all. The set of such methods is read off the ledger package, so a
+    money primitive written tomorrow is covered without anyone adding its name."""
+    import ast
+
+    names = _money_verdict_methods()
+    assert names, "no money-writing Ledger method answers with a bool — this gate stopped measuring"
+    assert names <= {n for n in dir(Ledger) if not n.startswith("__")}, (
+        f"{sorted(names - set(dir(Ledger)))} are not on the real Ledger")
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    offenders: list[str] = []
+    for pkg in ("bot", "web", "agent", "deploy", "scripts"):
+        for dirpath, _dirs, files in os.walk(os.path.join(root, pkg)):
+            for fname in files:
+                if not fname.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, fname)
+                with open(path, encoding="utf-8-sig") as handle:
+                    text = handle.read()
+                for node in ast.walk(ast.parse(text)):
+                    if not isinstance(node, ast.Expr):
+                        continue
+                    call = node.value
+                    if isinstance(call, ast.Await):
+                        call = call.value
+                    if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                            and call.func.attr in names):
+                        rel = os.path.relpath(path, root).replace("\\", "/")
+                        offenders.append(f"{rel}:{node.lineno} discards {call.func.attr}()")
+
+    assert not offenders, "a bool verdict about money was read as a statement of fact:\n" + "\n".join(sorted(offenders))

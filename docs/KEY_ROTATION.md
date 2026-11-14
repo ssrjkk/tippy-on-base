@@ -27,7 +27,7 @@ print('Private key:', acct.key.hex())
 
 **Pre-rotation (15 min before):**
 1. Check no pending withdrawals: `python -c "from bot.ledger import ledger; print(ledger.pending_withdraws())"`
-2. Pause the bot: `kill` or `docker stop tipbot-bot`
+2. Pause the bot: `kill` or `docker compose stop app`
 3. Final solvency snapshot: `curl http://localhost:8000/api/solvency`
 
 **Rotation steps:**
@@ -73,7 +73,7 @@ from a contract change; the vault does not provide one.
 ### 3.1 Suspected Compromise (Private Key Exposed)
 
 **Immediate (< 5 min):**
-1. **STOP THE BOT** — `kill` / `docker stop tipbot-bot`
+1. **STOP THE BOT** — `kill` / `docker compose stop app`
 2. Drain hot wallet USDC to cold storage:
    ```bash
    # Use old key to send all USDC to cold wallet

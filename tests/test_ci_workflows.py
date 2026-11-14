@@ -120,7 +120,7 @@ def test_ci_test_and_lint_commands_are_intact():
     """A workflow that quietly stops running the suite, or narrows it to a
     directory, still reports green. Pin the two commands the gate depends on."""
     ci = _read(Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml")
-    assert "run: ruff check bot web tests deploy agent scripts" in ci
+    assert "run: ruff check bot web tests deploy agent scripts alembic" in ci
     assert 'run: python -m pytest -q -m "not production"' in ci
     # `--continue-on-collection-errors` turns an unimportable test module into a
     # green run with a warning, which is exactly the silent gap this bans.

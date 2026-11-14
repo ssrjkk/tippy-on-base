@@ -99,9 +99,24 @@ AI_PROVIDERS=openrouter|https://openrouter.ai/api/v1|OPENROUTER_API_KEY|meta-lla
 
 ```bash
 pip install -r requirements.txt
-python -c "from bot import base; print(base.hot_wallet())"   # должен вывести 0x862b...
+python -c "from bot import base; print(base.hot_wallet())"   # адрес из HOT_WALLET_KEY
 python -c "from bot import config; print(config.BOT_USERNAME, config.BASE_RPC_URL)"
 ```
+
+Перед тем как нести это на сервер, прогони единый релизный гейт:
+
+```bash
+./scripts/final_release_check.sh   # exit 0 = готов к деплою, exit 1 = есть блокеры
+```
+
+Он собирает в один прогон то, что иначе проверяют по отдельности:
+`validate_env.py`, линт, компиляция `bot web tests`, весь pytest (в очищенном
+окружении и на одноразовой `tipbot_test`, а не на живой базе), `alembic upgrade
+head` на **созданной с нуля** базе (`tippy_gate_<epoch>`, создаётся и удаляется
+тем же шагом), `docker compose config`, наличие `Dockerfile`/доков/CI-воркфлоу
+и `forge build`, если рядом стоит foundry. Блокер — это красный вывод, а не
+«скрипт отработал»: `warn_check` помечает, но не считает блокером то, что не
+мешает запуску — pending-головы миграций, `forge test` и `slither`.
 
 ---
 
@@ -127,6 +142,37 @@ wrangler pages deploy web/static --project-name tippy
 
 Бэкенд — на VPS через `docker compose up -d` (см. ниже) или любой
 PaaS-платформе с Docker-поддержкой.
+
+### 1.1b. Один удар: `deploy/bootstrap_oracle.sh`
+
+Скрипт для свежего Ubuntu 22.04/24.04 (Oracle Free Tier, x86_64 или ARM):
+ставит Docker, клонирует репозиторий, готовит `.env`, поднимает стек
+(postgres + app + cloudflared) и сам себя проверяет. Только от root.
+
+```bash
+sudo BOT_TOKEN=<токен из 0.1> bash -c "curl -fsSL \
+  https://raw.githubusercontent.com/ssrjkk/Tippy-on-base/main/deploy/bootstrap_oracle.sh | bash"
+```
+
+Что он делает с секретами: `BOT_TOKEN` обязателен (плейсхолдер — `fatal`, стек
+не поднимется), а `HOT_WALLET_KEY`, `WALLET_ENC_KEY` и `SECRET_KEY`
+генерируются на сервере через `openssl rand -hex 32` **только если пусты или
+отсутствуют** и пишутся в `/opt/tippy/.env` с `chmod 600` — ключи не уходят с
+машины. Любую переменную можно передать самому: тогда она просто сливается в
+`.env`.
+
+После старта скрипт ждёт `healthy`-статуса контейнера, печатает
+`DEPOSIT_ADDRESS` (адрес, который читается из самого приложения, а не из
+документации), проверяет туннель и `GET ${MINI_APP_URL}/app`; без
+`MINI_APP_URL` прямо говорит, что кнопка Mini App работать не будет.
+
+> ⚠️ `curl | sudo bash` исполняет то, что лежит в `main` на момент вызова:
+> сначала прочитай файл — или запусти его уже склонированным,
+> `sudo bash deploy/bootstrap_oracle.sh`.
+>
+> ⚠️ Сгенерированный ключ hot wallet существует **только** в `.env` на этой
+> VM. Бэкап базы (`scripts/backup_and_monitor.sh`) его не касается, поэтому
+> забери `.env` в свой менеджер паролей **до** пополнения адреса.
 
 ### 1.2. Установка Docker
 
@@ -179,10 +225,10 @@ docker compose up -d --build
 Проверка по шагам:
 
 ```bash
-# 1. все сервисы запущены (db + app + cloudflared + backup)
+# 1. все сервисы запущены (db + app + cloudflared)
 docker compose ps          # db: Up (healthy), app: Up (healthy)
 
-# 2. логи бота — должен появиться "hot wallet: 0x862b..." и polling
+# 2. логи бота — должен появиться "hot wallet: 0x…" (bot/main.py) и polling
 docker compose logs -f app
 
 # 3. здоровье дашборда (на сервере)
@@ -320,7 +366,7 @@ tipbot.example.com {
 |---|---|---|
 | 1 | Отправь своему боту `/start` | меню бота, ты в базе |
 | 2 | `/deposit` | QR-фото с адресом бота + кнопка на basescan |
-| 3 | Отправь **1 USDC** на `0x862b...` со своего кошелька (Base) | в течение ~15–30 c приходит **DM: «✅ Депозит зачислен: 1 USDC»** |
+| 3 | Отправь **1 USDC** на адрес, который показывает `/deposit` (не из доки) со своего кошелька (Base) | в течение ~15–30 c приходит **DM: «✅ Депозит зачислен: 1 USDC»** |
 | 4 | `/balance` | «1 USDC» |
 | 5 | `/tip 0.5` кому-нибудь (или `/link` + `/withdraw`) | мгновенный перевод внутри бота |
 | 6 | Создай группу и `/rain 1 2` в ней | участники получили USDC, тебе написали кого |
@@ -415,29 +461,39 @@ docker compose up -d --build
 
 ### Бэкап БД (PostgreSQL)
 
-Автоматический бэкап уже в compose: сервис `backup` раз в 6 часов снимает
-`pg_dump | gzip` в volume `backups_data` и хранит копии 14 дней:
+В стеке три сервиса — `db`, `app`, `cloudflared` — и **никакого сервиса бэкапа в
+compose нет**: `docker compose up -d` сам ничего не снимает. Автоматизация — это
+cron-строка поверх `scripts/backup_and_monitor.sh`, и поставить её должен
+оператор:
 
 ```bash
-docker compose up -d --build      # поднимет и backup
-docker compose logs -f backup     # следить за бэкапами
+crontab -e
+# каждые 6 часов, 14 копий, максимум 30 дней
+0 */6 * * * /opt/tipbot/scripts/backup_and_monitor.sh /opt/tipbot/backups >> /var/log/tippy-backup.log 2>&1
 ```
 
-Ручной бэкап:
+Скрипт кладёт архивы в `BACKUP_DIR` (по умолчанию `./backups` **на хосте**, не в
+volume — `pgdata` — единственный volume стека), проверяет, что внутри действительно
+`PostgreSQL database dump`, а не пустой gzip, и жалуется в `ALERT_WEBHOOK`, если
+что-то из этого не так; `BACKUP_REMOTE` дополнительно синхронит копии по rsync.
+`scripts/backup_db.sh` — тот же дамп без алертинга и rsync, с ретеншеном в 7 копий.
+
+Ручной бэкап одним заходом:
 
 ```bash
-docker compose exec db pg_dump -U tipbot -d tipbot | gzip > tipbot-$(date +%F).sql.gz
+docker compose exec db pg_dump -U tippy -d tippy | gzip > tipbot-$(date +%F).sql.gz
 ```
 
-Восстановление:
+Восстановление (роль и база стека — `tippy`, их задаёт `POSTGRES_USER`/`POSTGRES_DB`
+в `docker-compose.yml`; `tipbot` — имя **тестовой** базы из `tests/conftest.py`):
 
 ```bash
-docker compose exec -T db psql -U tipbot -d tipbot < tipbot-2026-08-19.sql
+docker compose exec -T db psql -U tippy -d tippy < tipbot-2026-08-19.sql
 docker compose restart app cloudflared
 ```
 
-Копии лежат в volume `backups_data` (`docker compose exec backup ls /backups`).
-Бэкап — это вся пользовательская история и балансы, не пропускай.
+Бэкап — это вся пользовательская история и балансы, не пропускай установку cron:
+стек переживает перезапуск, диск — нет.
 
 ### Безопасность (коротко)
 
@@ -451,7 +507,7 @@ docker compose restart app cloudflared
 
 | Симптом | Причина | Решение |
 |---|---|---|
-| Контейнер bot не стартует | пустой `BOT_TOKEN` / нет `.env` | заполни `.env`, `docker compose up -d` |
+| Сервис app не стартует | пустой `BOT_TOKEN` / нет `.env` | заполни `.env`, `docker compose up -d` |
 | `KeyError: 'BOT_TOKEN'` в логах | `.env` не подхватился | проверь `docker compose config` |
 | Депозит не зачисляется | RPC публичный/rate-limited | поставь Alchemy/Infura в `BASE_RPC_URL` |
 | `deposit_lag` растёт | сканер отстаёт от head | см. `docker compose logs app`; проверь RPC |
@@ -482,7 +538,7 @@ CREATE2_SAFE_DEPOSITS=1
 - Деплой (идемпотентный): `scripts/deploy_create2_factory.py` (флаги `--wire-env`, `--dry-run`).
 - Схема БД — таблица `create2_proxies` (миграция `004_create2_proxies`).
 - Sweep: `create2_sweep_watcher` каждые `POLL_SECONDS` форвардит прокси с балансом >0.
-- Диагностика E2E: `python -m pytest tests/test_create2.py -q` и `python scripts/deploy_create2_factory.py --dry-run`.
+- Диагностика E2E: `python -m pytest tests/test_create2.py -q -m "not production"` и `python scripts/deploy_create2_factory.py --dry-run`.
 - **Комиссия за деплой прокси** платит hot wallet (ETH на Sepolia), юзер платит только gas сети за Swift USDC.
 
 ## Этап 6. Telecom API через прокси
