@@ -20,7 +20,7 @@ External funding figures are quoted from the programs' own pages and listed in
   (паримутуэл и LMSR-AMM), платный контент, токены авторов с дивидендами,
   рекуррентные подписки, автономный AI-агент и приём платежей от AI-агентов по x402.
 - **Что уже написано:** 47 команд бота, 48 HTTP-маршрутов, 9 контрактов, 21 доменный
-  миксин леджера, 10 модулей агента, 1336 обычных тестов + 171 боевой. Три языка.
+  миксин леджера, 10 модулей агента, 1353 обычных тестов + 171 боевой. Три языка.
 - **Что выключено флагами:** ончейн-рынки (ERC-1155) и gasless-кошельки (ERC-4337).
   Код есть, деплой на mainnet — нет.
 - **Что приносит деньги сегодня:** ровно одна строка — комиссия 1% с вывода.
@@ -301,7 +301,7 @@ data through `bot/ai_data.py` and says that it did.
 
 | Measure | Value |
 | --- | --- |
-| Tests | 1336 ordinary + 171 production (rendered-page and live-site gates) |
+| Tests | 1353 ordinary + 171 production (rendered-page and live-site gates) |
 | Languages | ru / en / zh, two independent catalogs, key sets gated equal |
 | Ledger domain mixins | 21 |
 | Agent modules | 10 |
@@ -494,7 +494,7 @@ repository today):
 5. An autonomous agent with spend caps, a circuit breaker, stop-loss and EAS
    attestations, which also sells its analysis through the same paywall rail.
 6. Published solvency across six liability categories, an append-only audit trail,
-   and 1336 + 171 tests including structural gates that fail the build when a
+   and 1353 + 171 tests including structural gates that fail the build when a
    documented claim stops being true.
 7. Three languages, with the Mini App as the primary mobile surface.
 

@@ -5,9 +5,11 @@ import io
 import json
 import os
 import re
+import sys
 import time
 from decimal import ROUND_CEILING, Decimal
 
+import psycopg
 import pytest
 from conftest import close_bet
 
@@ -1879,9 +1881,10 @@ def test_run_alembic_upgrades_the_database_it_was_given(ledger, monkeypatch, cap
     env.py used to rewrite sqlalchemy.url from the environment unconditionally, so
     every programmatic caller migrated the environment's database instead: locally
     the test suite ALTERed the developer's live `tippy` ledger, while tipbot_test —
-    the database the Ledger actually uses — was never stamped and silently relied
-    on ensure_schema(). The decoy below is unreachable on purpose: if alembic
-    consults it, the upgrade fails and the stamp below never appears.
+    the database the Ledger actually uses — was never stamped at all, and only the
+    DDL string 018 deleted kept it usable. The decoy below is unreachable on
+    purpose: if alembic consults it, the upgrade fails and the stamp below never
+    appears.
     """
     import logging
 
@@ -1989,6 +1992,448 @@ def test_env_py_refuses_to_migrate_a_guessed_database(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         command.upgrade(Config(str(ini)), "head")
     assert "DATABASE_URL" in str(exc.value)
+
+
+# ---------- the chain is the only schema source ----------
+
+# `Ledger.__init__` runs `alembic upgrade head` and applies nothing after it, so the
+# chain has to be sufficient by itself. These gates build one database that has never
+# seen the DDL string 018 replaced, and measure the shipped code against it.
+CHAIN_ONLY_DB = "tipbot_chain_only"
+CHAIN_ONLY_URL = TEST_DB_URL.rsplit("/", 1)[0] + "/" + CHAIN_ONLY_DB
+
+RUNTIME_PKGS = ("bot", "web", "agent", "deploy", "scripts")
+EXEC_LIKE = frozenset({"execute", "executemany", "script"})
+RELATION_RE = re.compile(r"\b(?:from|join|into|delete\s+from|update)\s+([a-z_][a-z0-9_.]*)")
+CTE_RE = re.compile(r"\b([a-z_][a-z0-9_]*)\s*(?:\([^)]*\))?\s+as\s*\(")
+# Reserved words that legally follow those keywords — none can name a table unquoted.
+NOT_A_RELATION = frozenset({
+    "select", "set", "values", "conflict", "returning", "where", "only", "distinct",
+    "lateral", "natural", "recursive", "default", "if", "perform",
+})
+# Alembic's own bookkeeping table: written by alembic, read by alembic, named by no SQL here.
+MIGRATION_TABLES = frozenset({"alembic_version"})
+# `002` created a treasury-voting feature the bot never grew: no SQL in the runtime names
+# these three, and every database here holds zero rows in them. Dropping them is a
+# destructive change to live schemas and waits for the maintainer's word; until it comes,
+# the set is pinned so the dead weight cannot grow by one more table nobody reads.
+DEAD_TABLES = frozenset({"treasury_proposals", "treasury_transactions", "treasury_votes"})
+
+
+def _root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _sql_text(node, consts):
+    """The SQL a call argument carries, as far as the AST can follow it."""
+    import ast
+
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else ""
+    if isinstance(node, ast.FormattedValue):
+        return ""  # a bound value is not a relation name
+    if isinstance(node, ast.JoinedStr):
+        return " ".join(_sql_text(v, consts) for v in node.values)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _sql_text(node.left, consts) + " " + _sql_text(node.right, consts)
+    if isinstance(node, ast.Name):
+        return consts.get(node.id, "")
+    return ""
+
+
+def _assigned_text(tree):
+    """Names this module binds to a string, so `execute(SQL)` is followed to its body."""
+    import ast
+
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign | ast.AugAssign):
+            targets, value = [node.target], node.value
+        else:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                text = _sql_text(value, out)
+                if text.strip():
+                    out[target.id] = text
+    return out
+
+
+def executed_relations() -> dict[str, set[str]]:
+    """Every relation named by SQL the shipped code hands to `execute()`.
+
+    Read from the call argument, not from the file text: prose is full of "from" and
+    "update", and a gate that matched sentences could be satisfied by a schema missing
+    real tables — or, worse, kept honest only by a list of words someone decides are
+    prose.
+    """
+    import ast
+
+    found: dict[str, set[str]] = {}
+    for pkg in RUNTIME_PKGS:
+        for dirpath, _dirs, files in os.walk(os.path.join(_root(), pkg)):
+            for fname in files:
+                if not fname.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, fname)
+                with open(path, encoding="utf-8-sig") as handle:
+                    text = handle.read()
+                tree = ast.parse(text)
+                consts = _assigned_text(tree)
+                rel = os.path.relpath(path, _root()).replace("\\", "/")
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call) or not node.args:
+                        continue
+                    func = node.func
+                    if not (isinstance(func, ast.Attribute) and func.attr in EXEC_LIKE):
+                        continue
+                    sql = _sql_text(node.args[0], consts).lower()
+                    skip = {m.group(1) for m in CTE_RE.finditer(sql)} | NOT_A_RELATION
+                    for match in RELATION_RE.finditer(sql):
+                        name = match.group(1)
+                        if "." in name or name in skip:
+                            continue
+                        if sql[match.end():match.end() + 1] == "(":
+                            continue  # a set-returning function, not a relation
+                        found.setdefault(name, set()).add(f"{rel}:{node.lineno}")
+    return found
+
+
+@pytest.fixture(scope="module")
+def chain_only_database():
+    """A database made by `alembic upgrade head` and nothing else, through the runtime's own call."""
+    try:
+        from conftest import TEST_ADMIN_URL
+    except ImportError:
+        from tests.conftest import TEST_ADMIN_URL
+
+    with psycopg.connect(TEST_ADMIN_URL, autocommit=True) as admin:
+        admin.execute(f"DROP DATABASE IF EXISTS {CHAIN_ONLY_DB}")
+        admin.execute(f"CREATE DATABASE {CHAIN_ONLY_DB}")
+    try:
+        Ledger._run_alembic(CHAIN_ONLY_URL)
+        yield CHAIN_ONLY_URL
+    finally:
+        with psycopg.connect(TEST_ADMIN_URL, autocommit=True) as admin:
+            admin.execute(f"DROP DATABASE IF EXISTS {CHAIN_ONLY_DB}")
+
+
+def _query(url, sql, args=()):
+    with psycopg.connect(url) as conn:
+        return [tuple(row) for row in conn.execute(sql, args).fetchall()]
+
+
+def chain_relations(url) -> set[str]:
+    return {row[0] for row in _query(url, """
+        SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'
+        UNION SELECT table_name FROM information_schema.views WHERE table_schema = 'public'
+    """)}
+
+
+def test_the_chain_alone_serves_every_relation_the_runtime_names(chain_only_database):
+    """018 exists because this sentence was false, and nothing could see it.
+
+    The chain never created `recurring_payments`, `x402_invoices`, `login_nonces`,
+    `paymaster_usage`, `gas_drips`, `market_subsidies`, `notification_outbox`,
+    `creator_tokens`, `creator_token_holders` or `creator_dividends` — subscriptions,
+    the x402 paywall, the gasless allowance counter and revenue sharing had no table.
+    Every process hid it by applying a second DDL string after the chain, so a fresh
+    install (compose up on a new volume) was the only case that showed it, and the
+    swallowed migration error showed even that only as a log line.
+    """
+    named = executed_relations()
+    assert len(named) >= 30, (
+        f"the extractor named {len(named)} relations — it stopped reading the code, "
+        "and a green run here would mean nothing was measured")
+    missing = sorted(set(named) - chain_relations(chain_only_database))
+    assert not missing, (
+        "alembic upgrade head alone does not create "
+        + "; ".join(f"{t} (called from {', '.join(sorted(named[t])[:3])})" for t in missing)
+        + " — there is no second DDL to apply after the chain anymore")
+
+
+def test_the_chain_alone_holds_the_columns_indexes_and_checks_the_code_writes_to(
+        chain_only_database):
+    """Objects the deleted DDL string owned and the chain did not, verified present.
+
+    A missing column is the same failure as a missing table and a different symptom:
+    the INSERT raises on a running process instead of on a fresh install, so the
+    deposit scanner had no block to record and no timestamp to order by only on the
+    databases that had never had the string applied.
+    """
+    columns = {(r[0], r[1]) for r in _query(chain_only_database, """
+        SELECT table_name, column_name FROM information_schema.columns
+        WHERE table_schema = 'public'
+    """)}
+    nullable = dict(_query(chain_only_database, """
+        SELECT table_name || '.' || column_name, is_nullable FROM information_schema.columns
+        WHERE table_schema = 'public' AND column_name = 'close_at'
+          AND table_name IN ('bets', 'markets')
+    """))
+    indexes = {r[0] for r in _query(chain_only_database,
+                                    "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'")}
+    checks = {r[0] for r in _query(chain_only_database, """
+        SELECT conname FROM pg_constraint
+        WHERE connamespace = to_regnamespace('public')::oid AND contype = 'c'
+    """)}
+
+    for table in ("users", "pending_deposits", "x402_payments", "recurring_payments",
+                  "x402_invoices", "login_nonces", "paymaster_usage", "creator_tokens",
+                  "creator_token_holders", "creator_dividends", "gas_drips",
+                  "market_subsidies", "notification_outbox", "audit_logs", "idempotency_keys"):
+        assert any(t == table for t, _ in columns), f"the chain creates no table {table}"
+    for table, column in (("users", "smart_address"), ("users", "smart_deployed"),
+                          ("users", "smart_created_at"), ("pending_deposits", "block"),
+                          ("pending_deposits", "created_at"), ("x402_payments", "pay_to")):
+        assert (table, column) in columns, f"the chain creates no {table}.{column}"
+    # 015 made the deadline mandatory; the DDL string still allowed a market with none,
+    # which is the parked money 015 exists to prevent.
+    assert nullable == {"bets.close_at": "NO", "markets.close_at": "NO"}, nullable
+    for name in ("idx_bets_status", "idx_markets_status", "idx_pending_deposits_claimed",
+                 "idx_recurring_payments_due", "idx_x402_invoices_credited"):
+        assert name in indexes, f"the chain creates no index {name}"
+    for name in ("chk_ai_usage_day_nn", "chk_ai_provider_fails_nn", "chk_idempotency_status"):
+        assert name in checks, f"the chain creates no check {name}"
+
+
+def test_one_unique_fact_has_one_index_name(chain_only_database):
+    """The DDL string and the chain each declared these facts, under two names apiece.
+
+    Two indexes on one column list are two objects to keep consistent, one of which the
+    planner may ignore: `user_wallets` carried both the auto-named UNIQUE constraint and
+    `uq_wallets_user_slot`, `create2_proxies` two expression indexes on `lower(proxy_address)`.
+    """
+    duplicated = _query(chain_only_database, r"""
+        SELECT indrelid::regclass::text,
+               regexp_replace(pg_get_indexdef(idx.indexrelid),
+                              '^CREATE (UNIQUE )?INDEX \\S+ ON', 'INDEX ON') AS shape,
+               count(*), string_agg(cls.relname, ', ' ORDER BY cls.relname) AS names
+        FROM pg_index idx
+        JOIN pg_class cls ON cls.oid = idx.indexrelid
+        JOIN pg_class tab ON tab.oid = idx.indrelid
+        JOIN pg_namespace ns ON ns.oid = tab.relnamespace
+        WHERE ns.nspname = 'public' AND idx.indisunique
+        GROUP BY 1, 2
+        HAVING count(*) > 1
+    """)
+    assert not duplicated, "one unique fact has several names: " + "; ".join(
+        f"{r[0]} -> {r[3]}" for r in duplicated)
+    names = {r[0] for r in _query(chain_only_database,
+                                  "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'")}
+    for gone in ("user_wallets_tg_id_slot_key", "idx_create2_proxies_addr",
+                 "idx_pending_deposits_sender"):
+        assert gone not in names, f"the duplicate index {gone} is back beside the chain's own name"
+
+
+def test_the_status_domain_the_database_states_is_the_domain_the_ddl_states(chain_only_database):
+    """`bets.status` names its vocabulary in its own CREATE TABLE, and now in the catalog.
+
+    Until 018 the comment lived only in the DDL string, so a fresh database described
+    nothing about the states the interface is held to when an operator inspected it.
+    """
+    ddl = {}
+    versions = os.path.join(_root(), "alembic", "versions")
+    for fname in sorted(os.listdir(versions)):
+        if not fname.endswith(".py"):
+            continue
+        with open(os.path.join(versions, fname), encoding="utf-8-sig") as handle:
+            text = handle.read()
+        for table in ("bets", "markets"):
+            block = re.search(rf"CREATE TABLE (?:IF NOT EXISTS )?{table} \(.*?^\s*\);",
+                              text, re.S | re.M)
+            if block:
+                stated = re.search(
+                    r"status\s+TEXT NOT NULL DEFAULT '\w+',?\s*--\s*([\w |]+)", block.group(0))
+                if stated:
+                    ddl[table] = {w.strip() for w in stated.group(1).split("|") if w.strip()}
+    assert ddl == {"bets": {"open", "resolved", "cancelled"},
+                   "markets": {"open", "resolved", "cancelled"}}, ddl
+
+    for table, words in ddl.items():
+        in_db = _query(chain_only_database,
+                       "SELECT col_description(attrelid, attnum) FROM pg_attribute "
+                       "WHERE attrelid = %s::regclass AND attname = 'status'", (table,))
+        assert in_db and in_db[0][0], f"the database says nothing about {table}.status"
+        assert {w.strip() for w in in_db[0][0].split("|") if w.strip()} == words, (table, in_db[0][0])
+
+
+def test_the_chain_creates_no_table_the_runtime_never_reads(chain_only_database):
+    """Dead schema is a promise the product cannot keep, at storage cost.
+
+    `002` created treasury proposals, votes and transactions for a voting feature no
+    handler, route or ledger method implements — the same shape as the deleted
+    `CreditScorer`, whose `/credit` screen printed a limit nothing could lend against.
+    """
+    unread = chain_relations(chain_only_database) - set(executed_relations()) - MIGRATION_TABLES
+    assert unread == DEAD_TABLES, (
+        f"tables the chain creates and no executed SQL names: {sorted(unread)}; "
+        f"recorded as dead: {sorted(DEAD_TABLES)}")
+
+
+def test_no_second_schema_source_ships():
+    """The chain is the only writer, so nothing may carry DDL beside it again.
+
+    `bot/ledger/_schema.py` was deleted rather than kept "for safety": a second source
+    that is applied unconditionally is a second source nobody diffs, which is exactly
+    how the two came to disagree in both directions.
+    """
+    import ast
+
+    assert not os.path.exists(os.path.join(_root(), "bot", "ledger", "_schema.py"))
+    assert not hasattr(Ledger, "ensure_schema")
+    assert "SCHEMA_DDL" not in dir(sys.modules["bot.ledger"])
+
+    offenders: list[str] = []
+    for pkg in RUNTIME_PKGS:
+        for dirpath, _dirs, files in os.walk(os.path.join(_root(), pkg)):
+            for fname in files:
+                if not fname.endswith(".py"):
+                    continue
+                path = os.path.join(dirpath, fname)
+                with open(path, encoding="utf-8-sig") as handle:
+                    text = handle.read()
+                for node in ast.walk(ast.parse(text)):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str) \
+                            and "CREATE TABLE" in node.value.upper():
+                        offenders.append(os.path.relpath(path, _root()).replace("\\", "/"))
+                        break
+    assert not offenders, (
+        "DDL outside alembic/versions would be a second schema source: " + ", ".join(sorted(set(offenders))))
+
+
+def test_the_chain_is_one_line_of_revisions_with_one_head():
+    """`alembic upgrade head` has one answer only if the chain is one line.
+
+    The chain is now the only writer of this database's schema and every process runs it
+    at boot, so a second head, a revision id used twice or a `down_revision` naming a
+    revision the tree does not have is not untidiness — it is `MultipleHeadDetected` or
+    `RevisionIsNotRegistered` on every start, in production, and there is no longer a DDL
+    string behind it to make the process look healthy. Nothing but this gate reads the
+    graph: 018 joined the chain while the files were already fourteen months old.
+    """
+    versions = os.path.join(_root(), "alembic", "versions")
+    files = sorted(f for f in os.listdir(versions) if f.endswith(".py"))
+    assert len(files) >= 18, "the chain read fewer revisions than the directory holds"
+
+    declared: dict[str, str] = {}
+    parents: dict[str, list[str]] = {}
+    for fname in files:
+        with open(os.path.join(versions, fname), encoding="utf-8-sig") as handle:
+            text = handle.read()
+        rev = re.search(r'^revision(?::\s*str)?\s*=\s*["\']([^"\']+)["\']', text, re.M)
+        assert rev, f"{fname} declares no revision id — alembic cannot register it"
+        assert rev.group(1) not in declared, (
+            f"revision id {rev.group(1)} is declared by both {declared.get(rev.group(1))} "
+            f"and {fname}; the second file silently replaces the first")
+        declared[rev.group(1)] = fname
+        down = re.search(r"^down_revision[^=\n]*=\s*(.+)$", text, re.M)
+        parents[rev.group(1)] = re.findall(r'["\']([^"\']+)["\']', down.group(1)) if down else []
+
+    unknown = sorted(f"{rev} -> {p} ({declared[rev]})"
+                     for rev, ps in parents.items() for p in ps if p not in declared)
+    assert not unknown, "a revision continues one the tree does not have: " + "; ".join(unknown)
+
+    merged = sorted(rev for rev, ps in parents.items() if len(ps) > 1)
+    assert not merged, (
+        f"{', '.join(merged)} merges two revisions: without a head to upgrade to, "
+        "`upgrade head` refuses and every process fails at boot")
+
+    child_count: dict[str, list[str]] = {}
+    for rev, ps in parents.items():
+        for parent in ps:
+            child_count.setdefault(parent, []).append(rev)
+    branches = sorted(f"{parent} is continued by {children}"
+                      for parent, children in child_count.items() if len(children) > 1)
+    assert not branches, "the chain forks, so it has more than one head: " + "; ".join(branches)
+
+    heads = sorted(rev for rev in declared if rev not in child_count)
+    assert len(heads) == 1, f"`upgrade head` has {len(heads)} answers: {', '.join(heads)}"
+
+    walked: set[str] = set()
+    cursor: str | None = heads[0]
+    while cursor is not None and cursor not in walked:
+        walked.add(cursor)
+        cursor = parents[cursor][0] if parents[cursor] else None
+    assert walked == set(declared), (
+        "revisions no upgrade path reaches, so their DDL never runs: "
+        + ", ".join(sorted(set(declared) - walked)))
+
+
+def test_a_failing_migration_stops_the_process(monkeypatch):
+    """A database whose schema is unknown is not a database to move USDC in.
+
+    `_run_alembic()` used to log and swallow every failure because the DDL string ran
+    afterwards and made the process look healthy; with the string gone, a swallowed
+    error means serving money on a schema the chain never asked for.
+    """
+    from alembic import command
+
+    def boom(cfg, target):
+        raise psycopg.errors.SyntaxError("no such column")
+
+    monkeypatch.setattr(command, "upgrade", boom)
+    with pytest.raises(psycopg.errors.SyntaxError):
+        Ledger._run_alembic(TEST_DB_URL, retries=3, delay=0)
+    # The same failure through the real constructor: no process starts on a schema
+    # the chain refused to describe.
+    with pytest.raises(psycopg.errors.SyntaxError):
+        Ledger(TEST_DB_URL)
+
+
+def test_schema_contention_is_retried_and_a_stuck_lock_is_loud(monkeypatch):
+    """Boot contention is real (the bot, web and agent all migrate) and is not an error.
+
+    `env.py` sets `lock_timeout` so the loser of the advisory lock raises instead of
+    hanging; that has to be retried, and a lock that never clears has to end in a
+    refusal rather than a silent pass.
+    """
+    from alembic import command
+
+    calls = []
+
+    def contends_then_works(cfg, target):
+        calls.append(1)
+        if len(calls) < 3:
+            raise psycopg.errors.LockNotAvailable("another backend holds the lock")
+
+    monkeypatch.setattr(command, "upgrade", contends_then_works)
+    Ledger._run_alembic(TEST_DB_URL, retries=5, delay=0)
+    assert len(calls) == 3, calls
+
+    calls.clear()
+
+    def never_clears(cfg, target):
+        calls.append(1)
+        raise psycopg.errors.LockNotAvailable("the schema lock stayed held")
+
+    monkeypatch.setattr(command, "upgrade", never_clears)
+    with pytest.raises(RuntimeError, match="stayed locked"):
+        Ledger._run_alembic(TEST_DB_URL, retries=2, delay=0)
+    assert len(calls) == 2, calls
+
+
+@pytest.mark.parametrize(("exc", "contention"), [
+    (psycopg.errors.LockNotAvailable, True),
+    (psycopg.errors.DeadlockDetected, True),
+    (psycopg.errors.OperationalError, True),
+    (psycopg.errors.InterfaceError, True),
+    (psycopg.errors.SyntaxError, False),
+    (psycopg.errors.UndefinedTable, False),
+    (psycopg.errors.NotNullViolation, False),
+    (RuntimeError, False),
+])
+def test_only_contention_and_an_unreachable_server_are_worth_another_attempt(exc, contention):
+    """Retrying a broken migration would boot a process on a schema it never asked for.
+
+    The decision is read off the innermost cause, because alembic wraps SQLAlchemy which
+    wraps psycopg: the Postgres state arrives three objects down.
+    """
+    assert Ledger._is_transient(exc("x")) is contention
+    wrapped = RuntimeError("Migration failed")
+    wrapped.__cause__ = exc("original")
+    assert Ledger._is_transient(wrapped) is contention
 
 
 # ---------- concurrency safety ----------

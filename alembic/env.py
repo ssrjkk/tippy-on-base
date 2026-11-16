@@ -2,9 +2,9 @@
 
 Reads DATABASE_URL from the environment (same as bot.config).  The
 ``env.py`` is intentionally minimal — Alembic is used only for schema
-versioning and migration tracking.  The actual DDL still lives in
-``bot/ledger/_schema.py`` (SCHEMA_DDL) for backward compatibility with the
-``ensure_schema()`` fallback.
+versioning and migration tracking.  The chain in ``versions/`` is the only
+writer of this database's schema: 018 closed the gap that let a second,
+hand-maintained DDL string exist beside it.
 """
 
 import os
@@ -58,8 +58,8 @@ print(f"[alembic] migrating {_safe_url}", file=_sys.stderr)
 # time (e.g. the combined bot+web runner creating two Ledger() instances, or a
 # web process racing the entrypoint), the second one would otherwise block on
 # that lock forever and hang the process. lock_timeout makes the loser raise
-# `lock_not_available` instead; the caller (Ledger._run_alembic) treats that
-# as "schema already being migrated" and falls back to ensure_schema().
+# `lock_not_available` instead; the caller (Ledger._run_alembic) counts that as
+# contention, backs off and retries, and refuses to start if it never clears.
 # statement_timeout guards against pathological long-held locks.
 def _milliseconds(name: str, default: str) -> str:
     """A `SET` takes no bind parameter, so these two knobs are written into SQL as

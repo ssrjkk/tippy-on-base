@@ -1,7 +1,7 @@
 """Add missing indexes for query performance and idempotency table.
 
 Also materializes onchain_markets/onchain_trades, which previously existed
-only in runtime DDL (bot/ledger/_schema.py) — on a fresh database
+only in the runtime DDL string that 018 removed — on a fresh database
 `alembic upgrade head` crashed in this revision because the tables were
 missing at index-creation time.
 

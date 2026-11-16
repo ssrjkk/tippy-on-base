@@ -1892,8 +1892,6 @@ def test_the_edge_sends_the_headers_the_origin_sends():
 # market state: the schema, the shared derivation, and both badge families
 # ---------------------------------------------------------------------------
 
-SCHEMA = (ROOT / "bot" / "ledger" / "_schema.py").read_text(encoding="utf-8-sig")
-
 # The vocabulary is not a frontend opinion, and it is not a tuple kept here.
 # `bets.status` and `markets.status` name their domain in the DDL that creates
 # them, and the one state the page adds on top of the row is the market whose
@@ -1905,14 +1903,31 @@ SCHEMA = (ROOT / "bot" / "ledger" / "_schema.py").read_text(encoding="utf-8-sig"
 # So the set is measured from the three layers it has to agree across: the
 # database, the derivation and the two stylesheets that have a paint for it.
 
+# The DDL that creates these tables lives in exactly one place since 018: the
+# tracked alembic chain. The list is the directory, so a table a later revision
+# re-creates is still read where the chain last said what it holds.
+CHAIN_DDL = "\n".join(p.read_text(encoding="utf-8-sig")
+                      for p in sorted((ROOT / "alembic" / "versions").glob("*.py")))
+
+
+def ddl_block(table: str) -> str:
+    """The CREATE TABLE text the chain uses for this table (the last one wins)."""
+    blocks = re.findall(rf"CREATE TABLE (?:IF NOT EXISTS )?{table} \((.*?)^\s*\);",
+                        CHAIN_DDL, re.S | re.M)
+    assert blocks, f"the alembic chain never creates {table}"
+    return blocks[-1]
+
 
 def schema_states() -> set[str]:
     """Every status a market row can hold, read off its own CREATE TABLE."""
     found: set[str] = set()
-    for default, listed in re.findall(
-            r"status\s+TEXT NOT NULL DEFAULT '(\w+)',?\s*--\s*([\w |]+)", SCHEMA):
-        found.add(default)
-        found |= {word.strip() for word in listed.split("|") if word.strip()}
+    for table in ("bets", "markets"):
+        found |= {default for default, _ in re.findall(
+            r"status\s+TEXT NOT NULL DEFAULT '(\w+)',?\s*--\s*([\w |]+)", ddl_block(table))}
+        for _, listed in re.findall(
+                r"status\s+TEXT NOT NULL DEFAULT '(\w+)',?\s*--\s*([\w |]+)", ddl_block(table)):
+            found |= {word.strip() for word in listed.split("|") if word.strip()}
+    assert found, "no status column in the chain names the domain it holds"
     return found
 
 

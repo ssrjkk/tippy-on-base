@@ -1,4 +1,9 @@
-"""Initial schema — all tables from bot/ledger.py SCHEMA_DDL.
+"""Initial schema — the tables this chain starts from.
+
+It was written as a copy of the DDL string in `bot/ledger/_schema.py`, which the
+process applied *after* the chain. Two sources stayed legal until 018: by then
+they disagreed in both directions, and the string had hidden what the chain never
+created.
 
 Revision ID: 001
 Revises: None
@@ -55,7 +60,7 @@ def upgrade() -> None:
             creator     BIGINT NOT NULL,
             question    TEXT NOT NULL,
             options     TEXT NOT NULL,
-            status      TEXT NOT NULL DEFAULT 'open',
+            status      TEXT NOT NULL DEFAULT 'open', -- open | resolved | cancelled
             winner      BIGINT,
             close_at    BIGINT,
             deadline_notified BIGINT NOT NULL DEFAULT 0,
@@ -151,7 +156,7 @@ def upgrade() -> None:
             creator       BIGINT NOT NULL,
             question      TEXT NOT NULL,
             options       TEXT NOT NULL,
-            status        TEXT NOT NULL DEFAULT 'open',
+            status        TEXT NOT NULL DEFAULT 'open', -- open | resolved | cancelled
             winner        BIGINT,
             close_at      BIGINT,
             subsidy_micro BIGINT NOT NULL,

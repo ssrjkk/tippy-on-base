@@ -204,7 +204,7 @@ async def test_concurrent_buys_cannot_overshoot_supply(ledger):
     })
     before = ledger._conn.execute("SELECT SUM(balance) AS s FROM users").fetchone()["s"]
     # Drop the read transaction: an open ACCESS SHARE on users would make each
-    # worker Ledger's ensure_schema (ALTER TABLE) wait for lock_timeout.
+    # worker Ledger's `alembic upgrade` (ALTER TABLE) wait for lock_timeout.
     ledger._conn.rollback()
 
     results = {}

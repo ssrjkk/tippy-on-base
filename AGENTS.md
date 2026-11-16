@@ -25,7 +25,7 @@
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding. `alembic/` joined the
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
-- `python -m pytest -q -m "not production"` — ~14 min, 1336 tests (171 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~14 min, 1353 tests (171 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -186,6 +186,39 @@
   failure), and the **edge maintenance card** in `functions/[[path]].js` held to the same document
   contract as the pages — it is served without the origin, so nothing else measures it.
   It reads files only — no browser, no database, so it runs in ordinary CI.
+- **The alembic chain is the only writer of this database's schema, and that is measured
+  against the code, not remembered.** `Ledger.__init__` runs `alembic upgrade head` and applies
+  nothing after it; `bot/ledger/_schema.py` (the idempotent `CREATE TABLE IF NOT EXISTS` string
+  `ensure_schema()` used to apply on top of the chain) is deleted, because a second source that
+  is applied unconditionally is a second source nobody diffs: the chain lacked `recurring_payments`,
+  `x402_invoices`, `login_nonces`, `paymaster_usage`, `gas_drips`, `market_subsidies`,
+  `notification_outbox` and the three `creator_*` tables — every one of them named by SQL the
+  runtime executes — while the string lacked `idempotency_keys` and `audit_logs`, and migration
+  018 converged the two. The gates in `tests/test_ledger.py` build one database by
+  `Ledger._run_alembic()` alone and hold it to: **every relation the shipped SQL names exists**
+  (the names are read from the first argument of each `execute()` call through the AST, so prose
+  like "the UPDATE that failed" cannot answer for a table, and the extractor asserts it found ≥30
+  relations so a silent parser cannot make the law vacuous); the columns, indexes and CHECKs the
+  deleted string owned are present; `bets.close_at`/`markets.close_at` are NOT NULL (015's whole
+  point, which the string undid on every DDL-built database); **one unique fact has one index
+  name** (`user_wallets` carried `user_wallets_tg_id_slot_key` *and* `uq_wallets_user_slot`);
+  the `bets.status`/`markets.status` domain in the catalog equals the domain in its own
+  `CREATE TABLE`; and no shipped `.py` outside `alembic/versions` carries a `CREATE TABLE`.
+  The graph itself is measured by `test_the_chain_is_one_line_of_revisions_with_one_head`: every
+  file in `alembic/versions` declares a `revision` id, no id appears twice, every `down_revision`
+  names a revision the tree has, no revision merges or forks, exactly one head exists and nothing
+  is unreachable from it — measured as 18 revisions with head `018`. That law is what the deletion
+  made necessary: with no DDL string behind a failed upgrade, `MultipleHeadDetected` is a boot
+  failure in production, and no other gate reads the graph.
+  `test_the_chain_creates_no_table_the_runtime_never_reads` pins the dead weight it found —
+  `treasury_proposals`, `treasury_votes`, `treasury_transactions`, created by 002 for a voting
+  feature no code implements and holding zero rows everywhere — so a fifth unread table fails,
+  and the trio's eventual `DROP` (a destructive change to live schemas, awaiting the
+  maintainer's word) will fail it too until the list shrinks. A migration failure now
+  **propagates** (`_run_alembic` retries only lock contention and an unreachable server,
+  `_is_transient` walking the exception chain to the innermost Postgres state), so a process
+  cannot serve money on a schema it never asked for; `test_a_failing_migration_stops_the_process`
+  and `test_schema_contention_is_retried_and_a_stuck_lock_is_loud` measure both halves.
 - **The dust floor is one number, and the layers that carry it are read from the tree.**
   `config.MARKET_MIN_TRADE_MICRO` in `bot/config.py` is deliberately not an env knob: it is the only
   place the value is written. Both refusal paths compare against it and answer `api_amount_dust`

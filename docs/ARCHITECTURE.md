@@ -71,9 +71,22 @@ constraints) — NOT from Python locks.
 
 ## Database
 
-PostgreSQL 16+ with `dict_row` factory. Schema managed by:
-1. **Alembic** (`alembic/versions/`) — tracked migrations
-2. **ensure_schema()** — idempotent DDL fallback (runs on every startup)
+PostgreSQL 16+ with `dict_row` factory. Schema has one writer:
+
+1. **Alembic** (`alembic/versions/`) — every `Ledger` process runs
+   `alembic upgrade head` in its constructor and applies nothing afterwards. A
+   migration that fails for a reason other than lock contention or an
+   unreachable server stops the process: a database whose schema is unknown is
+   not a database to move USDC in. Contention is retried (`ALEMBIC_LOCK_TIMEOUT_MS`,
+   then backoff) and a lock that never clears ends in the same refusal.
+
+There is deliberately no second DDL. Until 018 the process also applied an
+idempotent `CREATE TABLE IF NOT EXISTS` string after the chain, and the two
+disagreed in both directions: the chain lacked the tables subscriptions, x402
+and revenue sharing write into, the string lacked `idempotency_keys` and
+`audit_logs`, and every run papered over the gap with a swallowed error. What
+the chain must alone provide is measured, not remembered — see
+`tests/test_ledger.py::test_the_chain_alone_serves_every_relation_the_runtime_names`.
 
 Key tables:
 - `users` — Telegram user IDs and USDC balances (internal ledger)

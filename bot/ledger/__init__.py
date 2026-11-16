@@ -27,7 +27,6 @@ from ._pay import LedgerPayMixin
 from ._paymaster import LedgerPaymasterMixin
 from ._paywall import LedgerPaywallMixin
 from ._recurring import LedgerRecurringMixin
-from ._schema import SCHEMA_DDL
 from ._transfer import LedgerTransferMixin
 from ._users import LedgerUsersMixin
 from ._views import LedgerViewsMixin
@@ -35,7 +34,6 @@ from ._withdraw import LedgerWithdrawMixin, blocked_destination
 
 __all__ = [
     "MICRO",
-    "SCHEMA_DDL",
     "AsyncLedger",
     "IdempotencyDuplicate",
     "Ledger",

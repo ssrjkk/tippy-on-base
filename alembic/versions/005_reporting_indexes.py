@@ -2,7 +2,7 @@
 
 volume_history / user_stats / top_tippers filter the append-only tx_log table
 on (kind, created_at) and (kind, counterparty); without composite indexes those
-requests scan the whole table. Mirrors bot/ledger.py SCHEMA_DDL.
+requests scan the whole table. 018 made this chain the only place they are written.
 
 Revision ID: 005
 Revises: 004

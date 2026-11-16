@@ -289,8 +289,7 @@ bot/
 │  └─ breakthrough.py   /gasless, /subscribe, /createtoken
 ├─ ledger/              PostgreSQL accounting + LMSR AMM engine (Decimal-exact)
 │  ├─ __init__.py       Ledger facade + singletons + lmsr_* re-exports
-│  ├─ _core.py          connect/schema/ping
-│  ├─ _schema.py        DDL
+│  ├─ _core.py          connect / alembic upgrade / idempotency reservations
 │  ├─ _conn.py          ReconnectingConn
 │  ├─ _users.py         accounts, wallet links, create2
 │  ├─ _pay.py / _paywall.py / _transfer.py   x402, paywalls, transfers
@@ -364,7 +363,7 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts alembic
-python -m pytest -q -m "not production"   # 1336 passed
+python -m pytest -q -m "not production"   # 1353 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password

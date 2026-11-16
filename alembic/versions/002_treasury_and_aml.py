@@ -1,10 +1,19 @@
-"""Treasury + AML tables — reconcile with bot/ledger.py _ensure_schema().
+"""Treasury + AML tables — the first time the chain had to catch the runtime up.
 
 The initial schema (001) predated the community-treasury and AML-monitor
-features. ledger._ensure_schema() creates these tables at runtime, but any
-deploy path that provisions the database via `alembic upgrade head` would be
-missing them and crash the treasury flows / AML monitor. This migration makes
-the two schema sources agree.
+features. The runtime DDL string created these tables at startup, but any
+deploy path that provisions the database via `alembic upgrade head` was missing
+them and crashed the treasury flows / AML monitor. This migration is one of the
+attempts to make the two schema sources agree; 018 is the one that ended the
+arrangement by removing the second source.
+
+Measured in the same wave: `treasury_transactions`, `treasury_proposals` and
+`treasury_votes` — the voting half of a community treasury the bot never grew —
+are named by no SQL any process executes and hold zero rows in every database
+here. `community_treasuries` (the balance the solvency sum counts) is live. The
+three are left in place because dropping them is a destructive change to live
+schemas; `tests/test_ledger.py::test_the_chain_creates_no_table_the_runtime_never_reads`
+pins them so the list cannot grow meanwhile.
 
 Revision ID: 002
 Revises: 001

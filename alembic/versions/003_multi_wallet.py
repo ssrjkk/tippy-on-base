@@ -15,7 +15,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # 001's SCHEMA_DDL already creates user_wallets in the modern shape
+    # 001 already creates user_wallets in the modern shape
     # (id BIGSERIAL PK, slot, active) on fresh installs; this migration must
     # only patch the LEGACY shape (tg_id PK, no id/slot/active). Every step
     # is guarded so the migration is a no-op on modern tables — otherwise a

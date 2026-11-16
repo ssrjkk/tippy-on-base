@@ -9,15 +9,15 @@ import psycopg.errors
 from .. import config
 from ._base import IdempotencyDuplicate
 from ._conn import ReconnectingConn
-from ._schema import SCHEMA_DDL
 
 # Alembic installs the names an env.py script reads (`context`, `config`, ...)
 # into process-global module dicts when an EnvironmentContext is entered and
 # deletes them on exit. Two threads calling `command.upgrade` inside one
 # process nest those installs, so the second exit raises `KeyError: 'config'`
 # for names that are already gone. _run_alembic() logs and swallows it, which
-# leaves the tracked migrations unapplied while ensure_schema() papers over it.
-# The advisory lock in env.py only serialises across processes, hence this one.
+# leaves the tracked migrations unapplied, and the process would then run on a
+# schema it never asked for. The advisory lock in env.py only serialises across
+# processes, hence this one.
 _ALEMBIC_LOCK = threading.Lock()
 
 
@@ -30,8 +30,11 @@ class LedgerCoreMixin:
         # constraints, row-level locking), not from this lock.
         self._lock = threading.RLock()
         self._conn = ReconnectingConn(database)
+        # alembic/versions/* is the only writer of this database's schema. There is
+        # deliberately no second DDL applied after it: the two used to disagree in
+        # both directions, and applying the string on top of the chain hid the gap
+        # until 018 closed it. See _run_alembic().
         self._run_alembic(database)
-        self.ensure_schema()  # idempotent; retries past lock contention
 
 
 
@@ -52,68 +55,83 @@ class LedgerCoreMixin:
 
 
 
-    @staticmethod
-    def _run_alembic(database: str) -> None:
-        """Run ``alembic upgrade head`` to apply tracked schema migrations.
+    # Postgres states that mean "someone else holds the schema lock right now" or
+    # "the server was not reachable this instant" — both are worth another attempt.
+    _TRANSIENT_PGCODES = frozenset({"55P03", "40P01", "08000", "08001", "08003", "57P01"})
+    _TRANSIENT_NAMES = frozenset({"LockNotAvailable", "DeadlockDetected", "OperationalError", "InterfaceError"})
 
-        Best-effort: if alembic is not installed or alembic.ini / versions/
-        is missing (tests, clean installs), we fall back to ensure_schema()
-        which applies the full DDL idempotently. But a REAL migration failure
-        (e.g. a conflicting or partially-applied migration) must not be
-        silent: it is logged loudly so an operator knows the tracked schema
-        (alembic/versions/*) diverged from the live DDL before money flows.
+    @classmethod
+    def _is_transient(cls, exc: BaseException) -> bool:
+        """Walk the exception chain: SQLAlchemy wraps psycopg, psycopg wraps the
+        Postgres state, and the retry decision belongs to the innermost one."""
+        seen: set[int] = set()
+        node: BaseException | None = exc
+        while node is not None and id(node) not in seen:
+            seen.add(id(node))
+            for candidate in (node, getattr(node, "orig", None)):
+                if candidate is not None and type(candidate).__name__ in cls._TRANSIENT_NAMES:
+                    return True
+            state = getattr(node, "sqlstate", None) or getattr(node, "pgcode", None)
+            if state in cls._TRANSIENT_PGCODES:
+                return True
+            node = node.__cause__ or node.__context__
+        return False
+
+    @staticmethod
+    def _run_alembic(database: str, retries: int = 8, delay: float = 2.0) -> None:
+        """Apply the tracked chain — the only writer of this database's schema.
+
+        Used to be best-effort: any failure was logged and swallowed because
+        `ensure_schema()` applied an idempotent DDL string afterwards. That made
+        two schema sources legal at the same time, and they drifted in both
+        directions: the chain lacked `recurring_payments`, `x402_invoices`,
+        `login_nonces`, `paymaster_usage` and `users.smart_address`, while the
+        string lacked `idempotency_keys` and `audit_logs`. A process whose
+        migration raised therefore started serving money on a database missing the
+        table its own reservation writes into — with only a log line to say so.
+
+        Now: lock contention and an unreachable server are retried (several
+        processes call this at once on boot, and ALTER needs ACCESS EXCLUSIVE);
+        everything else propagates. A database whose schema is unknown is not a
+        database to move USDC in.
 
         `database` travels in Config.attributes rather than sqlalchemy.url
         because env.py rewrites sqlalchemy.url from $DATABASE_URL; without the
         marker every programmatic caller migrated the environment's database,
         which made the test suite ALTER the developer's live ledger.
         """
-        try:
-            import pathlib
+        import pathlib
 
-            from alembic.config import Config
+        from alembic.config import Config
 
-            from alembic import command
-            ini = pathlib.Path(__file__).resolve().parent.parent.parent / "alembic.ini"
-            if not ini.exists():
-                return
-            cfg = Config(str(ini), attributes={"tippy.database_url": database})
-            with _ALEMBIC_LOCK:
-                command.upgrade(cfg, "head")
-        except Exception as e:  # ensure_schema() remains the safety net
-            logging.getLogger("tipbot.alembic").exception(
-                "alembic upgrade head failed: %s. ensure_schema() will apply the "
-                "idempotent DDL, but the tracked migration state may be stale — "
-                "check alembic_version vs the migration chain.", e
+        from alembic import command
+
+        log = logging.getLogger("tipbot.alembic")
+        ini = pathlib.Path(__file__).resolve().parent.parent.parent / "alembic.ini"
+        if not ini.exists():
+            raise RuntimeError(
+                "alembic.ini is missing — alembic/versions/* is the only schema source, "
+                "so the process cannot start without the chain it is supposed to apply."
             )
-
-
-
-    def ensure_schema(self, retries: int = 8, delay: float = 2.0) -> None:
-        """Apply idempotent schema DDL, retrying past transient lock timeouts.
-
-        Running this at Ledger() construction used to crash the whole process
-        when a concurrent bot/web/test process held a lock (ALTER TABLE needs
-        ACCESS EXCLUSIVE). Now we back off and retry instead of dying.
-        """
-        last = None
-        for _ in range(retries):
+        last: Exception | None = None
+        for attempt in range(1, retries + 1):
             try:
-                with self._lock:
-                    self._conn.rollback()
-                    self._conn.execute("SET lock_timeout = '30s'")
-                    self._conn.execute("SET statement_timeout = '60s'")
-                    self._conn.execute(SCHEMA_DDL)
-                    self._conn.commit()
+                cfg = Config(str(ini), attributes={"tippy.database_url": database})
+                with _ALEMBIC_LOCK:
+                    command.upgrade(cfg, "head")
                 return
-            except (psycopg.errors.LockNotAvailable, psycopg.OperationalError) as e:
+            except Exception as e:
+                if not LedgerCoreMixin._is_transient(e):
+                    log.exception("alembic upgrade head failed: %s", e)
+                    raise
                 last = e
-                try:
-                    self._conn.rollback()
-                except Exception:
-                    pass
+                log.warning(
+                    "alembic upgrade head contended (attempt %d/%d): %s", attempt, retries, e
+                )
                 time.sleep(delay)
-        raise RuntimeError(f"schema migration failed after {retries} attempts: {last}")
+        raise RuntimeError(
+            f"the schema stayed locked through {retries} alembic attempts: {last}"
+        )
 
     def reserve_idempotency_in_tx(self, key_hash: str, user_id: int, action: str) -> None:
         """Insert the reservation INTO THE CALLER'S TRANSACTION — no commit.
