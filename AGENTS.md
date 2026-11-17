@@ -36,7 +36,7 @@
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
 - `python -m pytest -q -m "not production"` — 11–16 min (measured 643 s alone on the host, 949 s
-  with another project's suite sharing it), 1381 tests (173 more, marked `production`, run
+  with another project's suite sharing it), 1383 tests (173 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -112,7 +112,10 @@
   line that pulls in the 173 `production` tests both fail, while a targeted-file run that still
   states its `-m` is allowed); and no document tells a human to reach this host on a port the
   tree does not listen on (`_ports_the_stack_answers_on()` derives the live set from the
-  `postgresql://` authorities and `WEB_PORT`, measured this wave as 5432 and 8000 —
+  `postgresql://` authorities, `WEB_PORT` and every loopback port a tracked `deploy/` program
+  binds — cloudflared's metrics `127.0.0.1:20241` is a port this host answers on because
+  `deploy/watchdog.ps1` names it, and the third source is asserted non-empty so a doc cannot gain
+  a free port by the deploy tree going unread; measured this wave as 5432, 8000 and 20241 —
   `docs/CONTRIBUTING.md` promised a published database port of its own and `docs/OPERATIONS.md`
   had Prometheus scrape the app on a port that is not `WEB_PORT`; neither compose file has a
   ports key at all, so the stack answers on the compose network and `app:8000` is what a
@@ -459,13 +462,16 @@
   `main`, `fonts.css` and all eleven faces were absent — and an absent bundle file is not a 404, it
   is `200 text/html`: Pages answers a missing path with the landing page, so every `@font-face` src
   resolved to a whole website and the browser silently painted the operating system's font, exactly
-  the shape `/robots.txt` had. Nothing in the tree could say so.
+  the shape `/robots.txt` had. Nothing in the tree could say so. The miss is now refused where it is
+  produced: `functions/[[path]].js` treats an asset path whose bundle answer is `text/html` as a miss
+  and lets it reach the origin, because a `200` from Pages is not evidence that a file was found.
   `tests/test_production_health.py::test_the_published_bundle_is_this_checkouts_bundle` now hashes
   every file the directory walk says the edge can answer and compares the bytes, the type and the
   `max-age` against this checkout and against `_headers`; the companion law asks the two paths that
   must never reach the bundle (`/robots.txt`, a missing `.css`) what the edge does with them. Both
   are `production` — an ordinary green run does not prove a deploy happened, and
-  `--commit-dirty=true` is precisely why a deploy proves nothing about a commit either.
+  `--commit-dirty=true` is precisely why a deploy proves nothing about a commit either. Published the
+  same wave: 21 bundle assets, bytes and windows identical to the tree.
 - **One file, one cache window, read in three places.** Before this wave the site had no promise
   about how long anything may be cached: the middleware's blanket `setdefault('Cache-Control',
   'no-store…')` covered the origin's own assets, and Pages answered the same files with
@@ -482,8 +488,12 @@
   `no-store` and has to be argued out of it. `/qr` is the one non-asset the origin publishes as
   cacheable and the law measures its premise rather than trusting it — the same URL answered cold
   and answered by a signed session must be the same bytes with the same window, because a long window
-  on a URL is only safe when nothing but the URL decides the answer.
-- **Three more laws read the Function file, because it is the other program that answers this
+  on a URL is only safe when nothing but the URL decides the answer. The path-to-window reader is
+  `window_for()`, held to the decoy this tree actually ships: `fonts.css` sits at the bundle root
+  beside the `fonts/` directory, so a directory pattern sliced as a name prefix (`pattern[1:-2]`, the
+  first version) claims that stylesheet twice with two different windows — which is how the live law
+  went red on a bundle that was byte-for-byte correct.
+- **Four more laws read the Function file, because it is the other program that answers this
   origin and no Python ever executes it.** `test_the_edge_routes_every_class_of_file_the_bundle_ships`
   takes the `ASSET` extension list out of the shipped `functions/[[path]].js` and requires every
   shipped suffix to match and `.html`/`.md`/`.txt`/`.json`/`.yaml`/`.yml` to **not** — a class the
@@ -500,7 +510,27 @@
   also the only document on this site that no middleware writes, so
   `test_the_edge_card_sends_the_headers_the_origin_sends` requires `nosniff`, `no-referrer`,
   `Retry-After: 300` and `no-store` in its own `Response` — a cacheable outage card outlives the
-  outage. Sixteen mutations were proven to fire across these eight laws and the two live ones.
+  outage. The fourth reads the **outage window itself**:
+  `test_the_edge_answers_a_silent_origin_inside_the_window_the_doc_promises` takes
+  `UPSTREAM_DEADLINE_MS` out of the Function, refuses a figure that is not whole seconds or not in
+  5–25 s, then requires the four shapes that make it real — the timer armed on that constant, the
+  `signal` reaching the upstream `fetch`, `if (expired) break;` inside the retry loop, and
+  `clearTimeout(timer)` after the answer is chosen — and finally compares it with the one
+  `docs/CLOUDFLARE.md` paragraph that names the constant and the **15 s** it bolds. The reason is a
+  measurement: with the laptop's tunnel mid-reconnect a request into the black-holed origin sat
+  **22.5 s** before the visitor saw the card, because `fetch` has no deadline of its own and the wait
+  fell through to Cloudflare's subrequest limit — a 22-second spinner is indistinguishable from a dead
+  tab, which is the one thing the card exists to avoid saying. 15 s rather than something snappier
+  because the same origin has answered a plain health read in 7.8 s while the host ran its test suite,
+  and a deadline that cuts off a live origin manufactures the outage it reports.
+  The shipped file was then run, not read: in workerd against a scratch origin that answers nothing
+  for 25 s the card arrived at **15.1 s** (one window, not two — the spent window is not retried), a
+  second scratch origin that sends headers at once and trickles its body for 30 s delivered **all 12
+  chunks and `END`** at 30.1 s, which is what `clearTimeout` buys and what `AbortSignal.timeout()`
+  would have destroyed; a refused connection still retried and answered the card in 0.27 s, and the
+  app's own `502 application/json` still passed through untouched. Twenty-five mutations were proven
+  to fire across these nine laws and the two live ones, the last of them against `window_for()`
+  itself: the same slice that the first version carried makes `fonts.css` a file the font block owns.
 - A browser navigation never gets a JSON body. `not_found.html` is rendered with `noindex`, **no
   canonical and no share card** (`canonical=False` — a URL that 404s must not name itself as a
   page), for any 404 outside `/api/`; a `RequestValidationError` on a page path is the same dead

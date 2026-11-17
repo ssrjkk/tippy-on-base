@@ -12,8 +12,12 @@ import sys
 CF = os.path.join(os.path.dirname(__file__), "cloudflared.exe")
 
 def main():
+    # http2, not the default auto: on a host whose VPN/TUN interface answers the
+    # QUIC precheck and then drops the tunnel's long-lived UDP streams, an auto
+    # connector registers four connections, loses them all, and the origin reads
+    # as unreachable while uvicorn is serving fine.
     proc = subprocess.Popen(
-        [CF, "tunnel", "--url", "http://localhost:8000"],
+        [CF, "tunnel", "--url", "http://localhost:8000", "--protocol", "http2"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

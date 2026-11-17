@@ -660,7 +660,14 @@ def test_every_documented_gate_command_is_the_command_ci_runs():
 
 
 def _ports_the_stack_answers_on() -> set[str]:
-    """The Postgres wire port read off a connection string, plus `WEB_PORT`."""
+    """The Postgres wire port read off a connection string, `WEB_PORT`, and every
+    loopback port a tracked `deploy/` program binds.
+
+    The third source is what makes `127.0.0.1:20241` a legal thing to tell an
+    operator: cloudflared's metrics server is a port this host answers on because
+    the script that starts it says so, and a document that reads it off the
+    running machine is reading the same script. A deploy program that stops
+    binding a port takes it out of the documents with it."""
     authority = [
         ROOT / ".env.example",
         ROOT / "docker-compose.yml",
@@ -677,7 +684,15 @@ def _ports_the_stack_answers_on() -> set[str]:
         ports |= set(re.findall(r"postgresql://[^\s\"']*?:(\d{2,5})/", text))
         web_port |= set(re.findall(r'WEB_PORT\D{0,20}?(\d{2,5})', text))
     assert ports and web_port, f"no Postgres port ({sorted(ports)}) or WEB_PORT ({sorted(web_port)}) derived"
-    return ports | web_port
+    bind: set[str] = set()
+    for name in sorted(_tracked_files("deploy")):
+        path = ROOT / name
+        if path.suffix.lower() not in {".py", ".ps1", ".sh"}:
+            continue
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        bind |= set(re.findall(r"(?:127\.0\.0\.1|localhost):(\d{2,5})\b", text))
+    assert bind, "no tracked deploy/ program binds a loopback port — the third source went blind"
+    return ports | web_port | bind
 
 
 def test_no_document_tells_a_human_to_reach_a_port_the_stack_does_not_answer_on():

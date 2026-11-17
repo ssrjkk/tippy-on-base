@@ -120,9 +120,15 @@ this checkout: `style.css`, `app.js`, `chain.js` and `site.js` were the previous
 revisions, and `fonts.css` plus all eleven faces were not in the bundle at all,
 which is not a 404 — Pages answers a missing path with the landing page, so every
 `@font-face` src resolved to a whole website and the browser silently fell back to
-the operating system's font. `--commit-dirty=true` is what lets a working tree
-publish; it is also how a deploy stops meaning anything about a commit, so the
-law below compares the live bytes with the tree instead of trusting either.
+the operating system's font. That answer is now refused where it is produced: the
+Function treats an asset path whose bundle response is `text/html` as a miss and
+lets it reach the origin, which is the only thing that knows it is a 404. Measured
+on the live host: `/wave33-no-such-asset.css` answered `200 text/html` before the
+fix and the origin's own answer after it — while the origin cannot be reached, that
+answer is the outage card. The cause the law below measures is unchanged: a file
+that was never published is still absent, and it is absent silently. `--commit-dirty=true`
+is what lets a working tree publish, and it is also how a deploy stops meaning
+anything about a commit.
 
 ```bash
 python -m pytest tests/test_production_health.py -m production
@@ -140,6 +146,18 @@ or in the dashboard under **Workers & Pages → tippy → Settings → Variables
 Requests that reach the function without it get a 503 maintenance card with
 `Retry-After: 300` instead of a silent failure — the same card replaces a gateway
 5xx from a dead origin, so a visitor never sees an infrastructure error page.
+
+The card has to arrive, too. Before the deadline existed, a request into a tunnel
+that was mid-reconnect waited for Cloudflare's own subrequest limit — measured once
+at more than twenty seconds of spinner — where the page promised an answer.
+`functions/[[path]].js` now arms `UPSTREAM_DEADLINE_MS` on the upstream request, so a
+visitor gives up on the origin after **15 s** and reads the card instead; a window
+spent hearing nothing is not retried, because a second silence is a longer wait, not
+better evidence, and the timer is cleared the moment the origin starts answering, so
+a slow document is delivered rather than truncated. The number is deliberately not
+tighter: the same origin has answered a plain health read in 7.8 s while the machine
+hosting it ran the test suite, and a deadline that cuts a live origin off invents the
+outage it is supposed to report.
 
 ## 4. Proxy trust on the backend
 
@@ -212,10 +230,11 @@ python -m pytest tests/test_production_health.py -m production
 |---|---|
 | 503 maintenance card on every dynamic page | `BACKEND_URL` missing on the project, or the origin is down (the function replaces a gateway 5xx that carries no JSON) |
 | `cloudflared: Could not lookup srv records on _v2-origintunneld._tcp.argotunnel.com` | The host's resolver answers A but not SRV, which is how VPN/TUN resolvers behave. Allow SRV for `argotunnel.com`, or run the origin where DNS is normal |
+| The origin serves `127.0.0.1:8000` fine, `http://127.0.0.1:20241/ready` says 503, and Pages shows the maintenance card | The connector was started with `--protocol auto`. A VPN/TUN interface answers cloudflared's QUIC precheck with PASS and then drops the long-lived UDP streams, so each connection registers and dies on `timeout: no recent network activity` and the watchdog keeps restarting a tunnel that can never be ready. All three local launchers (`deploy/tunnel.py`, `deploy/launch.py`, `deploy/watchdog.ps1`) pin `http2`, whose TCP path the same precheck also passes |
 | Every page shows the landing page | A `_redirects` rewrite is still in the bundle |
 | Signs in, then immediately signed out | `Secure` cookie rejected: check `X-Forwarded-Proto` and that the origin is https |
 | `/index.html` (or any `*.html`) answers 200 with the template | The Pages project is serving the bundle without the origin: `BundleFiles` refuses those paths, so a raw template means the function did not run for it |
-| The site shows the old design, or the text sets itself in the system font | The bundle was never published: `web/static` on the edge is older than `web/static` in the tree. Run `python -m pytest tests/test_production_health.py -m production` — it names every file that differs, and a missing face is not a 404 but the landing page with `200 text/html` |
+| The site shows the old design, or the text sets itself in the system font | The bundle was never published: `web/static` on the edge is older than `web/static` in the tree. Run `python -m pytest tests/test_production_health.py -m production` — it names every file that differs. A face the bundle does not carry used to arrive as the landing page with `200 text/html`; the Function refuses that answer now, so a missing file reaches the origin and reads as its 404 — or as the outage card while the origin is unreachable |
 | Address bar ends in `/?auth=state` after the Telegram button | Cookie not surviving the proxy (same as above) or older than 30 minutes |
 | Address bar ends in `/?auth=slow` | That IP hit `AUTH_RATE_LIMIT` attempts in `AUTH_RATE_WINDOW` seconds — the origin answers the browser with the landing and a reason code, so the limit shows up as a message, not a JSON page |
 | Rate limits trigger for one user only, or for everyone | `TRUST_PROXY_XFF` / `TRUSTED_PROXY_PEERS` misconfigured |

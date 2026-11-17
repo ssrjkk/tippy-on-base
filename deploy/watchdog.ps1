@@ -63,8 +63,13 @@ function Start-Connector([string]$Address) {
     $previous = $env:TUNNEL_TOKEN
     try {
         $env:TUNNEL_TOKEN = $token
+        # http2, not auto: this host's VPN/TUN interface answers the QUIC precheck
+        # and then kills the long-lived UDP streams, so an auto connector
+        # registers four connections, loses them on 'no recent network activity'
+        # and leaves /ready at 503 forever — the origin is up and Pages cannot
+        # reach it. launch.py has always pinned http2 for the same reason.
         Start-Process -FilePath $Cloudflared -WindowStyle Hidden -ArgumentList @(
-            'tunnel', '--no-autoupdate', '--protocol', 'auto',
+            'tunnel', '--no-autoupdate', '--protocol', 'http2',
             '--edge-bind-address', $Address, '--metrics', '127.0.0.1:20241',
             '--logfile', ('"{0}"' -f $CfLog), 'run'
         ) | Out-Null

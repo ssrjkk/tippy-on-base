@@ -6,7 +6,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from test_design_system import header_blocks
+from test_design_system import header_blocks, window_for
 
 HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
 
@@ -96,18 +96,6 @@ def test_the_published_bundle_is_this_checkouts_bundle():
     promises = edge_promises()
     assert len(promises) >= 4, f"_headers declared {promises} — no window to measure"
 
-    def promised(path: str) -> int:
-        wanted = None
-        for pattern, value in promises:
-            if pattern == "/*":
-                continue
-            if (pattern.endswith("/*") and path.startswith(pattern[1:-2])) \
-                    or (pattern.startswith("/*.") and path.endswith(pattern[2:])):
-                assert wanted in (None, value), f"{path} is claimed by two blocks"
-                wanted = value
-        assert wanted is not None, f"{Path(path).suffix} reaches the edge with no block in _headers"
-        return wanted
-
     findings = []
     for asset in assets:
         status, headers, body = get(f"/{asset}")
@@ -125,9 +113,10 @@ def test_the_published_bundle_is_this_checkouts_bundle():
                              "note": f"live {len(body)} B / {hashlib.sha256(body).hexdigest()[:12]} "
                                      f"!= tree {len(local)} B / {hashlib.sha256(local).hexdigest()[:12]}"})
         live_age = max_age_of(headers.get("cache-control", ""))
-        if live_age != promised(asset):
+        if live_age != window_for(asset, promises):
             findings.append({"asset": asset, "status": status,
-                             "note": f"edge cached for max-age={live_age}, _headers promises {promised(asset)}"})
+                             "note": f"edge cached for max-age={live_age}, _headers promises "
+                                     f"{window_for(asset, promises)}"})
     assert not findings, ("the published Pages bundle is not this checkout:\n"
                           + "\n".join(f"{f['asset']}: {f.get('note', f.get('served', f.get('status')))}"
                                      for f in findings))

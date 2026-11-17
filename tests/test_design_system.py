@@ -1942,6 +1942,29 @@ def suffixes_covered_by(pattern: str, root: Path | None = None) -> set[str]:
     return {f".{match.group(1)}"} if match else set()
 
 
+def window_for(path: str, promises: list[tuple[str, int]]) -> int:
+    """The `Cache-Control` window a bundle-relative path is owed, walked through
+    the two shapes `_headers` can be written in.
+
+    `/fonts/*` names a *directory*, so the prefix keeps its slash: slicing the
+    pattern as `pattern[1:-2]` drops that slash together with the `/*`, and then
+    `fonts.css` — a stylesheet at the bundle root, next to the directory — reads
+    as claimed by the font block and the stylesheet block at once. That is a name
+    collision inside the law, not a defect on the edge: the live bundle answered
+    the file with the code window and the law was the thing that was wrong."""
+    wanted: int | None = None
+    for pattern, value in promises:
+        if pattern == "/*":
+            continue
+        hit = (pattern.endswith("/*") and path.startswith(pattern[1:-1])) \
+            or (pattern.startswith("/*.") and path.endswith(pattern[2:]))
+        if hit:
+            assert wanted in (None, value), f"{path} is claimed by two blocks"
+            wanted = value
+    assert wanted is not None, f"{Path(path).suffix} reaches the edge with no block in _headers"
+    return wanted
+
+
 def test_one_file_one_caching_policy_in_both_answers():
     """Pages answered every asset with its own default — `max-age=0,
     must-revalidate` — and the origin answered the same file with `no-store`,
@@ -2122,6 +2145,58 @@ def test_the_edge_card_sends_the_headers_the_origin_sends():
     assert headers.get("content-type", "").startswith("text/html"), headers
 
 
+def test_the_edge_answers_a_silent_origin_inside_the_window_the_doc_promises():
+    """The outage card is only kind if it arrives. Measured on the live host while
+    the tunnel was mid-reconnect: `fetch` had no deadline, so a request sat **22.5 s**
+    behind a spinner and then spent a second untimed window in the retry loop — the
+    one behaviour a visitor cannot distinguish from a dead tab. So the edge names one
+    `UPSTREAM_DEADLINE_MS`, arms it on the upstream request, releases it once the
+    origin has begun answering (a body still arriving is a live page, not an outage),
+    and treats a spent window as the end of the retry rather than a blink worth
+    another wait. The paragraph of `docs/CLOUDFLARE.md` that names the constant has
+    to bold the same figure, because a runbook promising a card at fifteen seconds
+    that ships it at forty teaches the operator to distrust the runbook."""
+    source = EDGE.read_text(encoding="utf-8-sig")
+    declared = re.search(r"const UPSTREAM_DEADLINE_MS = (\d+);", source)
+    assert declared, "the edge no longer names one upstream deadline constant"
+    milliseconds = int(declared.group(1))
+    assert milliseconds % 1000 == 0, f"{milliseconds} ms is not a figure a document can quote in seconds"
+    seconds = milliseconds // 1000
+    assert 5 <= seconds <= 25, (
+        f"a {seconds} s window is either shorter than this origin's measured worst "
+        "answer under load (7.8 s for a health read on the hosting machine) or longer "
+        "than a browser tab a human is still watching"
+    )
+    armed = re.search(r"setTimeout\(\(\) => \{ expired = true; waiting\.abort\(\); \},"
+                      r" UPSTREAM_DEADLINE_MS\)", source)
+    assert armed, "the deadline is declared and never armed on the upstream request"
+    upstream = re.search(r"const send = \(\) => fetch\(.*?\n {2}\}\);", source, re.S)
+    assert upstream and re.search(r"\bsignal:\s*waiting\.signal\b", upstream.group(0)), (
+        "the armed controller never reaches the upstream request"
+    )
+    loop = source[source.index("for (let attempt"):source.index("const answer")]
+    assert re.search(r"if \(expired\) break;", loop), (
+        "a spent window is retried: the deadline the card promises becomes two windows "
+        "of silence, which is the defect this law was written after measuring"
+    )
+    tail = source[source.index("const answer"):]
+    assert re.search(r"clearTimeout\(timer\)", tail), (
+        "the timer survives the answer, so an origin that takes eight seconds to "
+        "stream a document has its body cut off by a deadline that was only ever "
+        "meant to bound the wait for the first byte"
+    )
+    doc = (ROOT / "docs" / "CLOUDFLARE.md").read_text(encoding="utf-8-sig")
+    paragraphs = [block for block in doc.split("\n\n") if "UPSTREAM_DEADLINE_MS" in block]
+    assert len(paragraphs) == 1, (
+        f"the deadline is promised in {len(paragraphs)} paragraphs of the doc; two "
+        "places state one number and only one of them can be right"
+    )
+    promised = re.findall(r"\*\*(\d+) s\*\*", paragraphs[0])
+    assert promised == [str(seconds)], (
+        f"the doc bolds {promised} where the code arms {seconds} s"
+    )
+
+
 def test_the_headers_reader_reads_every_block_the_file_writes(tmp_path):
     """`header_blocks()` is four lines of parsing standing between the shipped
     policy and a green build, so a parser that quietly returned only the first
@@ -2170,6 +2245,24 @@ def test_a_pattern_reaches_the_files_that_actually_exist(tmp_path):
     assert suffixes_covered_by("/style.css", tmp_path) == set(), "a literal path is not a class"
     assert suffixes_covered_by("/*", tmp_path) == {".woff2", ".css", ".html"}, (
         "the extension-less `_headers` joined the set, so `/*` would claim a class no file has")
+
+
+def test_a_window_pattern_reaches_paths_and_not_names_that_look_alike():
+    """`window_for()` is how the live-bundle law decides what a file was promised.
+    The decoy is the real tree: `fonts.css` sits at the bundle root beside the
+    `fonts/` directory, and a pattern matcher that reads `/fonts/*` as the prefix
+    `fonts` claims it twice with two different windows — which is exactly how this
+    law failed the day the bundle it measures was byte-for-byte correct."""
+    promises = [("/*.css", 300), ("/*.js", 300), ("/fonts/*", 86400), ("/*.png", 86400)]
+    assert window_for("fonts.css", promises) == 300, (
+        "the directory block reached a root file whose name merely starts with it")
+    assert window_for("fonts/golos-text-latin.woff2", promises) == 86400
+    assert window_for("style.css", promises) == 300
+    assert window_for("chain.js", promises) == 300
+    with pytest.raises(AssertionError):
+        window_for("legal.md", promises)
+    with pytest.raises(AssertionError):
+        window_for("a.css", [("/*.css", 300), ("/nope/*", 1), ("/*.css", 86400)])
 
 
 # ---------------------------------------------------------------------------

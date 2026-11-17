@@ -363,7 +363,7 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts alembic
-python -m pytest -q -m "not production"   # 1381 passed
+python -m pytest -q -m "not production"   # 1383 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password

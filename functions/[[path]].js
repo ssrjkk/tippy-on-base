@@ -28,6 +28,12 @@
 
 const ASSET = /\.(?:css|js|mjs|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|otf|map|webmanifest)$/i;
 
+// The longest a visitor waits for an origin that is not answering, in
+// milliseconds. One number, here: `docs/CLOUDFLARE.md` states it in seconds and
+// a gate compares the two, because a promise about an outage is only useful if
+// the outage keeps it.
+const UPSTREAM_DEADLINE_MS = 15000;
+
 const MAINTENANCE = `<!doctype html>
 <html lang="ru">
 <head>
@@ -137,7 +143,14 @@ export async function onRequest(context) {
 
   if (reads && ASSET.test(pathname)) {
     const asset = await env.ASSETS.fetch(request);
-    if (asset.status !== 404) return asset;
+    // A miss is not always a 404. Measured on this deployment: a stylesheet the
+    // bundle does not carry comes back as the landing document — `200
+    // text/html`, with `_headers` still stamping it the code cache window — so a
+    // status test alone returns a whole website where a visitor asked for one
+    // file, and the browser then paints the operating system's font without ever
+    // reporting an error. The payload's type is the fact; the status is not.
+    const served = (asset.headers.get('content-type') || '').toLowerCase();
+    if (asset.status !== 404 && !served.includes('text/html')) return asset;
   }
 
   const backend = (env.BACKEND_URL || '').replace(/\/+$/, '');
@@ -161,10 +174,25 @@ export async function onRequest(context) {
     || ([502, 503, 504].includes(res.status)
         && !(res.headers.get('content-type') || '').includes('application/json'));
 
+  // Measured on this deployment while the laptop's tunnel was mid-reconnect: a
+  // request into a black-holed origin sat 22.5 s before the visitor saw the card,
+  // because `fetch` has no deadline of its own and the wait fell through to
+  // Cloudflare's subrequest limit. A visitor cannot tell a 22-second spinner from a
+  // dead tab, which is the one thing this card exists to avoid saying. The window
+  // bounds the whole upstream exchange — retries included, since the controller is
+  // armed once outside `send()` — and it is 15 s rather than something snappier
+  // because this origin has been measured at 7.8 s for a plain health read while the
+  // same machine ran its test suite, and a deadline that cuts off a live origin
+  // manufactures the outage it is supposed to report.
+  const waiting = new AbortController();
+  let expired = false;
+  const timer = setTimeout(() => { expired = true; waiting.abort(); }, UPSTREAM_DEADLINE_MS);
+
   const send = () => fetch(backend + pathname + search, {
     method: request.method,
     headers,
     body: reads ? undefined : request.body,
+    signal: waiting.signal,
   });
 
   // Edge subrequests blink occasionally, and for a read the cost of one more
@@ -178,7 +206,16 @@ export async function onRequest(context) {
       if (!isDown(upstream)) break;
     } catch {
       upstream = null;
+      // A refused connection is a blink worth another try; a spent window is the
+      // origin having said nothing for fifteen seconds, and a second silence is not
+      // evidence — it is only a longer wait before the same card.
+      if (expired) break;
     }
   }
-  return upstream && !isDown(upstream) ? upstream : maintenance();
+  const answer = upstream && !isDown(upstream) ? upstream : maintenance();
+  // The deadline guarded the wait for the first byte. Once the origin has begun
+  // answering, a body still arriving is a live page, and letting the timer fire
+  // would truncate a half-delivered document and call it a maintenance window.
+  clearTimeout(timer);
+  return answer;
 }
