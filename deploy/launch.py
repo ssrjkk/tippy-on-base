@@ -109,6 +109,10 @@ def start_cloudflared(bin_path: str):
         [bin_path, "tunnel", "--url", f"http://localhost:{PORT}",
          "--protocol", "http2", "--no-autoupdate"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+        # cloudflared writes UTF-8; decoded with the Windows console codepage the
+        # first non-ASCII log line raises in the reader and the URL below is never
+        # parsed, so the tunnel the operator did start looks like it never came up.
+        encoding="utf-8", errors="replace",
     )
     url = None
     started = time.time()

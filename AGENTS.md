@@ -12,6 +12,16 @@
   Never assert a config literal in a test — read it from config.
 - stdout of redirected Python on this console is cp1251: printing Cyrillic or `–` raises
   `UnicodeEncodeError`. Write JSON/text reports as files opened with `encoding="utf-8"`.
+  The same quirk bites in the other direction: a `text=True` pipe with no `encoding=` is
+  decoded with the **console codepage** while the child writes UTF-8, and the resulting
+  `UnicodeDecodeError` dies inside the pipe-reader thread, so the parent gets `None` and
+  nobody sees the output the failure was supposed to explain. Every child this repo reads
+  as text therefore names its encoding on both sides — `-X utf8` for a Python child,
+  `encoding="utf-8", errors="replace"` for the parent.
+  `test_every_child_process_this_repo_reads_as_text_names_its_encoding` in `tests/test_admin.py`
+  walks every spawn site in `bot|web|agent|deploy|scripts|alembic|tests` (10 measured, count
+  asserted), and `deploy/launch.py` parsing cloudflared's URL out of that pipe is why this is not
+  only a harness rule: a correctly started tunnel reads as one that never came up.
 - Every text file is stored with LF and `.gitattributes` says so. A patch script must therefore
   rewrite with `Path.write_bytes(...encode("utf-8"))`, not `write_text()`: text mode on this host
   turns every `\n` into `\r\n` and the diff is the whole file. Ten files carry a UTF-8 BOM (`web/mini.py`, `web/auth.py`, `web/frame.py`,
@@ -25,7 +35,7 @@
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding. `alembic/` joined the
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
-- `python -m pytest -q -m "not production"` — ~14 min, 1353 tests (171 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — ~11 min (measured 643 s), 1358 tests (171 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -108,6 +118,40 @@
   Prometheus attached to it reaches). Commands
   are read from fenced blocks and backtick spans only, and the argument list is cut at the
   first `# | < >` — prose after a closing backtick is not a service name.
+- **The monetization prose is the same kind of document law, and §7.1 of the WHITEPAPER is what
+  a counterparty reads about where the platform's money comes from.**
+  `test_the_whitepaper_cites_the_statements_that_earn_the_platform_money` builds the subject set
+  from the AST rather than from the doc: `_tx_log_writers()` walks every runtime `*.py` for an
+  `INSERT INTO tx_log` **and** for a `credit(...)` call whose kind argument is a literal — that
+  one method writes through the `%s` slot the INSERT can only name `<kind>` (`bot/ledger/_pay.py:9`
+  is where the scan would otherwise be blind). Measured this wave: 36 statements write the ledger,
+  exactly two of them carry `kind='fee'`, both in `bot/ledger/_withdraw.py`. §7.1's
+  `` `file.py:NNN` `` citations must map **bijectively** onto that set — a citation naming a line
+  no fee statement covers is a doc pointing at moved code, and a fee statement the doc never cites
+  is platform revenue the WHITEPAPER does not list. The gate then reads the two expressions §7.1
+  quotes (`creator_income = fee_sum + remainder`,
+  `creator_fee = min(win_fee_micro(distributed), leftover)`) back out of `ast.get_source_segment`
+  of the real assignments and compares them **whole**, so a doc paraphrasing half a sum survives
+  review and fails the build; substring containment was the first version's hole and mutation M5
+  is what closed it. `creator_income` may be written by no file outside the two payout engines.
+  A unit test of the reader itself (`test_the_positional_reader_reads_the_kind_from_the_column_that_holds_it`)
+  is the third gate, because a substring scan reads `INSERT … SELECT 'withdraw' … WHERE kind='fee'`
+  as revenue: `_kinds_written_by()` splits the VALUES/SELECT lists on **top-level** commas only,
+  takes the cell under the `kind` column, and reports an arity mismatch instead of guessing.
+  `test_no_document_states_a_fee_rate_that_is_not_the_rate_that_fee_carries` then reads **every**
+  tracked `*.md` — not the four files `tests/test_fees.py::test_help_text_percentages_are_the_configured_rates`
+  still names — and attributes each `%` to the mechanism its own sentence says (withdrawal or win)
+  within 60 characters, after `_prose()` drops fenced blocks and replaces file spans so a
+  `bot/fees.py` mention cannot masquerade as a fee word. 13 claims measured (7 win, 6 withdrawal),
+  and a rate with no mechanism beside it, or one sitting between two, is reported rather than
+  guessed — which found one real defect: `docs/DEPLOY.md` had put both rates in one
+  parenthetical as bare numbers, so an operator holding a `.env` diff could not tell which
+  figure was the withdrawal fee and which the win fee; the line now names each fee beside its
+  own number. Eight mutations were proven to fire (a paywall row written as `fee`, a
+  `credit(…, 'fee')`, a moved citation, a renamed variable in code, a truncated quote in the doc,
+  and three wrong rates in three different documents). What the laws cannot see is stated here: a
+  rate written under proposal wording («proposed», «levers», «would») is exempt — §7.2's 0.5%
+  scenario is a what-if, not a promise — and a document may still describe a fee qualitatively.
 - Three AST gates read the runtime tree, because prose review missed all three:
   `test_every_ledger_call_site_resolves_on_the_real_class` (every `ledger.<method>()` call in
   `bot|web|agent|deploy|scripts` has to exist on `Ledger` — `bot/credit.py` called five methods
@@ -219,6 +263,14 @@
   `_is_transient` walking the exception chain to the innermost Postgres state), so a process
   cannot serve money on a schema it never asked for; `test_a_failing_migration_stops_the_process`
   and `test_schema_contention_is_retried_and_a_stuck_lock_is_loud` measure both halves.
+  The harness drops its scratch databases the same forced way: `chain_only_database` used a bare
+  `DROP DATABASE`, one contended lock turned that teardown into an unbounded wait, and under
+  `--timeout-method=thread` a wait in a teardown does not fail one test — it aborts the session and
+  prints only a stack, which is how a full run here reported nothing at all after eleven minutes.
+  `test_a_test_database_is_never_dropped_without_force` reads the call arguments of every
+  `tests/*.py` — prose about a drop is not one, and an f-string is read whole rather than as its
+  fragments — and requires `WITH (FORCE)` on each of the three drops, with the count asserted so a
+  blind scan cannot pass; `conftest.py` had already learned this for `tipbot_test`.
 - **The dust floor is one number, and the layers that carry it are read from the tree.**
   `config.MARKET_MIN_TRADE_MICRO` in `bot/config.py` is deliberately not an env knob: it is the only
   place the value is written. Both refusal paths compare against it and answer `api_amount_dust`

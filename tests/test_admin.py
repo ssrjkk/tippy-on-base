@@ -340,8 +340,12 @@ def test_admin_tg_id_is_only_an_alias_of_the_owner():
     def resolve(owner: str, admin: str) -> str:
         env = {**os.environ, "OWNER_ID": owner, "ADMIN_TG_ID": admin}
         out = subprocess.run(
-            [sys.executable, "-c", probe], cwd=root, env=env,
-            capture_output=True, text=True,
+            # `-X utf8` makes the child write UTF-8; without it a Windows child
+            # encodes its stderr with the console codepage while this parent decodes
+            # UTF-8, and `bot.config` logging a Cyrillic line at import killed the
+            # reader thread — the assert below then reported `out.stderr` as None.
+            [sys.executable, "-X", "utf8", "-c", probe], cwd=root, env=env,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         assert out.returncode == 0, out.stderr
         return out.stdout.strip()
@@ -350,6 +354,47 @@ def test_admin_tg_id_is_only_an_alias_of_the_owner():
     assert resolve("", "397") == "397 397"      # legacy spelling only
     assert resolve("397", "397") == "397 397"
     assert resolve("397", "555") == "397 397"   # conflict: the owner wins
+
+
+def test_every_child_process_this_repo_reads_as_text_names_its_encoding():
+    """`text=True` without `encoding=` decodes the child with the **console codepage**,
+    and on this host that is cp1251 while every child writes UTF-8 — `git ls-files`
+    paths, cloudflared's log glyphs, a Python that logged a Cyrillic line while
+    importing `bot.config`. The decode error does not surface where it happened: it
+    kills the pipe-reader thread, the parent gets `None`, and the failure an operator
+    was supposed to read (`out.stderr`, the tunnel's own output) is simply absent —
+    which is how this suite printed a warning instead of the reason a probe failed,
+    and how a running tunnel could be reported as never started. The population is
+    every spawn site in the shipped packages and the harness, read as AST so prose
+    about a subprocess cannot answer for one, and the count is asserted so a blind
+    scan cannot pass vacuously."""
+    root = Path(__file__).resolve().parents[1]
+    SPAWNERS = {"run", "Popen", "check_output", "check_call", "call"}
+    TEXT_FLAGS = {"text", "universal_newlines"}
+    decoded, missing = 0, []
+    for pkg in ("bot", "web", "agent", "deploy", "scripts", "alembic", "tests"):
+        for path in sorted((root / pkg).rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                call_name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+                if call_name not in SPAWNERS:
+                    continue
+                keywords = {kw.arg: kw for kw in node.keywords if kw.arg}
+                text_mode = "encoding" in keywords or any(
+                    isinstance(keywords[flag].value, ast.Constant)
+                    and keywords[flag].value.value is True
+                    for flag in TEXT_FLAGS
+                    if flag in keywords
+                )
+                if not text_mode:
+                    continue  # a bytes pipe decodes nothing, so it cannot break
+                decoded += 1
+                if "encoding" not in keywords:
+                    missing.append(f"{path.relative_to(root).as_posix()}:{node.lineno}")
+    assert decoded >= 10, f"only {decoded} text-mode spawn sites were read — the scan is blind"
+    assert not missing, f"{missing} decode a child's UTF-8 with the console codepage"
 
 
 def test_the_panel_calls_nothing_that_moves_money():

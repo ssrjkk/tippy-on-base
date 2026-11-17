@@ -2103,21 +2103,75 @@ def executed_relations() -> dict[str, set[str]]:
 
 @pytest.fixture(scope="module")
 def chain_only_database():
-    """A database made by `alembic upgrade head` and nothing else, through the runtime's own call."""
+    """A database made by `alembic upgrade head` and nothing else, through the runtime's own call.
+
+    Both `DROP`s carry `WITH (FORCE)`, the way `tests/conftest.py` drops `tipbot_test`:
+    a plain `DROP DATABASE` waits **unbounded** for the AccessExclusiveLock, so one
+    backend left on this database — a connection the GC had not yet closed, an
+    autovacuum worker, or the wreckage of an aborted session — turns the fixture's
+    teardown into a hang. Under `--timeout-method=thread` that hang does not fail one
+    test: the timeout aborts the whole session, and a twelve-minute run reports nothing.
+    """
     try:
         from conftest import TEST_ADMIN_URL
     except ImportError:
         from tests.conftest import TEST_ADMIN_URL
 
     with psycopg.connect(TEST_ADMIN_URL, autocommit=True) as admin:
-        admin.execute(f"DROP DATABASE IF EXISTS {CHAIN_ONLY_DB}")
+        admin.execute(f"DROP DATABASE IF EXISTS {CHAIN_ONLY_DB} WITH (FORCE)")
         admin.execute(f"CREATE DATABASE {CHAIN_ONLY_DB}")
     try:
         Ledger._run_alembic(CHAIN_ONLY_URL)
         yield CHAIN_ONLY_URL
     finally:
         with psycopg.connect(TEST_ADMIN_URL, autocommit=True) as admin:
-            admin.execute(f"DROP DATABASE IF EXISTS {CHAIN_ONLY_DB}")
+            admin.execute(f"DROP DATABASE IF EXISTS {CHAIN_ONLY_DB} WITH (FORCE)")
+
+
+def _string_value(node) -> str | None:
+    """The text of a string constant or of an f-string with its holes cut to `?`."""
+    import ast
+
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            value.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            else "?"
+            for value in node.values
+        )
+    return None
+
+
+def test_a_test_database_is_never_dropped_without_force():
+    """A bare `DROP DATABASE` waits **unbounded** for the AccessExclusiveLock: one
+    backend left on that database — an un-GC'd connection, an autovacuum worker, the
+    wreckage of an earlier aborted session — turns the drop into a hang, and under
+    `--timeout-method=thread` a hang in a teardown does not fail one test, it aborts
+    the run and reports nothing but a stack. That is how a full twelve-minute session
+    died here: the chain-only teardown dropped the way `conftest.py` had stopped
+    dropping in 2026. The set is every `tests/*.py`, not the two files someone
+    remembered, and the count is asserted so a blind scan cannot pass."""
+    import ast
+    from pathlib import Path
+
+    force_re = re.compile(r"DROP\s+DATABASE[^;]*?\bWITH\s*\(\s*FORCE\s*\)", re.I)
+    drops, offenders = 0, []
+    for path in sorted(Path(__file__).parent.glob("*.py")):
+        source = path.read_text(encoding="utf-8-sig")
+        for node in ast.walk(ast.parse(source)):
+            # The call argument, not the file's prose: a docstring about a DROP is not one.
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            text = _string_value(node.args[0])
+            if text is None or "DROP DATABASE" not in text.upper():
+                continue
+            drops += 1
+            if not force_re.search(" ".join(text.split())):
+                offenders.append(f"{path.name}:{node.lineno} {text.strip()[:70]!r}")
+    assert drops >= 3, f"only {drops} DROP DATABASE statements were read — the scan is blind"
+    assert not offenders, f"{offenders} can wait forever for a lock some other backend holds"
 
 
 def _query(url, sql, args=()):

@@ -6,8 +6,10 @@ maintainer hunting for nothing (one such pointer lived in bot/base.py until
 this gate found it). Both are cheap to check from the tree.
 """
 
+import ast
 import re
 import subprocess
+from decimal import Decimal
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -22,6 +24,11 @@ def _tracked_files(*prefixes: str) -> set[str]:
         ["git", "ls-files", *prefixes],
         capture_output=True,
         text=True,
+        # Git writes UTF-8 bytes whatever the console says; decoding them with the
+        # Windows locale codepage would turn a non-ASCII path into a reader-thread
+        # UnicodeDecodeError, and stderr is the message an operator needs.
+        encoding="utf-8",
+        errors="replace",
         cwd=ROOT,
         timeout=60,
     )
@@ -655,4 +662,331 @@ def test_no_document_tells_a_human_to_reach_a_port_the_stack_does_not_answer_on(
                 if port not in live:
                     offenders.append(f"{path.relative_to(ROOT)}:{number} :{port} (live {sorted(live)})")
     assert not offenders, f"{offenders} name a port nothing in this tree listens on"
+
+
+RUNTIME_PACKAGES = ("bot", "web", "agent", "deploy", "scripts")
+
+
+def _split_on_commas(text: str) -> list[str]:
+    """Split a SQL column/value list on its top-level commas only.
+
+    `COALESCE(status, 'done')` and `substring(note from … for …)` are one value each;
+    splitting them by `text.split(",")` moves every later column one slot right and
+    reads a status string as the kind.
+    """
+    parts: list[str] = []
+    buf, depth, quote = "", 0, None
+    for char in text:
+        if quote:
+            buf += char
+            if char == quote:
+                quote = None
+        elif char in "'\"":
+            quote = char
+            buf += char
+        elif char == "(":
+            depth += 1
+            buf += char
+        elif char == ")":
+            depth -= 1
+            buf += char
+        elif char == "," and depth == 0:
+            parts.append(buf)
+            buf = ""
+        else:
+            buf += char
+    parts.append(buf)
+    return [part.strip() for part in parts]
+
+
+def _sql_argument(node: ast.Call) -> str | None:
+    """The SQL of a call, when its first argument is one string (implicit concatenation
+    folds into a single Constant) or an f-string with no interpolated SQL."""
+    if not node.args:
+        return None
+    first = node.args[0]
+    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+        return first.value
+    if isinstance(first, ast.JoinedStr):
+        return "".join(
+            value.value if isinstance(value, ast.Constant) and isinstance(value.value, str) else "?"
+            for value in first.values
+        )
+    return None
+
+
+def _kinds_written_by(sql: str) -> list[str]:
+    """The `kind` values one `INSERT INTO tx_log` writes, found by column position.
+
+    A `'fee'` in the note slot, inside `COALESCE`, or in a `WHERE kind = 'fee'` guard is
+    not a kind being written; only the value the column list puts in the `kind` slot is.
+    A parameterised kind comes back as `<expression>` so a caller naming it is still
+    measured, and a column/value count mismatch comes back as `<arity mismatch>` rather
+    than silently reading the wrong slot."""
+    flat = " ".join(sql.split())
+    head = re.match(r"INSERT\s+INTO\s+tx_log\s*\(([^)]*)\)", flat, re.I)
+    if head is None:
+        return []
+    columns = _split_on_commas(head.group(1))
+    rest = flat[head.end():].lstrip()
+    verb = re.match(r"(VALUES|SELECT)\b", rest, re.I)
+    if verb is None:
+        return []
+    body = rest[verb.end():].strip()
+    if verb.group(1).lower() == "values":
+        if not body.startswith("("):
+            return []
+        depth, quote, end = 1, None, len(body)
+        for index, char in enumerate(body[1:], 1):
+            if quote:
+                if char == quote:
+                    quote = None
+            elif char in "'\"":
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    end = index
+                    break
+        values = _split_on_commas(body[1:end])
+    else:
+        stop = re.search(r"\bWHERE\b", body, re.I)
+        values = _split_on_commas(body[: stop.start()] if stop else body)
+    if len(values) != len(columns):
+        return ["<arity mismatch>"]
+    kinds = []
+    for index, column in enumerate(columns):
+        if column.lower() != "kind":
+            continue
+        literal = re.fullmatch(r"'([a-z_0-9]+)'", values[index])
+        kinds.append(literal.group(1) if literal else f"<{values[index]}>")
+    return kinds
+
+
+def _tx_log_writers() -> list[tuple[str, int, int, list[str]]]:
+    """Every runtime statement that writes a `tx_log` row, with the kinds its SQL names.
+
+    `UPDATE tx_log` is deliberately absent: `test_the_audit_trail_keeps_the_properties_
+    the_architecture_documents` already forbids any UPDATE from touching `kind`, so an
+    INSERT scan sees every kind this database ever holds. `credit(...)` calls join the
+    list because that one method takes the kind as a parameter and writes it through the
+    `%s` slot the INSERT above can only call `<kind>`.
+    """
+    writers = []
+    for package in RUNTIME_PACKAGES:
+        for path in sorted((ROOT / package).rglob("*.py")):
+            source = path.read_text(encoding="utf-8-sig")
+            rel = path.relative_to(ROOT).as_posix()
+            for node in ast.walk(ast.parse(source)):
+                if not isinstance(node, ast.Call):
+                    continue
+                sql = _sql_argument(node)
+                if sql and "tx_log" in sql and "INSERT" in sql.upper():
+                    kinds = _kinds_written_by(sql)
+                    if kinds:
+                        writers.append((rel, node.lineno, node.end_lineno or node.lineno, kinds))
+                function = node.func
+                name = getattr(function, "attr", None) or getattr(function, "id", None)
+                if name != "credit":
+                    continue
+                literal = None
+                if len(node.args) >= 3 and isinstance(node.args[2], ast.Constant):
+                    literal = node.args[2].value
+                for keyword in node.keywords:
+                    if keyword.arg == "kind" and isinstance(keyword.value, ast.Constant):
+                        literal = keyword.value.value
+                if isinstance(literal, str):
+                    writers.append((rel, node.lineno, node.end_lineno or node.lineno, [literal]))
+    return writers
+
+
+def test_the_whitepaper_cites_the_statements_that_earn_the_platform_money():
+    """docs/WHITEPAPER.md §7.1 promises three things a change can break in silence:
+    that exactly one revenue line exists (the withdrawal commission), that the only
+    `kind='fee'` rows are the two statements it names by file and line, and that the
+    win commission is a creator's income rather than the platform's. Every clause was
+    true when the section was written and is measured by nothing — the platform could
+    book a cut on a paywall sale tomorrow and §7.1 would keep printing its table of
+    «no platform cut at all»."""
+    paper = (ROOT / "docs" / "WHITEPAPER.md").read_text(encoding="utf-8-sig")
+    start = paper.find("### 7.1")
+    assert start != -1, "docs/WHITEPAPER.md lost the §7.1 heading this gate reads"
+    tail = paper[start:]
+    following = re.search(r"\n#{2,3} ", tail[8:])
+    section = tail[: 8 + following.start()] if following else tail
+
+    writers = _tx_log_writers()
+    assert len(writers) >= 30, f"the tree writes {len(writers)} tx_log rows — the reader is blind"
+    broken = [f"{rel}:{first}" for rel, first, _last, kinds in writers if "<arity mismatch>" in kinds]
+    assert not broken, f"{broken} write tx_log with a column/value count that does not line up"
+
+    fee_sites = [site for site in writers if "fee" in site[3]]
+    assert fee_sites, "no statement writes kind='fee': §7.1 cites revenue that does not exist"
+
+    cited = re.findall(r"`([A-Za-z0-9_.\-/]+\.py):(\d+)`", section)
+    assert cited, "§7.1 names no file:line, so the claim it was made against is no longer written down"
+    matched, dangling = set(), []
+    for rel, line in cited:
+        winner = next(
+            (
+                index
+                for index, (file, first, last, kinds) in enumerate(fee_sites)
+                if file == rel and first <= int(line) <= last and "fee" in kinds
+            ),
+            None,
+        )
+        if winner is None:
+            dangling.append(f"{rel}:{line}")
+        else:
+            matched.add(winner)
+    assert not dangling, (
+        f"{dangling} is not a line of a statement writing kind='fee' "
+        f"(the statements start at {[(file, first) for file, first, _l, _k in fee_sites]})"
+    )
+    uncited = [f"{file}:{first}" for index, (file, first, _last, _kinds) in enumerate(fee_sites) if index not in matched]
+    assert not uncited, f"{uncited} take platform revenue that §7.1 never lists"
+
+    modules = {file for file, _first, _last, _kinds in fee_sites}
+    assert modules == {"bot/ledger/_withdraw.py"}, (
+        f"the platform keeps money in {sorted(modules)}; §7.1 promises the withdrawal path and nothing else"
+    )
+
+    creator_sites = [site for site in writers if "creator_income" in site[3]]
+    assert {file for file, *_rest in creator_sites} == {"bot/ledger/_bets.py", "bot/ledger/_markets.py"}, (
+        "the win commission is supposed to land on the creator in both engines, and these are the writers: "
+        f"{sorted({file for file, *_rest in creator_sites})}"
+    )
+
+    quoted = re.findall(r"`([A-Za-z0-9_.\-/]+\.py)`\s*\(`([^`]+)`\)", section)
+    assert quoted, "§7.1 quotes no expression, so the creator-income half of the claim is unmeasured"
+    for rel, expression in quoted:
+        source = (ROOT / rel).read_text(encoding="utf-8-sig")
+        assignments = {
+            " ".join(ast.get_source_segment(source, node).split())
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Assign) and ast.get_source_segment(source, node)
+        }
+        # Compared as a whole statement: `creator_income = fee_sum` is a substring of the
+        # real line and would satisfy a containment check while describing a ledger that
+        # no longer hands the creator the rounding dust.
+        wanted = " ".join(expression.split())
+        if wanted in assignments:
+            continue
+        name = wanted.split("=")[0].strip()
+        now = sorted(item for item in assignments if item.split("=")[0].strip() == name)
+        raise AssertionError(f"§7.1 quotes {expression!r} from {rel}; that file assigns {now or 'nothing'} to {name}")
+
+
+_FEE_NOUN = re.compile(r"\bfee\b|\bfees\b|commission|комисси", re.I)
+_PERCENT = re.compile(r"(?<![\d.])(\d+(?:[.,]\d+)?)\s?%")
+_WITHDRAWAL_WORDS = re.compile(r"withdraw\w*|вывод", re.I)
+_WIN_WORDS = re.compile(r"\bwins?\b|\bwinn?ers?\b|winning|profit|выигрыш", re.I)
+_PROPOSAL_WORDS = re.compile(r"proposed|предлож|lever|рычаг|\bwould\b|not yet|не реализ", re.I)
+_FILE_SPAN = re.compile(r"`[^`\n]*\.(?:py|js|html|css|md|sql|sh|yml|yaml|toml|json)[^`\n]*`")
+_FEE_WINDOW = 60  # characters on each side that still count as "says the fee out loud"
+
+
+def _prose(text: str) -> str:
+    """The sentences a human reads, with file paths and fenced blocks blanked out.
+
+    A span naming a file is not a sentence about that file: `bot/ledger/_withdraw.py`
+    three lines above a 2% made the withdrawal fee look like the fee being stated. A
+    fenced block is code an operator copies into `.env`, and `tests/test_env_contract.py`
+    already reads those numbers as configuration; treating it as prose both invented
+    claims and — because a backtick inside a fence has no partner on its own line —
+    swallowed whole paragraphs and moved every line number after it.
+    """
+    kept, inside = [], False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            inside = not inside
+            kept.append("")
+            continue
+        kept.append("" if inside else _FILE_SPAN.sub(" ", line))
+    return "\n".join(kept)
+
+
+def _fee_rate_claims() -> tuple[list[tuple[str, int, str, str]], list[str]]:
+    """Every percentage a document states next to a fee word, and which fee it names.
+
+    Command spans (``/withdraw <address> <amount>``) survive the blanking: they are the
+    mechanism the reader is being told about, and they are how README's table row names
+    the withdrawal fee at all."""
+    claims, loose = [], []
+    for path in MARKDOWN:
+        text = _prose(path.read_text(encoding="utf-8-sig", errors="replace"))
+        rel = path.relative_to(ROOT).as_posix()
+        for match in _PERCENT.finditer(text):
+            start = max(0, match.start() - _FEE_WINDOW)
+            near = text[start: match.end() + _FEE_WINDOW]
+            if not _FEE_NOUN.search(near):
+                continue
+            line = text[: match.start()].count("\n") + 1
+            if _PROPOSAL_WORDS.search(near):
+                continue  # a rate in a proposal is not a promise this build keeps
+            offset = match.start() - start
+            families = []
+            for pattern, name in ((_WITHDRAWAL_WORDS, "withdrawal"), (_WIN_WORDS, "win")):
+                best = min((abs(found.start() - offset) for found in pattern.finditer(near)), default=None)
+                if best is not None:
+                    families.append((best, name))
+            families.sort()
+            if not families:
+                loose.append(f"{rel}:{line} {match.group(0)} in {near.strip()[:120]!r}")
+                continue
+            if len(families) > 1 and families[1][0] - families[0][0] <= 8:
+                loose.append(f"{rel}:{line} {match.group(0)} names both fees in {near.strip()[:120]!r}")
+                continue
+            claims.append((rel, line, match.group(1), families[0][1]))
+    return claims, loose
+
+
+def test_the_positional_reader_reads_the_kind_from_the_column_that_holds_it():
+    """`_kinds_written_by` is the instrument the revenue law above measures with, so it is
+    tested against SQL that does not look like the two statements in `bot/ledger/_withdraw.py`:
+    a `fee` sitting in a note slot is not a kind, a reordered column list still has to
+    resolve, a `SELECT … WHERE` insert is read from the projection and not from the guard,
+    and a count that does not line up is reported rather than guessed at."""
+    assert _kinds_written_by(
+        "INSERT INTO tx_log (kind, tg_id, amount, note) VALUES ('fee', %s, %s, 'withdraw_id=12')"
+    ) == ["fee"]
+    assert _kinds_written_by(
+        "INSERT INTO tx_log (tg_id, note, kind) VALUES (%s, 'fee', 'tip')"
+    ) == ["tip"], "a note that says fee is not a platform fee"
+    assert _kinds_written_by(
+        "INSERT INTO tx_log (kind, tg_id) SELECT 'withdraw', %s "
+        "WHERE (SELECT COUNT(*) FROM tx_log WHERE kind = 'fee') < 5"
+    ) == ["withdraw"], "the kind comes from the projection, not from the guard"
+    assert _kinds_written_by("INSERT INTO tx_log (kind, amount) VALUES (%s, %s)") == ["<%s>"]
+    assert _kinds_written_by("INSERT INTO tx_log (kind, amount) VALUES (%s)") == ["<arity mismatch>"]
+    assert _kinds_written_by("INSERT INTO audit_logs (kind) VALUES ('fee')") == []
+
+
+def test_no_document_states_a_fee_rate_that_is_not_the_rate_that_fee_carries():
+    """`bot/fees.py` is one formula and `bot/config.py` one pair of rates, but a page can
+    still print a number: README promises «2% fee on net profit», docs/USER_GUIDE.md «a 1%
+    fee» and docs/DEPLOY.md tells an operator which knobs the defaults are. Until now only
+    four hand-picked files were read, and only for whether the number was one of the two —
+    a document could call the withdrawal commission 2% and pass. Here every tracked
+    markdown is read, and each percentage is judged against the fee its own sentence names."""
+    from bot import fees
+
+    rates = {"withdrawal": fees.withdraw_fee_pct_label(), "win": fees.win_fee_pct_label()}
+    claims, loose = _fee_rate_claims()
+    assert len(claims) >= 10, f"only {len(claims)} documented fee rates were read — the scan is blind"
+
+    wrong = []
+    for rel, line, value, family in claims:
+        stated = Decimal(value.replace(",", "."))
+        if stated != Decimal(rates[family]):
+            wrong.append(f"{rel}:{line} states the {family} fee as {value}%, the code charges {rates[family]}%")
+    assert not wrong, "\n".join(wrong)
+
+    families = {family for _rel, _line, _value, family in claims}
+    assert families == {"withdrawal", "win"}, (
+        f"the documents name only {sorted(families)} of the two rates the code charges"
+    )
+    assert not loose, f"{loose} state a fee percentage without naming which fee it is"
 
