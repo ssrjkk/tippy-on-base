@@ -1463,42 +1463,22 @@ def test_docs_do_not_advertise_a_palette_or_entrypoint_that_does_not_exist():
     assert "deploy/run.py" in readme
 
 
-def test_the_whitepaper_counts_the_routes_the_web_process_registers():
-    """Appendix A of the whitepaper publishes the recipe for its own numbers, and
-    `/api/prediction/{id}/quote` landed in `web/server.py` while the document kept
-    saying 34. A reader who is about to apply for a grant counts what the site
-    answers, not what a doc remembers, so this re-runs that recipe and refuses a
-    paper that no longer matches the tree it describes."""
+def test_the_documents_agree_on_the_size_of_their_own_run():
+    """The route and command inventories this law used to measure are now read in
+    `tests/test_docs.py`, where the subject set is `git ls-files web/*.py` and the command
+    catalogue rather than the three files someone remembered: `web/auth.py` had been serving
+    five routes while this law's hand-written list kept answering 48, and the whitepaper's own
+    opening line carried that 48 into prose no gate read.
+
+    What stays here is the half that is not an inventory: five documents publish one suite
+    size. `test_the_documented_suite_size_is_the_size_of_this_run` pins that figure to the run
+    that is happening — agreement alone is not truth, these statements said "66 production"
+    while the run deselected 74, and every gate stayed green because each only compared the
+    documents to each other. Here they must still agree."""
     from pathlib import Path
 
-    from bot.commands_catalog import BOT_COMMAND_SPECS
-
     root = Path(__file__).resolve().parents[1]
-    counted = {
-        rel: len(re.findall(
-            r"@(?:app|router)\.(get|post|put|delete)\(",
-            (root / rel).read_text(encoding="utf-8-sig")))
-        for rel in ("web/server.py", "web/mini.py", "web/frame.py")
-    }
-    total = sum(counted.values())
     paper = (root / "docs" / "WHITEPAPER.md").read_text(encoding="utf-8")
-
-    heading = re.search(r"### 4\.2 Web and Mini App — (\d+) HTTP routes", paper)
-    assert heading, "§4.2 no longer states its route count"
-    assert int(heading.group(1)) == total, (heading.group(1), counted, total)
-    for rel, n in counted.items():
-        # The count is the first thing each bullet bolds; "1 Farcaster frame
-        # route" and "35 routes in" are the same claim in two wordings.
-        bullet = re.search(rf"^- \*\*(\d+)[^\n]*`{re.escape(rel)}`", paper, re.M)
-        assert bullet, (rel, "no §4.2 bullet states a route count for this file")
-        assert int(bullet.group(1)) == n, (rel, bullet.group(1), n)
-    assert (f"# HTTP routes ({counted['web/server.py']} + "
-            f"{counted['web/mini.py']} + {counted['web/frame.py']})") in paper
-
-    summary = re.search(r"(\d+) команд бота, (\d+) HTTP-маршрутов", paper)
-    assert summary, "the Russian summary no longer counts commands and routes"
-    assert int(summary.group(1)) == len(BOT_COMMAND_SPECS), summary.group(1)
-    assert int(summary.group(2)) == total, summary.group(2)
 
     # The size of the suite is stated in three files, and all three are pinned to
     # the *run itself* by test_the_documented_suite_size_is_the_size_of_this_run:

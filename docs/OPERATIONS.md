@@ -249,8 +249,24 @@ GROUP BY action;
 Weekly review checklist:
 - [ ] Check for failed withdrawal attempts (possible attack)
 - [ ] Verify no unauthorized admin actions
-- [ ] Review large transactions (> $1000 USDC)
+- [ ] Review the payouts the ledger flagged `large_withdraw` (at or above
+      `WITHDRAW_LARGE_USDC_THRESHOLD`, 500 USDC by default)
 - [ ] Check for unusual patterns (rapid withdrawals, new user activity)
+
+### Withdrawal bounds the operator sets
+
+- `WITHDRAW_LARGE_USDC_THRESHOLD` (500 USDC by default) is what the ledger compares a
+  payout against: at or above it, `check_aml_withdraw` writes a `large_withdraw` row into
+  `suspicious_activity` and, with `SOLVENCY_ALERT_CHAT_ID` set, the alert chat gets the
+  line. It does not block the withdrawal — the flag is a review queue, not a refusal.
+- When a user who already completed three withdrawals in the last hour requests a fourth,
+  `check_aml_withdraw` writes a `rapid_withdraw` flag the same way. The count and the
+  window are fixed in `bot/ledger/_withdraw.py`, so there is no knob to loosen here.
+- `VAULT_RELAYER_DAILY_USDC` (5,000 USDC by default) is *not* a runtime limit: it is the
+  value `scripts/deploy_vault.py` passes to `setDailyLimit` when it deploys the vault. A
+  queue larger than that drains over more than one day, and editing this line afterwards
+  changes the contract not at all — move the on-chain limit with `setDailyLimit` from the
+  owner key, then restate the number here.
 
 ## Performance
 

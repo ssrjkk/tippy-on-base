@@ -363,7 +363,7 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts alembic
-python -m pytest -q -m "not production"   # 1358 passed
+python -m pytest -q -m "not production"   # 1373 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password
@@ -421,9 +421,18 @@ worst-case payout.
 
 ## Roadmap
 
-- Per-user deposit addresses (CREATE2 vaults) 
-- ~~Smart Wallet (ERC-4337) + gasless paymaster~~ core shipped + Sepolia-proven (P2)
-- ~~Withdrawal batching for gas savings~~  shipped (queued payouts flushed as one vault batch, direct-send fallback)
+- ~~Per-user deposit addresses (CREATE2 vaults)~~ shipped: `bot/create2.py` derives one
+  deterministic EIP-1167 proxy per `tg_id`, `bot/main.py` sweeps it into the hot wallet, and
+  `/deposit` prints it. Off until the operator sets `CREATE2_SAFE_DEPOSITS=1` with a deployed
+  `CREATE2_FACTORY_ADDRESS`; both `.env.example` and `deploy/prod.env.example` ship the flag at 0.
+- ~~Smart Wallet (ERC-4337) + gasless paymaster~~ core shipped and proven on Base Sepolia:
+  `contracts/SmartAccount.sol`, `contracts/SmartAccountFactory.sol` and
+  `contracts/VerifyingPaymaster.sol`, driven by `bot/smart_wallet.py`. Off until the operator
+  sets `SMART_WALLET_ENABLED=1` with a deployed factory and paymaster. Multi-signature control
+  and account recovery are not part of what shipped.
+- ~~Withdrawal batching for gas savings~~ shipped: `bot/base.py` flushes queued payouts as one
+  vault batch under the `WITHDRAW_BATCH_*` caps, with `WITHDRAW_BATCH_FALLBACK_DIRECT` as the
+  direct-send path when a batch cannot settle on-chain.
 - Order-book style CLOB on top of the AMM
 - ~~On-chain market escrow (resolution via a UMA-style oracle)~~ shipped as **Cally**
   (OutcomeMarket ERC-1155): an oracle proposes, the owner has 2h to dispute. Not

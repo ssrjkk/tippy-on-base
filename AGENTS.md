@@ -35,7 +35,8 @@
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding. `alembic/` joined the
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
-- `python -m pytest -q -m "not production"` — ~11 min (measured 643 s), 1358 tests (171 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — 11–16 min (measured 643 s alone on the host, 949 s
+  with another project's suite sharing it), 1373 tests (171 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -152,6 +153,83 @@
   and three wrong rates in three different documents). What the laws cannot see is stated here: a
   rate written under proposal wording («proposed», «levers», «would») is exempt — §7.2's 0.5%
   scenario is a what-if, not a promise — and a document may still describe a fee qualitatively.
+- **The pictures a document ships are files in this tree, and `tests/test_docs.py` reads them as
+  files.** `scripts/make_docs_screenshots.py` shoots every `docs/screenshots` PNG and writes a
+  `tEXt` pair into each: `tippy-surface` (which surface the file pictures) and
+  `tippy-fingerprint` (a digest of the payload that picture can show — the palette tokens and the
+  heading outline of a landing or the Mini App, the tab-bar `data-i18n` grid of the Mini App, the
+  label grid of the two keyboards the bot really builds — plus the `name@WxH@scale` camera
+  geometry). Six laws hold it: every PNG on disk is shown by a tracked document **and** carried by
+  git, and every image a document shows is on disk (the subject set is the directory glob, so a
+  fifth picture joins by being added, not by being named here); the generator's `SURFACE_OF`
+  registry, its shot table and the directory are one set; no picture is unstamped or stamped as a
+  surface the registry denies; **the fingerprint is recomputed from the current tree**, so the edit
+  that changes the design is the edit that fails the build; the pixels are the size the table lays
+  out — a resize, crop or pad in an image editor moves no source token and is caught here or
+  nowhere; and the four small readers inside the generator are tested on markup that is not the
+  file they usually get (a token block whose last declaration has no `;`, a heading wrapping a
+  nested tag, a decoy `data-i18n` outside the tab bar, a one-tab bar, a payload where one
+  character moves), because a reader that quietly returns nothing would certify a design that no
+  longer exists. The laws import the generator and call its functions — no browser, no server.
+  What the stamp cannot see: it certifies the source and the geometry of a surface, not that the
+  captured pixels look right, and the menu fingerprint is the Russian keyboard, so an English or
+  Chinese label change moves no digest.
+- **Every number a document prints about this tree is measured by the run that reads it.**
+  §4.1, §4.2, §4.9 and Appendix A of the WHITEPAPER are inventories, and until wave 32 nothing
+  re-measured them: §4.9 promised twenty-one ledger mixins after the second schema source had left
+  eighteen, §4.2 counted 48 routes while `web/auth.py` had been serving five for waves, the line
+  count was 4,700 lines short in `tests` and silent about `alembic` and `functions`, and the
+  rendered design gate was described as five surfaces while it walks nine facets. Three laws read
+  them back out of the tree: `_lines_of_code_by_package()` (every `git ls-files` path carrying a
+  code suffix, grouped by top-level directory, so the vendored `contracts/lib/` and a git-ignored
+  scratch file never enter), `_routes_by_module()` (the `@app.`/`@router.` decorators counted
+  **per module**, so a new route-bearing file has to appear in the section) and
+  `_ledger_mixins()`/`_rendered_gate_facets()` with the contract and deploy-script inventory (the
+  bases of `Ledger`, `agent/*.py`, the `FACETS` tuple, `contracts/*.sol`, every cited script). A
+  name-number pair the tree cannot produce fails, and so does a package the tree has that the
+  sentence omits — the pairing is bidirectional in both directions by set equality. The
+  WHITEPAPER's opening «Что уже написано» line joined that subject set the wave it was found
+  stale: it still promised 48 routes and 21 mixins after §4.2 and §4.9 had been corrected,
+  because the only law that read it counted routes over a hand-written triple of files
+  (`web/server.py`, `web/mini.py`, `web/frame.py`) and answered 48 while `web/auth.py` had been
+  serving five for waves. That law is now retired into `tests/test_docs.py`, where the set is
+  `git ls-files web/*.py`, and `tests/test_web.py` keeps only the half that is not an inventory —
+  five documents publishing one suite size must agree with each other, and
+  `test_the_documented_suite_size_is_the_size_of_this_run` pins that figure to the run.
+- **A roadmap promise is a claim about the tree, gated in both directions.** The README `##
+  Roadmap` section is parsed from the file — a bullet that wraps is one bullet, `~~struck~~` is
+  the markup for *done* — and the resolvers are the ones the rest of the docs use: environment
+  names come from the AST of the runtime (310 read this wave), tracked paths from `git ls-files`,
+  slash commands from the handlers that register them. A struck bullet must name at least one
+  artifact that resolves, because a claim whose every citation is dead can never be re-checked; a
+  struck bullet may not be reported as still pending, and a **live** bullet may not cite a file,
+  a flag or a command the tree already has — which is how "shipped" creeps back into a promise.
+  A URL is stripped before its path can be read as this repository's file, and `EIP-1167`,
+  `ERC-1155`, `USDC` and `PROTOCOL` are not config names, so the spec numbers and the acronyms in
+  a bullet do not become phantom knobs. Two unit tests hold the readers to those shapes, plus one
+  that keeps a wrapped bullet one bullet.
+- **A USDC figure written beside a knob is a claim about that knob's default.**
+  `docs/OPERATIONS.md` told an operator to review payouts over `$1000` while the ledger has always
+  flagged one at `WITHDRAW_LARGE_USDC_THRESHOLD` — 500 — and the same number sat twice more because
+  the code read it through `getattr(config, …, 500)`, a second copy of the bound in the module
+  that compares against it. Both are gone. The law takes every `NAME, "DEFAULT"` pair the AST
+  parses as `int`/`float`/**`Decimal`** out of the runtime (74 knobs measured; `Decimal` is what
+  this configuration uses for every money-sized knob, so reading only `int` reproduced the bounds
+  and missed the amounts — that widening is what found the defect below), keeps the ones whose own
+  name states the unit (12), and holds each USDC figure within ±60 characters of such a name to
+  that default. A name defaulted to **two** numbers is reported as a conflict, because then no
+  document can quote one. A figure sitting between two knobs with two different defaults is
+  reported, not guessed; fenced code and proposal wording («proposed», «levers», «would») state no
+  bound; and the count of attributed figures is floored, so the law cannot go vacuous by the prose
+  forgetting to state a number. What the scan found the day it could read `Decimal`: a §4.5
+  sentence put the paywall floor of `X402_MIN_USDC` in the same breath as the ceiling knob
+  `MAX_TIP_USDC`, so nothing said which bound the first figure stated — both numbers were right
+  and the sentence still needed a guess, and it is now two clauses, each naming its own knob
+  beside its own figure. The law cannot tell a quoted defect from a live claim (it read this very
+  paragraph until the figures left the window), which is why the write-up names knobs and not
+  numbers. Its blind spot is the rule's own premise: a knob whose name does not say USDC —
+  `AGENT_DAILY_CAP`, `MAX_WITHDRAWS_PER_DAY` — is invisible to it, since nothing in the name or the
+  sentence tells a reader which unit a bare number means.
 - Three AST gates read the runtime tree, because prose review missed all three:
   `test_every_ledger_call_site_resolves_on_the_real_class` (every `ledger.<method>()` call in
   `bot|web|agent|deploy|scripts` has to exist on `Ledger` — `bot/credit.py` called five methods

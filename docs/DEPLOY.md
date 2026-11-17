@@ -357,6 +357,26 @@ tipbot.example.com {
 > `X-Telegram-Bot-Api-Secret-Token` (403 при несовпадении), кривые апдейты
 > не заставляют Telegram пересылать их вечно (отвечаем 200).
 
+### 3.4. Без домена: cloudflared-туннель (тест мини-аппа с телефона)
+
+`deploy/launch.py` поднимает туннель, дашборд и бота одним процессом и
+перезапускает туннель, когда edge его роняет (quick-туннели нестабильны):
+
+```bash
+python deploy/launch.py     # в логах: tunnel ready: https://xxxx.trycloudflare.com
+```
+
+Нужен бинарник cloudflared — берётся (в этом порядке) из `CLOUDFLARED_BIN`,
+`deploy/cloudflared.exe`, `cloudflared.exe` в корне проекта или из `PATH`.
+Туннель открывается на `http://localhost:8000` (`WEB_PORT`), а полученный URL
+скрипт сам подставляет в `MINI_APP_URL` детям; если `MINI_APP_URL` уже задан
+на `http(s)://…`, туннель не поднимается вообще и запускаются только web+бот.
+
+За туннелем каждый клиент приходит с 127.0.0.1, поэтому для проверки лимитов
+поставь в `.env` `TRUST_PROXY_XFF=1` — иначе rate limiter видит один адрес на
+всех. Только туннель, без бота и дашборда: `python deploy/tunnel.py` — печатает
+`TUNNEL_URL=` и ждёт Ctrl+C.
+
 ---
 
 ## Этап 4. Финальный E2E-прогон на mainnet
@@ -408,6 +428,13 @@ GAS_DRIP_DAILY_MAX=50           # суточный бюджет газ-дрип�
 
 ```bash
 python scripts/smoke_onchain.py
+```
+
+Полный цикл на Sepolia (свой ключ в окружении, скрипт деплоит TestUSDC +
+OutcomeMarket и прогоняет create → buy → ownerResolve → redeem):
+
+```bash
+SMOKE_KEY=<deployer hex> SMOKE_RPC=https://sepolia.base.org python scripts/smoke_full_cycle.py
 ```
 
 **4. Жизненный цикл:** создание `/oc_create 50 Вопрос | Да | Нет 7d`
@@ -616,6 +643,11 @@ EAS_SCHEMA_UID=
 Агент **fail-closed**: ошибка LLM = нет действия; при некорректных капах
 `agent.main` завершается с ошибкой; без `EAS_SCHEMA_UID` аттестации пишутся
 в локальный `agent_attestations.jsonl` с предупреждением в логе.
+
+Для демонстрационного ролика: `python scripts/agent_demo.py "Заголовок" --base https://хост`
+заводит paywall-пост от имени агента и печатает шаги оплаты через x402 (шаги 2–4
+с реальными деньгами только печатаются, не исполняются). Строка paywall при этом
+**пишется в ledger** владельцем `tg_id=0` — на живом проде это заметный мусор.
 
 ## Required secrets
 

@@ -521,8 +521,8 @@ class LedgerWithdrawMixin:
         """Run AML checks before a withdrawal. Returns list of warning messages.
 
         Checks:
-          - Single withdrawal > WITHDRAW_LARGE_USDC_THRESHOLD (warn)
-          - >3 withdrawals in 1h (warn)
+          - Single withdrawal at or above WITHDRAW_LARGE_USDC_THRESHOLD (warn)
+          - 3 or more completed withdrawals within the last hour (warn)
           - Balance after withdraw <0 and user has large recent deposits (info)
         Flags are persisted for audit trail.
         """
@@ -530,15 +530,18 @@ class LedgerWithdrawMixin:
         now = int(time.time())
 
         # Check 1: large single withdrawal
-        large_thresh = getattr(config, "WITHDRAW_LARGE_USDC_THRESHOLD", 500) * 10**config.USDC_DECIMALS
+        large_thresh = config.WITHDRAW_LARGE_USDC_THRESHOLD * 10**config.USDC_DECIMALS
         if amount_micro >= large_thresh:
-            msg = f"Large withdrawal: ${amount_micro / 10**config.USDC_DECIMALS:.2f} >= ${large_thresh / 10**config.USDC_DECIMALS:.0f}"
+            msg = (
+                f"Large withdrawal: {amount_micro / 10**config.USDC_DECIMALS:.2f} USDC "
+                f">= {large_thresh / 10**config.USDC_DECIMALS:.0f} USDC"
+            )
             warnings.append(msg)
             self._flag_suspicious(tg_id, "large_withdraw", {
                 "amount": amount_micro, "threshold": large_thresh, "to": to_address,
             }, severity="warn")
 
-        # Check 2: rapid successive withdrawals (>3 in 1 hour)
+        # Check 2: rapid successive withdrawals (3 or more completed in one hour)
         since_1h = now - 3600
         with self._lock:
             row = self._conn.execute(

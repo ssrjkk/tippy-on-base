@@ -1,4 +1,9 @@
-"""Start cloudflared tunnel + bot + web server. Outputs the public URL."""
+"""Start a cloudflared quick tunnel and print its public URL.
+
+Prints `TUNNEL_URL=` and blocks until Ctrl+C. It starts nothing else: web server
+and bot are `deploy/launch.py`'s job, and that script also restarts the tunnel
+when the edge drops it.
+"""
 import os
 import re
 import subprocess

@@ -31,7 +31,19 @@ kinds are welcome: code, docs, bug reports, feature ideas.
    `production`-marked tests probe the deployed site and belong to the
    `Prod Health Check` workflow — a local run that includes them fails for a
    reason this checkout did not cause.
-5. **Commit** with a clear message (`feat:`, `fix:`, `docs:`, `refactor:`)
+5. **If you changed a design the documents picture**, re-shoot it in the same change:
+   ```bash
+   python -X utf8 scripts/make_docs_screenshots.py --only menu
+   python -X utf8 scripts/make_docs_screenshots.py --origin http://127.0.0.1:8000 --user-id 9000001
+   ```
+   Every PNG in `docs/screenshots/` carries a fingerprint of what it can show — the palette
+   tokens and headings of the landing and the Mini App, the button labels of the two keyboards
+   the bot builds, and the viewport each shot was taken at. `tests/test_docs.py` recomputes it
+   from the tree, so a design change that leaves the image behind fails the build and names
+   this command in the message. The menu mock needs neither a server nor a database; the web
+   surfaces need a running origin and a `--user-id` to sign in with, because `dashboard.png`
+   pictures the Mini App with data in it.
+6. **Commit** with a clear message (`feat:`, `fix:`, `docs:`, `refactor:`)
    and open a Pull Request against `main`.
 
 ## Money-conservation rule

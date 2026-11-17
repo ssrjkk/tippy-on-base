@@ -148,6 +148,14 @@ Deployed & proven on Base Sepolia.
   correct `postOp(PostOpMode, bytes, uint256)` for EP v0.6.
 - **bot/smart_wallet.py** — UserOp build + EIP-191 signing, paymaster data,
   `create_account` / `approve_and_trade_sync`. Config `SMART_WALLET_*`.
+- **Deploy** — `python scripts/deploy_smart_wallet.py --dry-run` (rehearsal), then
+  the same without the flag: compiles and deploys `VerifyingPaymaster` +
+  `SmartAccountFactory` from the relayer key; `--wire-env` writes the resulting
+  addresses into `.env`. Chain-guarded by `EXPECTED_CHAIN_ID`.
+- **Re-verify** — `python scripts/smoke_smart_buy.py` prints chain, EntryPoint,
+  factory, paymaster, USDC and account state and broadcasts nothing; each
+  transaction is behind its own flag (`--deploy-market`, `--create-market`,
+  `--fund 5`, `--buy <mid> <out> <shares> <max_usdc>`).
 
 ## Security model
 

@@ -84,6 +84,7 @@ scripts/*
 !scripts/restore_db.sh
 !scripts/backup_and_monitor.sh
 !scripts/final_release_check.sh
+!scripts/make_docs_screenshots.py
 
 # Agent runtime artifacts
 .agent_seen_news.json

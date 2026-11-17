@@ -7,9 +7,11 @@ this gate found it). Both are cheap to check from the tree.
 """
 
 import ast
+import importlib.util
+import json
 import re
 import subprocess
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -310,6 +312,37 @@ SCRIPT_NAMING_SOURCES = [ROOT / "AGENTS.md", ROOT / "Dockerfile",
                         ROOT / "docker-compose.yml", ROOT / "docker-compose.ci.yml",
                         *sorted((ROOT / ".github" / "workflows").glob("*.yml"))]
 OPERATOR_SCRIPT_DIRS = ("scripts", "deploy")
+# Both extensions: the law used to glob `*.sh` only, so every Python procedure under
+# those folders — the deploys, the smoke tests, the tunnel — was outside it by suffix.
+OPERATOR_SCRIPT_SUFFIXES = frozenset({".sh", ".py"})
+
+
+def _operator_scripts() -> list[Path]:
+    return sorted(
+        p for folder in OPERATOR_SCRIPT_DIRS
+        for p in (ROOT / folder).iterdir()
+        if p.is_file() and p.suffix in OPERATOR_SCRIPT_SUFFIXES
+    )
+
+
+def _reached_by_a_sibling(script: Path, texts: dict[Path, str]) -> str | None:
+    """Which sibling can bring this script up: a shell that names the file, or a
+    Python module whose import path mentions it (`import tunnel` reaches
+    `deploy/tunnel.py` the way `source pg_env.sh` reaches that library)."""
+    for other, text in texts.items():
+        if other == script:
+            continue
+        if script.name in text:
+            return other.name
+        if script.suffix == ".py":
+            stem = script.stem
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(("import ", "from ")) and re.search(
+                    rf"(^|[.\s]){re.escape(stem)}($|[.\s])", stripped
+                ):
+                    return other.name
+    return None
 
 
 def test_every_operator_script_is_named_by_something_a_human_reads():
@@ -325,16 +358,20 @@ def test_every_operator_script_is_named_by_something_a_human_reads():
     assert len(sources) >= 6, f"only {len(sources)} naming sources found — the scan is blind"
     named = "\n".join(p.read_text(encoding="utf-8-sig", errors="replace") for p in sources)
 
-    shells = sorted(p for d in OPERATOR_SCRIPT_DIRS for p in (ROOT / d).glob("*.sh"))
-    assert len(shells) >= 6, f"only {len(shells)} operator scripts found — the scan is blind"
-    sibling_text = {p: p.read_text(encoding="utf-8-sig", errors="replace") for p in shells}
+    scripts = _operator_scripts()
+    assert len(scripts) >= 20, f"only {len(scripts)} operator scripts found — the scan is blind"
+    assert {p.suffix for p in scripts} == OPERATOR_SCRIPT_SUFFIXES, (
+        f"{sorted({p.suffix for p in scripts})} — the scan lost one of the two extensions"
+    )
+    texts = {p: p.read_text(encoding="utf-8-sig", errors="replace") for p in scripts}
 
     unnamed = []
-    for script in shells:
+    for script in scripts:
         if script.name in named:
             continue
-        # Sourced by another script: reachable through that caller, whose name is checked.
-        if any(script.name in text for other, text in sibling_text.items() if other != script):
+        # Reachable through a caller that is itself checked.
+        reached = _reached_by_a_sibling(script, texts)
+        if reached:
             continue
         unnamed.append(f"{script.parent.name}/{script.name}")
     assert not unnamed, (
@@ -353,12 +390,8 @@ def test_every_operator_script_reaches_the_server_that_runs_it():
     `set -euo pipefail` is the first executable statement in every one of them.
     """
     tracked = _tracked_files("scripts", "deploy")
-    on_disk = {
-        p.relative_to(ROOT).as_posix()
-        for folder in OPERATOR_SCRIPT_DIRS
-        for p in (ROOT / folder).glob("*.sh")
-    }
-    assert len(on_disk) >= 6, f"only {len(on_disk)} operator scripts found — the scan is blind"
+    on_disk = {p.relative_to(ROOT).as_posix() for p in _operator_scripts()}
+    assert len(on_disk) >= 20, f"only {len(on_disk)} operator scripts found — the scan is blind"
     missing = sorted(on_disk - tracked)
     assert not missing, (
         f"{missing} exist on this machine and in no clone: the scripts that source them "
@@ -990,3 +1023,906 @@ def test_no_document_states_a_fee_rate_that_is_not_the_rate_that_fee_carries():
     )
     assert not loose, f"{loose} state a fee percentage without naming which fee it is"
 
+
+# --- the pictures the documents ship -------------------------------------------
+
+SHOTS_DIR = ROOT / "docs" / "screenshots"
+SHOT_SCRIPT = ROOT / "scripts" / "make_docs_screenshots.py"
+
+
+def _shot_script():
+    """`scripts/make_docs_screenshots.py` loaded as a module instead of reimplemented here.
+
+    A law with its own parser would go on certifying pictures after someone changed what the
+    generator reads — the gate would stay green while nothing in the tree could draw the image
+    it just approved. So every check below calls the functions that wrote the chunk it reads."""
+    if not SHOT_SCRIPT.is_file():
+        pytest.fail(
+            f"{SHOT_SCRIPT.relative_to(ROOT).as_posix()} is gone: the docs images carry a stamp "
+            "this tree cannot compute, so they can neither be refreshed nor measured"
+        )
+    spec = importlib.util.spec_from_file_location("make_docs_screenshots", SHOT_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _pictures() -> dict[str, tuple[tuple[int, int], dict[str, str]]]:
+    """Every PNG in `docs/screenshots`, as its pixel size and its text chunks.
+
+    Pillow is a declared runtime dependency (`requirements.txt`), so a missing Pillow is a
+    broken environment rather than a reason to skip: skipping is the one outcome that lets an
+    unread picture through."""
+    try:
+        from PIL import Image
+    except ImportError as exc:  # pragma: no cover - the gate means nothing without the reader
+        pytest.fail(f"Pillow is not importable, so no docs screenshot can be read: {exc}")
+    found: dict[str, tuple[tuple[int, int], dict[str, str]]] = {}
+    for path in sorted(SHOTS_DIR.glob("*.png")):
+        image = Image.open(path)
+        try:
+            image.load()
+            found[path.name] = (image.size, {k: v for k, v in image.info.items() if isinstance(v, str)})
+        finally:
+            image.close()
+    assert len(found) >= 4, f"only {sorted(found)} read from docs/screenshots — the scan is blind"
+    return found
+
+
+def _markdown_image_targets() -> dict[str, list[str]]:
+    """Every image a tracked markdown shows, keyed by the file under docs/screenshots it names."""
+    refs: dict[str, list[str]] = {}
+    for path in MARKDOWN:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        for raw in re.findall(r"!\[[^\]]*\]\(\s*<?([^)\s>]+)", text):
+            resolved = (path.parent / raw.split("#", 1)[0].rstrip(")")).resolve()
+            try:
+                name = resolved.relative_to(SHOTS_DIR.resolve()).as_posix()
+            except ValueError:
+                continue  # an image the documents ship from somewhere else is not this directory's
+            refs.setdefault(name, []).append(path.relative_to(ROOT).as_posix())
+    return refs
+
+
+def test_every_docs_screenshot_is_shown_by_a_document_and_carried_by_git():
+    """README has four images and the directory has had files that no page shows and, once, a
+    picture no commit carried. Both directions are the same defect seen from the two ends of the
+    clone: an image git never tracked renders as nothing for every GitHub reader, and a picture
+    on disk that no document names is a file nobody will ever notice is wrong.
+
+    The bijection is over the directory, not over a list of file names in this test — a fifth
+    screenshot joins the law by being added, not by being remembered here."""
+    on_disk = set(_pictures())
+    tracked = {
+        PurePosixPath(name).name for name in _tracked_files("docs/screenshots") if name.endswith(".png")
+    }
+    refs = _markdown_image_targets()
+    assert len(refs) >= 4, f"only {sorted(refs)} screenshots are shown by a document — the scan is blind"
+
+    untracked = sorted(on_disk - tracked)
+    unshown = sorted(on_disk - set(refs))
+    phantom = sorted(set(refs) - on_disk)
+    assert not untracked, (
+        f"{untracked} exist on this machine and in no clone: the document that shows them "
+        "renders a broken image for every reader on GitHub"
+    )
+    assert not unshown, f"{unshown} sit in docs/screenshots and are shown by no document"
+    assert not phantom, f"{phantom} are shown by a document and are not in the directory"
+
+
+def test_the_generator_owns_every_picture_the_documents_ship():
+    """`SURFACE_OF` is the registry that says what each file pictures, `WEB_SHOTS` and
+    `MENU_SHOT` are the files the script actually writes, and `docs/screenshots` is the
+    directory README reads. Three lists that were kept by hand are three lists that drift:
+    a registry entry for a file nothing draws, or a drawn file the registry never names,
+    is an image whose provenance nobody can state."""
+    module = _shot_script()
+    registry, pictures = dict(module.SURFACE_OF), _pictures()
+    drawn = {name for name, *_rest in module.WEB_SHOTS} | {module.MENU_SHOT}
+    assert len(registry) >= 4 and len(drawn) >= 4, "the registry or the shot table emptied"
+
+    assert set(registry) == drawn, (
+        f"the registry names {sorted(set(registry) - drawn)} that this script draws no more, "
+        f"and never names {sorted(drawn - set(registry))} that it writes"
+    )
+    assert set(registry) == set(pictures), (
+        f"{sorted(set(registry) - set(pictures))} are registered and not on disk; "
+        f"{sorted(set(pictures) - set(registry))} are on disk and register nothing"
+    )
+
+
+def test_every_docs_screenshot_carries_the_surface_it_pictures():
+    """An unstamped PNG is an image whose source nobody can name — the four files were
+    hand-saved from a laptop browser for a wave, with no record of which origin, viewport or
+    build they came from. The stamp is what makes that claim checkable, and the gate requires
+    both that every picture carries it and that every surface the generator can draw is
+    carried by at least one picture, so a registry surface nobody shoots cannot pass."""
+    module = _shot_script()
+    registry, pictures = dict(module.SURFACE_OF), _pictures()
+
+    unstamped = sorted(name for name, (_size, info) in pictures.items() if not info.get(module.STAMP_SURFACE))
+    mismatched = sorted(
+        f"{name} says {info.get(module.STAMP_SURFACE)!r}, the registry says {registry[name]!r}"
+        for name, (_size, info) in pictures.items()
+        if info.get(module.STAMP_SURFACE) and info.get(module.STAMP_SURFACE) != registry[name]
+    )
+    assert not unstamped, (
+        f"{unstamped} carry no {module.STAMP_SURFACE} chunk — re-run "
+        f"`python -X utf8 {SHOT_SCRIPT.relative_to(ROOT).as_posix()}`"
+    )
+    assert not mismatched, f"{mismatched} are stamped as a surface they do not picture"
+
+    pictured = {info[module.STAMP_SURFACE] for (_size, info) in pictures.values()}
+    assert pictured == set(registry.values()), (
+        f"the generator draws {sorted(set(registry.values()) - pictured)} for no picture on disk"
+    )
+
+
+def test_no_docs_screenshot_outlives_the_source_it_pictures():
+    """A README image is the design a buyer sees before they open the site, and it stayed
+    current only as long as someone remembered to re-shoot it. The stamp is a fingerprint of
+    what the picture can show — the palette tokens and headings of the landing and the Mini
+    App, the label grid of the two keyboards the bot really builds — recomputed here from the
+    tree, so the edit that changes the design is the edit that fails the build."""
+    module = _shot_script()
+    stale, missing_digest = [], []
+    for name, (_size, info) in sorted(_pictures().items()):
+        surface = info.get(module.STAMP_SURFACE)
+        if not surface:
+            continue  # the law above reports it
+        wanted = module.fingerprint(surface)
+        stamped = info.get(module.STAMP_FINGERPRINT)
+        if not stamped:
+            missing_digest.append(name)
+        elif stamped != wanted:
+            stale.append(f"{name} ({surface}): stamped {stamped}, the tree says {wanted}")
+
+    how = "python -X utf8 scripts/make_docs_screenshots.py"
+    assert not missing_digest, f"{missing_digest} carry a surface and no {module.STAMP_FINGERPRINT} chunk"
+    assert not stale, (
+        f"{stale} picture a source that has moved. Re-shoot with `{how}` (menu only: "
+        f"`{how} --only menu`; web: `{how} --origin http://127.0.0.1:8000 --user-id <tg_id>`)."
+    )
+
+
+def test_the_pictures_are_the_size_the_generator_lays_out():
+    """The menu mock is drawn to a canvas the script computes from its own row and button
+    metrics, and every web shot to the viewport and scale factor its table names.
+
+    The stamp carries that geometry too, so a constant moved in the table invalidates the
+    picture; this law is the other half — the pixels themselves. A screenshot resized,
+    cropped or padded in an image editor changes no source file and moves no token, and is
+    caught here or nowhere."""
+    module = _shot_script()
+    pictures = _pictures()
+    assert len(module.WEB_SHOTS) >= 3, f"only {len(module.WEB_SHOTS)} web shots — the table is blind"
+
+    wrong = []
+    for name, _path, (width, height), _signed in module.WEB_SHOTS:
+        got = pictures[name][0]
+        want = (width * module.DEVICE_SCALE, height * module.DEVICE_SCALE)
+        if got != want:
+            wrong.append(f"{name} is {got[0]}x{got[1]}, the table says {want[0]}x{want[1]}")
+    assert not wrong, f"{wrong} are not the size the generator captures them at"
+
+    menu = pictures[module.MENU_SHOT][0]
+    canvas = module.menu_canvas(module.menu_panels())
+    assert menu == canvas, f"{module.MENU_SHOT} is {menu[0]}x{menu[1]} pixels, the menu layout computes {canvas}"
+
+
+def test_the_fingerprint_readers_read_the_structures_the_pictures_are_built_from():
+    """Every law above trusts four small readers, so they are tested against markup that is
+    not the file they usually get: a token block whose last declaration has no semicolon,
+    a heading wrapping a nested tag, a decoy `data-i18n` outside the tab bar, a tab bar with
+    one tab, and a payload where one character moves. A reader that silently returns nothing
+    would make the fingerprint law green on an image of a design that no longer exists."""
+    module = _shot_script()
+
+    css = ':root { --blue: #0000ff; --gap: 1px   2px; }\n[data-theme="dark"] {\n  --blue: #224bff;\n}'
+    assert module.palette_tokens(css, (":root", '[data-theme="dark"]')) == [
+        "--blue:#0000ff",
+        "--gap:1px 2px",
+        "--blue:#224bff",
+    ], "two blocks must keep their own value for one token, and whitespace must normalise"
+    assert module.palette_tokens(":root { --a: 1; --b: 2 }", (":root",)) == ["--a:1", "--b:2"], (
+        "a block's last declaration carries no semicolon, and losing it loses a token the picture is painted with"
+    )
+    with pytest.raises(ValueError, match=r"no '\.missing' block"):
+        module.palette_tokens(css, (".missing",))
+    with pytest.raises(ValueError, match="no custom properties"):
+        module.palette_tokens(":root { color: red; }", (":root",))
+
+    assert module.headings("<h1>A <em>b</em></h1><h4>nope</h4><h2>   </h2><h3>C</h3>") == ["A b", "C"]
+    nav = '<nav class="tab-bar"><button data-i18n="wallet">A</button><button data-i18n="markets">B</button></nav>'
+    assert module.tab_labels(f"{nav}<button data-i18n=\"decoy\">X</button>") == ["wallet", "markets"]
+    with pytest.raises(ValueError, match=r"no \.tab-bar"):
+        module.tab_labels("<main><button data-i18n=\"a\"></button><button data-i18n=\"b\"></button></main>")
+    with pytest.raises(ValueError, match="1 labels"):
+        module.tab_labels('<nav class="tab-bar"><button data-i18n="solo"></button></nav>')
+
+    panels = module.menu_panels()
+    assert len(panels) == 2, "the menu picture is laid out as two panels side by side"
+    labels = [label for panel in panels for row in panel for label in row]
+    assert len(labels) >= 8 and all(label.strip() for label in labels), f"{panels} is not a keyboard"
+
+    base = {"tokens": ["--blue:#0000ff"], "panels": [["💰 Баланс"]]}
+    assert len(module.fingerprint_of(base)) == 16
+    assert module.fingerprint_of(base) == module.fingerprint_of(dict(reversed(list(base.items())))), (
+        "key order must not change the digest: the same design may serialise in any order"
+    )
+    moved = json.loads(json.dumps(base))
+    moved["panels"][0][0] = "💰 Баланс!"
+    assert module.fingerprint_of(moved) != module.fingerprint_of(base), "a relabelled button must move the digest"
+    recoloured = json.loads(json.dumps(base))
+    recoloured["tokens"][0] = "--blue:#0052ff"
+    assert module.fingerprint_of(recoloured) != module.fingerprint_of(base), "a token change must move the digest"
+
+    payloads = {surface: module.surface_payload(surface) for surface in sorted(set(module.SURFACE_OF.values()))}
+    assert set(payloads["landing"]) == {"tokens", "headings", "capture"}
+    assert set(payloads["mini"]) == {"tokens", "tabs", "headings", "capture"}
+    assert set(payloads["menu"]) == {"panels", "canvas"}
+    assert len(payloads["landing"]["tokens"]) >= 40, "the landing palette read too few tokens to certify a design"
+    assert len(payloads["mini"]["tokens"]) >= 40, "the Mini App palette read too few tokens to certify a design"
+    assert len(payloads["landing"]["headings"]) >= 3 and len(payloads["mini"]["tabs"]) >= 2
+
+    geometry = {surface: module.capture_geometry(surface) for surface in ("landing", "mini")}
+    assert [len(rows) for rows in geometry.values()] == [2, 1], f"{geometry} is not the shot table"
+    assert all(re.fullmatch(r"[\w.-]+\.png@\d+x\d+@\d+", row) for rows in geometry.values() for row in rows), (
+        f"{geometry} does not read as `name@WxH@scale`"
+    )
+    assert sorted(row.split("@")[0] for rows in geometry.values() for row in rows) == sorted(
+        name for name, surface in module.SURFACE_OF.items() if surface != "menu"
+    ), "a web picture the camera geometry never accounts for"
+    with pytest.raises(ValueError, match="no shot in WEB_SHOTS"):
+        module.capture_geometry("menu")
+
+    assert len({module.fingerprint_of(payload) for payload in payloads.values()}) == len(payloads), (
+        "three different surfaces hashed to one digest — the payload is not what it claims"
+    )
+
+
+# --- the numbers a document prints about this tree ---------------------------
+#
+# Sections 4.1, 4.2 and 4.9 and Appendix A of the WHITEPAPER are inventories: they are
+# the evidence, and until this wave nothing re-measured them. §4.9 still promised 21
+# ledger domain mixins after the second schema source was deleted and 18 remained, §4.2
+# counted 48 routes while `web/auth.py` had been serving five for waves, the line count
+# was 4,700 lines short in `tests` and silent about `alembic` and `functions`, and the
+# rendered design gate was described as "five surfaces" while it walks nine facets.
+# Every claim below is read out of the files it counts, the same way Appendix A tells a
+# reader to count them.
+
+_CODE_SUFFIXES = frozenset({".py", ".sol", ".js", ".css", ".html", ".sh", ".ps1"})
+_ROUTE_DECORATOR = re.compile(r"@(?:app|router)\.(?:get|post|put|delete)\(")
+_NUMBERED_PACKAGE = re.compile(r"\b([a-z][a-z0-9_]*) ([\d,]{2,9})\b")
+_WORD_NUMBER = {
+    word: value
+    for value, word in enumerate((
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+        "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+        "seventeen", "eighteen", "nineteen", "twenty",
+    ))
+}
+
+
+def _whitepaper() -> str:
+    return (ROOT / "docs" / "WHITEPAPER.md").read_text(encoding="utf-8-sig")
+
+
+def _command_specs() -> list[tuple[str, str, str]]:
+    """`BOT_COMMAND_SPECS` as the catalogue writes it — read from the literal, not by
+    importing the bot, so the count does not need a database or a token."""
+    tree = ast.parse((ROOT / "bot" / "commands_catalog.py").read_text(encoding="utf-8-sig"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "BOT_COMMAND_SPECS"
+            for target in node.targets
+        ):
+            return [ast.literal_eval(element) for element in node.value.elts]
+    pytest.fail("BOT_COMMAND_SPECS is no longer a literal list in bot/commands_catalog.py")
+
+
+def _ledger_mixins() -> list[str]:
+    tree = ast.parse((ROOT / "bot" / "ledger" / "__init__.py").read_text(encoding="utf-8-sig"))
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "Ledger":
+            return [ast.unparse(base) for base in node.bases]
+    pytest.fail("class Ledger is no longer declared in bot/ledger/__init__.py")
+
+
+def _routes_by_module() -> dict[str, int]:
+    """Every tracked `web/*.py` that answers an HTTP route, and how many.
+
+    The directory is the subject set, not the list the doc happened to name: three
+    files were enumerated for waves and the fourth kept growing outside the count.
+    """
+    counts = {
+        f"web/{path.name}": len(_ROUTE_DECORATOR.findall(path.read_text(encoding="utf-8-sig")))
+        for path in sorted((ROOT / "web").glob("*.py"))
+    }
+    answered = {name: n for name, n in counts.items() if n}
+    assert len(answered) >= 3, f"only {answered} — the walk found no route-bearing module"
+    return answered
+
+
+def _lines_of_code_by_package() -> dict[str, int]:
+    lines: dict[str, int] = {}
+    for rel in sorted(_tracked_files()):
+        if PurePosixPath(rel).suffix not in _CODE_SUFFIXES:
+            continue
+        package = rel.split("/", 1)[0] if "/" in rel else "."
+        text = (ROOT / rel).read_text(encoding="utf-8-sig", errors="replace")
+        lines[package] = lines.get(package, 0) + len(text.splitlines())
+    assert len(lines) >= 8, f"only {len(lines)} packages counted — the walk is blind"
+    return lines
+
+
+def test_the_whitepapers_lines_of_code_are_the_lines_the_tree_has():
+    """`git ls-files`, the seven source suffixes, `len(splitlines())`, one number per
+    top-level directory — and the directory set is the tree's answer, not the doc's."""
+    sentence = re.search(r"the\s+tree\s+is\s+\*\*([\d,]+)\*\*\s+lines(?P<body>[^.]*\.)", _whitepaper())
+    assert sentence, "the WHITEPAPER no longer states its lines of code where this law reads them"
+    body = sentence.group("body")
+    stated = {name: int(value.replace(",", "")) for name, value in _NUMBERED_PACKAGE.findall(body)}
+    assert stated, f"no `package 12,345` pair in {body!r} — the sentence has nothing to check"
+    measured = _lines_of_code_by_package()
+    assert set(stated) == set(measured), (
+        f"the sentence names {sorted(set(stated) - set(measured))} the tree does not have, "
+        f"and hides {sorted(set(measured) - set(stated))} it does"
+    )
+    wrong = {name: (stated[name], measured[name]) for name in stated if stated[name] != measured[name]}
+    assert not wrong, f"{wrong} read (doc, measured) — rerun the Appendix A command and restate them"
+    total = int(sentence.group(1).replace(",", ""))
+    assert total == sum(measured.values()), (
+        f"the sentence totals {total:,} while its own packages sum to {sum(measured.values()):,}"
+    )
+
+
+def test_the_whitepaper_counts_the_routes_the_web_layer_serves():
+    text = _whitepaper()
+    measured = _routes_by_module()
+    claimed = {
+        f"web/{Path(module).name}": int(count)
+        for count, module in re.findall(r"\*\*(\d+) routes? in `(web/[\w.-]+)`\*\*", text)
+    }
+    assert len(claimed) >= 3, f"{claimed} — the law stopped finding the route bullets in §4.2"
+    assert set(claimed) == set(measured), (
+        f"§4.2 describes {sorted(set(claimed) ^ set(measured))} — a module that serves routes "
+        "and is not in the inventory, or one that is listed and serves none"
+    )
+    off = {name: (claimed[name], measured[name]) for name in claimed if claimed[name] != measured[name]}
+    assert not off, f"{off} read (doc, measured) for route decorators under web/"
+
+    total = sum(measured.values())
+    heading = re.search(r"### 4\.2 Web and Mini App — (\d+) HTTP routes", text)
+    assert heading, "§4.2 no longer states its route total in its heading"
+    assert int(heading.group(1)) == total, f"§4.2 heads with {heading.group(1)}, the modules answer {total}"
+
+    breakdown = re.search(r"# HTTP routes[^\n]*\((\d+(?: \+ \d+)+)\)", text)
+    assert breakdown, "Appendix A no longer breaks the route total down per module"
+    parts = sorted(int(part) for part in breakdown.group(1).split(" + "))
+    assert parts == sorted(measured.values()), (
+        f"Appendix A adds {parts} = {sum(parts)} while the tree answers {sorted(measured.values())}"
+    )
+
+
+def test_the_whitepapers_engineering_inventory_is_the_inventory_the_tree_has():
+    """§4.1's command catalogue, §4.9's table and the rendered-gate facet count."""
+    text = _whitepaper()
+    specs = _command_specs()
+    commands, groups = len(specs), len({row[2] for row in specs})
+    assert commands >= 20 and groups >= 4, f"{commands} commands in {groups} groups — the catalogue was not read"
+
+    inventory = re.findall(r"(\d+) commands, (\d+) groups", text)
+    assert len(inventory) >= 2, (
+        f"{inventory} — §4.1 and Appendix A are both supposed to state the catalogue"
+    )
+    for stated_commands, stated_groups in inventory:
+        assert (int(stated_commands), int(stated_groups)) == (commands, groups), (
+            f"a document says {stated_commands} commands in {stated_groups} groups; "
+            f"bot/commands_catalog.py declares {commands} in {groups}"
+        )
+
+    mixins = _ledger_mixins()
+    assert all(name.endswith("Mixin") for name in mixins) and len(mixins) >= 10, (
+        f"{mixins} is not a list of ledger domain mixins"
+    )
+    row = re.search(r"\|\s*Ledger domain mixins\s*\|\s*(\d+)\b", text)
+    assert row, "§4.9 no longer states the ledger domain mixin count"
+    assert int(row.group(1)) == len(mixins), (
+        f"§4.9 says {row.group(1)} mixins, `class Ledger` is built from {len(mixins)}"
+    )
+
+    agent_modules = sorted(rel for rel in _tracked_files("agent") if rel.endswith(".py"))
+    assert len(agent_modules) >= 5, f"{agent_modules} — the agent package was not enumerated"
+    agent_row = re.search(r"\|\s*Agent modules\s*\|\s*(\d+)\b", text)
+    assert agent_row, "§4.9 no longer states the agent module count"
+    assert int(agent_row.group(1)) == len(agent_modules), (
+        f"§4.9 says {agent_row.group(1)} agent modules, `git ls-files agent/*.py` answers "
+        f"{len(agent_modules)}"
+    )
+
+    contracts_row = re.search(r"\|\s*Contracts\s*\|\s*([^|\n]+)\|", text)
+    assert contracts_row, "§4.9 no longer carries the contracts row"
+    cell = contracts_row.group(1)
+    sol_files = sorted(p.name for p in (ROOT / "contracts").glob("*.sol"))
+    assert len(sol_files) >= 8, f"{sol_files} — the contracts folder was not read"
+    stated_total = re.search(r"(\d+) in `contracts/`", cell)
+    assert stated_total, f"{cell!r} no longer states how many contracts there are"
+    assert int(stated_total.group(1)) == len(sol_files), (
+        f"the row says {stated_total.group(1)} contracts, contracts/ holds {len(sol_files)}"
+    )
+    stand_ins = re.findall(r"`([\w.-]+\.sol)`", cell.split("production")[-1].split("),")[0])
+    assert stand_ins and all(name in sol_files for name in stand_ins), (
+        f"{stand_ins} — the row calls these the test-only stand-ins; contracts/ does not have them"
+    )
+    production = re.search(r"\((\d+) production", cell)
+    assert production and int(production.group(1)) == len(sol_files) - len(stand_ins), (
+        f"the row splits {production.group(1) if production else '?'} production + "
+        f"{len(stand_ins)} stand-ins, contracts/ has {len(sol_files)}"
+    )
+
+    forge_suites = sorted(rel for rel in _tracked_files("contracts") if rel.endswith(".t.sol"))
+    suites = re.search(r"(\d+) Forge suites", cell)
+    assert suites, f"{cell!r} no longer states the Forge suite count"
+    assert int(suites.group(1)) == len(forge_suites), (
+        f"the row says {suites.group(1)} Forge suites, the tree tracks {forge_suites}"
+    )
+
+    deploy_scripts = sorted(
+        rel for rel in _tracked_files("script", "contracts/script") if rel.endswith(".s.sol")
+    )
+    foundry = re.search(r"(\d+) Foundry deploy scripts \(([^)]*)\)", cell)
+    assert foundry, f"{cell!r} no longer states the Foundry deploy scripts"
+    assert int(foundry.group(1)) == len(deploy_scripts), (
+        f"the row says {foundry.group(1)}, the tree tracks {deploy_scripts}"
+    )
+    named_scripts = [part.strip(" `") for part in foundry.group(2).split(",")]
+    assert sorted(named_scripts) == deploy_scripts, (
+        f"the row names {named_scripts} and the tree tracks {deploy_scripts}"
+    )
+
+    facets = _rendered_gate_facets()
+    stated_facets = re.search(r"\b(\w+) facets named in `tests/test_production_design\.py`", text)
+    assert stated_facets, "§4.9 no longer says how many rendered facets the design gate walks"
+    assert _WORD_NUMBER.get(stated_facets.group(1), -1) == len(facets), (
+        f"the text says {stated_facets.group(1)} facets, FACETS lists {len(facets)}: {facets}"
+    )
+
+    # The line the document opens with is the same inventory in Russian, and it kept saying
+    # 48 routes and 21 mixins while §4.2 and §4.9 were being corrected around it. A number a
+    # reader meets first is the number least allowed to be wrong.
+    flat = re.sub(r"\s+", " ", text)
+    summary = re.search(
+        r"\*\*Что уже написано:\*\* (\d+) команд\S* бота, (\d+) HTTP-маршру\S*, "
+        r"(\d+) контракт\S*, (\d+) доменн\S* миксин\S* леджера, (\d+) модулей агента",
+        flat,
+    )
+    assert summary, (
+        "the WHITEPAPER's opening inventory line no longer states its figures in the shape this "
+        "law reads — if the sentence moved, move the pattern with it, and never only the numbers"
+    )
+    routes = sum(_routes_by_module().values())
+    for label, stated, measured in (
+        ("commands", int(summary.group(1)), commands),
+        ("HTTP routes", int(summary.group(2)), routes),
+        ("contracts", int(summary.group(3)), len(sol_files)),
+        ("ledger mixins", int(summary.group(4)), len(mixins)),
+        ("agent modules", int(summary.group(5)), len(agent_modules)),
+    ):
+        assert stated == measured, (
+            f"the opening line states {stated} {label}, the tree answers {measured} "
+            "(§4.1/§4.2/§4.9 state these the same way — one of the two is stale)"
+        )
+
+
+def _rendered_gate_facets() -> list[str]:
+    tree = ast.parse((ROOT / "tests" / "test_production_design.py").read_text(encoding="utf-8-sig"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "FACETS" for target in node.targets
+        ):
+            facets = [ast.literal_eval(element) for element in node.value.elts]
+            assert len(facets) >= 5, f"{facets} — the rendered gate walks almost nothing"
+            return facets
+    pytest.fail("FACETS is no longer a literal list in tests/test_production_design.py")
+
+
+# ── the README roadmap is a list of promises, and a promise rots ────────────
+#
+# Every bullet there either says the platform already does something or asks
+# someone to build it. The first kind is a claim about the tree — `bot/create2.py`
+# has to exist and `CREATE2_SAFE_DEPOSITS` has to be a name the runtime reads —
+# and the second kind is a claim about the tree too: a live bullet that names a
+# module the repository already tracks is finished work nobody crossed off. So
+# this law reads the artifacts out of each bullet and resolves them against the
+# tree in both directions: struck bullets must resolve, live bullets must not.
+
+_SOURCE_PY_DIRS = ("bot", "web", "agent", "deploy", "scripts", "alembic", "functions")
+_STRIKE = re.compile(r"~~(.+?)~~", re.S)
+_URL = re.compile(r"https?://\S+")
+_ARTIFACT_PATH = re.compile(
+    r"\b[\w.-]+/[\w./-]*\.(?:py|js|css|html|md|sh|sol|sql|yml|yaml|json|toml)\b"
+)
+_ENV_TOKEN = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*(?:_\*)?(?![A-Za-z0-9_])")
+_SLASH_COMMAND = re.compile(r"(?<![\w/.-])/([a-z][a-z0-9_]{1,15})\b")
+
+
+def _is_environ(node: ast.expr) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "os"
+        and node.attr == "environ"
+    )
+
+
+def _env_names_the_runtime_reads() -> set[str]:
+    """Every name `os.environ[...]`, `os.environ.get(...)` or `getenv(...)` reads."""
+    found: set[str] = set()
+
+    class Visitor(ast.NodeVisitor):
+        def visit_Subscript(self, node):
+            if (
+                _is_environ(node.value)
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)
+            ):
+                found.add(node.slice.value)
+            self.generic_visit(node)
+
+        def visit_Call(self, node):
+            func = node.func
+            gets_env = isinstance(func, ast.Name) and func.id == "getenv"
+            gets_env = gets_env or (isinstance(func, ast.Attribute) and func.attr in {"getenv", "get"})
+            gets_env = gets_env or (isinstance(func, ast.Attribute) and _is_environ(func))
+            if (
+                gets_env
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                found.add(node.args[0].value)
+            self.generic_visit(node)
+
+    for rel in sorted(_tracked_files()):
+        path = PurePosixPath(rel)
+        if path.suffix != ".py" or path.parts[0] not in _SOURCE_PY_DIRS:
+            continue
+        Visitor().visit(ast.parse((ROOT / rel).read_text(encoding="utf-8-sig")))
+    assert len(found) >= 40, f"only {len(found)} env names — the scanner lost the config surface"
+    return found
+
+
+def _readme_roadmap_bullets() -> list[tuple[bool, int, str]]:
+    """`(struck, first line, text)` for every bullet under the README's `## Roadmap`."""
+    return _roadmap_bullets_from((ROOT / "README.md").read_text(encoding="utf-8-sig"))
+
+
+def _roadmap_bullets_from(source: str) -> list[tuple[bool, int, str]]:
+    lines = source.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == "## Roadmap")
+    except StopIteration:
+        pytest.fail("README.md has no `## Roadmap` section for this law to read")
+
+    bullets: list[tuple[bool, int, str]] = []
+    index = start + 1
+    while index < len(lines) and not lines[index].startswith("## "):
+        if lines[index].startswith(("- ", "* ")):
+            first_line = index + 1
+            body = [lines[index][2:]]
+            index += 1
+            while index < len(lines) and lines[index].startswith(("  ", "\t")):
+                body.append(lines[index].strip())
+                index += 1
+            text = " ".join(body)
+            bullets.append((bool(_STRIKE.search(text)), first_line, _STRIKE.sub(r"\1", text)))
+        else:
+            index += 1
+    assert len(bullets) >= 4, f"{len(bullets)} bullets — that is not a roadmap this law can read"
+    assert any(struck for struck, _, _ in bullets), "no struck bullet: nothing claims to ship"
+    assert any(not struck for struck, _, _ in bullets), "no live bullet: the roadmap promises nothing"
+    return bullets
+
+
+def _artifacts_cited(text: str, env_names: set[str], commands: set[str], tracked: set[str]):
+    """`[(token, resolves, why)]` for the paths, environment names and commands a bullet names.
+
+    A token ending in `*` is a family and resolves when the runtime reads at least
+    one name with that prefix; anything else has to appear exactly.
+    """
+    plain = _URL.sub(" ", text)
+    cited = []
+    for token in _ARTIFACT_PATH.findall(plain):
+        cited.append((token, token in tracked, f"`{token}` is no file the repository tracks"))
+    for token in _ENV_TOKEN.findall(plain):
+        if "_" not in token:
+            continue  # USDC, EIP, API — a word, not a configuration name
+        if token.endswith("*"):
+            prefix = token.rstrip("*").rstrip("_")
+            hits = sorted(name for name in env_names if name.startswith(f"{prefix}_"))
+            cited.append((token, bool(hits), f"nothing reads a `{prefix}_*` environment name"))
+        else:
+            cited.append((token, token in env_names, f"`{token}` is no name the runtime reads"))
+    for token in _SLASH_COMMAND.findall(plain):
+        cited.append(
+            (f"/{token}", f"/{token}" in commands, f"`/{token}` is no command the bot registers")
+        )
+    return cited
+
+
+def test_the_readme_roadmap_promises_only_what_the_tree_does_not_have_yet():
+    """Struck bullets cite artifacts the tree has; live bullets cite none; nothing rots."""
+    env_names = _env_names_the_runtime_reads()
+    commands = {f"/{name}" for name, _, _ in _command_specs()}
+    tracked = _tracked_files()
+    assert len(commands) >= 20, f"only {len(commands)} commands — the catalogue read is blind"
+
+    shipped_lies: list[str] = []
+    finished_but_live: list[str] = []
+    untraceable: list[str] = []
+    resolved_total = 0
+
+    for struck, line, text in _readme_roadmap_bullets():
+        cited = _artifacts_cited(text, env_names, commands, tracked)
+        if not struck:
+            asking = sorted(token for token, resolves, _ in cited if resolves)
+            if asking:
+                finished_but_live.append(f"README.md:{line} still asks for {asking} the tree has")
+            continue
+        broken = sorted(token for token, resolves, _ in cited if not resolves)
+        if broken:
+            shipped_lies.append(f"README.md:{line} claims shipped and cites {broken}")
+        if not cited:
+            untraceable.append(f"README.md:{line}")
+        resolved_total += sum(1 for _, resolves, _ in cited if resolves)
+
+    assert not shipped_lies, (
+        "a struck roadmap bullet cites what the tree does not have — the feature is "
+        "not shipped or the artifact moved and the doc never followed:\n" + "\n".join(shipped_lies)
+    )
+    assert not untraceable, (
+        "a struck roadmap bullet must name at least one artifact that ships it, or nothing "
+        "can ever tell it was true and nothing can tell it stopped being true:\n"
+        + "\n".join(untraceable)
+    )
+    assert not finished_but_live, (
+        "a live roadmap bullet may not cite an artifact the tree already has "
+        "(cross it off, or say what you meant):\n" + "\n".join(finished_but_live)
+    )
+    assert resolved_total >= 5, (
+        f"only {resolved_total} struck-bullet artifacts resolved — the law read almost nothing"
+    )
+
+
+def test_the_roadmap_reader_reads_the_artifacts_the_text_names():
+    """The resolvers, on text written to break them: a URL is not a repository path, a
+    doc path is not a slash command, a spec number is not an environment name."""
+    env = {"CREATE2_SAFE_DEPOSITS", "WITHDRAW_BATCH_FLUSH_COUNT", "ORACLE_PRIVATE_KEY"}
+    commands = {"/deposit", "/balance"}
+    tracked = {"bot/create2.py", "docs/SECURITY.md"}
+
+    def cited(markdown: str) -> dict[str, bool]:
+        return {token: resolves for token, resolves, _ in _artifacts_cited(markdown, env, commands, tracked)}
+
+    assert cited("`bot/create2.py:212` derives one address") == {"bot/create2.py": True}
+    assert cited("`bot/moved.py` shipped") == {"bot/moved.py": False}
+    assert cited("see `docs/SECURITY.md`") == {"docs/SECURITY.md": True}
+    assert cited("chat at https://t.me/ssrjkk or https://x.com/ludych1") == {}
+    assert cited("upstream: https://github.com/org/repo/blob/main/web/mini.py") == {}
+    assert cited("queued under `WITHDRAW_BATCH_*` caps") == {"WITHDRAW_BATCH_*": True}
+    assert cited("gated by `REEF_4589_*`") == {"REEF_4589_*": False}
+    assert cited("`CREATE2_SAFE_DEPOSITS=1` with a deployed `CREATE2_FACTORY_ADDRESS`") == {
+        "CREATE2_SAFE_DEPOSITS": True,
+        "CREATE2_FACTORY_ADDRESS": False,
+    }
+    assert cited("EIP-1167 proxies, ERC-1155 shares, USDC") == {}
+    assert cited("USDC on Base through the API, per PROTOCOL") == {}
+    assert cited("printed by `/deposit`, never by `/melt`") == {"/deposit": True, "/melt": False}
+    assert cited("set create2_safe_deposits in .env") == {}
+
+
+def test_the_roadmap_reader_keeps_one_wrapped_bullet_one_bullet():
+    """A bullet that wraps is one promise, struck text is scanned without its markup, and
+    the line number points where a reader has to look."""
+    source = "\n".join([
+        "## Roadmap",
+        "",
+        "- ~~Per-user deposits~~ shipped: `bot/create2.py` derives one",
+        "  proxy per user and `/deposit` prints it.",
+        "- ~~Old work~~ shipped, names nothing",
+        "- Live `bot/live.py` idea",
+        "- Another live idea",
+        "",
+        "## Contributing",
+    ])
+    bullets = _roadmap_bullets_from(source)
+    assert len(bullets) == 4, bullets
+    struck, line, text = bullets[0]
+    assert struck and line == 3, (struck, line)
+    assert "`bot/create2.py`" in text and "`/deposit`" in text
+    assert "~~" not in text, "the strike markup must not hide inside the text the law scans"
+    assert [item[0] for item in bullets] == [True, True, False, False]
+
+
+# ── a money figure written beside a named knob is a claim about that knob ───
+#
+# `docs/OPERATIONS.md` told an operator to review transactions "> $1000 USDC" while the
+# ledger has always flagged a payout at `WITHDRAW_LARGE_USDC_THRESHOLD` — 500. The
+# checklist was a sentence away from the knob it meant and two times away from the number
+# it promised, and a reviewer who trusts the doc misses half the flagged payouts. This law
+# reads the default out of the `int(os.environ.get(NAME, DEFAULT))` pair in the runtime and
+# holds every USDC figure a document puts beside that name to it.
+
+_MONEY_FIGURE = re.compile(r"(?<![\d.])\$?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:USDC|usdc)\b")
+_NUMERIC_PARSERS = frozenset({"int", "float", "Decimal"})
+_THRESHOLD_WINDOW = 60  # characters on each side that still count as "about this knob"
+
+
+def _numeric_env_knobs() -> tuple[dict[str, Decimal], list[str]]:
+    """Every knob the runtime parses as a number from its own default, and conflicts found.
+
+    The pair is read out of `int(os.environ.get("NAME", "500"))` and its `Decimal` sibling —
+    `Decimal` is what this configuration uses for every money-sized knob, so leaving it out
+    would read the bounds of the site and miss the amounts — because that default is the number
+    a document quotes, and a name two modules default to two different numbers is the same
+    defect in code that this law refuses to accept in prose.
+    """
+    defaults: dict[str, Decimal] = {}
+    conflicts: list[str] = []
+    for rel in sorted(_tracked_files()):
+        path = PurePosixPath(rel)
+        if path.suffix != ".py" or path.parts[0] not in _SOURCE_PY_DIRS:
+            continue
+        tree = ast.parse((ROOT / rel).read_text(encoding="utf-8-sig"))
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in _NUMERIC_PARSERS
+                and len(node.args) == 1
+            ):
+                continue
+            inner = node.args[0]
+            if not (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr == "get"
+                and _is_environ(inner.func.value)
+                and len(inner.args) == 2
+                and all(isinstance(arg, ast.Constant) for arg in inner.args)
+            ):
+                continue
+            name, raw = inner.args[0].value, inner.args[1].value
+            if not isinstance(name, str) or not isinstance(raw, str):
+                continue
+            try:
+                value = Decimal(raw)
+            except InvalidOperation:
+                continue
+            if name in defaults and defaults[name] != value:
+                conflicts.append(f"{name} defaults to {defaults[name]} and also to {value} ({rel})")
+            defaults[name] = value
+    assert len(defaults) >= 50, f"only {len(defaults)} numeric knobs (74 read this wave) — the scan lost the config"
+    return defaults, conflicts
+
+
+def _usdc_figures_a_document_attributes_to_a_knob(
+    defaults: dict[str, Decimal], paths: list[Path] | None = None
+):
+    """`(attributed, wrong, ambiguous)` for every USDC figure written beside a money knob.
+
+    A knob counts as money-sized only when its own name says the unit (`…_USDC…`): the
+    default of `AGENT_DAILY_CAP` is 50 and of `MAX_WITHDRAWS_PER_DAY` is 5, and nothing in
+    the name tells a reader — or this scan — which of them a "$50 USDC" in a runbook means.
+    Guessing a unit would invent claims, so the law checks only the knobs whose own name
+    declares it (12 read this wave) and AGENTS.md states that the rest are outside its reach.
+    """
+    money = {name: value for name, value in defaults.items() if "USDC" in name}
+    # How many money-sized knobs the real configuration has is floored by the law that calls
+    # this with it; the reader's own unit test calls it with a three-entry fixture.
+    attributed: list[tuple[str, int, str, str, str]] = []
+    wrong: list[str] = []
+    ambiguous: list[str] = []
+    for path in MARKDOWN if paths is None else paths:
+        # A probe document written by the reader's own unit test has no place under ROOT.
+        rel = path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else path.name
+        text = _prose(path.read_text(encoding="utf-8-sig", errors="replace"))
+        for match in _MONEY_FIGURE.finditer(text):
+            start = max(0, match.start() - _THRESHOLD_WINDOW)
+            near = text[start : match.end() + _THRESHOLD_WINDOW]
+            if _PROPOSAL_WORDS.search(near):
+                continue  # a figure in a proposal is not a bound this build keeps
+            offset = match.start() - start
+            named = sorted(
+                (min((abs(found.start() - offset) for found in re.finditer(rf"\b{name}\b", near)),
+                     default=10**6), name)
+                for name in money
+            )
+            named = [entry for entry in named if entry[0] < 10**6]
+            if not named:
+                continue
+            line = text[: match.start()].count("\n") + 1
+            figure = Decimal(match.group(1).replace(",", ""))
+            owners = [name for _, name in named]
+            row = (rel, line, match.group(0).strip(), owners[0], str(defaults[owners[0]]))
+            attributed.append(row)
+            if len(owners) > 1 and defaults[owners[0]] != defaults[owners[1]]:
+                ambiguous.append(
+                    f"{rel}:{line} {row[2]} sits between {owners[0]} ({defaults[owners[0]]}) "
+                    f"and {owners[1]} ({defaults[owners[1]]})"
+                )
+                continue
+            if figure != defaults[owners[0]]:
+                wrong.append(
+                    f"{rel}:{line} states {row[2]} beside `{owners[0]}`, "
+                    f"which the runtime defaults to {defaults[owners[0]]}"
+                )
+    return attributed, wrong, ambiguous
+
+
+def test_no_document_states_a_usdc_figure_that_is_not_the_named_knobs_default():
+    defaults, conflicts = _numeric_env_knobs()
+    assert not conflicts, "an environment knob has two defaults, so no document can quote one:\n" + \
+        "\n".join(conflicts)
+
+    # The helper takes a fixture dict from its own unit test, so the count of the real
+    # configuration is floored here, where the scan has read the tree.
+    money = sorted(name for name in defaults if "USDC" in name)
+    assert len(money) >= 10, (
+        f"only {money} — {len(money)} knobs declare a USDC unit (12 read this wave), so the "
+        "scan lost the money half of the configuration and this law would measure prose "
+        "against nothing"
+    )
+
+    attributed, wrong, ambiguous = _usdc_figures_a_document_attributes_to_a_knob(defaults)
+    assert len(attributed) >= 2, (
+        f"only {len(attributed)} USDC figures in the documents sit beside a money knob — the "
+        "prose stopped telling an operator the bound, or the reader stopped finding it"
+    )
+    assert not ambiguous, (
+        "a USDC figure written between two knobs that default to two different numbers states "
+        "neither of them; name the knob the figure belongs to:\n" + "\n".join(ambiguous)
+    )
+    assert not wrong, (
+        "a document states a USDC figure beside the knob whose default it is not — an operator "
+        "reading the prose applies a bound the code never enforces:\n" + "\n".join(wrong)
+    )
+
+
+def test_the_threshold_reader_attributes_a_figure_to_the_knob_beside_it(tmp_path):
+    """The instrument the threshold law measures with, on prose written to break it: only a
+    name that states the USDC unit owns a figure, only within the window, never inside a fence,
+    and a figure between two different defaults is reported instead of guessed."""
+    defaults = {
+        "LARGE_USDC": Decimal("500"),
+        "DAILY_USDC": Decimal("5000"),
+        "AGENT_DAILY_CAP": Decimal("50"),
+    }
+
+    def probe(markdown: str):
+        doc = tmp_path / "probe.md"
+        doc.write_text(markdown, encoding="utf-8", newline="\n")
+        return _usdc_figures_a_document_attributes_to_a_knob(defaults, [doc])
+
+    attributed, wrong, ambiguous = probe("`LARGE_USDC` is 500 USDC by default.\n")
+    assert attributed and not wrong and not ambiguous, (attributed, wrong, ambiguous)
+    assert attributed[0][3] == "LARGE_USDC"
+
+    assert probe("`DAILY_USDC` is 5,000 USDC by default.\n")[1] == []
+    _, one_wrong, _ = probe("`LARGE_USDC` flags anything over $1000 USDC.\n")
+    assert len(one_wrong) == 1 and "500" in one_wrong[0], one_wrong
+
+    assert probe("`AGENT_DAILY_CAP` spends 50 USDC a day.\n")[0] == []
+    far = "`LARGE_USDC` is the bound, and the ledger compares every payout it is "
+    far += "offered against the stored threshold before it flags anything. A payout of 500 USDC.\n"
+    assert probe(far)[0] == [], "a figure outside the window belongs to no name"
+    assert probe("```python\n# `LARGE_USDC` 500 USDC\n```\n")[0] == []
+    assert probe("proposed: raise `LARGE_USDC` to 1000 USDC\n")[0] == []
+
+    *_, between = probe("`LARGE_USDC`/`DAILY_USDC`: 700 USDC\n")
+    assert len(between) == 1 and "between" in between[0], between
+
+    attributed, _, _ = probe("first line\nsecond line\n`LARGE_USDC` is 500 USDC here\n")
+    assert attributed[0][1] == 3, attributed

@@ -3107,3 +3107,56 @@ def test_oc_create_refuses_too_many_options(ledger, monkeypatch):
 
     assert "Формат" in m.answers[0][0], m.answers
     assert ledger.open_amm_markets(limit=20) == []
+
+
+def test_no_module_defines_the_same_constant_twice():
+    """A second module-level assignment to one upper-case name is a second source of one fact,
+    and the first one is dead code that keeps being edited.
+
+    `scripts/make_docs_screenshots.py` carried `WEB_SHOTS` and `DEVICE_SCALE` twice this wave:
+    the copy the screenshot laws read was the later one, so a mutation of the earlier one
+    changed nothing and the law it was supposed to break reported "survived" — the failure mode
+    is not a wrong number, it is a gate that cannot be made to fail.
+
+    Measured this wave as 269 module-level literal constants in 84 files, none of them named
+    twice. Only `tree.body` is read, and only literals: a name assigned inside `if`/`try` is a
+    conditional fallback, and a value computed at runtime (`os.environ.get(...)`, a call) is a
+    default, not a duplicated number.
+    """
+    import ast
+    from collections import Counter
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    packages = ("bot", "web", "agent", "deploy", "scripts", "alembic", "functions", "tests")
+    offenders: list[str] = []
+    constants = files = 0
+    for pkg in packages:
+        folder = root / pkg
+        assert folder.is_dir(), f"{pkg} is gone — the scan cannot read the tree it is scoped to"
+        for path in sorted(folder.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+            seen: Counter[str] = Counter()
+            for node in tree.body:
+                if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                    target, value = node.targets[0], node.value
+                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    target, value = node.target, node.value
+                else:
+                    continue
+                if not isinstance(target, ast.Name) or not target.id.isupper() or value is None:
+                    continue
+                if isinstance(value, (ast.Constant, ast.Tuple, ast.List, ast.Set, ast.Dict)):
+                    seen[target.id] += 1
+            constants += sum(seen.values())
+            files += 1 if seen else 0
+            offenders += [
+                f"{path.relative_to(root).as_posix()}: {name} assigned {count} times"
+                for name, count in sorted(seen.items())
+                if count > 1
+            ]
+
+    assert files >= 60 and constants >= 200, (
+        f"only {constants} module-level literals in {files} files were read — the scan is blind"
+    )
+    assert not offenders, f"{offenders} are a fact written twice in one module, so one copy reads nothing"

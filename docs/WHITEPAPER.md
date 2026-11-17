@@ -19,8 +19,8 @@ External funding figures are quoted from the programs' own pages and listed in
   денежную экономику на Base: чаевые в USDC, два движка рынков прогнозов
   (паримутуэл и LMSR-AMM), платный контент, токены авторов с дивидендами,
   рекуррентные подписки, автономный AI-агент и приём платежей от AI-агентов по x402.
-- **Что уже написано:** 47 команд бота, 48 HTTP-маршрутов, 9 контрактов, 21 доменный
-  миксин леджера, 10 модулей агента, 1358 обычных тестов + 171 боевой. Три языка.
+- **Что уже написано:** 47 команд бота, 53 HTTP-маршрута, 9 контрактов, 18 доменных
+  миксинов леджера, 10 модулей агента, 1373 обычных тестов + 171 боевой. Три языка.
 - **Что выключено флагами:** ончейн-рынки (ERC-1155) и gasless-кошельки (ERC-4337).
   Код есть, деплой на mainnet — нет.
 - **Что приносит деньги сегодня:** ровно одна строка — комиссия 1% с вывода.
@@ -120,7 +120,7 @@ The catalog is plain data in `bot/commands_catalog.py`, read by both the bot (wh
 wraps it into `BotCommand`) and the web process (which publishes it through
 `/api/info`), so the menu and the website cannot drift apart.
 
-### 4.2 Web and Mini App — 48 HTTP routes (Live)
+### 4.2 Web and Mini App — 53 HTTP routes (Live)
 
 - **35 routes in `web/server.py`**: the landing page with a working workspace
   (balance, tip, withdraw, markets, bets, create, onchain, history), a slide-over
@@ -138,7 +138,11 @@ wraps it into `BotCommand`) and the web process (which publishes it through
   `create`, `trade`, `smartbuy`, `smartwallet`, `withdraw`, `withdraw/confirm`,
   `onchain/{market_id}`. Every money-moving POST
   requires an `Idempotency-Key`; withdrawal uses a staged single-use token instead.
-- **1 Farcaster frame route** in `web/frame.py`.
+- **5 routes in `web/auth.py`**: `/login` (a bookmark redirect that still
+  issues the login-state cookie), `/api/auth/telegram` (the widget callback — a
+  refusal 303s to `/?auth=<code>` instead of answering a body to a browser),
+  `POST /api/auth/wallet` (sign-in by wallet signature), `/logout`, `/api/me`.
+- **1 route in `web/frame.py`** — the Farcaster frame contract the Base App feed calls.
 
 Interface rules are enforced by tests, not by review: touch targets ≥ 44 px, no
 horizontal overflow at 360 px, dark theme default, one `<h1>` per page, focus ring
@@ -218,9 +222,10 @@ can never be redeemed for another. Two payment paths then unlock the same credit
   of `x402_payments` and the deposit scanner skips it, so a payment is never
   credited twice and liabilities stay exact. A repeated hash answers 409.
 
-Either rail also sells paywall content through `POST /api/x402/paywall`. Minimum
-invoice 0.01 USDC, maximum 1000 USDC (the same `MAX_TIP_USDC` the Telegram
-handlers enforce), invoice TTL 300 s. An amount outside that range answers 400
+Either rail also sells paywall content through `POST /api/x402/paywall`. The floor is
+`X402_MIN_USDC` (0.01 USDC) and an invoice lives 300 seconds after it is issued. The
+ceiling is `MAX_TIP_USDC` (1000 USDC), the same cap the Telegram handlers enforce. An
+amount outside that range answers 400
 naming the bound it broke — `amount is over the 1000 USDC limit of this site` —
 because a generic "recipient and amount are required" tells an agent to add a
 parameter it already sent, and it resends the identical request forever. The
@@ -301,11 +306,11 @@ data through `bot/ai_data.py` and says that it did.
 
 | Measure | Value |
 | --- | --- |
-| Tests | 1358 ordinary + 171 production (rendered-page and live-site gates) |
+| Tests | 1373 ordinary + 171 production (rendered-page and live-site gates) |
 | Languages | ru / en / zh, two independent catalogs, key sets gated equal |
-| Ledger domain mixins | 21 |
-| Agent modules | 10 |
-| Contracts | 9 (8 production + 1 test-only stand-in), plus a deploy script and 2 Forge suites |
+| Ledger domain mixins | 18 (every base of `Ledger` in `bot/ledger/__init__.py`) |
+| Agent modules | 10 (`git ls-files agent/*.py`) |
+| Contracts | 9 in `contracts/` (8 production + `MiniUSDC.sol`, the test stand-in), 2 Forge suites in `contracts/test/forge/`, 2 Foundry deploy scripts (`script/DeployTimelock.s.sol`, `contracts/script/DeployOutcomeMarket.s.sol`) |
 
 The gates are structural, not stylistic. Examples that exist because prose review
 missed the bug: every `ledger.<method>()` call site must resolve on the real class;
@@ -316,7 +321,9 @@ chars and `callback_data` ≤ 64 bytes in all three languages; every env knob th
 reads must be written down in a template or a doc, and no template may offer a knob
 nothing reads; the design contract is measured from the tokens (contrast, fonts,
 focus, zoom, headings, dead CSS, skeleton ownership) and from the rendered page
-across five surfaces including all four Mini App tabs.
+across the nine facets named in `tests/test_production_design.py` (`FACETS` there —
+both landings, a market page, the Mini App, the agent dashboard, `/tos`, `/u/{id}`,
+an on-chain market, the dead end), which include all four Mini App tabs.
 
 ## 5. What is measurably different
 
@@ -346,7 +353,7 @@ across five surfaces including all four Mini App tabs.
 - Set `OUTCOME_MARKET_ADDRESS` after deploying `OutcomeMarket` → on-chain markets
   appear in the bot, the site and the Mini App.
 - Set `SMART_WALLET_ENABLED=1` with factory and paymaster addresses → gasless
-  onboarding, 10 sponsored transactions per account.
+  onboarding, `PAYMASTER_FREE_TX` (10 by default) sponsored transactions per account.
 - Both are **Built, off** today; neither needs new product code.
 
 ### G1 — Mainnet readiness (blocking, in order)
@@ -494,7 +501,7 @@ repository today):
 5. An autonomous agent with spend caps, a circuit breaker, stop-loss and EAS
    attestations, which also sells its analysis through the same paywall rail.
 6. Published solvency across six liability categories, an append-only audit trail,
-   and 1358 + 171 tests including structural gates that fail the build when a
+   and 1373 + 171 tests including structural gates that fail the build when a
    documented claim stops being true.
 7. Three languages, with the Mini App as the primary mobile surface.
 
@@ -565,8 +572,8 @@ Every internal figure above can be re-measured from a clean checkout:
 # command inventory (47 commands, 7 groups)
 python -c "import ast,pathlib,collections;t=ast.parse(pathlib.Path('bot/commands_catalog.py').read_text(encoding='utf-8-sig'));r=[ast.literal_eval(e) for n in ast.walk(t) if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='BOT_COMMAND_SPECS' for e in n.value.elts];print(len(r),dict(collections.Counter(x[2] for x in r)))"
 
-# HTTP routes (35 + 12 + 1)
-python -c "import re,pathlib;[print(f,len(re.findall(r'@(?:app|router)\.(get|post|put|delete)\(',pathlib.Path(f).read_text(encoding='utf-8-sig')))) for f in ['web/server.py','web/mini.py','web/frame.py']]"
+# HTTP routes — every module under web/ that carries them (35 + 12 + 5 + 1)
+python -X utf8 -c "import re,pathlib;n=[(p.as_posix(),len(re.findall(r'@(?:app|router)\.(get|post|put|delete)\(',p.read_text(encoding='utf-8-sig')))) for p in sorted(pathlib.Path('web').glob('*.py'))];print([x for x in n if x[1]],sum(c for _,c in n))"
 
 # the only platform revenue line
 grep -rn "kind='fee'\|'fee', %s" bot/ledger/
@@ -574,11 +581,18 @@ grep -rn "kind='fee'\|'fee', %s" bot/ledger/
 # test counts
 python -m pytest -q -m "not production" --collect-only | tail -1
 python -m pytest -q -m production --collect-only | tail -1
+
+# lines of code per top-level directory (the sentence below)
+python -X utf8 -c "import collections,pathlib,subprocess as s;S={'.py','.sol','.js','.css','.html','.sh','.ps1'};P=[p for p in s.run(['git','ls-files'],capture_output=True,text=True,encoding='utf-8').stdout.split() if pathlib.PurePosixPath(p).suffix in S];c=collections.Counter();[c.update({(p.split('/')[0] if '/' in p else '.'):len(pathlib.Path(p).read_text(encoding='utf-8-sig',errors='replace').splitlines())}) for p in P];print(sum(c.values()),sorted(c.items()))"
 ```
 
-Lines of code, measured over `.py .sol .js .css .html .sh .ps1`, excluding vendored
-`lib/`: bot 20,909 · web 9,446 · agent 1,659 · contracts 2,649 · tests 25,449 ·
-deploy 1,064 · scripts 2,475.
+Lines of code: every file `git ls-files` reports with one of `.py .sol .js .css
+.html .sh .ps1`, counted as `len(splitlines())` and grouped by top-level directory
+— so the vendored `contracts/lib/` (a `.gitkeep` in git) never enters, and neither
+does a scratch file `.gitignore` keeps out of the clone. Measured this way the tree
+is **72,389** lines: tests 30,830 · bot 20,566 · web 11,014 · scripts 2,906 ·
+contracts 2,649 · agent 1,659 · alembic 1,462 · deploy 1,073 · functions 174 ·
+script 56 (the one Foundry deploy script at the repository root).
 
 Live configuration is published by the origin itself: `GET /api/info` (chain,
 addresses, fees, limits, feature flags), `GET /api/health` (scanner lag, database),
