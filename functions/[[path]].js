@@ -39,9 +39,9 @@ const MAINTENANCE = `<!doctype html>
 <link rel="stylesheet" href="/fonts.css">
 <style>
   :root {
-    --blue: #0000ff; --blue-hover: #0000cc; --blue-soft: rgba(0, 0, 255, .07);
+    --blue: #0000ff; --blue-hover: #0000cc; --blue-soft: rgba(0, 0, 255, 0.07);
     --canvas: #ffffff; --surface: #f8f8f8; --border: #efefef; --border-strong: #dadada;
-    --ink: #111111; --muted: #6f6f6f; --muted-2: #9a9a9a; --warning: #8a5a00;
+    --ink: #111111; --muted: #666666; --muted-2: #707070; --warning: #8a5a00;
     --pill: 9999px;
     --font-ui: "Schibsted Grotesk", "Golos Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
     --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -49,7 +49,7 @@ const MAINTENANCE = `<!doctype html>
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --blue: #224bff; --blue-hover: #3d61ff; --blue-soft: rgba(34, 75, 255, .16);
+      --blue: #224bff; --blue-hover: #3d61ff; --blue-soft: rgba(34, 75, 255, 0.16);
       --canvas: #111111; --surface: #1a1a1a; --border: #2d2d2d; --border-strong: #3a3a3a;
       --ink: #ededed; --muted: #9a9a9a; --muted-2: #8b8b8b; --warning: #d99a2b;
       color-scheme: dark;
@@ -114,9 +114,19 @@ const MAINTENANCE = `<!doctype html>
 </html>`;
 
 function maintenance() {
+  // The one document this edge writes by itself, so the one document that has to
+  // carry the protection layer by hand: the origin stamps nosniff, Referrer-Policy
+  // and no-store on everything it answers, and a card that asks to be read again
+  // in five minutes cannot itself be cached.
   return new Response(MAINTENANCE, {
     status: 503,
-    headers: { 'content-type': 'text/html; charset=utf-8', 'retry-after': '300' },
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'retry-after': '300',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+    },
   });
 }
 

@@ -144,6 +144,16 @@ wrangler pages deploy web/static --project-name tippy
 Бэкенд — на VPS через `docker compose up -d` (см. ниже) или любой
 PaaS-платформе с Docker-поддержкой.
 
+Это два отдельных ручных действия, и зелёный CI не значит, что сделано оба:
+`git push` не публикует Pages, а `wrangler pages deploy` не трогает backend.
+Опубликованный бандл сверяется с деревом законом
+`tests/test_production_health.py::test_the_published_bundle_is_this_checkouts_bundle`
+(байты каждого отдаваемого файла, его тип и окно кеширования из `_headers`), а
+`BACKEND_URL` живого проекта указывает не на VPS, а на туннель от этой машины:
+`deploy/tunnel.py` поднимает его, `deploy/watchdog.ps1 -Check` читает состояние
+не меняя ничего, и `python -m pytest -q -m "not production"` проверяет сам
+backend на `127.0.0.1:8000`.
+
 ### 1.1b. Один удар: `deploy/bootstrap_oracle.sh`
 
 Скрипт для свежего Ubuntu 22.04/24.04 (Oracle Free Tier, x86_64 или ARM):

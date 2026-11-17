@@ -1889,6 +1889,290 @@ def test_the_edge_sends_the_headers_the_origin_sends():
 
 
 # ---------------------------------------------------------------------------
+# the edge bundle: what Pages answers from itself, and what it promises about it
+# ---------------------------------------------------------------------------
+
+def header_blocks(text: str | None = None) -> dict[str, dict[str, str]]:
+    """`{path pattern: {Header: value}}` read out of `web/static/_headers`.
+
+    The file's own syntax: an unindented line names the pattern, indented lines
+    name the headers. A parser that only read the first block would certify a
+    policy that half the bundle never receives, so it walks the whole file and
+    the caller asserts which blocks it saw. A line with no colon is not a header
+    and is dropped here — which is why the law that calls this reads the shipped
+    file's own lines too, so a `Cache-Control …` typed without its colon is
+    reported as the typo it is instead of quietly becoming no window at all.
+    """
+    lines = (EDGE_HEADERS.read_text(encoding="utf-8") if text is None else text).splitlines()
+    blocks: dict[str, dict[str, str]] = {}
+    pattern = None
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")):
+            pattern = line.strip()
+            blocks[pattern] = {}
+        elif pattern is not None and ":" in line:
+            key, _, value = line.strip().partition(":")
+            blocks[pattern][key.strip()] = value.strip()
+    return blocks
+
+
+def bundle_asset_suffixes() -> set[str]:
+    """Every extension the edge can answer as a file: what the bundle directory
+    holds, minus the templates and Markdown the mount refuses and minus plumbing
+    that carries no suffix. The directory is the subject set, so a new file type
+    joins this law by being added, not by being named here."""
+    return {p.suffix.lower() for p in STATIC.rglob("*")
+            if p.is_file() and p.suffix and not p.name.endswith((".html", ".md"))}
+
+
+def suffixes_covered_by(pattern: str, root: Path | None = None) -> set[str]:
+    """The extensions one `_headers` pattern actually reaches, measured from the
+    files it names rather than from what the pattern was written for."""
+    root = STATIC if root is None else root
+    if pattern.endswith("/*"):
+        directory = root / pattern[1:-2].strip("/")
+        if not directory.is_dir():
+            return set()
+        # A file with no extension names no class — the same rule the shipped-asset
+        # walk uses, so the two readers cannot disagree about `_headers` itself.
+        return {p.suffix.lower() for p in directory.rglob("*") if p.is_file() and p.suffix}
+    match = re.fullmatch(r"/\*\.(\w+)", pattern)
+    return {f".{match.group(1)}"} if match else set()
+
+
+def test_one_file_one_caching_policy_in_both_answers():
+    """Pages answered every asset with its own default — `max-age=0,
+    must-revalidate` — and the origin answered the same file with `no-store`,
+    stamped by the middleware's blanket default. Measured: 61 KB of CSS, seven
+    scripts and eleven faces refetched on every page view of a site whose assets
+    change only when someone ships a commit.
+
+    The policy is therefore one table with three readers: the extension set the
+    bundle directory carries, the `Cache-Control` lines `_headers` writes for
+    those patterns, and `ASSET_CACHE` in `web/server.py` that the mount stamps
+    onto the same files when a browser reaches the VPS directly. The pairing goes
+    both ways in both layers, so a new `.svg` in the bundle fails until the edge
+    names a window for it and the origin does too, and a suffix in a table that
+    ships no file fails the same law.
+
+    A document is not in any of it. The middleware's `no-store` is what the
+    session, the nonce and the balance owe, and `.html`/`.md` are refused from
+    the mount — so this law also refuses a `Cache-Control` on the `/*` block,
+    which is the one pattern that would reach a page."""
+    import ast
+
+    malformed = [line for line in EDGE_HEADERS.read_text(encoding="utf-8").splitlines()
+                 if line[:1].isspace() and line.strip() and not line.lstrip().startswith("#")
+                 and ":" not in line]
+    assert not malformed, f"_headers has line(s) that are neither a comment nor a header: {malformed}"
+
+    policies: dict[str, dict[str, str]] = {}
+    for pattern, rules in header_blocks().items():
+        cache = [value for key, value in rules.items() if key.lower() == "cache-control"]
+        assert len(cache) <= 1, f"{pattern} declares {cache}"
+        if pattern == "/*":
+            assert not cache, "a Cache-Control on /* is a Cache-Control on a document"
+        for suffix in suffixes_covered_by(pattern):
+            if cache:
+                policies.setdefault(suffix, []).append(cache[0])
+    ambiguous = {s: v for s, v in policies.items() if len(set(v)) > 1}
+    assert not ambiguous, f"two windows for one extension: {ambiguous}"
+    edge = {suffix: values[0] for suffix, values in policies.items()}
+
+    source = (ROOT / "web" / "server.py").read_text(encoding="utf-8-sig")
+    tree = ast.parse(source)
+    strings = {t.id: node.value.value
+               for node in tree.body if isinstance(node, ast.Assign)
+               for t in node.targets
+               if isinstance(t, ast.Name) and isinstance(node.value, ast.Constant)
+               and isinstance(node.value.value, str)}
+    origin: dict[str, str] = {}
+    for node in tree.body:
+        if not (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", "") == "ASSET_CACHE" for t in node.targets)):
+            continue
+        for key, value in zip(node.value.keys, node.value.values):
+            if not isinstance(key, ast.Constant):
+                continue
+            if isinstance(value, ast.Constant):
+                origin[key.value] = value.value
+            elif isinstance(value, ast.Name):
+                assert value.id in strings, f"ASSET_CACHE names {value.id}, which is not a string"
+                origin[key.value] = strings[value.id]
+    assert origin, "web/server.py declares no ASSET_CACHE table"
+
+    shipped = bundle_asset_suffixes()
+    assert len(shipped) >= 4, f"the directory walk saw {sorted(shipped)} — no gate"
+    assert set(origin) == shipped, (
+        f"the origin stamps a policy for {sorted(set(origin) - shipped)} the bundle does not "
+        f"carry, and none for {sorted(shipped - set(origin))} it does")
+    assert set(edge) == shipped, (
+        f"_headers names a window for {sorted(set(edge) - shipped)} that is not a shipped "
+        f"asset class, and none for {sorted(shipped - set(edge))} the edge answers itself")
+    mismatched = [f"{s}: _headers {edge[s]!r} vs BundleFiles {origin[s]!r}"
+                  for s in sorted(shipped & set(edge) & set(origin)) if edge[s] != origin[s]]
+    assert not mismatched, "one file, two promises — a visitor through Pages and a visitor " \
+                           "at the VPS cache the same asset for different lengths:\n" + "\n".join(mismatched)
+
+
+def test_the_edge_routes_every_class_of_file_the_bundle_ships():
+    """`functions/[[path]].js` decides alone which paths come from the asset
+    bundle and which travel to the origin, so a file type the bundle carries but
+    the routing does not name is proxied — and while the origin is down it is the
+    maintenance card standing where a stylesheet should be. The class the routing
+    must NOT name is the one that made `/robots.txt` a whole website's markup:
+    Pages answers a missing bundle path with `index.html`.
+
+    The extension list is read out of the shipped function, not restated here."""
+    source = EDGE.read_text(encoding="utf-8-sig")
+    declared = re.search(r"const ASSET = /\\.\((\?:[^)]*)\)\$/i;", source)
+    assert declared, "the edge asset pattern moved somewhere this gate cannot read"
+    asset = re.compile(f"\\.({declared.group(1)})$", re.I)
+    unrouted = sorted(s for s in bundle_asset_suffixes() if not asset.search(f"x{s}"))
+    assert not unrouted, (
+        f"the bundle ships {unrouted} but the edge does not treat them as assets, so each is "
+        "proxied to the origin and replaced by the maintenance card when it is down")
+    for proxied in (".html", ".md", ".txt", ".json", ".yaml", ".yml"):
+        assert not asset.search(f"x{proxied}"), (
+            f"{proxied} is answered from the bundle, where a missing path is index.html")
+
+
+def test_every_asset_url_a_shipped_file_names_is_a_file_the_bundle_carries():
+    """`web/static` is both the source and the build output, so a URL that is not
+    a file there is not a 404 on Pages — it is the landing page, with a 200 and
+    `text/html`, in the place where a stylesheet, a face or a picture was asked
+    for. That is the `/robots.txt` defect in its other direction: the file was
+    correct, the reference pointed at nothing.
+
+    Quoted absolute paths with an asset extension, over every document, script
+    and stylesheet in the bundle and over the function that routes them. What it
+    cannot see is a path assembled at runtime (`'/fonts/' + name + '.woff2'`),
+    which no static scan can resolve, and a URL without a suffix is an origin
+    route, not a bundle file."""
+    offenders = []
+    named: set[str] = set()
+    for name in (*DOCUMENTS, "functions/[[path]].js"):
+        path = STATIC / name if name in DOCUMENTS else ROOT / name
+        text = path.read_text(encoding="utf-8-sig")
+        for match in re.finditer(
+            r"""['"(](/[A-Za-z0-9._/-]+\.(?:css|js|mjs|png|jpe?g|gif|svg|ico|webp|avif"""
+            r"""|woff2?|webmanifest))(?:\?[^'")]*)?['")]""", text):
+            url = match.group(1)
+            named.add(url)
+            if not (STATIC / url.lstrip("/")).is_file():
+                offenders.append(f"{name} asks the edge for {url}")
+    assert len(named) >= 8, f"the scan resolved {sorted(named)} — no gate"
+    assert not offenders, "\n".join(sorted(set(offenders)))
+
+
+def test_the_edge_card_copies_the_tokens_the_stylesheets_ship():
+    """The maintenance card carries its own copy of the palette because it has to
+    paint before any asset arrives. A copy is a second source, and this one had
+    drifted two waves behind: `--muted` was #6f6f6f and `--muted-2` #9a9a9a while
+    `style.css` had moved to #666666 and #707070, so the card's own `.hint` line
+    measured 2.85:1 on the light canvas — the exact failure the design gates were
+    written to refuse, on the one page the origin does not answer.
+
+    Every token the card declares must be a token the stylesheet ships with the
+    same value, and a token the card invents is a value no gate measures."""
+    card = MAINTENANCE_RE.search(EDGE.read_text(encoding="utf-8-sig"))
+    assert card, "the edge maintenance card is gone or its template shape changed"
+    html = card.group(1)
+    light = re.search(r":root \{(.*?)\n  \}", html, re.S)
+    dark = re.search(r"@media \(prefers-color-scheme: dark\) \{\s*\n\s*:root \{(.*?)\n  \}", html, re.S)
+    assert light and dark, "the card's :root blocks moved out of the shape this gate reads"
+
+    def flat(value: str) -> str:
+        return re.sub(r"\s+", "", value).lower()
+
+    def declared(block: str) -> dict[str, str]:
+        return dict(re.findall(r"(--[a-z0-9-]+):\s*([^;]+);", block))
+
+    wrong: list[str] = []
+    for label, block, palette in (("light", light.group(1), LIGHT), ("dark", dark.group(1), DARK)):
+        tokens = declared(block)
+        assert len(tokens) >= 10, f"the parser read {sorted(tokens)} from the {label} block — no gate"
+        for name, value in sorted(tokens.items()):
+            if name not in palette:
+                wrong.append(f"{label}: {name} is in the card and in no stylesheet")
+            elif flat(value) != flat(resolve(palette, name)):
+                wrong.append(
+                    f"{label}: {name} is {value.strip()} in the card, {resolve(palette, name).strip()} "
+                    "in style.css")
+    assert not wrong, "the edge paints a palette the site does not ship:\n" + "\n".join(wrong)
+
+
+def test_the_edge_card_sends_the_headers_the_origin_sends():
+    """The middleware stamps nosniff, `Referrer-Policy` and `no-store` on every
+    response the origin writes, and the 503 card is the one document on this site
+    that no origin writes — so it was the only page on the internet that answered
+    a browser with neither, and a card whose own body is cacheable is a card that
+    outlives the outage it describes."""
+    source = EDGE.read_text(encoding="utf-8-sig")
+    block = re.search(r"function maintenance\(\) \{.*?headers: \{(.*?)\}", source, re.S)
+    assert block, "maintenance() no longer builds its headers inline where this gate reads them"
+    headers = {name.strip().lower(): value.strip()
+               for name, value in re.findall(r"'([^']+)':\s*'([^']*)'", block.group(1))}
+    assert headers.get("x-content-type-options") == "nosniff", headers
+    assert headers.get("referrer-policy") == "no-referrer", headers
+    assert headers.get("cache-control") == "no-store", headers
+    assert headers.get("retry-after") == "300", headers
+    assert headers.get("content-type", "").startswith("text/html"), headers
+
+
+def test_the_headers_reader_reads_every_block_the_file_writes(tmp_path):
+    """`header_blocks()` is four lines of parsing standing between the shipped
+    policy and a green build, so a parser that quietly returned only the first
+    block would certify a file whose last half nothing reads. Tested on markup that
+    is not the file it usually gets: a comment, a blank line, a block carrying two
+    headers, a block carrying none, and a line that is not a header at all."""
+    text = "\n".join([
+        "# a comment a naive split would call a pattern",
+        "/*",
+        "  X-Content-Type-Options: nosniff",
+        "",
+        "  Referrer-Policy: no-referrer",
+        "/fonts/*",
+        "  not a header line",
+        "/*.css",
+        "  Cache-Control: public, max-age=300, stale-while-revalidate=86400",
+        "  Link: </fonts.css>; rel=preload",
+    ])
+    blocks = header_blocks(text)
+    assert set(blocks) == {"/*", "/fonts/*", "/*.css"}, blocks
+    assert blocks["/*"] == {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"}
+    assert blocks["/fonts/*"] == {}, "a pattern with no headers must still be seen"
+    # `public, max-age=300, …` splits on commas in the value, not on the colon.
+    assert blocks["/*.css"]["Cache-Control"] == "public, max-age=300, stale-while-revalidate=86400"
+    assert blocks["/*.css"]["Link"] == "</fonts.css>; rel=preload"
+
+
+def test_a_pattern_reaches_the_files_that_actually_exist(tmp_path):
+    """`suffixes_covered_by()` decides which shipped extensions a `_headers` window
+    is promised to. Derived from the files, so `/fonts/*` over an empty directory
+    claims nothing and `/sub/*` claims what is really under it — including a
+    nested file a pattern written for one depth would have missed."""
+    (tmp_path / "fonts").mkdir()
+    (tmp_path / "fonts" / "a.woff2").write_bytes(b"x")
+    (tmp_path / "fonts" / "deep").mkdir()
+    (tmp_path / "fonts" / "deep" / "b.WOFF2").write_bytes(b"x")
+    (tmp_path / "style.css").write_bytes(b"x")
+    (tmp_path / "index.html").write_bytes(b"x")
+    (tmp_path / "_headers").write_bytes(b"x")
+    assert suffixes_covered_by("/fonts/*", tmp_path) == {".woff2"}
+    assert suffixes_covered_by("/*.css", tmp_path) == {".css"}
+    assert suffixes_covered_by("/*.svg", tmp_path) == {".svg"}, (
+        "an extension the pattern names is claimed even when no file carries it — "
+        "the caching law is what refuses a window for a class the bundle does not ship")
+    assert suffixes_covered_by("/nope/*", tmp_path) == set()
+    assert suffixes_covered_by("/style.css", tmp_path) == set(), "a literal path is not a class"
+    assert suffixes_covered_by("/*", tmp_path) == {".woff2", ".css", ".html"}, (
+        "the extension-less `_headers` joined the set, so `/*` would claim a class no file has")
+
+
+# ---------------------------------------------------------------------------
 # market state: the schema, the shared derivation, and both badge families
 # ---------------------------------------------------------------------------
 

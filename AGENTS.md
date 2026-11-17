@@ -36,7 +36,7 @@
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
 - `python -m pytest -q -m "not production"` — 11–16 min (measured 643 s alone on the host, 949 s
-  with another project's suite sharing it), 1373 tests (171 more, marked `production`, run
+  with another project's suite sharing it), 1381 tests (173 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -109,7 +109,7 @@
   emails and `t.me`/`x.com` handles); every documented gate command equals what CI actually
   runs (`_ci_gate_commands()` reads the ruff directory list and the pytest selection out of
   `.github/workflows/ci.yml`, so a lint line missing three of the seven directories and a suite
-  line that pulls in the 171 `production` tests both fail, while a targeted-file run that still
+  line that pulls in the 173 `production` tests both fail, while a targeted-file run that still
   states its `-m` is allowed); and no document tells a human to reach this host on a port the
   tree does not listen on (`_ports_the_stack_answers_on()` derives the live set from the
   `postgresql://` authorities and `WEB_PORT`, measured this wave as 5432 and 8000 —
@@ -453,6 +453,54 @@
   is a shell whose id comes from a path it does not have, so anything not in the maps is the dead-end
   page. Both maps are compared against the directory by the plumbing gate. Share images live at the
   bundle root: `/miniapp-hero.png`, never `/static/miniapp-hero.png`.
+- **The published bundle is a second answer to the same question, and Pages is published by hand,
+  so the tree can be right and the site wrong at once.** Measured on the live host the day this was
+  written: `style.css`, `app.js`, `chain.js` and `site.js` served bytes two weeks older than
+  `main`, `fonts.css` and all eleven faces were absent — and an absent bundle file is not a 404, it
+  is `200 text/html`: Pages answers a missing path with the landing page, so every `@font-face` src
+  resolved to a whole website and the browser silently painted the operating system's font, exactly
+  the shape `/robots.txt` had. Nothing in the tree could say so.
+  `tests/test_production_health.py::test_the_published_bundle_is_this_checkouts_bundle` now hashes
+  every file the directory walk says the edge can answer and compares the bytes, the type and the
+  `max-age` against this checkout and against `_headers`; the companion law asks the two paths that
+  must never reach the bundle (`/robots.txt`, a missing `.css`) what the edge does with them. Both
+  are `production` — an ordinary green run does not prove a deploy happened, and
+  `--commit-dirty=true` is precisely why a deploy proves nothing about a commit either.
+- **One file, one cache window, read in three places.** Before this wave the site had no promise
+  about how long anything may be cached: the middleware's blanket `setdefault('Cache-Control',
+  'no-store…')` covered the origin's own assets, and Pages answered the same files with
+  `public, max-age=0, must-revalidate` — measured: one view of the landing re-fetched 61 KB of CSS,
+  seven scripts and eleven faces. The table is the two pairs in `web/server.py` (`CACHE_CODE`,
+  `CACHE_MEDIA`) and the `Cache-Control` lines in `web/static/_headers`; the subject set is
+  `bundle_asset_suffixes()`, the extensions the directory actually carries.
+  `test_one_file_one_caching_policy_in_both_answers` demands set equality in **both** directions and
+  verbatim equality of the two directives, so a new file type fails until someone decides its window
+  twice, and a `Cache-Control` on the `/*` block fails because `/*` reaches a document and a document
+  is the session, the nonce and the balance. `test_the_window_a_response_carries_is_the_window_its_class_declares`
+  reads the same policy off served bytes: the assets are the directory walk and the documents are the
+  parameterless `GET` routes the app itself registers, so a new page or endpoint arrives answering
+  `no-store` and has to be argued out of it. `/qr` is the one non-asset the origin publishes as
+  cacheable and the law measures its premise rather than trusting it — the same URL answered cold
+  and answered by a signed session must be the same bytes with the same window, because a long window
+  on a URL is only safe when nothing but the URL decides the answer.
+- **Three more laws read the Function file, because it is the other program that answers this
+  origin and no Python ever executes it.** `test_the_edge_routes_every_class_of_file_the_bundle_ships`
+  takes the `ASSET` extension list out of the shipped `functions/[[path]].js` and requires every
+  shipped suffix to match and `.html`/`.md`/`.txt`/`.json`/`.yaml`/`.yml` to **not** — a class the
+  bundle carries but the routing does not name is proxied, and while the origin is down it becomes
+  the maintenance card standing where a stylesheet should be.
+  `test_every_asset_url_a_shipped_file_names_is_a_file_the_bundle_carries` scans every document,
+  script and stylesheet plus the function for quoted absolute asset URLs and resolves each against
+  the directory (the missing-file direction of the same defect, which is what a 404-ignoring edge
+  turns into a silently wrong font). `test_the_edge_card_copies_the_tokens_the_stylesheets_ship`
+  compares the card's own `:root` and dark blocks to `style.css` token by token — the copy had
+  drifted two waves behind (`--muted` #6f6f6f, `--muted-2` #9a9a9a), and its `.hint` line measured
+  **2.85:1**, the exact failure the contrast gates refuse, on the one page the origin does not
+  answer; a token the card invents fails too, because no other gate would ever read it. The card is
+  also the only document on this site that no middleware writes, so
+  `test_the_edge_card_sends_the_headers_the_origin_sends` requires `nosniff`, `no-referrer`,
+  `Retry-After: 300` and `no-store` in its own `Response` — a cacheable outage card outlives the
+  outage. Sixteen mutations were proven to fire across these eight laws and the two live ones.
 - A browser navigation never gets a JSON body. `not_found.html` is rendered with `noindex`, **no
   canonical and no share card** (`canonical=False` — a URL that 404s must not name itself as a
   page), for any 404 outside `/api/`; a `RequestValidationError` on a page path is the same dead

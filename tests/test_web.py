@@ -2349,6 +2349,69 @@ def test_the_bundle_directory_does_not_publish_its_own_plumbing(client):
         assert r.headers["location"] == page, (template, r.headers["location"])
 
 
+def test_the_window_a_response_carries_is_the_window_its_class_declares(client):
+    """The middleware stamps `no-store` on everything it sees, and until this wave
+    that included the 61 KB stylesheet, the seven scripts and the eleven faces the
+    same process serves from disk — so a visitor at the VPS refetched the entire
+    bundle on every page view, and a visitor at Pages got Cloudflare's own default
+    (`max-age=0, must-revalidate`) because the bundle said nothing either.
+
+    The subject set is not a list of URLs. The assets are the files the bundle
+    directory carries (the same walk the MIME gate above uses), and the documents
+    are the parameterless `GET` routes the app itself registers — so a new page, a
+    new endpoint and a new file type are each measured the day they land, and a new
+    one gets `no-store` until someone decides otherwise on purpose.
+
+    `/qr` is the exception the walk cannot express, and the reason it is allowed:
+    its whole input is the query string, so a cache key cannot go stale relative to
+    the bytes it holds — a browser asking `/qr?data=0xOLD` is asking for the QR of
+    0xOLD, and the document that chose that address is itself `no-store`. That
+    precondition is measured, not asserted: the same URL answered cold and by a
+    signed-in session must be the same bytes with the same window."""
+    from web.server import ASSET_CACHE
+
+    root = Path(__file__).resolve().parents[1] / "web" / "static"
+    assets = sorted(str(p.relative_to(root)).replace("\\", "/")
+                    for p in root.rglob("*")
+                    if p.is_file() and p.suffix and not p.name.endswith((".html", ".md")))
+    kinds = {Path(name).suffix for name in assets}
+    assert len(kinds) >= 4, f"the walk saw {sorted(kinds)} — no gate"
+    assert kinds <= set(ASSET_CACHE), f"{sorted(kinds - set(ASSET_CACHE))} reach the client with no declared window"
+
+    offenders = []
+    for name in assets:
+        served = client.get(f"/{name}")
+        got = served.headers.get("cache-control", "<none>")
+        want = ASSET_CACHE[Path(name).suffix]
+        if served.status_code != 200 or got != want:
+            offenders.append({"path": f"/{name}", "status": served.status_code, "served": got, "declared": want})
+    assert not offenders, "an asset answered something other than its class's window:\n" + json.dumps(offenders)
+
+    routes = sorted({r.path for r in client.app.routes
+                     if "GET" in (getattr(r, "methods", None) or set()) and "{" not in r.path})
+    assert len(routes) >= 20, f"the router answered {routes} — no gate"
+    # /metrics needs no session, /api/agent/status needs the admin token, and an
+    # answer that is a refusal is still an answer about a document.
+    cacheable = {"/qr"}
+    stale = []
+    for path in routes:
+        if path in cacheable:
+            continue
+        got = client.get(path, follow_redirects=False).headers.get("cache-control", "<none>")
+        if "no-store" not in got:
+            stale.append((path, got))
+    assert not stale, f"a page or an endpoint is cacheable, and a page is the session: {stale}"
+
+    public = client.get("/qr", params={"data": "0x" + "ab" * 20, "size": 120})
+    other = TestClient(client.app)
+    other.cookies.set(COOKIE_NAME, make_session(1))
+    signed_in = other.get("/qr", params={"data": "0x" + "ab" * 20, "size": 120})
+    assert public.status_code == signed_in.status_code == 200, (public.status_code, signed_in.status_code)
+    assert public.content == signed_in.content, "the QR is a function of something besides its URL"
+    assert public.headers["cache-control"] == signed_in.headers["cache-control"]
+    assert public.headers["cache-control"].startswith("public, max-age="), public.headers["cache-control"]
+
+
 def test_no_asset_the_bundle_serves_arrives_as_undifferentiated_bytes(client):
     """`web/static` is the build output, so every file in it is a URL and the
     `Content-Type` the origin stamps is the only thing a browser learns about it.

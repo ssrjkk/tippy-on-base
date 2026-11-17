@@ -1488,6 +1488,22 @@ async def metrics(request: Request) -> Response:
 mimetypes.add_type('text/javascript', '.js')
 mimetypes.add_type('font/woff2', '.woff2')
 
+# The two windows `web/static/_headers` promises the edge bundle, written here so
+# the origin answers the same file with the same policy. Without them every asset
+# left this process at the middleware's `no-store`, so someone who opens the VPS
+# directly — during an incident, on a preview, before Pages is pointed at it —
+# refetched 61 KB of CSS, the seven scripts and the eleven faces on every page
+# view. A suffix absent from this table keeps `no-store`, which is what a document
+# owes: it carries the session, the nonce and the balance.
+CACHE_CODE = 'public, max-age=300, stale-while-revalidate=86400'
+CACHE_MEDIA = 'public, max-age=86400, stale-while-revalidate=604800'
+ASSET_CACHE = {
+    '.css': CACHE_CODE,
+    '.js': CACHE_CODE,
+    '.woff2': CACHE_MEDIA,
+    '.png': CACHE_MEDIA,
+}
+
 
 class BundleFiles(StaticFiles):
     """The bundle directory is the web root — so its source is refused.
@@ -1512,7 +1528,11 @@ class BundleFiles(StaticFiles):
             if home:
                 return RedirectResponse(home, status_code=301)
             return _not_found(Request(scope))
-        return await super().get_response(path, scope)
+        response = await super().get_response(path, scope)
+        directive = ASSET_CACHE.get(os.path.splitext(url_path)[1].lower())
+        if directive and response.status_code == 200:
+            response.headers['Cache-Control'] = directive
+        return response
 
 
 app.mount('/', BundleFiles(directory=str(STATIC), html=True), name='static')
