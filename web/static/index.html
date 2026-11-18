@@ -273,8 +273,8 @@
           </div>
           <div class="field">
             <label class="label" for="newHours">Дедлайн, часов</label>
-            <input class="input" id="newHours" type="number" min="1" max="720" step="1" inputmode="numeric" placeholder="24" />
-            <div class="hint">До 30 дней. Пусто — __DEFAULT_DEADLINE_HOURS__ ч по умолчанию.</div>
+            <input class="input" id="newHours" type="number" min="1" max="720" step="1" inputmode="numeric" />
+            <div class="hint" id="hoursLimits"></div>
           </div>
           <div class="field" id="subsidyField">
             <label class="label" for="newSubsidy">Субсидия ликвидности, USDC</label>

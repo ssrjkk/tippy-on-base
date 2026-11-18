@@ -25,6 +25,7 @@ from bot import i18n
 
 from .. import onchain_market as om
 from ..ledger import lmsr_buy_shares, lmsr_sell_value
+from ..pct import as_pct
 from . import _common as common
 from .wallet import _ensure_wallet
 
@@ -126,7 +127,7 @@ def _card(m: dict, prices: list[Decimal], lang: str) -> str:
     lines = [f"⛓️ #{m['id']} <b>{esc(m['question'])}</b>"]
     lines.append(i18n.t(lang, 'oc_deadline', dt=time.strftime('%d.%m %H:%M', time.localtime(m['close_at']))))
     for i, o in enumerate(options):
-        pct = int((prices[i] * 100).to_integral_value()) if i < len(prices) else 0
+        pct = as_pct(prices[i]) if i < len(prices) else 0.0
         lines.append(f"{i + 1}) {esc(o)} — <b>{pct}%</b>")
     return '\n'.join(lines)
 
@@ -155,7 +156,7 @@ async def cmd_oc(message: types.Message) -> None:
     async def _pcts(m) -> str:
         try:
             prices = await _prices(int(m['id']), len(json.loads(m['options'])))
-            return '/'.join(f"{int((p * 100).to_integral_value())}%" for p in prices)
+            return '/'.join(f'{as_pct(p)}%' for p in prices)
         except Exception:
             return '—'
 

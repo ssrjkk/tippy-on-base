@@ -15,6 +15,7 @@ from aiogram.filters import Command
 
 from bot import i18n
 
+from ..pct import as_pct
 from . import _common as common
 
 
@@ -97,7 +98,7 @@ async def cmd_agent(message: types.Message) -> None:
             # still an audit line, and printing its amount would report a spend
             # the ledger never took.
             action = f"${e['bet_amount_usdc']:.2f} bet" if e.get('bet_placed') else "market only"
-            lines.append(f"• #{e['market_id']}: {common._esc(e['question'][:60])} — {action} ({int(e['confidence'] * 100)}%)")
+            lines.append(f"• #{e['market_id']}: {common._esc(e['question'][:60])} — {action} ({as_pct(e['confidence'])}%)")
     else:
         lines.append(i18n.t(lang, 'agent_no_audit'))
 

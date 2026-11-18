@@ -42,6 +42,7 @@ from bot.base import hot_balance, hot_wallet, vault_balance
 from bot.commands_catalog import BOT_COMMAND_SPECS
 from bot.ledger import IdempotencyDuplicate, lmsr_buy_shares, lmsr_cost, lmsr_prices
 from bot.ledger import async_ledger as ledger
+from bot.pct import as_pct, share
 from bot.tx_view import rows_view
 from web.auth import COOKIE_NAME, attach_login_state, login_failed, parse_session
 from web.auth import router as auth_router
@@ -549,7 +550,7 @@ async def api_prediction_quote(market_id: int, option: int, amount: str) -> dict
         'price_after_pct': om.price_pct(price_after),
         'payout_usdc': _usdc(shares),
         'profit_usdc': _usdc(shares - cost_micro),
-        'roi_pct': float(round(Decimal(shares - cost_micro) / Decimal(cost_micro) * 100, 2)),
+        'roi_pct': share(shares - cost_micro, cost_micro),
         'max_trade_usdc': _usdc(cap_micro),
         'min_trade_usdc': _usdc(config.MARKET_MIN_TRADE_MICRO),
     }
@@ -718,9 +719,17 @@ async def api_agent_audit(request: Request) -> list[dict]:
         if not line.strip():
             continue
         try:
-            entries.append(json.loads(line))
+            entry = json.loads(line)
         except json.JSONDecodeError:
             continue
+        # The trail writes the model's confidence as a ratio (0..1). The bot
+        # multiplies it into a percent, and a dashboard that multiplied it in
+        # JS would decide the same face in a second language with a second
+        # rule — so the percentage is published here, under the name the page
+        # paints: every `_pct` field this origin answers is a percentage.
+        if isinstance(entry, dict) and isinstance(entry.get("confidence"), (int, float)):
+            entry["confidence_pct"] = as_pct(entry["confidence"])
+        entries.append(entry)
     return entries
 
 @app.get('/api/onchain/markets', tags=['markets'])
@@ -801,6 +810,16 @@ def api_info() -> dict:
             'max_withdraws_per_day': config.MAX_WITHDRAWS_PER_DAY,
             'min_subsidy_usdc': float(config.MARKET_MIN_SUBSIDY_USDC),
             'max_subsidy_usdc': float(config.MARKET_MAX_SUBSIDY_USDC),
+            # How many blocks a deposit waits before it is credited. The
+            # Mini App's deposit sheet prints this figure beside its QR, so
+            # it is published from the sweep's own knob (bot/base.py).
+            'deposit_confirmations': config.DEPOSIT_CONFIRM_BLOCKS,
+            # The two deadline bounds `/api/mini/create` applies: what a creator
+            # who names no deadline gets, and the ceiling it refuses above. Both
+            # create fields state them, so a sheet never offers a clock the route
+            # will not honour.
+            'default_deadline_hours': config.MARKET_DEFAULT_HOURS,
+            'max_deadline_hours': config.MARKET_MAX_DEADLINE_HOURS,
         },
         'smart_wallet_enabled': bool(
             config.SMART_WALLET_ENABLED
@@ -885,6 +904,9 @@ async def api_solvency() -> dict:
 
     One number gets one name: the payload used to carry the same figure as
     `owed_usdc` as well, and nothing but a test read that second key.
+    `coverage_pct` is the ring's own figure — the clamped share of liabilities
+    the address covers, stated at the one decimal the painted face owes, so the
+    page paints what the API says instead of dividing and rounding again.
     """
     from decimal import ROUND_HALF_UP, Decimal
 
@@ -898,10 +920,18 @@ async def api_solvency() -> dict:
     if reserves is not None:
         reserve_diff = float((Decimal(str(reserves)) - Decimal(str(owed))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
         solvent = Decimal(str(reserves)) >= Decimal(str(owed))
+        # The ring's number, published as the face it is painted at: the page
+        # used to divide and multiply here and let `toLocaleString` decide the
+        # decimal a second time, so the arc and the label were two claims about
+        # one fraction, rounded by two rules. A clamped ratio has no business
+        # above 100 — an over-covered treasury still reads as fully covered.
+        owed_d, held_d = Decimal(str(owed)), Decimal(str(reserves))
+        coverage_pct = 100.0 if owed_d <= 0 else as_pct(min(max(held_d / owed_d, Decimal(0)), Decimal(1)))
     else:
         reserve_diff = None
         solvent = None
-    return {'hot_wallet': str(hot_wallet()), 'vault_address': vault_addr, 'vault_balance_usdc': vault_bal, 'reserves_source': 'vault' if vault_addr else 'hot_wallet', 'hot_wallet_balance_usdc': bal, 'liabilities_usdc': owed, 'pending_deposits_usdc': _usdc(pending), 'reserve_usdc': reserve_diff, 'solvent': solvent}
+        coverage_pct = None
+    return {'hot_wallet': str(hot_wallet()), 'vault_address': vault_addr, 'vault_balance_usdc': vault_bal, 'reserves_source': 'vault' if vault_addr else 'hot_wallet', 'hot_wallet_balance_usdc': bal, 'liabilities_usdc': owed, 'pending_deposits_usdc': _usdc(pending), 'reserve_usdc': reserve_diff, 'solvent': solvent, 'coverage_pct': coverage_pct}
 
 @app.get('/qr', tags=['treasury'])
 async def api_qr(data: str, size: int=220) -> Response:
@@ -1150,7 +1180,6 @@ def _static_page(page: str, request: Request | None = None, *, path: str,
     for marker, value in (replacements or {}).items():
         html = html.replace(marker, value)
     html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
-    html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
     html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
     html = _document_meta(html, path=path, title=title, description=description,
                           robots=robots, json_ld=json_ld, canonical=canonical)

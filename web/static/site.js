@@ -298,6 +298,7 @@
     bindBound('betAmount', L, [['max', 'max_bet_usdc']]);
     bindBound('wdAmount', L, [['min', 'min_withdraw_usdc']]);
     bindBound('newSubsidy', L, [['min', 'min_subsidy_usdc'], ['max', 'max_subsidy_usdc']]);
+    bindBound('newHours', L, [['max', 'max_deadline_hours']]);
     bindBound('x402Amount', info.x402, [['min', 'min_usdc'], ['max', 'max_usdc']]);
     if (L.max_bet_usdc) {
       $('betLimit').textContent = 'Максимум на одну ставку — ' + usd(L.max_bet_usdc) + '.';
@@ -310,6 +311,10 @@
     if (L.min_subsidy_usdc && L.max_subsidy_usdc) {
       $('subsidyLimits').textContent = 'От ' + usd(L.min_subsidy_usdc) + ' до ' + usd(L.max_subsidy_usdc) +
         ' — эта сумма идёт в ликвидность LMSR и не списывается с баланса сверх неё.';
+    }
+    if (L.max_deadline_hours && L.default_deadline_hours) {
+      $('hoursLimits').textContent = 'До ' + L.max_deadline_hours + ' ч. Пусто — '
+        + L.default_deadline_hours + ' ч по умолчанию.';
     }
     amountChips('tipChips', 'tipAmount', [1, 5, 10, 25, 50].filter(function (v) {
       return !L.max_tip_usdc || v <= L.max_tip_usdc;
@@ -415,10 +420,10 @@
       b.dataset.pick = key;
       b.dataset.option = o.index;
       b.dataset.target = boxId;
-      var price = o.price_pct != null ? o.price_pct
+      var pricePct = o.price_pct != null ? o.price_pct
         : (o.chance_pct != null ? o.chance_pct : null);
       b.innerHTML = '<span class="opt-label">' + esc(o.label) + '</span>' +
-        (price != null ? '<span class="opt-price">' + pctLabel(price) + '</span>' : '');
+        (pricePct != null ? '<span class="opt-price">' + pctLabel(pricePct) + '</span>' : '');
       box.appendChild(b);
     });
   }

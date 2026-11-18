@@ -321,9 +321,13 @@ function chartSummaryTotal() {
 
 function chartSummaryDay(col) {
   const vol = Number(col.dataset.volume);
-  const share = chartTotal > 0 ? (vol / chartTotal) * 100 : 0;
+  // `Pct` in the name is this bundle's spelling of "already a percentage". A
+  // local called `share` is the money word under the product's own number
+  // grammar, and the law that reads a formatter's argument by name then has
+  // nothing to check.
+  const sharePct = chartTotal > 0 ? vol / chartTotal * 100 : 0;
   $("chart-summary").innerHTML =
-    `${fmtDay(col.dataset.day)}: <b>${fmtUSDC(vol)} USDC</b> · ${fmtPct(share)} объёма периода`;
+    `${fmtDay(col.dataset.day)}: <b>${fmtUSDC(vol)} USDC</b> · ${fmtPct(sharePct)} объёма периода`;
 }
 
 $("chart-ranges").addEventListener("click", (e) => {
@@ -422,10 +426,13 @@ function paintSolvency(s) {
     ring.setAttribute("aria-label", "Покрытие резервами неизвестно: RPC не ответил.");
     return;
   }
-  const covered = owed > 0 ? Math.max(0, Math.min(held / owed, 1)) : 1;
+  // The arc and the label are two pictures of the one number the API publishes:
+  // dividing here again would put a second rounding between the fraction the
+  // treasury really covers and the percentage the visitor reads.
+  const covered = Number(s.coverage_pct || 0) / 100;
   arc.style.strokeDashoffset = circumference * (1 - covered);
   arc.classList.toggle("gauge-value-low", s.solvent === false);
-  $("gaugePct").textContent = fmtPct(covered * 100);
+  $("gaugePct").textContent = fmtPct(s.coverage_pct);
   $("gaugeCap").textContent = "покрытие";
   $("gaugeDetail").innerHTML = owed > 0
     ? "На адресе <b>" + fmtUSDC(held) + "</b> USDC при <b>" + fmtUSDC(owed)
@@ -436,7 +443,7 @@ function paintSolvency(s) {
     : "На адресе <b>" + fmtUSDC(held) + "</b> USDC, обязательств у бота сейчас нет.";
   ring.setAttribute(
     "aria-label",
-    "Резервы покрывают " + fmtPct(covered * 100) + " обязательств: "
+    "Резервы покрывают " + fmtPct(s.coverage_pct) + " обязательств: "
     + fmtUSDC(held) + " из " + fmtUSDC(owed) + " USDC."
   );
 }
@@ -534,7 +541,7 @@ function marketCard(m, i) {
         <span class="option-label">${escapeHtml(o.label)}</span>
         <span class="option-val">${fmtUSDC(o.pool_usdc)}&nbsp;USDC · ${fmtPct(o.probability)} · ${escapeHtml(String(o.backers))}&nbsp;чел.</span>
       </div>
-      <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
+      <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${barWidth(o.probability)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
   }).join("");
 
@@ -600,7 +607,7 @@ function predictionCard(m, i) {
         <span class="option-label">${escapeHtml(o.label)}</span>
         <span class="option-val">${fmtPct(o.price_pct)}</span>
       </div>
-      <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
+      <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${barWidth(o.price_pct)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
     </div>`;
   }).join("");
 
@@ -637,7 +644,7 @@ function renderHeroSpot(markets) {
           <span class="option-label">${escapeHtml(o.label)}</span>
           <span class="option-val">${fmtPct(o.price_pct)}</span>
         </div>
-        <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%"></div></div>
+        <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${barWidth(o.price_pct)}%"></div></div>
       </div>`).join("")}
     <div class="spot-foot">
       <span class="pot">Ликвидность: <b>${fmtUSDC(top.liquidity_usdc)} USDC</b> · ${escapeHtml(String(top.traders))}&nbsp;чел.</span>
@@ -1261,7 +1268,7 @@ async function loadOnchainMarkets() {
             <span class="option-label">${escapeHtml(o.label)}</span>
             <span class="option-val">${fmtPct(o.price_pct)}</span>
           </div>
-          <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.price_pct, 2)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
+          <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${barWidth(o.price_pct)}%;animation-delay:${Math.min(i * 70 + j * 130, 900)}ms"></div></div>
         </div>`;
       }).join("");
       return `

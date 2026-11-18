@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from . import config
+from .pct import as_pct
 
 log = logging.getLogger("tipbot.ai")
 
@@ -515,7 +516,7 @@ async def _fetch_market_odds(market_id: int, onchain: bool = False) -> dict:
         prices_pct = []
         for i in range(n):
             p = await om.price_of(market_id, i)
-            prices_pct.append(float(round(p * 100, 1)))
+            prices_pct.append(as_pct(p))
         return {
             "market_id": market_id,
             "onchain": True,

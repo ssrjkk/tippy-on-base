@@ -5,6 +5,7 @@ from decimal import ROUND_FLOOR, Decimal, localcontext
 
 from .. import config
 from ..fees import win_fee_micro
+from ..pct import as_pct
 from ._base import _LMSR_PREC, _d, lmsr_buy_shares, lmsr_prices, lmsr_sell_value
 
 
@@ -258,7 +259,7 @@ class LedgerMarketsMixin:
                 {
                     "index": i,
                     "label": o,
-                    "price_pct": float(round(prices[i] * 100, 2)),
+                    "price_pct": as_pct(prices[i]),
                     "shares": q[i],
                 }
                 for i, o in enumerate(options)
@@ -327,7 +328,7 @@ class LedgerMarketsMixin:
                     {
                         "index": i,
                         "label": o,
-                        "price_pct": float(round(prices[i] * 100, 2)),
+                        "price_pct": as_pct(prices[i]),
                         "shares": q[i],
                     }
                     for i, o in enumerate(options)

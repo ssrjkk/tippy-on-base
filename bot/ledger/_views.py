@@ -4,6 +4,7 @@ import time
 from datetime import UTC, datetime
 
 from ..fees import win_fee_micro
+from ..pct import share
 from ._base import MICRO, MIRRORED_CREDIT_KINDS
 
 # What the site calls "volume": USDC that entered the bot (deposits) or changed
@@ -194,7 +195,7 @@ class LedgerViewsMixin:
         items = []
         for i, opt in enumerate(options):
             pool = totals.get(i, 0)
-            prob = round(pool / pot * 100, 1) if pot else 0.0
+            prob = share(pool, pot)
             items.append(
                 {
                     "index": i,
@@ -285,7 +286,7 @@ class LedgerViewsMixin:
             items = []
             for i, opt in enumerate(options):
                 pool = totals.get(i, 0)
-                prob = round(pool / pot * 100, 1) if pot else 0.0
+                prob = share(pool, pot)
                 items.append({"index": i, "label": opt, "pool": pool, "probability": prob, "backers": backers.get(i, 0)})
             out.append({
                 "id": bid, "question": bet["question"], "status": bet["status"],

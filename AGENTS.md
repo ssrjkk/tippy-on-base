@@ -24,9 +24,26 @@
   only a harness rule: a correctly started tunnel reads as one that never came up.
 - Every text file is stored with LF and `.gitattributes` says so. A patch script must therefore
   rewrite with `Path.write_bytes(...encode("utf-8"))`, not `write_text()`: text mode on this host
-  turns every `\n` into `\r\n` and the diff is the whole file. Ten files carry a UTF-8 BOM (`web/mini.py`, `web/auth.py`, `web/frame.py`,
-  `web/x402.py`, `bot/main.py`, four `bot/handlers/` modules and one test) — read those with
-  `utf-8-sig` and put the BOM back, or the gate that parses their AST dies on `U+FEFF`.
+  turns every `\n` into `\r\n` and the diff is the whole file.
+  Twelve tracked files carry a UTF-8 BOM (`bot/handlers/ai.py`, `bot/handlers/markets.py`,
+  `bot/handlers/paywall.py`, `bot/handlers/stats.py`, `bot/main.py`, `tests/test_outcome_market_evm.py`,
+  `tests/test_web.py`, `web/auth.py`, `web/frame.py`, `web/mini.py`, `web/static/style.css`,
+  `web/x402.py`) — read those with `utf-8-sig` and put the BOM back, or the gate that parses their AST
+  dies on `U+FEFF`: measured, every one of the eleven `.py` files in that list raises
+  `SyntaxError: invalid non-printable character U+FEFF` when read as plain `utf-8` and parses after the
+  sig, which is `test_a_bom_bearing_python_source_parses_only_after_the_sig`. The BOM survives where it
+  is read by a consumer that forgives one — CPython compiles a BOM'd module, a browser renders a BOM'd
+  stylesheet — and appears in no file an AST gate parses from a literal path (`bot/config.py`,
+  `bot/ledger/*.py`, `web/server.py`).
+  `test_the_documented_bom_inventory_is_the_bom_inventory_of_the_tree` re-measures that parenthesised
+  list against `git ls-files` and the first three bytes of each file, so a BOM arriving in a thirteenth
+  file, one leaving, and a count no longer equal to the names all fail the build instead of ageing this
+  sentence; the reader is only as good as the shape it reads, which is why the law asks for exactly one
+  such claim in the tracked markdown and fails on zero as loudly as on two — a reworded sentence that
+  names no count is the same stale document wearing a green check. What neither law sees is a *reader*
+  that reaches one of these twelve with plain `utf-8` through a variable or a glob: only literal
+  filenames are resolvable statically, so every reader helper in `tests/` names `utf-8-sig` and a new
+  one is expected to copy that, not this paragraph.
   Measured, not remembered: `web/server.py` has never had one.
 
 ## Gate
@@ -35,8 +52,9 @@
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding. `alembic/` joined the
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
-- `python -m pytest -q -m "not production"` — 11–16 min (measured 643 s alone on the host, 949 s
-  with another project's suite sharing it), 1436 tests (177 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — 11–17 min (measured 643 s alone on the host, 949 s
+  with another project's suite sharing it, 1,012 s alone on the run this wave pinned its counts to),
+  1473 tests (198 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -109,7 +127,7 @@
   emails and `t.me`/`x.com` handles); every documented gate command equals what CI actually
   runs (`_ci_gate_commands()` reads the ruff directory list and the pytest selection out of
   `.github/workflows/ci.yml`, so a lint line missing three of the seven directories and a suite
-  line that pulls in the 177 `production` tests both fail, while a targeted-file run that still
+  line that pulls in the 198 `production` tests both fail, while a targeted-file run that still
   states its `-m` is allowed); and no document tells a human to reach this host on a port the
   tree does not listen on (`_ports_the_stack_answers_on()` derives the live set from the
   `postgresql://` authorities, `WEB_PORT`, every loopback port a tracked `deploy/` program binds
@@ -224,6 +242,28 @@
   reader to the shapes prose actually takes (both list forms, a comma and a closer inside a span, a
   hyphenated word, digits, «These mutations…» which states no count, a full stop before the list, an
   unclosed bracket), because a reader that quietly found no list would report a clean tree forever.
+- **A byte-level claim in a document is a claim about this checkout, and the checkout is the witness.**
+  `AGENTS.md` names the files that carry a UTF-8 BOM because a patch script reads that list and decides
+  which encoding to name, and a BOM is a character no editor shows.
+  `test_the_documented_bom_inventory_is_the_bom_inventory_of_the_tree` reads the parenthesised inventory
+  out of the tracked markdown and holds it against `git ls-files` plus the first three bytes of every
+  tracked file: the count word must equal the number of names, the names must equal the files that
+  actually carry a BOM, a span in the list resolving to no tracked path is reported instead of dropped,
+  and exactly one document may state the inventory — zero claims is the same stale sentence wearing a
+  reworded shape. Measured this wave: twelve files, eleven of them Python modules, and every one of
+  those eleven raises `SyntaxError: invalid non-printable character U+FEFF` when read as plain `utf-8`
+  and parses after `utf-8-sig`, which is `test_a_bom_bearing_python_source_parses_only_after_the_sig`;
+  its `.py` filter carries a floor of its own for the same reason the byte scan does.
+  `test_the_bom_inventory_reader_reads_the_claim_a_document_writes` holds the reader to the shapes prose
+  takes (a list wrapping a source line, a count written as digits, a `file.py::test_name` span beside a
+  path, a sentence stating «Several», a colon list the reader cannot bound). Ten mutations were proven to
+  fire: a thirteenth file gaining a BOM, a named file losing one, the count word off by one, one name
+  leaving the list, the sentence reworded out of the shape the reader reads, a second document answering
+  with its own inventory, a span that is no tracked path, the byte scan comparing two bytes instead of
+  three, a BOM-less module entering the inventory, and the `.py` filter going blind. What neither law
+  sees is a *reader*: only literal filenames resolve statically, so a gate that reaches a BOM'd file
+  through a variable or a glob and names plain `utf-8` still dies at import on the message this bullet
+  exists to prevent rather than here.
 - **A roadmap promise is a claim about the tree, gated in both directions.** The README `##
   Roadmap` section is parsed from the file — a bullet that wraps is one bullet, `~~struck~~` is
   the markup for *done* — and the resolvers are the ones the rest of the docs use: environment
@@ -494,6 +534,107 @@
   (`production`): the sheet where the sum is chosen is judged against that origin's `/api/info`, because
   only the painted panel can show the attribute and the hint disagreeing, and the hint is what tells a
   visitor *why* a sum was refused rather than that it was.
+- **An empty state is a payload, and the container that carries the heading is not its place.**
+  `web/static/user.html`, `market.html` and `oc.html` each answered a failed read by replacing the
+  article that also holds the page's `<h1>`: the heading, the controls under it and the outline a
+  screen reader walks went away with the data, so a visitor following a link to a pool that had been
+  closed reached a document with no title — and the rendered gate stayed green, because the load it
+  opens is the one that succeeds.
+  `tests/test_design_system.py::test_no_script_repaints_the_container_that_carries_the_heading` pairs
+  the two sets a file can show: `element_subtrees()` walks each document's tags and keeps the inner
+  markup of every identified element, and `HEADING_BURN_RE` takes the ids the page's own code hands a
+  content assignment — `$('id')`, `getElementById('id')` and `querySelector('#id')` into `innerHTML`,
+  `outerHTML`, `textContent` or `innerText`, with an append excluded because `+=` destroys nothing and
+  a comparison excluded because it reads. Measured this wave as 4 heading-carrying containers (`#app`,
+  `#market`, `#oc`, `#profile`) and 108 content writes over 8 pages, both floored, so a walk that lost
+  its tags fails instead of certifying a clean tree; `#user-name` is an `<h1>` written through
+  `textContent` and is allowed for the reason the law can state — the id's own subtree holds no
+  heading. The rendered companion is
+  `tests/test_production_design.py::test_an_empty_read_is_still_a_page` (`production`), parametrized
+  over `id_bearing_page_routes()`, which reads the document and the path out of the arguments of every
+  `_static_page` call in `web/server.py` — measured as 7 calls, 3 of them with a `{…}` in the path — so
+  a fourth id-bearing surface joins by being written, and whose premise is checked rather than assumed:
+  the probe id is fifteen nines, and a load that found its data is reported as the empty state never
+  having been measured. What the pair cannot see: a container reached through a variable instead of an
+  id literal, a note painted by a script the page loads from outside this bundle, a heading rebuilt
+  rather than replaced, and the wording of the note itself, which no gate here can judge. The
+  derivation was wrong on its first run in exactly the way a floor is for: without the brace test it
+  parametrized `/tos`, `/agent` and `/`, three empty reads with nothing empty about them. Seven
+  mutations were proven to fire: a wipe restored in the profile page, the same wipe in the pool page,
+  the same wipe in the on-chain page, a fourth page that no list names reaching the gate by being
+  written, the subtree walk made blind, the writer scan made blind, and the shipped `user.html` wipe
+  restored in the tree and re-rendered against a live origin.
+- **A clock is a bound too, and the money law could not see it.** `MARKET_MAX_DEADLINE_HOURS` is the
+  ceiling `/api/mini/create` answers `api_deadline_long` under, and three surfaces typed a deadline
+  against it blind: both Mini App create sheets carried no `max` at all, and the landing wrote
+  `max="720"` into markup beside a hint restating the same cap as «До 30 дней». The money law reads
+  `min=`/`cap=` kwargs, `_usdc`/`_micro` keys and decimal inputs only — a clock is in none of those
+  sets — so `test_the_clock_a_field_offers_is_the_clock_the_route_honours` is its sibling: the cap
+  comes out of the handler's own `refuse(..., max=config.X)` where the config name ends in `_HOURS`,
+  the published key comes out of the `/api/info` dict rather than being paired by hand, and the fields
+  come out of every function that reads a payload name containing the parameter — measured as
+  `newHours`, `mkHours`, `btHours`, with the count floored so an id that reaches the reader through a
+  variable fails the build instead of passing unseen. Each field must bind `max` to that key, and a
+  `max=` literal left in markup as the no-JS fallback must equal the knob, because a number written
+  into HTML is a second copy of the config. The rendered half is
+  `tests/test_production_design.py::test_an_open_layer_states_the_bounds_this_origin_publishes`, which
+  now opens the create layers too: the painted attribute is judged against this origin's `/api/info`
+  **and** the figure must also be said in a hint, because a bound that blocks a tap without telling
+  the user why is a refusal the field could have prevented.
+- **A repaint hook is a claim about a dictionary, and the law had the wrong attribute names.**
+  `applyI18n()` walks `[data-i18n]`, `[data-i18n-ph]` and `[data-i18n-label]`, while
+  `test_every_mini_app_translation_key_exists_in_all_three_languages` typed the suffixes as one
+  alternation — and it named `-title`, which no element carries and no line walks, and missed
+  `-label`, whose four aria-labels were therefore checked against no dictionary by anything. The
+  subject set is now `_mini_app_repainted_attributes()`, the app's own `querySelectorAll('[data-i18n…')`
+  calls, and both directions of the rename are gated: markup carrying an attribute `applyI18n()` does
+  not walk is a word that survives a language switch — the shape that put `Option 1` in a Russian
+  placeholder — and an attribute it walks while no element carries it is a repaint pass with nothing
+  to repaint. `_mini_app_dictionaries()` is the single reader of the inline dictionaries for both that
+  law and `test_mini_app_dictionary_is_complete_across_languages`: the block is brace-scanned, so a
+  dictionary written on one line and one spread over twenty read the same way, and the number of words
+  parsed is held against the number of `key: "` pairs visible, because a rename that leaves one word
+  written twice shadows the first and a set cannot show that it lost a declaration. `addCreateOpt`
+  assembles its placeholder as `opt_<n>` and caps `n` with a literal in its own body, so
+  `test_the_localization_key_the_mini_app_builds_covers_every_row_it_offers` takes the cap from that
+  comparison and requires `opt_1`…`opt_4` in each language — raising it without the words paints
+  `opt_5` as UI text in every language — and
+  `test_the_mini_app_localization_readers_read_the_shapes_a_rename_leaves_behind` holds the three
+  readers to a spread dictionary, a duplicated word, a `>`-written cap and a page whose hooks are
+  walked by nothing.
+- **A knob is only another module's default if the code reads it from that module, and a painted
+  sentence owes every bound a typed one paid.** `agent/tools.py` imports `agent/config.py` as
+  `config`, and the deadline ceiling this wave added there names a knob `bot/config.py` owns — so
+  every market the agent tried to create died on `AttributeError`, and only the two `single_cycle()`
+  e2e tests noticed.
+  `tests/test_env_contract.py::test_every_knob_the_runtime_reads_exists_on_the_module_it_reads_it_from`
+  resolves each binding through the AST (`from . import config` → `agent.config`, `from bot import
+  config as runtime_config` → `bot.config`) and asks the imported module for the attribute: measured
+  as 459 constant reads over 57 files and 7 in-repo modules, exactly those two sites missing, with the
+  floor refusing a scan that goes blind. The same move on the landing left three loose ends nothing
+  reached: the `__DEFAULT_DEADLINE_HOURS__` substitution in `_static_page` answering a document that no
+  longer carries the token, an empty `<div class="hint">` the day its writer is renamed, and the
+  figures themselves, because a painted sentence types a number as easily as markup.
+  `test_every_placeholder_the_server_replaces_is_one_a_document_asks_for` scopes each `html.replace` to
+  the documents that function serves — the literals passed to `_static_page`, the Mini App its own
+  route; `test_every_hint_the_landing_ships_empty_is_filled_by_a_script_the_landing_loads` takes the
+  slots from `index.html` and the writers from the scripts that same document names, through both quote
+  styles and the `const foot = $("searchFoot")` hop; and the rewritten
+  `test_landing_deadline_hint_quotes_the_configured_default` refuses **any digit** inside the painted
+  expression while holding both keys against `monkeypatch`ed config. The class-parity reader was fooled
+  by the same edit: `class="chip${v === value ? ' active' : ''}"` is JS standing in markup position, so
+  `_literal_markup()` blanks every `${…}` span together with the token it interrupts and
+  `test_the_class_reader_reads_a_class_attribute_the_way_a_template_writes_one` holds it to the shapes
+  the shipped files take — a ternary, a state-suffixed name, a closed concatenation, a nested template
+  and an interpolation the attribute never closes. What these readers cannot see is a class the
+  interpolation decides (`.tag-open` arrives that way), the same blind spot as `bar-fill-over` inside
+  `cls`. Twelve mutations were proven to fire across these laws: `bindBound('newHours', …)` removed
+  from `site.js`, `max="720"` moved to 721 in `index.html`, `boundAttr` dropped from `#mkHours`,
+  `boundAttr` dropped from `#btHours`, the landing's hours id reached through a variable, the ceiling
+  enforced in the attribute but no longer said in the hint, `#mkHours` painted with no `max` at the
+  rendered layer, markup carrying `data-i18n-title` that nothing walks, the option-row cap raised to
+  six without the words, `theme_toggle` removed from the zh dictionary alone, a typed «30 дней» put
+  back inside the painted hours sentence, and the `$('hoursLimits')` writer deleted.
 - **A market state is one word, and each of the layers that carries it is measured.**
   `bets.status` and `markets.status` store `open | resolved | cancelled` — read off the
   DDL's own comments (`schema_states()`), not typed here — and the interface answers a
@@ -886,6 +1027,24 @@
 - A language switch repaints. `setLang()` calls `renderAll()` and no single-screen painter beside it, so
   any screen that writes localized text into a node gets its words from that pass and not from a fetch
   that happened to run earlier.
+- An empty read is still a page. The note goes where the data would have gone, never into the article
+  that carries the `<h1>`: replacing that container takes the heading, the controls under it and the
+  outline a screen reader walks with it, and a visitor who cannot find the thing they were linked to is
+  owed a title and a way back.
+- A clock field states the cap its route honours: the `max` comes from `/api/info`'s
+  `max_deadline_hours`, the hint under it says the same figure in words, and a `max=` literal left in
+  markup as the no-JS fallback is a copy of `MARKET_MAX_DEADLINE_HOURS` that has to stay equal to it.
+- A localization hook is a promise that `applyI18n()` walks it: `[data-i18n]`, `[data-i18n-ph]` and
+  `[data-i18n-label]` are the three attributes the repaint reads, so a placeholder or aria-label hung
+  on any other attribute keeps the language the screen was drawn in — and a hook whose key one of the
+  three dictionaries lacks renders English, because `t()` falls back rather than failing.
+- A limit the visitor has to trigger to learn is a limit the field failed to state. The number in the
+  attribute and the number in the sentence under it are the same published key, and a sentence a
+  script paints carries no digit of its own — a hint written `'До 30 дней'` is a second copy of a
+  config knob in the one place nobody diffs.
+- A `__TOKEN__` is a contract between a document and `web/server.py`, in both directions: a token no
+  writer substitutes reaches the visitor literally, and a substitution no served document asks for is
+  dead code that reads like a contract.
 - A row with a `gap` needs no separator glyph, and a framed grid whose cells share a border needs a cell
   count that fills its tracks — a list of figures is `.rows`, one column, not a grid with a hole in it.
 - Show/hide is `hidden` (see `[hidden] { display: none !important }`), never `el.style.display`.

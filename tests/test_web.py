@@ -1049,16 +1049,27 @@ def test_chain_js_is_served_as_javascript(client):
     assert "function applyNetInfo" in r.text
 
 
-def test_css_has_new_ui_styles(client):
+def test_the_served_stylesheet_paints_the_option_rows_the_market_page_builds(client):
+    """The classes the market page emits are classes the served stylesheet defines.
+
+    This used to be a hand-written list of five names, which is why it kept
+    asserting a bar modifier long after the row stopped carrying one. The subject
+    set now comes from the page's own markup, so a row that gains a class gains a
+    check.
+    """
     css = client.get("/style.css").text
-    for needle in (
-        ".chart-bar",
-        ".chip-open",
-        ".option-winner",
-        ".bar-fill-win",
-        ".empty",
-    ):
-        assert needle in css
+    markup = (Path(__file__).resolve().parents[1] / "web" / "static" / "market.html").read_text(
+        encoding="utf-8-sig"
+    )
+    built = {
+        token
+        for value in re.findall(r'class="([^"]*)"', markup)
+        for token in re.findall(r"[A-Za-z0-9_-]+", value)
+        if "option" in token or token.startswith("bar")
+    }
+    missing = sorted(f".{token}" for token in built if f".{token}" not in css)
+    assert not missing, missing
+    assert len(built) >= 4, f"the scan read {sorted(built)}, which is not the market page"
 
 
 def test_miniapp_meta_tags_render_public_url(client, monkeypatch):
@@ -1125,16 +1136,185 @@ def test_miniapp_withdraw_hint_quotes_the_configured_terms(client, monkeypatch):
     assert "1% fee, min 1 USDC" not in html
 
 
+def _landing_hint_slots(markup: str) -> set[str]:
+    """Ids of `.hint` elements the landing ships with no text of its own.
+
+    The attribute order is the file's business, not the reader's: `searchFoot` is
+    `class="hint palette-foot" id="…" aria-live="polite"` and a reader that
+    demanded `id` right after `class` reported it as a filled slot."""
+    out: set[str] = set()
+    for match in re.finditer(r"<(p|div|span)\b([^>]*)>\s*</\1>", markup):
+        attrs = match.group(2)
+        hit = re.search(r'id="([\w-]+)"', attrs)
+        if hit and re.search(r'class="[^"]*\bhint\b[^"]*"', attrs):
+            out.add(hit.group(1))
+    assert out, "the landing ships no empty hint slot — this reader needs re-reading"
+    return out
+
+
+def _landing_written_ids(sources: str) -> set[str]:
+    """Every id a script writes content, text or visibility into.
+
+    Both quote styles (site.js uses `$('x')`, app.js `$("x")`) and the variable hop
+    (`const foot = $("searchFoot")` then `foot.textContent = …`), because a write
+    through a name is the same write."""
+    read = r"""(?:\$\(|getElementById\(|querySelector\()['"]#?([\w-]+)['"]\)"""
+    write = r"\s*\.\s*(?:textContent|innerHTML|value|hidden|disabled)\s*="
+    direct = set(re.findall(read + write, sources))
+    bound = re.findall(r"(?:var|let|const)\s+([\w$]+)\s*=\s*" + read, sources)
+    via_var = {
+        ident for var, ident in bound
+        if re.search(rf"\b{re.escape(var)}\s*\.\s*(?:textContent|innerHTML|value|hidden|disabled|classList)",
+                     sources)
+    }
+    assert direct | via_var, "no script writes into an element by id — this reader needs re-reading"
+    return direct | via_var
+
+
+def test_the_landing_hint_readers_read_every_way_a_script_writes():
+    """A slot reported as filled while nothing fills it is the defect this pair of
+    readers exists for, so each shape the shipped files take is held here: the two
+    quote styles, the variable hop, an attribute order that puts other attributes
+    between `class` and `id`, and the shapes that must stay invisible — a filled
+    hint, an element written by neither text nor visibility, and a non-hint slot."""
+    markup = (
+        '<div class="hint" id="alpha"></div>'
+        '<p class="hint palette-foot" id="beta" aria-live="polite"></p>'
+        '<span class="hint" id="gamma">already states its bound</span>'
+        '<div class="row" id="delta"></div>'
+    )
+    assert _landing_hint_slots(markup) == {"alpha", "beta"}
+    sources = (
+        "$('alpha').textContent = 'x';\n"
+        '$("beta").textContent = "y";\n'
+        "const g = $('gamma'); g.className = 'z';\n"
+        "const foot = $(\"beta\"); foot.textContent = 'y';\n"
+    )
+    assert _landing_written_ids(sources) == {"alpha", "beta"}
+    written = _landing_written_ids(sources + "$('delta').addEventListener('click', f);\n")
+    assert {"alpha", "beta"} == written, "a listener is not a write into a slot"
+
+
+def test_every_hint_the_landing_ships_empty_is_filled_by_a_script_the_landing_loads():
+    """A limit the page leaves blank is a bound the visitor decides without. The
+    landing moved its bounds out of markup and into painted sentences, and a
+    `<div class="hint" id="…"></div>` whose writer was renamed or deleted reads as
+    an empty line under the field forever: the markup is valid, the script is happy
+    on its own, and only the pair of them is wrong. Both sets come from the files —
+    the slots from `index.html`, the writers from every script that same document
+    loads — so a new slot joins the law by existing."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "web" / "static"
+    markup = (root / "index.html").read_text(encoding="utf-8-sig")
+    scripts = re.findall(r'<script src="/([\w.-]+\.js)"', markup)
+    assert scripts, "the landing loads no script of its own — the subject set is empty"
+    sources = "\n".join((root / name).read_text(encoding="utf-8-sig") for name in scripts)
+    unwritten = sorted(_landing_hint_slots(markup) - _landing_written_ids(sources))
+    assert not unwritten, f"{unwritten} ship empty and no script in {scripts} writes into them"
+
+
+def _server_substitutions(server_src: str) -> list[tuple[str, set[str], set[str]]]:
+    """`(function, tokens it replaces, documents it can substitute into)`.
+
+    Scoped by the enclosing function because the same module serves the site pages
+    through `_static_page(page, …)` and the Mini App through its own route, and a
+    token one of them needs says nothing about the other. A function that takes the
+    page as a parameter gets the pages its own call sites pass."""
+    import ast
+
+    tree = ast.parse(server_src)
+    out: list[tuple[str, set[str], set[str]]] = []
+    for fn in (n for n in tree.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)):
+        tokens = {
+            node.args[0].value
+            for node in ast.walk(fn)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "replace" and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str) and node.args[0].value.startswith("__")
+        }
+        if not tokens:
+            continue
+        files = {
+            node.value for node in ast.walk(fn)
+            if isinstance(node, ast.Constant)
+            and isinstance(node.value, str) and node.value.endswith(".html")
+        }
+        if any(arg.arg == "page" for arg in fn.args.args):
+            for call in ast.walk(tree):
+                if (isinstance(call, ast.Call) and getattr(call.func, "id", None) == fn.name
+                        and call.args and isinstance(call.args[0], ast.Constant)
+                        and isinstance(call.args[0].value, str)):
+                    files.add(call.args[0].value)
+        assert files, f"{fn.name} replaces a placeholder into documents this reader cannot name"
+        out.append((fn.name, tokens, files))
+    assert out, "web/server.py substitutes no placeholder anywhere — this reader needs re-reading"
+    return out
+
+
+def test_every_placeholder_the_server_replaces_is_one_a_document_asks_for():
+    """`__DEFAULT_DEADLINE_HOURS__` stayed in `_static_page` after the landing
+    stopped carrying it, which reads to the next maintainer as a live contract: the
+    page appears to take its default from the server while the sentence is painted
+    from `/api/info`. A substitution no served document asks for is code doing
+    nothing, and the honest answer is to delete it. The other direction — a token a
+    document ships that no writer replaces — is what the design gate refuses in the
+    painted bytes of every page."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    server_src = (root / "web" / "server.py").read_text(encoding="utf-8-sig")
+    scopes = _server_substitutions(server_src)
+    carried: dict[str, set[str]] = {}
+    for _fn, _tokens, files in scopes:
+        for name in files:
+            if name not in carried:
+                path = root / "web" / "static" / name
+                assert path.is_file(), f"{name} is served by web/server.py and is not in web/static"
+                carried[name] = set(re.findall(
+                    r"__\w+__", path.read_text(encoding="utf-8-sig")))
+    dead = sorted(
+        f"{fn}: {token} (serves {sorted(files)})"
+        for fn, tokens, files in scopes
+        for token in tokens
+        if not any(token in carried[name] for name in files)
+    )
+    assert not dead, "replaced by web/server.py and asked for by no document it serves: " + "; ".join(dead)
+
+
 def test_landing_deadline_hint_quotes_the_configured_default(client, monkeypatch):
     """The form said "Пусто — без дедлайна", but an empty field has meant
-    `now + MARKET_DEFAULT_HOURS` since deadlines became mandatory (015)."""
+    `now + MARKET_DEFAULT_HOURS` since deadlines became mandatory (015).
+
+    The sentence is now painted from `/api/info` rather than typed into markup, so
+    the gate reads the chain instead of the bytes: the config value reaches the
+    published key, the published key reaches the sentence, and no figure of the
+    author's sits between them. What it cannot see is the painted result — that is
+    `test_the_open_layer_states_the_bounds_this_origin_publishes`, which needs a
+    browser and so runs in the `production` set."""
+    from pathlib import Path
+
     from bot import config as cfg
 
     monkeypatch.setattr(cfg, "MARKET_DEFAULT_HOURS", 42)
+    monkeypatch.setattr(cfg, "MARKET_MAX_DEADLINE_HOURS", 4095)
+    limits = client.get("/api/info").json()["limits"]
+    assert limits["default_deadline_hours"] == 42
+    assert limits["max_deadline_hours"] == 4095
+
+    js = (Path(__file__).resolve().parents[1] / "web" / "static" / "site.js").read_text(
+        encoding="utf-8-sig")
+    sentence = re.search(r"\$\(['\"]hoursLimits['\"]\)\.textContent = ([^;]+);", js)
+    assert sentence, "the landing no longer paints the deadline hint this law exists for"
+    painted = sentence.group(1)
+    assert "L.default_deadline_hours" in painted and "L.max_deadline_hours" in painted, painted
+    assert not re.search(r"\d", painted), f"a typed figure is back in the painted sentence: {painted}"
+
     html = client.get('/').text
-    assert "42 ч по умолчанию" in html
     assert "без дедлайна" not in html
     assert "__DEFAULT_DEADLINE_HOURS__" not in html
+    assert 'id="hoursLimits"' in html
 
 
 # Each VOLUME_KINDS entry and the words the landing uses for it. A kind the copy
@@ -1355,21 +1535,90 @@ def test_mini_app_dictionary_is_complete_across_languages():
     `bot/i18n.py`, and `scripts/check_i18n.py` cannot see it. A key added for the
     Russian UI only renders as the raw identifier for an English or Chinese user,
     which is the exact drift AGENTS.md warns about — so it is enforced here."""
-    from pathlib import Path
-
-    text = (Path(__file__).resolve().parents[1] / "web" / "static" / "app.html").read_text(
-        encoding="utf-8"
-    )
-    dicts = {}
-    for lang in ("ru", "en", "zh"):
-        block = re.search(rf"\n  {lang}: \{{(.*?)\}},?\n", text, re.S)
-        assert block, f"I18N.{lang} not found in app.html"
-        dicts[lang] = set(re.findall(r'(?:^|[,{\s])([a-z0-9_]+):\s*"', block.group(1), re.M))
+    text = _mini_app_text()
+    dicts = _mini_app_dictionaries(text)
     assert dicts["ru"] == dicts["en"], dicts["ru"] ^ dicts["en"]
     assert dicts["ru"] == dicts["zh"], dicts["ru"] ^ dicts["zh"]
 
     used = set(re.findall(r"(?<![A-Za-z0-9_$.])t\(\s*'([a-z0-9_]+)'\s*\)", text))
     assert not used - dicts["ru"], sorted(used - dicts["ru"])
+
+
+def _class_attribute_spans(text: str) -> list[str]:
+    """The raw value of every `class="…"` in the file, template included.
+
+    A JS renderer's markup is a string literal in this tree, so the attribute is
+    read the same way whether it sits in `.html` or in a `.js` template."""
+    return re.findall(r'class="([^"]+)"', text)
+
+
+def _literal_markup(attr_value: str) -> str:
+    """A class attribute with every `${…}` interpolation replaced by a sentinel.
+
+    A template decides part of the value in code position —
+    `class="chip${v === value ? ' active' : ''}"` — and the words inside that
+    expression belong to JS, not to markup. Read them as classes and `value`
+    fails this gate as an undefined class while the `active` it selects is real:
+    the reader would be judging the grammar of the file, not its design. The
+    sentinel stays inside the token it interrupts, so `class="tag-${state}"`
+    yields no name at all rather than a half-word `tag-`."""
+    out: list[str] = []
+    i, depth = 0, 0
+    while i < len(attr_value):
+        if depth == 0 and attr_value.startswith("${", i):
+            out.append("\x00")
+            depth, i = 1, i + 2
+            continue
+        if depth:
+            if attr_value[i] == "{":
+                depth += 1
+            elif attr_value[i] == "}":
+                depth -= 1
+            i += 1
+            continue
+        out.append(attr_value[i])
+        i += 1
+    return "".join(out)
+
+
+def _painted_classes(text: str) -> set[str]:
+    """Class names the document or a renderer writes into markup.
+
+    A JS template closes the attribute to concatenate — `'<div class="bar-fill' +
+    cls + '" aria-hidden…'` — so the raw value alternates string and code. Even
+    segments (counted from the opening string) are the literal markup; a bare
+    word in an odd segment is a variable name, not a class, and `agent.js`
+    proved the difference: `cls` failed this gate as an undefined class while
+    the real `bar-fill-over` it holds was defined all along."""
+    used = set()
+    for value in _class_attribute_spans(text):
+        for i, segment in enumerate(_literal_markup(value).split("'")):
+            if i % 2 == 0:
+                used |= {
+                    c for c in segment.split()
+                    if "\x00" not in c and re.fullmatch(r"[a-zA-Z][\w-]*", c)
+                }
+    used |= set(re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)['\"]", text))
+    return used
+
+
+def test_the_class_reader_reads_a_class_attribute_the_way_a_template_writes_one():
+    """Both readers exist to name classes, and each has already been fooled once by
+    a word in code position. Held here to the shapes the shipped files take: a
+    ternary inside an interpolation, a state-suffixed name, a closed attribute
+    concatenation, a nested template and an interpolation the attribute never
+    closes — plus the plain literal, so a reader that returned nothing for
+    everything could not pass."""
+    assert _painted_classes('<span class="chip active">') == {"chip", "active"}
+    assert _painted_classes("""<button class="chip${v === value ? ' active' : ''}">""") == set()
+    assert _painted_classes('<span class="tag-${state}">') == set()
+    painted_bar = _painted_classes("""'<div class="bar-fill' + cls + '" aria-hidden="true">'""")
+    assert painted_bar == {"bar-fill"}, "the literal half of a concatenated attribute is markup"
+    assert "cls" not in painted_bar, "the variable holding `bar-fill-over` is not a class"
+    assert _painted_classes("<div class=\"row ${a ? `sub-${b}` : ''} x\">") == {"row", "x"}
+    assert _painted_classes('<div class="row ${unclosed x">') == {"row"}
+    assert "\x00" in _literal_markup("a ${b}") and "\x00" not in _literal_markup("a b")
+    assert _class_attribute_spans('class="a" class="b"') == ["a", "b"]
 
 
 def test_every_class_a_page_paints_is_defined_in_the_stylesheet_that_serves_it():
@@ -1380,9 +1629,11 @@ def test_every_class_a_page_paints_is_defined_in_the_stylesheet_that_serves_it()
     this pins the one that can be checked without guessing — and it covers the JS
     renderers, because that is where the templates actually live: `cmd-group` was
     emitted from app.js and no HTML file mentioned it. What it cannot see is a
-    class arriving through a variable (`agent.js` builds `bar-fill-over` that way,
-    inside `cls`) — a word in code position is not evidence of markup, and the
-    gate stays honest about that instead of keeping a list of exceptions.
+    class the template decides in code position — through a variable (`agent.js`
+    builds `bar-fill-over` that way, inside `cls`) or inside `${…}`
+    (`class="tag-${state}"` selects a `.tag-open` that this gate never reads) —
+    a word in code position is not evidence of markup, and the gate stays honest
+    about that instead of keeping a list of exceptions.
 
     The Mini App is measured against its own `<style>` rather than skipped: it is
     one self-contained document, so `style.css` says nothing about a class its JS
@@ -1391,23 +1642,6 @@ def test_every_class_a_page_paints_is_defined_in_the_stylesheet_that_serves_it()
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "web" / "static"
-
-    def painted(text: str) -> set[str]:
-        """Class names the document or a renderer writes into markup.
-
-        A JS template closes the attribute to concatenate — `'<div class="bar-fill' +
-        cls + '" aria-hidden…'` — so the raw value alternates string and code. Even
-        segments (counted from the opening string) are the literal markup; a bare
-        word in an odd segment is a variable name, not a class, and `agent.js`
-        proved the difference: `cls` failed this gate as an undefined class while
-        the real `bar-fill-over` it holds was defined all along."""
-        used = set()
-        for match in re.finditer(r'class="([^"]+)"', text):
-            for i, segment in enumerate(match.group(1).split("'")):
-                if i % 2 == 0:
-                    used |= {c for c in segment.split() if re.fullmatch(r"[a-zA-Z][\w-]*", c)}
-        used |= set(re.findall(r"classList\.(?:add|toggle|remove)\(\s*['\"]([\w-]+)['\"]", text))
-        return used
 
     css = (root / "style.css").read_text(encoding="utf-8-sig")
     defined = set(re.findall(r"\.([a-zA-Z][\w-]*)", css))
@@ -1419,12 +1653,12 @@ def test_every_class_a_page_paints_is_defined_in_the_stylesheet_that_serves_it()
         + sorted(p.name for p in root.glob("*.js"))
     for name in surfaces:
         text = (root / name).read_text(encoding="utf-8-sig")
-        assert painted(text) <= defined, f"{name}: {sorted(painted(text) - defined)}"
+        assert _painted_classes(text) <= defined, f"{name}: {sorted(_painted_classes(text) - defined)}"
 
     app = (root / "app.html").read_text(encoding="utf-8-sig")
     style = re.search(r"<style>(.*?)</style>", app, re.S).group(1)
     own = set(re.findall(r"\.([a-zA-Z][\w-]*)", style))
-    used = painted(app.replace(style, ""))
+    used = _painted_classes(app.replace(style, ""))
     assert used <= own, f"app.html: {sorted(used - own)}"
 
 
@@ -1888,6 +2122,132 @@ def _bound_assigned_by_script(sources):
     return pairs
 
 
+def _hours_caps_by_route():
+    """`route -> {parameter: (config name, hours, published key)}` for every
+    refusal that caps a clock.
+
+    `_money_bounds_by_route()` reads the `min`/`cap` kwargs whose values are USDC
+    figures, so a ceiling stated in hours is invisible to it and to
+    `_limits_the_origin_publishes()`, which collects the `_usdc`/`_micro` keys:
+    the create route answered `api_deadline_long` over a configured ceiling while
+    no law read the number the create fields offered. The parameter comes out of
+    the comparison the refusal guards — `if body.hours and body.hours > config.X` —
+    because a field is paired with the payload key it types, not with the attribute
+    name the markup spells."""
+    import ast
+
+    from bot import config as cfg
+
+    root = Path(__file__).resolve().parents[1]
+    published = {}
+    for rel in ("web/server.py", "web/mini.py"):
+        text = (root / rel).read_text(encoding="utf-8-sig")
+        published.update(
+            (name, key) for key, name in re.findall(r"'(\w+)':\s*config\.([A-Z0-9_]+)", text)
+        )
+    out = {}
+    for rel in ("web/server.py", "web/mini.py"):
+        tree = ast.parse((root / rel).read_text(encoding="utf-8-sig"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            routes = [
+                d.args[0].value
+                for d in node.decorator_list
+                if isinstance(d, ast.Call) and d.args
+                and isinstance(d.args[0], ast.Constant)
+                and isinstance(d.args[0].value, str)
+            ]
+            if not routes:
+                continue
+            for call in ast.walk(node):
+                if not (isinstance(call, ast.Call)
+                        and getattr(call.func, "id", "") in ("refuse", "refuse_protocol")):
+                    continue
+                for kw in call.keywords:
+                    if kw.arg != "max":
+                        continue
+                    names = [n for n in re.findall(r"\bconfig\.([A-Z0-9_]+)", ast.unparse(kw.value))
+                             if n.endswith("_HOURS")]
+                    if not names:
+                        continue
+                    assert len(names) == 1, f"{rel}: {ast.unparse(kw.value)} names {names}"
+                    name = names[0]
+                    key = published.get(name)
+                    assert key, f"config.{name} caps a route but /api/info answers no name for it"
+                    parameter = None
+                    for cmp in ast.walk(node):
+                        if isinstance(cmp, ast.Compare) and f"config.{name}" in ast.unparse(cmp):
+                            found = re.findall(r"\b(?:body|payload)\.(\w+)", ast.unparse(cmp))
+                            if found:
+                                parameter = found[0]
+                                break
+                    assert parameter, f"config.{name} is compared against no payload field"
+                    for route in routes:
+                        out.setdefault(route, {})[parameter] = (name, getattr(cfg, name), key)
+    return out
+
+
+def test_the_clock_a_field_offers_is_the_clock_the_route_honours(client):
+    """A deadline is a figure the user types before any refusal says otherwise, and
+    both create surfaces offered one the route would not honour: the Mini App's
+    hours fields carried no ceiling at all, and the landing typed `max="720"` and
+    restated the same cap as «До 30 дней» while the knob it echoes lives in
+    `config`. The money law cannot see either — it reads USDC kwargs and USDC keys —
+    so the clock is measured here, out of the handler that refuses it."""
+    from decimal import Decimal
+
+    caps = _hours_caps_by_route()
+    assert caps, "no shipped route caps a clock — the reader needs re-reading"
+    limits = client.get("/api/info").json()["limits"]
+
+    static = Path(__file__).resolve().parents[1] / "web" / "static"
+    sources = {
+        p.name: p.read_text(encoding="utf-8-sig")
+        for p in sorted(static.glob("*.html")) + sorted(static.glob("*.js"))
+    }
+    bindings = _bound_assigned_by_script(sources)
+
+    fields = {}
+    for route, parameters in sorted(caps.items()):
+        for parameter, (name, value, key) in sorted(parameters.items()):
+            assert Decimal(str(limits[key])) == Decimal(str(value)), (
+                f"{route} refuses {parameter} above {value} ({name}) while /api/info "
+                f"publishes {key}={limits[key]}")
+            for text in sources.values():
+                for hit in re.finditer(_route_call_matcher(route), text):
+                    body = _enclosing_function(text, hit.start())
+                    for read in re.finditer(
+                        r"""(?:getElementById|\$)\(\s*['"](\w+)['"]\s*\)""", body
+                    ):
+                        field = read.group(1)
+                        if parameter.lower() in field.lower():
+                            fields.setdefault(field, []).append((parameter, name, value, key, route))
+    assert len(fields) >= 3, f"only {sorted(fields)} fields type a deadline"
+
+    problems = []
+    for field, refs in sorted(fields.items()):
+        parameter, name, value, key, route = refs[0]
+        if ("max", key) not in bindings.get(field, set()):
+            problems.append(
+                f"#{field} types the {parameter} {route} refuses above {value} ({name}) "
+                f"and binds no ceiling: {sorted(bindings.get(field, set()))}")
+        markup = next(
+            (text for text in sources.values()
+             if re.search(r"<input\b[^>]*id=[\"']" + re.escape(field) + r"[\"']", text)),
+            "",
+        )
+        tag = re.search(
+            r"<input\b[^>]*id=[\"']" + re.escape(field) + r"[\"'][^>]*>", markup, re.S
+        )
+        typed = re.search(r"\bmax=[\"']([^\"']*)[\"']", tag.group(0)) if tag else None
+        if typed and Decimal(typed.group(1)) != Decimal(str(value)):
+            problems.append(
+                f"#{field} carries the fallback max={typed.group(1)} while {name} is {value}: "
+                f"the number written into markup is a second copy of the knob")
+    assert not problems, problems
+
+
 def test_the_bound_a_route_refuses_with_is_the_bound_the_field_states(client, ledger):
     """A money field is the only place a user learns the bound before the
     refusal, and every bound this repository enforces was already copied into
@@ -1970,17 +2330,36 @@ def test_the_bound_a_route_refuses_with_is_the_bound_the_field_states(client, le
     # state the block name, and that block must carry every key a `boundAttr`
     # call references — a block of percentages cannot answer for USDC bounds.
     app_text = sources.get("app.html", "")
-    limits_assign = re.search(r"LIMITS\s*=\s*\(await\s+r\.json\(\)\)\.(\w+)", app_text)
-    if limits_assign:
-        block = limits_assign.group(1)
-        info = client.get("/api/info").json()
-        block_keys = set((info.get(block) or {}).keys())
-        bound_keys = {key for pairs in bindings.values() for attr, key in pairs}
-        missing = bound_keys - block_keys
-        assert not missing, (
-            f"Mini App reads LIMITS from .{block}, which carries {block_keys}; "
-            f"boundAttr references {bound_keys}, missing {missing}"
-        )
+    # The Mini App keeps the whole /api/info answer in one object and slices the
+    # bounds out of it, because the fee block and the chain block are read
+    # beside the bounds. The slice still has to name a block of that answer and
+    # come out of the very object the /api/info response was assigned to: point
+    # it at another name, or at `.fees`, and every `boundAttr` call below reads
+    # an empty object and this law goes blind on purpose.
+    sliced = re.search(r"LIMITS\s*=\s*\(await\s+r\.json\(\)\)\.(\w+)"
+                       r"|LIMITS\s*=\s*([A-Za-z_$][\w$]*)\.(\w+)", app_text)
+    assert sliced, "the Mini App no longer slices the published bounds out of the /api/info answer"
+    direct, holder, sliced_block = sliced.groups()
+    if holder is not None:
+        loaders = [_enclosing_function(app_text, hit.start())
+                   for hit in re.finditer(r"""fetch\(\s*['"]/api/info['"]""", app_text)]
+        assert loaders, f"nothing fetches /api/info, yet LIMITS is sliced out of {holder}.…"
+        assigned = {m.group(1) for body in loaders
+                    for m in re.finditer(r"([A-Za-z_$][\w$]*)\s*=\s*await\s+r\.json\(\)", body)}
+        assert holder in assigned, (
+            f"LIMITS is sliced out of {holder}.…, which is not the object this origin's "
+            f"/api/info answer was assigned to ({sorted(assigned) or 'no response parsed'})")
+        block = sliced_block
+    else:
+        block = direct
+    info = client.get("/api/info").json()
+    block_keys = set((info.get(block) or {}).keys())
+    bound_keys = {key for pairs in bindings.values() for attr, key in pairs}
+    missing = bound_keys - block_keys
+    assert not missing, (
+        f"Mini App reads LIMITS from .{block}, which carries {block_keys}; "
+        f"boundAttr references {bound_keys}, missing {missing}"
+    )
 
     def published_value(key):
         """The limits block and the x402 block are one namespace to a page: a
@@ -2044,6 +2423,126 @@ def test_the_bound_a_route_refuses_with_is_the_bound_the_field_states(client, le
                  for m in typed.finditer(line)]
     assert not offenders, offenders
 
+
+def _mini_app_text():
+    """`web/static/app.html` ships its markup, its stylesheet and its script in
+    one document; the laws below ask what that document paints."""
+    return (Path(__file__).resolve().parents[1] / "web" / "static" / "app.html").read_text(
+        encoding="utf-8-sig")
+
+
+def _enclosing_function_name(text, idx):
+    body = _enclosing_function(text, idx)
+    match = re.match(r"[ \t]*(?:async[ \t]+)?function[ \t]+(\w+)", body)
+    return match.group(1) if match else "<top level>"
+
+
+def test_every_money_panel_the_mini_app_paints_states_what_the_account_holds():
+    """A panel that takes a sum is the only place a user learns what they can
+    actually move, and not one of them said it: the tip sheet opened on 5 USDC
+    against a 3 USDC balance, the buy panel offered the same 5 with nothing on
+    the account, and the withdrawal sheet stated the fee but never the balance
+    the fee is added on top of.
+
+    The subject set is the shipped markup, not a list of sheets somebody
+    remembers: every panel that types a decimal amount owes the line, so a new
+    money field joins this law the moment it exists."""
+    text = _mini_app_text()
+    panels = {}
+    for hit in re.finditer(r'inputmode="decimal"', text):
+        panels[_enclosing_function_name(text, hit.start())] = _enclosing_function(text, hit.start())
+    assert len(panels) >= 3, f"only {len(panels)} Mini App panels type a decimal amount: {sorted(panels)}"
+    silent = sorted(name for name, body in panels.items() if "availableLine()" not in body)
+    assert not silent, f"these money panels take a sum and never say what the account holds: {silent}"
+
+
+def test_a_chip_row_offers_the_one_ladder_the_balance_filters():
+    """Two chip ladders are two answers to "what can I tap", and only the one
+    that reads the balance knows the difference between offering 25 USDC and
+    holding 3. The tip sheet typed four buttons by hand and the buy panel mapped
+    the same four numbers a second time, so the identical tap worked on one
+    screen and came back refused from the ledger on the other."""
+    text = _mini_app_text()
+    ladders = re.findall(r"\[\s*\d+(?:\s*,\s*\d+){2,}\s*\]", text)
+    assert len(ladders) == 1, f"quick amounts are typed in {len(ladders)} places: {ladders}"
+    declared = re.search(r"const QUICK_LADDER = (\[[^;]+);", text)
+    assert declared, f"the one ladder is declared by no name: {ladders}"
+    values = [int(v) for v in re.findall(r"\d+", declared.group(1))]
+    standing = re.search(r"const QUICK_DEFAULT = (\d+);", text)
+    assert standing and int(standing.group(1)) in values, (
+        f"the amount a money field opens on is not one of the amounts it offers: "
+        f"ladder {values}, default {standing.group(1) if standing else None}")
+    orphan = set()
+    for hit in re.finditer(r'class="chips"', text):
+        name = _enclosing_function_name(text, hit.start())
+        if "quickAmounts(" not in _enclosing_function(text, hit.start()):
+            orphan.add(name)
+    assert not orphan, (
+        f"these chip rows are painted beside a ladder that never reads the balance: {sorted(orphan)}")
+
+
+def test_the_confirmation_count_the_deposit_sheet_names_is_the_knob_the_sweep_uses(client):
+    """A deposit is not spendable the moment it is seen — the sweep credits it
+    `DEPOSIT_CONFIRM_BLOCKS` later — and the sheet that shows a QR is the only
+    place a user can learn that, where it said nothing at all. The window is
+    published from the knob and read back out of the published block, so an
+    operator shortening it moves the screen and nothing else has to be told."""
+    from bot import config
+
+    limits = client.get("/api/info").json()["limits"]
+    assert "deposit_confirmations" in limits, (
+        f"/api/info publishes no confirmation window: {sorted(limits)}")
+    assert limits["deposit_confirmations"] == config.DEPOSIT_CONFIRM_BLOCKS, (
+        f"/api/info publishes {limits['deposit_confirmations']} while the sweep compares "
+        f"against {config.DEPOSIT_CONFIRM_BLOCKS}")
+    sweep = (Path(__file__).resolve().parents[1] / "bot" / "base.py").read_text(encoding="utf-8-sig")
+    assert re.search(r"cutoff\s*=\s*current\s*-\s*config\.DEPOSIT_CONFIRM_BLOCKS\b", sweep), (
+        "the deposit sweep no longer compares against the knob the sheet quotes")
+    text = _mini_app_text()
+    hit = re.search(r"infoRow\(\s*t\('dep_confirmations'\)\s*,\s*([A-Za-z_.]+)\s*\)", text)
+    assert hit, "the deposit sheet states no confirmation count"
+    assert hit.group(1) == "LIMITS.deposit_confirmations", (
+        f"the confirmation row prints {hit.group(1)}, which is not the published knob")
+    assert 'id="depAddr"' in _enclosing_function(text, hit.start()), (
+        "the confirmation row is not painted by the panel that shows the deposit address")
+
+
+def test_every_action_the_mini_app_paints_is_dispatched_to_a_function_that_exists():
+    """`data-act` is a promise that a tap does something, and the delegated
+    handler is a chain of `if`s that falls off the end in silence: an action no
+    dispatcher answers is a control that eats the thumb, and a branch that calls
+    a function nobody wrote is the same control with a console error behind it.
+    Measured in both directions, because an action that never shipped and one
+    that was removed leave the identical dead screen."""
+    text = _mini_app_text()
+    painted = set(re.findall(r'data-act="(\w+)"', text))
+    assert len(painted) >= 15, f"only {len(painted)} delegated actions were read"
+    dispatched = set(re.findall(r"act === '(\w+)'", text))
+    unhandled = sorted(painted - dispatched)
+    assert not unhandled, f"data-act values nothing dispatches: {unhandled}"
+    stale = sorted(dispatched - painted)
+    assert not stale, f"dispatcher branches no shipped markup paints: {stale}"
+
+    # A branch is accountable for reaching code: the names it calls have to be
+    # functions or arrow constants the same document defines.
+    keywords = {"if", "for", "while", "switch", "return", "typeof", "catch", "parseInt",
+                "parseFloat", "Number", "String", "Boolean", "Math", "JSON", "document",
+                "window", "setTimeout", "clearTimeout", "encodeURIComponent", "Array",
+                "Object", "fetch", "navigator", "localStorage", "confirm", "alert"}
+    defined = set(re.findall(r"function\s+(\w+)\s*\(", text))
+    defined |= set(re.findall(
+        r"(?:const|let)\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>", text))
+    unresolved = []
+    for act in sorted(dispatched):
+        branch = re.search(r"act === '" + re.escape(act) + r"'\)\s*\{(.{0,400}?)return; \}", text, re.S)
+        if branch is None:
+            unresolved.append(f"{act}: the branch never returns, so a tap falls through")
+            continue
+        called = [n for n in re.findall(r"\b([A-Za-z_$][\w$]*)\s*\(", branch.group(1))
+                  if n not in keywords]
+        if called and not any(n in defined for n in called):
+            unresolved.append(f"{act} -> {called}")
+    assert not unresolved, f"dispatcher branches that reach no function: {unresolved}"
 
 def test_api_ask_answers_from_the_ledger_with_no_model(client, ledger, monkeypatch):
     """A public endpoint that 503s because an env var is empty is a broken
@@ -2142,31 +2641,164 @@ def test_metrics_loopback_opt_in_is_not_reachable_through_the_tunnel(monkeypatch
     assert local.get("/metrics").status_code == 200
 
 
+def _mini_app_dictionaries(page: str) -> dict[str, set[str]]:
+    """`{lang: {keys}}` for the three dictionaries `web/static/app.html` keeps
+    inline, apart from `bot/i18n.py` and therefore outside `check_i18n.py`.
+
+    One reader for every law that asks what the Mini App can say. The block is
+    found by its own braces rather than by a line shape, so a dictionary written
+    on one line and one spread over twenty answer the same way, and the number of
+    words parsed is checked against the number of `key: "` pairs visible in the
+    block — a rename that leaves one word written twice shadows the first, and a
+    reader returning a set cannot show that it lost a declaration.
+    """
+    out: dict[str, set[str]] = {}
+    for lang in ("ru", "en", "zh"):
+        hit = re.search(rf"(?:^|\n)[ \t]*{lang}: \{{", page)
+        assert hit, f"app.html declares no inline I18N.{lang} dictionary"
+        depth, end = 0, hit.end()
+        for idx in range(hit.end() - 1, len(page)):
+            if page[idx] == "{":
+                depth += 1
+            elif page[idx] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = idx
+                    break
+        body = page[hit.end():end]
+        keys = set(re.findall(r'(?:^|[,{\s])([a-z0-9_]+):\s*["\']', body, re.M))
+        written = len(re.findall(r'(?:^|[,{\s])[a-z0-9_]+:\s*["\']', body, re.M))
+        assert keys, f"I18N.{lang} parsed to no word at all — this reader needs re-reading"
+        assert len(keys) == written, f"I18N.{lang} shows {len(keys)} of {written} words to the gate"
+        out[lang] = keys
+    return out
+
+
+def _mini_app_repainted_attributes(page: str) -> set[str]:
+    """Every `data-i18n*` attribute `applyI18n()` walks, read out of its own
+    `querySelectorAll('[data-i18n…]')` calls.
+
+    The law below used to type the suffixes as an alternation and typed them
+    wrong: it named `-title`, which no element in the file carries and no line
+    walks, and missed `-label`, whose four aria-labels were therefore checked
+    against no dictionary by anything.
+    """
+    attrs = set(re.findall(r"querySelectorAll\(['\"]\[(data-i18n[\w-]*)\]['\"]\)", page))
+    assert attrs, "applyI18n() walks no data-i18n attribute — this reader needs re-reading"
+    return attrs
+
+
+def _mini_app_runtime_key_families(page: str) -> dict[str, int]:
+    """`{prefix: rows}` for every localization key the Mini App builds at runtime.
+
+    `addCreateOpt` names the row it appends `opt_<n>` and caps `n` with a literal
+    in its own body, so the cap — not a hand-written list — is what says how many
+    words the dictionaries owe. A body that caps nothing states no count and
+    answers no family.
+    """
+    out: dict[str, int] = {}
+    for hit in re.finditer(r'`([a-z][a-z0-9_]*?)_\$\{[^{}]*\}`', page):
+        cap = re.search(
+            r"\.length\s*(?:>=|>)\s*(\d+)", _enclosing_function(page, hit.start())
+        )
+        if cap:
+            prefix = hit.group(1) + "_"
+            out[prefix] = max(out.get(prefix, 0), int(cap.group(1)))
+    return out
+
+
 def test_every_mini_app_translation_key_exists_in_all_three_languages():
     """`web/static/app.html` keeps its own dictionary inline (ru/en/zh), apart
     from bot/i18n.py, so `scripts/check_i18n.py` cannot see it: a key used in
     the UI and added to two of the three languages silently renders English or
-    the raw key for the third one."""
-    from pathlib import Path
+    the raw key for the third one.
 
-    page = (
-        Path(__file__).resolve().parents[1] / "web" / "static" / "app.html"
-    ).read_text(encoding="utf-8-sig")
+    The subject set is what the app repaints, not what a law remembers: the
+    attributes come out of `applyI18n()`'s own `querySelectorAll` calls, and the
+    markup is refused an attribute those calls do not walk, because a hook nothing
+    walks is a word that survives a language switch — which is the shape that put
+    `Option 1` in a Russian placeholder."""
+    page = _mini_app_text()
+    dicts = _mini_app_dictionaries(page)
+    attrs = _mini_app_repainted_attributes(page)
 
     used = set(re.findall(r"""\bt\(\s*['"]([a-z0-9_]+)['"]""", page))
-    used |= set(re.findall(r'data-i18n(?:-ph|-title)?="([a-z0-9_]+)"', page))
-    assert used, "the Mini App stopped using t() — this test needs re-reading"
+    for attr in sorted(attrs):
+        painted = set(re.findall(re.escape(attr) + r'="([a-z0-9_]+)"', page))
+        assert painted, f"applyI18n() walks [{attr}] while no element in the file carries it"
+        used |= painted
+    assert len(used) >= 60, f"only {len(used)} keys reached the reader — a blind scan passes this"
 
-    for lang in ("ru", "en", "zh"):
-        line = next(
-            (l for l in page.splitlines()
-             if re.match(rf"\s*{lang}: \{{.*\}},?\s*$", l, re.S)),
-            None,
-        )
-        assert line, f"the {lang} dictionary is no longer a single block"
-        defined = set(re.findall(r"""['"]?([a-z0-9_]+)['"]?\s*:""", line))
+    typed = set(re.findall(r'(data-i18n[\w-]*)="', page))
+    assert not typed - attrs, (
+        f"markup carries {sorted(typed - attrs)} and applyI18n() repaints none of it: "
+        "those words stay in the language the screen was drawn in")
+
+    for lang, defined in sorted(dicts.items()):
         assert used <= defined, f"{lang} is missing {sorted(used - defined)}"
 
+
+def test_the_localization_key_the_mini_app_builds_covers_every_row_it_offers():
+    """`addCreateOpt` appends a row and names it `opt_<n>`, so the word the
+    placeholder shows is assembled at runtime and appears in no literal `t('…')`
+    span. The cap on `n` is a literal in the same body; the dictionaries owe one
+    word per row that cap allows. Raising the cap without the words paints the raw
+    identifier `opt_5` as UI text in every language, and nothing read either side
+    of the pair until now."""
+    page = _mini_app_text()
+    families = _mini_app_runtime_key_families(page)
+    assert families, "the Mini App assembles no localization key — this law needs re-reading"
+    dicts = _mini_app_dictionaries(page)
+
+    problems = []
+    for prefix, rows in sorted(families.items()):
+        for lang, defined in sorted(dicts.items()):
+            missing = sorted(
+                f"{prefix}{n}" for n in range(1, rows + 1) if f"{prefix}{n}" not in defined
+            )
+            if missing:
+                problems.append(f"{prefix} offers {rows} rows and {lang} has no word for {missing}")
+    assert not problems, problems
+
+
+def test_the_mini_app_localization_readers_read_the_shapes_a_rename_leaves_behind():
+    """Each reader above is one regex away from reporting a clean tree: the
+    dictionary block moved onto its own lines, the quotes around an attribute
+    changed, a cap written `>` instead of `>=`, one word left written twice by a
+    rename. A reader that quietly returned nothing would make every law using it
+    pass."""
+    page = (
+        "  ru: { one: 'a', two: 'b' },\n"
+        "  en: { one: 'a', two: 'b' },\n"
+        "  zh: {\n    one: 'a',\n    two: 'b',\n  },\n"
+        "function paint() {\n"
+        "  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));\n"
+        "  document.querySelectorAll(\"[data-i18n-label]\").forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nLabel)));\n"
+        "}\n"
+        "function add(container) {\n"
+        "  if (container.children.length > 3) return;\n"
+        "  const key = `row_${container.children.length + 1}`;\n"
+        "  return `<input data-i18n-label=\"${key}\">`;\n"
+        "}\n"
+    )
+    dicts = _mini_app_dictionaries(page)
+    assert dicts["ru"] == dicts["en"] == dicts["zh"] == {"one", "two"}, dicts
+    assert _mini_app_repainted_attributes(page) == {"data-i18n", "data-i18n-label"}, page
+    assert _mini_app_runtime_key_families(page) == {"row_": 3}, page
+
+    spread = page.replace("  ru: { one: 'a', two: 'b' },", "  ru: {\n    one: 'a',\n    two: 'b'\n  },")
+    assert _mini_app_dictionaries(spread)["ru"] == {"one", "two"}, "a spread dictionary read short"
+
+    dupe = page.replace("  en: { one: 'a', two: 'b' },", "  en: { one: 'a', two: 'b', two: 'c' },")
+    with pytest.raises(AssertionError, match="shows 2 of 3"):
+        _mini_app_dictionaries(dupe)
+
+    no_cap = page.replace("container.children.length > 3", "container.children.length > n")
+    assert _mini_app_runtime_key_families(no_cap) == {}, "a body that caps nothing became a family"
+
+    unwalked = page.replace("[data-i18n]", "aria-hidden").replace("[data-i18n-label]", "aria-hidden")
+    with pytest.raises(AssertionError, match="no data-i18n attribute"):
+        _mini_app_repainted_attributes(unwalked)
 
 def test_no_substitution_marker_survives_into_any_served_page(client):
     """Individual `assert "__X__" not in html` checks only remember the
@@ -2188,15 +2820,17 @@ def test_no_substitution_marker_survives_into_any_served_page(client):
 def test_onchain_list_and_market_page_print_the_same_price(client, ledger, monkeypatch):
     """`price_pct` is one field served two ways. The list rounded with the builtin
     (banker's, over a float) and the page with Decimal ROUND_HALF_UP, so the same
-    market could read 12,34% in one place and 12,35% in the other."""
+    market could read 12,3% in one place and 12,4% on its own page."""
     from bot import config
     from bot import onchain_market as om
 
     async def fake_prices(market_id, count):
-        # Chosen because the two rounders disagree here: the builtin sees
-        # 0.10499999999999999 * 100 and gives 0.1, ROUND_HALF_UP on the decimal
-        # text gives 0.11.
-        return [0.00105, 0.99895]
+        # Chosen because the two rounders disagree on BOTH options at the one
+        # decimal the interface paints: the builtin sees 12.3499999999999996 and
+        # 87.64999999999999 and gives 12.3 / 87.6, while ROUND_HALF_UP on the
+        # decimal text gives 12.4 / 87.7. Two decimals would have hidden the
+        # whole question behind a digit no face prints.
+        return [0.1235, 0.8765]
 
     async def fake_info(market_id):
         return {"b": 5_000_000_000, "escrow_micro": 250_000_000, "resolved": False,
@@ -2209,9 +2843,13 @@ def test_onchain_list_and_market_page_print_the_same_price(client, ledger, monke
 
     page = client.get("/api/onchain/market/7").json()["options"]
     listed = next(m for m in client.get("/api/onchain/markets").json() if m["id"] == 7)
-    expected = [0.11, 99.9]
+    expected = [12.4, 87.7]
     assert [o["price_pct"] for o in page] == expected, page
     assert [o["price_pct"] for o in listed["options"]] == expected, listed
+    # The published figure is already at the face the page paints: a second
+    # decimal would be rounded a second time, by ICU, with a different rule.
+    for row in (*page, *listed["options"]):
+        assert round(row["price_pct"], 1) == row["price_pct"], row
 
 
 # ---------------------------------------------------------------------------
@@ -2703,7 +3341,13 @@ def test_the_solvency_payload_names_the_liabilities_number_once(client, ledger):
     """One figure under two keys is two figures waiting to disagree. The payload
     used to answer both `liabilities_usdc` and `owed_usdc` from the same
     variable; a liabilities number now appears exactly once, measured on a ledger
-    where it cannot coincide with the pending line."""
+    where it cannot coincide with the pending line.
+
+    A `_pct` key is a different unit and is left out of the comparison: 100,0 %
+    of coverage and 100,00 USDC of obligations are two facts that happen to share
+    a numeral, and on the live treasury both are 100 whenever the vault exactly
+    matches the book.
+    """
     ledger.credit(1, 50_000_000, "deposit")
     bid = ledger.create_bet(1, "Пул для сверки?", ["Да", "Нет"])
     ledger.place_bet(bid, 1, 0, 10_000_000)
@@ -2712,7 +3356,8 @@ def test_the_solvency_payload_names_the_liabilities_number_once(client, ledger):
     assert owed > 0, "nothing on the ledger — the gate would pass on an empty payload"
     assert data["pending_deposits_usdc"] != owed
     duplicated = [key for key, value in data.items()
-                  if key != "liabilities_usdc" and isinstance(value, (int, float)) and value == owed]
+                  if key != "liabilities_usdc" and not key.endswith("_pct")
+                  and isinstance(value, (int, float)) and value == owed]
     assert not duplicated, f"the same liabilities figure is also published as {duplicated}"
 
 

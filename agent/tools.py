@@ -24,6 +24,7 @@ import time
 from decimal import Decimal
 from pathlib import Path
 
+from bot import config as runtime_config
 from bot.ledger import async_ledger as ledger
 
 from . import caps, config, pnl
@@ -98,7 +99,14 @@ async def create_market(
     if err:
         return {"error": err}
 
-    close_at = int(time.time() + min(hours, 30 * 24) * 3600)
+    # The same ceiling the create route refuses with, read from the same name: an
+    # agent that silently shortened a deadline would book a market its creator
+    # never agreed to.
+    if not 0 < hours <= runtime_config.MARKET_MAX_DEADLINE_HOURS:
+        return {
+            "error": f"hours must be between 1 and {runtime_config.MARKET_MAX_DEADLINE_HOURS} (got {hours})"
+        }
+    close_at = int(time.time() + hours * 3600)
     tg_id = config.AGENT_TG_ID
 
     try:

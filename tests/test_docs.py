@@ -2159,3 +2159,134 @@ def test_the_mutation_clause_reader_reads_the_shapes_a_prose_list_takes():
     assert one("Nine mutations were proven to fire (a, b, c")[1] == [], (
         "a bracket that never closes is not a list"
     )
+
+
+# ---------------------------------------------------------------------------
+# The byte-level inventory: which tracked sources carry a UTF-8 BOM.
+# ---------------------------------------------------------------------------
+
+_BOM_BYTES = b"\xef\xbb\xbf"
+_BOM_CLAIM = re.compile(r"\b([\w-]+) tracked files carry a UTF-8 BOM\s*\(([^)]*)\)", re.I)
+_SPAN = re.compile(r"`([^`]*)`")
+
+
+def _bom_bearing_tracked_files() -> list[str]:
+    """Every tracked path whose first three bytes are a UTF-8 BOM.
+
+    No editor shows the character, so it arrives by accident and leaves by accident. AGENTS.md
+    lists the files a patch script must read with `utf-8-sig` and put the BOM back into, which
+    makes that list a claim about bytes in this checkout — exactly the kind of number the rest of
+    this file refuses to leave unmeasured.
+    """
+    names = []
+    for name in sorted(_tracked_files()):
+        path = ROOT / PurePosixPath(name)
+        if not path.is_file():
+            continue
+        with path.open("rb") as handle:
+            if handle.read(3) == _BOM_BYTES:
+                names.append(name)
+    assert len(names) >= 8, f"only {len(names)} tracked files carry a BOM — the byte scan is blind"
+    return names
+
+
+def _documented_bom_claims(text: str, tracked: set[str]) -> list[tuple[int, set[str], list[str]]]:
+    """`(count, named paths, spans the reader could not resolve)` for each BOM inventory in a doc.
+
+    The window is the parenthesised list the sentence itself opens, so a law name mentioned
+    beside it is not swallowed into the inventory as a missing file — it is reported instead.
+    """
+    claims = []
+    for match in _BOM_CLAIM.finditer(" ".join(text.split())):
+        stated = _count_word(match.group(1))
+        if stated is None:
+            continue
+        named, unknown = set(), []
+        for span in _SPAN.findall(match.group(2)):
+            if span in tracked:
+                named.add(span)
+            else:
+                unknown.append(span)
+        claims.append((stated, named, unknown))
+    return claims
+
+
+def test_the_documented_bom_inventory_is_the_bom_inventory_of_the_tree():
+    """A patch script trusts this document about which files keep a BOM; the tree is the witness."""
+    tracked = set(_tracked_files())
+    measured = set(_bom_bearing_tracked_files())
+    claims = [
+        (path.relative_to(ROOT).as_posix(), *claim)
+        for path in MARKDOWN
+        for claim in _documented_bom_claims(
+            path.read_text(encoding="utf-8-sig", errors="replace"), tracked
+        )
+    ]
+    assert len(claims) == 1, (
+        f"{len(claims)} documents state a BOM inventory ({[c[0] for c in claims]}) — zero means the "
+        "sentence was reworded out of the shape the reader reads, which is a stale document "
+        "reporting a clean tree, and two means the tree has two answers"
+    )
+    where, stated, named, unknown = claims[0]
+    assert named, f"{where} states a BOM inventory that names no tracked file"
+    assert not unknown, (
+        f"{where} puts {sorted(unknown)} in the inventory and none of them is a tracked path"
+    )
+    assert stated == len(named), f"{where} says {stated} files carry a BOM and then names {len(named)}"
+    assert named == measured, (
+        f"{where} is stale — it names {sorted(named - measured)} that carry no BOM, while "
+        f"{sorted(measured - named)} carry one the document never mentions"
+    )
+
+
+def test_a_bom_bearing_python_source_parses_only_after_the_sig():
+    """Why the inventory is worth a law: the same bytes are a module to one reader and a crash to another."""
+    proven = 0
+    for name in _bom_bearing_tracked_files():
+        if not name.endswith(".py"):
+            continue
+        path = ROOT / PurePosixPath(name)
+        with pytest.raises(SyntaxError):
+            ast.parse(path.read_text(encoding="utf-8"), filename=name)
+        ast.parse(path.read_text(encoding="utf-8-sig"), filename=name)
+        proven += 1
+    assert proven >= 8, f"only {proven} BOM'd modules proved the rule — the .py filter is blind"
+
+
+def test_the_bom_inventory_reader_reads_the_claim_a_document_writes():
+    tracked = {"bot/main.py", "web/static/style.css", "bot/handlers/ai.py"}
+    plain = _documented_bom_claims(
+        "Twelve tracked files carry a UTF-8 BOM (`bot/main.py`, `web/static/style.css`) — read them.",
+        tracked,
+    )
+    assert plain == [(12, {"bot/main.py", "web/static/style.css"}, [])], plain
+
+    wrapped = _documented_bom_claims(
+        "Ten tracked files carry a UTF-8 BOM (`bot/main.py`,\n  `web/static/style.css`) done.",
+        tracked,
+    )
+    assert wrapped == [(10, {"bot/main.py", "web/static/style.css"}, [])], (
+        "a list wrapping across source lines is one list"
+    )
+
+    digits = _documented_bom_claims("3 tracked files carry a UTF-8 BOM (`bot/main.py`)", tracked)
+    assert digits == [(3, {"bot/main.py"}, [])], "a count written as digits is the same claim"
+
+    law_name = _documented_bom_claims(
+        "Twelve tracked files carry a UTF-8 BOM (`bot/main.py`, `tests/test_docs.py::a_law`)",
+        tracked,
+    )
+    assert law_name == [(12, {"bot/main.py"}, ["tests/test_docs.py::a_law"])], (
+        "a span that is not a tracked path is reported, not dropped: a reader that quietly lost "
+        "one would certify an inventory missing a file"
+    )
+
+    assert _documented_bom_claims("Ten files carry a UTF-8 BOM (`bot/main.py`)", tracked) == [], (
+        "the sentence has to state a count of tracked files for the reader to check it"
+    )
+    assert _documented_bom_claims("Several tracked files carry a UTF-8 BOM (`bot/main.py`)", tracked) == [], (
+        "«Several» states no number, so there is nothing to measure against the tree"
+    )
+    assert _documented_bom_claims("Twelve tracked files carry a UTF-8 BOM: `bot/main.py`.", tracked) == [], (
+        "a list the reader cannot bound is not read — which the inventory law reports as zero claims"
+    )

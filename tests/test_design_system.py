@@ -24,8 +24,15 @@ Three deliberate choices:
   declarations at `;` alone hid from every gate (`--safe-b`).
 * **A dead token, an unsubstituted placeholder and a substitution no template
   asks for all fail.** They are the same drift in three costumes.
+* **One number grammar, measured on both sides of the wire.** The bundle's
+  formatters are judged for the precision their kind owes and for being handed a
+  percentage rather than a ratio; the Python producers behind those fields are
+  judged for writing every percentage through `bot/pct.py`, so the face a user
+  reads is decided once — round-half-up at one decimal — and not re-derived in
+  each of the languages that paint it.
 """
 
+import ast
 import json
 import re
 import subprocess
@@ -1302,6 +1309,15 @@ INLINE_PROPERTIES = {"width", "height", "animation-delay"}
 LITERAL_GEOMETRY = re.compile(r"[\d.]+(?:%|ms|px)")
 
 
+def is_clamped(value: str) -> bool:
+    """Generated geometry is bounded, in one of the two honest ways: it goes
+    through the bundle's own bar primitive, or it carries its clamp in the
+    template. A chart column whose label is an amount may floor for legibility;
+    a percentage bar may not, and the law below is what keeps this one from
+    approving that shape again."""
+    return "barWidth(" in value or "Math.max" in value
+
+
 def test_inline_styles_are_only_clamped_geometry():
     """Layout belongs in CSS. An inline style may carry exactly one thing: a
     bar's width/height or an animation delay — and a data-driven one has to be
@@ -1320,7 +1336,7 @@ def test_inline_styles_are_only_clamped_geometry():
                     continue
                 elif prop == "animation-delay" and "Math.min" not in value:
                     offenders.append((name, f"stagger not capped: {value[:60]}"))
-                elif prop in ("width", "height") and "Math.max" not in value:
+                elif prop in ("width", "height") and not is_clamped(value):
                     offenders.append((name, f"bar not clamped: {value[:60]}"))
     assert not offenders, offenders
 
@@ -1349,11 +1365,76 @@ def test_generated_bars_are_clamped_and_their_stagger_capped():
     offenders = []
     for name in (*PAGES, *SCRIPTS):
         for attr in re.findall(r'style="[^"]*"', read(name)):
-            if ("width:${" in attr or "height:${" in attr) and "Math.max" not in attr:
+            if ("width:${" in attr or "height:${" in attr) and not is_clamped(attr):
                 offenders.append(f"{name}: {attr[:80]} — unclamped bar")
             if "animation-delay:${" in attr and "Math.min" not in attr:
                 offenders.append(f"{name}: {attr[:80]} — uncapped stagger")
     assert not offenders, offenders
+
+
+# Every generated bar width in the bundle, and the one primitive that may own it.
+# A percentage bar is the number beside it drawn as geometry: `Math.max(pct, 2)`
+# stood a 2 % fill under a row that printed «0,4 %», on nine bars — six on the
+# site (four in `app.js`, one each in `market.html` and `oc.html`), two in the
+# Mini App, one in the agent dashboard's capacity gauge — and on a two-option
+# market it set a 0 % share beside a 100 % one and asked the eye to compare
+# them. The floor is gone and this law is what keeps it gone: the clamp may
+# bound a bar to 0..100 and may not thicken it.
+INLINE_STYLE = re.compile(r'style="[^"]*"')
+# A generated width inside one inline style. The attribute is taken whole first
+# because a bar usually shares it with a stagger (`width:${…}%;animation-delay:
+# ${…}ms`), and a pattern that had to end at the closing quote read only the
+# bars whose attribute happens to end at the percentage.
+PERCENT_WIDTH = re.compile(r'(?<![-\w])width:\$\{(.{0,90}?)\}%')
+# ...and the same width when a builder concatenates its way through the number
+# instead of interpolating it: `agent.js` closes the quoted piece with `'%"`,
+# so the percentage's own quote is the JS string's opener, not another `'%'`
+# pair. A reader that only understood `${}` counted that file as shipping no
+# bars at all, which is the same hole the class-name parser fell through.
+CONCAT_WIDTH = re.compile(r"width:'\s*\+\s*(.{0,90}?)\s*\+\s*'%")
+
+
+def test_a_percentage_bar_paints_the_percentage_its_row_prints():
+    """No bar in this bundle may take its width from anything but the one
+    clamping primitive, because a floor in a template is invisible in review and
+    is the half of the defect the rendered gate can only catch on a page that
+    happens to hold a small share. The rule holds for the agent dashboard's
+    capacity gauge too, where the row prints «0.00 / 100 USDC» rather than a
+    percentage: a 2 % fill there still claims money the label says is unspent."""
+    sites, offenders = 0, []
+    for name in (*PAGES, *SCRIPTS):
+        for attr in INLINE_STYLE.findall(read(name)):
+            for expr in (*PERCENT_WIDTH.findall(attr), *CONCAT_WIDTH.findall(attr)):
+                sites += 1
+                if not expr.strip().startswith("barWidth("):
+                    offenders.append(f"{name}: {expr.strip()[:70]}")
+    assert sites >= 9, f"only {sites} generated bar widths read out of the bundle"
+    assert not offenders, offenders
+
+
+def test_the_bar_primitive_clamps_and_never_thickens():
+    """`barWidth` is the whole answer for what a bar may be, so the primitive is
+    measured rather than trusted: an added minimum is the floor back again, in
+    one place instead of seven, and it would pass every template law above.
+    The prose is taken out first — this very file names the `Math.max(pct, 2)`
+    the primitive replaced, and a reader that scans comments reports it as the
+    clamp the code finally settled on."""
+    body = js_function(read("chain.js"), "barWidth")
+    assert body, "chain.js defines no barWidth(): the bars have no primitive"
+    code = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+
+    def constants(call: str) -> list[str]:
+        arguments = re.findall(rf"Math\.{call}\(([^)]*)\)", code)
+        assert arguments, f"barWidth never calls Math.{call}(): nothing bounds a bar"
+        return [[part.strip() for part in pair.split(",")] for pair in arguments]
+
+    for parts in constants("max"):
+        floor = [part for part in parts if part.replace(".", "").isdigit()]
+        assert floor == ["0"], f"barWidth floors a bar at {floor} instead of at 0"
+    for parts in constants("min"):
+        ceiling = [part for part in parts if part.replace(".", "").isdigit()]
+        assert ceiling == ["100"], (
+            f"barWidth bounds a bar at {ceiling}, not at the 100 % a track holds")
 
 
 def test_chart_scaling_never_divides_by_a_zero_max():
@@ -1511,12 +1592,14 @@ def test_every_painted_number_states_the_precision_its_mechanism_owes():
             offenders.append(f"{document}:{formatter} is {kind} and declares {digits}, not {want}")
     assert not offenders, offenders
     # Floors, so the law cannot go vacuous by the scan losing every formatter —
-    # measured on this tree as money 8, odds 5, count 3, fee 1, raw 1, clock 3.
-    assert seen.get("money", 0) >= 4, f"the scan read {seen} money formatters"
-    assert seen.get("odds", 0) >= 4, f"the scan read {seen} odds formatters"
+    # measured on this tree as 23 formatters: money 8, odds 6, count 3, clock 4, fee 1, raw 1.
+    assert seen.get("money", 0) >= 6, f"the scan read {seen} money formatters"
+    assert seen.get("odds", 0) >= 5, f"the scan read {seen} odds formatters"
     assert seen.get("count", 0) >= 2, f"the scan read {seen} count formatters"
+    assert seen.get("clock", 0) >= 3, f"the scan read {seen} clock formatters"
+    assert seen.get("raw", 0) == 1, f"a raw on-chain amount is painted by {seen.get('raw', 0)}, seen {seen}"
     assert seen.get("fee", 0) == 1, f"the rate is stated by {seen.get('fee', 0)} formatters, seen {seen}"
-    assert sum(seen.values()) >= 15, f"the scan read {seen}, which is not the tree"
+    assert sum(seen.values()) >= 20, f"the scan read {seen}, which is not the tree"
 
 
 def formatter_spans(text: str) -> list[tuple[int, int]]:
@@ -1548,6 +1631,581 @@ def test_no_number_is_formatted_outside_a_named_formatter():
     assert total >= 20, f"the scan read {total} number calls, which is not this bundle"
 
 
+# ---------------------------------------------------------------------------
+# odds: one rounder, measured in both languages this product ships
+# ---------------------------------------------------------------------------
+
+# `bot/pct.py` is the only place a ratio becomes the printed percentage, and its
+# whole vocabulary is three names. Anything else that multiplies by 100 or formats
+# at a typed precision decides the face by hand — and Python's builtin rounds
+# half-to-even over a binary float while the primitive rounds Decimal half-up at
+# `ODDS_DP`. The two rules disagree on figures this product actually paints, so a
+# hand face is not a cosmetic duplicate: it is a different number on a page a
+# person reads. The bundle is the third language with the same trap — ICU's
+# `toLocaleString` also rounds half-to-even — so the same premise is measured in
+# JS as well, and `ODDS_DP` is tied to the digits the pages paint.
+ODDS_PRIMITIVES = ("share", "as_pct", "from_pct")
+ODDS_WORDS = re.compile(r"pct|percent|probability|chance|odds", re.IGNORECASE)
+FEE_WORDS = re.compile(r"fee", re.IGNORECASE)
+# `:.1f` / `%.1f` — the builtin's rounder, at whatever precision a call site typed.
+FIXED_FLOAT_SPEC = re.compile(r"\.\d+f")
+HAND_RATIO = re.compile(r"\*\s*100\b")
+HAND_QUANTIZERS = re.compile(r"\b(?:int|round)\(")
+# An assignment gets only `round(`: `pct = int(raw)` is what `/sell 12 1 50%`
+# parses out of the argument text, and a parse converts a string, it does not
+# decide the face of a number the ledger already rounded.
+HAND_ROUNDER = re.compile(r"\bround\(")
+# A printf conversion slot, so the digits a format string types can be paired with
+# the argument that fills it. `%%` is not a slot: it is the literal glyph.
+_PRINTF_SPEC = re.compile(r"%[-+ #0]*\d*(?:\.\d+)?[a-zA-Z]")
+RUNTIME_PACKAGES = ("bot", "web", "agent")
+# A `%` after one of these is a CSS unit, not a percentage: the bar fills and the
+# volume chart paint geometry in the same character a chance is stated with.
+CSS_GEOMETRY_PROP = re.compile(
+    r"(?:width|height|min-width|max-width|inline-size|block-size|top|left|right|bottom)\s*(?::|=)[^;\n]{0,90}$"
+)
+ODDS_BAR_CALLS = ("probBars", "optRows")
+ODDS_BAR_CALL_RE = re.compile(r"(?<![\w$.])(?:" + "|".join(ODDS_BAR_CALLS) + r")\(")
+
+
+def tracked_runtime_py() -> list[str]:
+    """Every tracked runtime module — the programs that answer a person.
+
+    A test that names a literal percent is prose about a face, not a face, so the
+    harness is not in the subject set; neither is `deploy/`, which speaks to an
+    operator's terminal about processes and ports.
+    """
+    out = subprocess.run(
+        ["git", "ls-files", *RUNTIME_PACKAGES],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
+    )
+    return sorted(line for line in out.stdout.splitlines() if line.endswith(".py"))
+
+
+def _py_tree(path: str) -> ast.AST:
+    return ast.parse((ROOT / path).read_text(encoding="utf-8-sig"))
+
+
+def _spec_text(node) -> str:
+    """The literal characters of an f-string format spec, without unparse's
+    re-quoting: the `.1f` of `{x:.1f}`."""
+    if node is None:
+        return ""
+    if isinstance(node, ast.Constant):
+        return str(node.value)
+    if isinstance(node, ast.JoinedStr):
+        return "".join(str(p.value) for p in node.values if isinstance(p, ast.Constant))
+    return ast.unparse(node)
+
+
+def _has_percent_glyph(node: ast.JoinedStr) -> bool:
+    return any(
+        isinstance(part, ast.Constant) and isinstance(part.value, str) and "%" in part.value
+        for part in node.values
+    )
+
+
+def _unit_follows(parts: list, index: int) -> bool:
+    """Does the text directly after this interpolation state the percent unit?
+
+    An implicitly concatenated alert is one `JoinedStr` node: `bot/solvency.py`
+    prints the margin as a percent and the reserves as money with `:.2f` in the
+    same node, and a glyph belonging to the margin would otherwise be read as the
+    money's face. The unit is a claim about the figure it follows.
+    """
+    nxt = parts[index + 1] if index + 1 < len(parts) else None
+    return bool(
+        isinstance(nxt, ast.Constant) and isinstance(nxt.value, str) and nxt.value.lstrip().startswith("%")
+    )
+
+
+def _printf_faces(fmt: str, args: list[str]) -> list[str]:
+    """Every hand face a printf format states, slot by slot.
+
+    A conversion slot is paired with the argument that fills it, and the unit is
+    read in the text that follows the slot before the next one — the printf shape
+    of :func:`_unit_follows`, where a literal percent is written `%%`. A format
+    that prints money and odds on one line (`"$%.2f and %s%%"`) therefore claims
+    the percent only for the figure whose slot carries it, and not for the balance
+    that shares the line.
+    """
+    specs = list(_PRINTF_SPEC.finditer(fmt))
+    out: list[str] = []
+    for index, spec in enumerate(specs):
+        stop = specs[index + 1].start() if index + 1 < len(specs) else len(fmt)
+        if "%%" not in fmt[spec.end():stop]:
+            continue
+        arg = args[index] if index < len(args) else " ".join(args)
+        if FIXED_FLOAT_SPEC.search(spec.group(0)) or HAND_RATIO.search(arg) or HAND_QUANTIZERS.search(arg):
+            out.append(f"`{fmt[:34]}` states {arg[:40]} at a face of its own")
+    return out
+
+
+def percent_faces_of(tree: ast.AST) -> list[tuple[int, str, str]]:
+    """(line, kind, why) for every percentage a tree rounds or converts by hand.
+
+    Six shapes, because a product writes a percent six ways: an f-string whose own
+    format spec quantizes, an f-string whose value converts or truncates, a printf
+    format, a logger call with its own face, an odds-named assignment, and an
+    odds-named dictionary field. The kind splits the two laws: `face` is text a
+    person reads, `field` is a published number a page re-paints. In every shape
+    the unit is read beside the figure it states, because the same sentence prints
+    money and odds and only the odds figure owes this grammar.
+    """
+    out: list[tuple[int, str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr) and _has_percent_glyph(node):
+            for index, part in enumerate(node.values):
+                if not isinstance(part, ast.FormattedValue) or not _unit_follows(node.values, index):
+                    continue
+                value = ast.unparse(part.value)
+                spec = _spec_text(part.format_spec)
+                if FIXED_FLOAT_SPEC.search(spec):
+                    out.append((node.lineno, "face", f"a `{spec}` face decides the percentage of {value}"))
+                elif HAND_RATIO.search(value) or HAND_QUANTIZERS.search(value):
+                    out.append((node.lineno, "face", f"a percentage sentence quantizes {value} by hand"))
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod) \
+                and isinstance(node.left, ast.Constant) and isinstance(node.left.value, str):
+            fmt, right = node.left.value, node.right
+            args = [ast.unparse(e) for e in right.elts] if isinstance(right, ast.Tuple) else [ast.unparse(right)]
+            out.extend((node.lineno, "face", why) for why in _printf_faces(fmt, args))
+        elif isinstance(node, ast.Call) and node.args \
+                and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+            out.extend(
+                (node.lineno, "face", why)
+                for why in _printf_faces(node.args[0].value, [ast.unparse(a) for a in node.args[1:]])
+            )
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names = " ".join(ast.unparse(t) for t in targets)
+            if node.value is None or not ODDS_WORDS.search(names):
+                continue
+            value = ast.unparse(node.value)
+            if FEE_WORDS.search(value + names) or any(p in value for p in ODDS_PRIMITIVES):
+                continue
+            if HAND_RATIO.search(value) or HAND_ROUNDER.search(value) or FIXED_FLOAT_SPEC.search(value):
+                out.append((node.lineno, "face", f"{names.strip()} is computed as {value[:56]}, outside bot/pct.py"))
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values, strict=False):
+                if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                    continue
+                if not ODDS_WORDS.search(key.value):
+                    continue
+                text = ast.unparse(value)
+                if FEE_WORDS.search(key.value + text):
+                    continue
+                if HAND_RATIO.search(text) or FIXED_FLOAT_SPEC.search(text) or HAND_QUANTIZERS.search(text):
+                    out.append((node.lineno, "field", f"{key.value!r} is {text[:56]}, not bot/pct.py"))
+    return out
+
+
+def hand_percent_faces(path: str) -> list[tuple[int, str]]:
+    return [(line, why) for line, kind, why in percent_faces_of(_py_tree(path)) if kind == "face"]
+
+
+def hand_quantized_odds_fields(path: str) -> list[tuple[int, str]]:
+    return [(line, why) for line, kind, why in percent_faces_of(_py_tree(path)) if kind == "field"]
+
+
+def odds_field_producers(path: str) -> tuple[int, int]:
+    """(fee-named fields, odds-named fields the primitive or a published `_pct` makes).
+
+    The fee count is the size of the exemption the law above grants, and the
+    producer count is the shape the law exists to keep: a field whose own name
+    states odds and whose value is either a primitive call or another odds-named
+    figure handed through unchanged.
+    """
+    tree = _py_tree(path)
+    fee = primitive = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values, strict=False):
+            if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                continue
+            if not ODDS_WORDS.search(key.value):
+                continue
+            text = ast.unparse(value)
+            if FEE_WORDS.search(key.value + text):
+                fee += 1
+            elif any(p in text for p in ODDS_PRIMITIVES) or ODDS_WORDS.search(text):
+                primitive += 1
+    return fee, primitive
+
+
+def test_no_percentage_face_is_written_outside_the_odds_primitive():
+    """One fact, one rounder: the shipped runtime may not quantize a percentage in
+    an f-string, a log format or an assignment of its own.
+
+    `bot/solvency.py` used to write `f"{delta / owed * 100:.1f}%"` beside a ledger
+    that had already rounded the same margin, and `bot/handlers/agent.py` wrote
+    `{int(confidence * 100)}%` where the bot's own market card wrote `99,9` — the
+    second truncates, so the audit line read a percent lower than the market page
+    for the same decision.
+    """
+    offenders: list[str] = []
+    legal = scanned = 0
+    for path in tracked_runtime_py():
+        if path == "bot/pct.py":
+            continue
+        scanned += 1
+        offenders.extend(f"{path}:{line}: {why}" for line, why in hand_percent_faces(path))
+        legal += primitive_percent_faces(path)
+    assert not offenders, offenders
+    # Floors, so the law cannot go vacuous by the scan quietly losing the tree or
+    # the legal shape losing its visibility: measured here as 86 runtime modules
+    # tracked by git and 11 percentages written through `bot/pct.py`.
+    assert scanned >= 80, f"the scan read {scanned} runtime modules, which is not this tree"
+    assert legal >= 8, f"the scan read {legal} percentages written through bot/pct.py"
+
+
+def primitive_percent_faces(path: str) -> int:
+    """How many percentages this module states *through* the primitive — the
+    non-vacuity side of :func:`hand_percent_faces`."""
+    tree = _py_tree(path)
+    found = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr) and _has_percent_glyph(node):
+            if any(
+                isinstance(part, ast.FormattedValue)
+                and any(p in ast.unparse(part.value) for p in ODDS_PRIMITIVES)
+                for part in node.values
+            ):
+                found += 1
+        elif isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant) \
+                and isinstance(node.args[0].value, str) and "%" in node.args[0].value:
+            rest = " ".join(ast.unparse(a) for a in node.args[1:])
+            if any(p in rest for p in ODDS_PRIMITIVES):
+                found += 1
+    return found
+
+
+def test_an_odds_named_field_is_produced_by_the_primitive_not_by_hand():
+    """A `_pct` field is a percentage, and a page that paints it must not multiply
+    it again — which is only safe if the producer stated the face.
+
+    The fee fields are the other mechanism and are held by another law: a
+    configured rate must be published **exactly**, so quantizing it through the
+    odds primitive would change a published fee. That exemption is granted by the
+    field or its value naming a fee, and the count of exempted fields is pinned
+    below so the exemption cannot quietly become the whole set.
+    """
+    offenders: list[str] = []
+    fee = produced = 0
+    for path in tracked_runtime_py():
+        if path == "bot/pct.py":
+            continue
+        offenders.extend(f"{path}:{line}: {why}" for line, why in hand_quantized_odds_fields(path))
+        more_fee, more_produced = odds_field_producers(path)
+        fee += more_fee
+        produced += more_produced
+    assert not offenders, offenders
+    # Measured here: 2 fee fields published by `/api/info`, 16 odds fields whose
+    # producer either calls the primitive or repeats a `_pct` the origin made.
+    assert fee >= 2, f"the scan read {fee} fee fields, so the exemption is unproven"
+    assert produced >= 12, f"the scan read {produced} odds fields made by the primitive or a published _pct"
+
+
+def test_the_odds_rounder_is_half_up_where_pythons_builtin_is_bankers():
+    """The premise of both laws above, executed rather than asserted.
+
+    Half-up and half-to-even are the same rule until the figure lands on the step —
+    and an LMSR price is a quotient, so it lands there often enough to matter:
+    `0.1235` is `0.123499999999999996` as a float, which the builtin prints as
+    `12,3` while the primitive prints `12,4`. A page and a card that pick different
+    rules disagree about a market's odds in public.
+    """
+    from decimal import Decimal
+
+    from bot.pct import ODDS_DP, as_pct, from_pct
+
+    discriminating = []
+    for raw in ["0.1235", "0.0025", "0.15", "1.25", "0.075", "0.5555", "0.1234"]:
+        ratio = float(raw)
+        primitive, builtin = as_pct(ratio), round(ratio * 100, ODDS_DP)
+        assert primitive == float(f"{primitive:.{ODDS_DP}f}"), (raw, primitive)
+        assert builtin == float(f"{builtin:.{ODDS_DP}f}"), (raw, builtin)
+        if primitive != builtin:
+            discriminating.append((raw, builtin, primitive))
+    assert len(discriminating) >= 3, (
+        f"the two rules disagreed only on {discriminating}; the fixtures no longer measure the difference"
+    )
+    assert as_pct(Decimal("0.1235")) == 12.4, "the shipped price face is 12,4, not 12,3"
+    assert from_pct(12.4) == 12.4, "a percent the origin already published must survive being repeated"
+
+
+def odds_primitive_dp() -> int:
+    """`ODDS_DP`, read off the assignment in `bot/pct.py` rather than retyped."""
+    for node in ast.walk(_py_tree("bot/pct.py")):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "ODDS_DP":
+                    return int(ast.unparse(node.value))
+    raise AssertionError("bot/pct.py declares no ODDS_DP for the law to read")
+
+
+def test_the_bundle_paints_the_precision_the_primitive_declares():
+    """Two languages, one number of digits.
+
+    `ODDS_DP` is why `bot/pct.py` quantizes to one decimal; `toLocaleString` is why
+    the page paints one. Until the two were tied by name, the server could publish
+    `12,35` and the card paint `12,4` — ICU rounds half-to-even, the same rule the
+    hand faces above were refused for, so the browser had become the rounder nobody
+    reviewed.
+    """
+    declared = odds_primitive_dp()
+    painted = [
+        (document, formatter, digits.get("maximumFractionDigits", ""))
+        for document in (*PAGES, *SCRIPTS)
+        for formatter, digits in js_number_formatters(document)
+        if mechanism_of(formatter) == ["odds"]
+    ]
+    assert painted, "the scan read no odds formatter in the bundle"
+    wrong = [
+        f"{document}:{formatter} paints {digits} digits, the primitive declares {declared}"
+        for document, formatter, digits in painted
+        if digits != str(declared)
+    ]
+    assert not wrong, wrong
+
+
+def _strip_js_comments(text: str) -> str:
+    """Blank every comment, keeping the line numbering.
+
+    This bundle ships a comment that quotes the defective face it replaced
+    (`agent.js`: `Math.round(e.confidence * 100) + '%'`), and a reader that reads a
+    comment as code reports a fix as an offender.
+    """
+    text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n") + " ", text, flags=re.S)
+    return re.sub(r"(?<!:)//[^\n]*", lambda m: " " * len(m.group(0)), text)
+
+
+def _statement_window(text: str, start: int) -> str:
+    """The characters from `start` to the end of its statement or line, whichever
+    comes first — the scope a unit glyph is claimed inside."""
+    ends = [len(text)] + [
+        at + 1 for at in (text.find(";", start), text.find("\n", start)) if at != -1
+    ]
+    return text[start:min(ends)]
+
+
+def _call_args(text: str, open_paren: int) -> str:
+    depth = 0
+    for i in range(open_paren, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return text[open_paren + 1:i]
+    return text[open_paren + 1:]
+
+
+def bundle_percent_arithmetic(text: str) -> tuple[list[tuple[int, str]], int, int]:
+    """(offenders, CSS-geometry sites, `* 100` sites) for one shipped document.
+
+    A `%` written after `* 100` in JS is a percentage decided at the paint site, in
+    a third language, by ICU's rounder. The exclusion is geometry — `width:…%` and
+    `height:…%` are CSS units and this bundle ships several of them — so the
+    excluded sites are counted and returned rather than dropped: a reader that
+    stopped finding them has gone blind, which is a different fact from the tree
+    having gone clean.
+    """
+    code = _strip_js_comments(text)
+    offenders: list[tuple[int, str]] = []
+    geometry = conversions = 0
+    for match in HAND_RATIO.finditer(code):
+        conversions += 1
+        at = match.start()
+        before = code[max(0, at - 120):at]
+        if CSS_GEOMETRY_PROP.search(before):
+            geometry += 1
+            continue
+        statement = _statement_window(code, at)
+        if "%" in statement:
+            offenders.append((code[:at].count("\n") + 1, (before[-52:] + "⟂" + statement[:52]).strip()))
+    return offenders, geometry, conversions
+
+
+def odds_formatter_names(document: str) -> set[str]:
+    """Names of the document's own formatters whose mechanism is odds."""
+    return {name for name, _digits in js_number_formatters(document) if mechanism_of(name) == ["odds"]}
+
+
+def odds_paint_sites(text: str, names: set[str]) -> list[tuple[int, str, str]]:
+    """(line, formatter, first argument) for every call of an odds formatter.
+
+    The formatter's own signature is skipped: `function fmtPct(x)` is a definition,
+    and the parameter is not a number anybody published.
+    """
+    out: list[tuple[int, str, str]] = []
+    for match in re.finditer(r"(?<![\w.$])([A-Za-z_$][\w$]*)\(", text):
+        if match.group(1) not in names:
+            continue
+        head = text[max(0, match.start() - 40):match.start()]
+        if re.search(r"(?:function|const|let|var)\s*$", head) or re.search(r"=\s*$", head):
+            continue
+        first = _call_args(text, match.end() - 1).split(",")[0].strip()
+        out.append((text[:match.start()].count("\n") + 1, match.group(1), first))
+    return out
+
+
+def states_a_percentage(keys: list[str]) -> bool:
+    """Does one of these field names say the number under it is a percent?"""
+    return any(ODDS_WORDS.search(key) for key in keys)
+
+
+def percent_bars_calls(text: str) -> list[tuple[int, list[str]]]:
+    """(line, quoted arguments) for every painter called with the *name* of the
+    field it paints as a percentage.
+
+    `probBars(opts, 'price_pct', winnerOf(mk))` reaches the figure through a
+    parameter, so the promise that the field holds a percentage is written as a
+    string and has to be read as one.
+    """
+    out: list[tuple[int, list[str]]] = []
+    for match in ODDS_BAR_CALL_RE.finditer(text):
+        keys = [a.strip() for a in _call_args(text, match.end() - 1).split(",")]
+        quoted = [k.strip("'\"") for k in keys if k[:1] in ("'", '"')]
+        if quoted:
+            out.append((text[:match.start()].count("\n") + 1, quoted))
+    return out
+
+
+def test_an_odds_formatter_is_handed_a_percent_not_a_ratio():
+    """A formatter paints a percentage, so the expression beside it has to say it
+    is one.
+
+    `fmtPct(e.confidence)` was this law's first real finding, and it is a bug the
+    rounder laws cannot see: the audit trail stores the model's confidence as a
+    ratio, so the dashboard painted `1,0%` for a 99 % decision. `fmtPct(covered *
+    100)` was the second — the ring's fraction converted at the paint site, where no
+    field name carries the unit and `/api/solvency` already answers `held` and
+    `owed`. Both now take a `_pct` the origin publishes, and the origin states that
+    figure through `bot/pct.py` rather than dividing in the route.
+    """
+    offenders: list[str] = []
+    checked = bars = 0
+    key_offenders: list[str] = []
+    for document in (*PAGES, *SCRIPTS):
+        code = _strip_js_comments(read(document))
+        names = odds_formatter_names(document)
+        if names:
+            for line, formatter, first in odds_paint_sites(code, names):
+                checked += 1
+                if not first or not ODDS_WORDS.search(first):
+                    offenders.append(f"{document}:{line} hands {formatter}() {first[:44]!r}")
+        for line, keys in percent_bars_calls(code):
+            bars += 1
+            if not states_a_percentage(keys):
+                key_offenders.append(f"{document}:{line} reaches the bars through {keys}")
+    assert not offenders, offenders
+    assert not key_offenders, key_offenders
+    # Floors: measured on this tree as 16 paint sites and 6 bar calls.
+    assert checked >= 14, f"the scan read {checked} odds paint sites, which is not this bundle"
+    assert bars >= 6, f"the scan read {bars} percentage-keyed bar calls, which is not this bundle"
+
+
+def test_no_percent_sign_in_the_bundle_is_built_by_hand_arithmetic():
+    """No shipped page converts a ratio to a percentage in its own script."""
+    offenders: list[str] = []
+    geometry = conversions = 0
+    for document in (*PAGES, *SCRIPTS):
+        bad, css, total = bundle_percent_arithmetic(read(document))
+        offenders.extend(f"{document}:{line}: {why}" for line, why in bad)
+        geometry += css
+        conversions += total
+    assert not offenders, offenders
+    # Floors: measured on this tree as four `* 100` sites — the ring's and the
+    # cap bar's ratio conversions, the scroll progress, and the money-share
+    # summary — one of which paints a CSS height.
+    assert conversions >= 4, f"the scan read {conversions} `* 100` sites, which is not this bundle"
+    assert geometry >= 1, f"the scan excluded {geometry} CSS-geometry sites; the reader no longer sees them"
+
+
+def test_the_percent_face_reader_refuses_the_shapes_it_exists_for():
+    """The Python reader on sources that are not the shipped tree: every shape it
+    claims to know, and the shapes it must not invent."""
+    known = {
+        'SPEC = f"{ratio:.1f}%"': "an f-string format spec",
+        'TXT = f"{int(ratio * 100)}%"': "a truncating percent",
+        'MIX = f"{a / b * 100}%"': "a hand ratio inside a percent sentence",
+        'log.info("odds %.1f%%", ratio * 100)': "a logger with its own face",
+        'MOD = "%.1f%%" % (ratio * 100)': "the %-operator with its own face",
+        'MOD = "%s%%" % (ratio * 100)': "the %-operator converting in the argument",
+        'chance_pct = (peak - now) / peak * 100': "an odds-named hand assignment",
+        'OUT = {"price_pct": round(ratio, 2)}': "an odds-named field quantized by hand",
+    }
+    innocent = {
+        'OK = f"{as_pct(ratio)}%"': "the primitive, written into text",
+        'REPEAT = f"{from_pct(field_pct)}%"': "an already-rounded percent repeated",
+        'PART = f"{share(part, whole)}%"': "the share primitive",
+        'GUESS = f"{as_pct(ratio)} chance"': "no unit glyph, so no claim",
+        'PLAIN = "%.1f" % ratio': "a decimal that states no unit",
+        'LINE = "%s%% and $%.2f" % (as_pct(ratio), owed / _MICRO)': "the unit beside the odds slot only",
+        'PCT = int(raw)': "a percent typed by a person, parsed not rounded",
+        'FEE = {"withdraw_fee_pct": float(config.WITHDRAW_FEE_PCT)}': "a fee published exactly",
+        'NOTHING = 1': "no percent anywhere",
+    }
+    for source, why in known.items():
+        assert percent_faces_of(ast.parse(source)), f"{why} ({source}) was not reported"
+    for source, why in innocent.items():
+        found = percent_faces_of(ast.parse(source))
+        assert not found, f"{why} ({source}) was read as a hand face: {found}"
+    prose = ast.parse('def f():\n    """Prefer `f"{ratio:.1f}%"` to `int(ratio * 100)`."""\n    return 1')
+    assert not percent_faces_of(prose), "a docstring quoting a defective face was read as one"
+    # An alert is one node across several lines: the money lines keep `:.2f` and the
+    # margin carries the unit. The face is read beside the figure it states, so the
+    # money must stay invisible and the hand-rounded margin must not.
+    alert = ast.parse(
+        'ALERT = (\n'
+        '    f"margin {as_pct(delta / owed)}%\\n"\n'
+        '    f"Reserves: ${reserves_micro / _MICRO:.2f}\\n"\n'
+        ')'
+    )
+    assert not percent_faces_of(alert), f"a money line in an alert that also states a margin: {percent_faces_of(alert)}"
+    hand_alert = ast.parse(
+        'ALERT = (\n'
+        '    f"margin {delta / owed * 100:.1f}%\\n"\n'
+        '    f"Reserves: ${reserves_micro / _MICRO:.2f}\\n"\n'
+        ')'
+    )
+    assert len(percent_faces_of(hand_alert)) == 1, percent_faces_of(hand_alert)
+    assert len(known) >= 8 and len(innocent) >= 9, "this reader test stopped covering the shapes"
+
+
+def test_the_bundle_percent_reader_refuses_the_shapes_it_exists_for():
+    """The JS readers on markup that is not the shipped bundle, including the decoys
+    this tree actually ships."""
+    code = _strip_js_comments(
+        "// var leak = fmtPct(e.confidence); Math.round(ratio * 100) + '%'\n"
+        "var ok = fmtPct(o.price_pct);\n"
+        "var url = 'https://example.org/market/0/1';\n"
+    )
+    assert "leak" not in code, "the comment stripper left a quoted face visible"
+    assert "example.org/market/0/1" in code, "the comment stripper ate a URL inside a string"
+
+    bad, css, total = bundle_percent_arithmetic(
+        'var a = "<span>" + Math.round(ratio * 100) + "%</span>";\n'
+        'el.style.width = (used / total * 100) + "%";\n'
+        'var bar = `<i style="height:${Math.max(vol / max * 100, 2)}%"></i>`;\n'
+        "var ms = ts * 1000;\n"
+    )
+    assert [line for line, _why in bad] == [1], bad
+    assert (css, total) == (2, 3), (css, total)
+
+    sites = odds_paint_sites(
+        "function fmtPct(x) { return x; }\nfmtPct(o.price_pct);\nfmtPct(covered * 100);\n", {"fmtPct"}
+    )
+    assert [arg for _line, _name, arg in sites] == ["o.price_pct", "covered * 100"], sites
+
+    calls = percent_bars_calls("probBars(opts, 'price_pct', 'label');\noptRows(o, 'volume_usdc', 'x');")
+    assert calls == [(1, ["price_pct", "label"]), (2, ["volume_usdc", "x"])], calls
+    assert [keys for _line, keys in calls if not states_a_percentage(keys)] == [["volume_usdc", "x"]], calls
+    assert not states_a_percentage([]), "a call with no key at all was read as a percentage"
+
+
+
 def test_the_chart_has_both_an_empty_and_a_failed_state():
     """No data and a failed request are two different answers, and both are part
     of the design: a bare <div> in either branch renders as a blank rectangle
@@ -1576,6 +2234,146 @@ def test_a_progress_bar_declares_its_role():
                 continue
             offenders.append((name, tag[:90]))
     assert not offenders, offenders
+
+
+# ---------------------------------------------------------------------------
+# the winner of a market
+# ---------------------------------------------------------------------------
+
+WINNER_TEXT_PROPS = frozenset({
+    "color", "font-weight", "font-size", "font-family", "font-variant-numeric",
+    "letter-spacing", "text-transform", "margin-left", "content",
+})
+BAR_FILLS = frozenset({"bar-fill", "prob-bar-fill", "detail-opt-bar-fill", "chart-bar"})
+
+
+def is_winner_token(token: str) -> bool:
+    """`win`, `-win`, `-winner` — and not the JS identifier `isWinner`.
+
+    `selected` and `active` name what the user is pointing at, which is a choice
+    and is allowed to paint a fill; these three name what the market resolved.
+    """
+    return token == "win" or token.endswith("-win") or token.endswith("-winner")
+
+
+def class_tokens(text: str) -> list[str]:
+    return re.findall(r"[A-Za-z0-9_-]+", text)
+
+
+def winner_tokens_in(text: str) -> list[str]:
+    return [token for token in class_tokens(text) if is_winner_token(token)]
+
+
+def bar_tokens_in(text: str) -> list[str]:
+    return [token for token in class_tokens(text) if token in BAR_FILLS]
+
+
+def winner_rules(css: str) -> list[tuple[str, dict[str, str]]]:
+    """(winner class, declarations) for every rule that paints the resolved option."""
+    out: list[tuple[str, dict[str, str]]] = []
+    for selector, body in rule_selector_and_body(css):
+        for token in winner_tokens_in(selector):
+            out.append((token, dict(re.findall(r"([a-z-]+)\s*:\s*([^;{}]+)", body))))
+    return out
+
+
+def class_attribute_values(text: str) -> list[tuple[int, str]]:
+    """(offset, value) for every `class="…"` attribute, template ternaries and all.
+
+    A JS template keeps double quotes inside `${…}`, so the first quote after the
+    opening one is not the end of the attribute; reading it as the end is how the
+    winner class named in a ternary vanished from the scan.
+    """
+    out: list[tuple[int, str]] = []
+    for match in re.finditer(r'class="', text):
+        i = value_start = match.end()
+        depth = 0
+        while i < len(text):
+            if text.startswith("${", i):
+                depth += 1
+                i += 2
+                continue
+            ch = text[i]
+            if depth == 0 and ch == '"':
+                break
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+            i += 1
+        out.append((match.start(), text[value_start:i]))
+    return out
+
+
+def bars_marked_as_won(text: str) -> list[tuple[int, str]]:
+    """Every emitted class list that hands a probability bar the winner marker."""
+    out: list[tuple[int, str]] = []
+    for offset, value in class_attribute_values(text):
+        if bar_tokens_in(value) and winner_tokens_in(value):
+            out.append((text[:offset].count(chr(10)) + 1, value))
+    return out
+
+
+def test_the_winner_is_painted_in_the_label_and_never_on_the_bar():
+    """One fact, one face: the resolved option is named in its label.
+
+    `style.css` also carried a winner rule for the bar — two declarations that
+    repeated exactly what `.bar-fill` already painted, brand blue at full opacity.
+    The rule said nothing, five templates kept adding the class it named, and
+    nothing in the tree could tell a reviewer whether the bar was a quantity or a
+    state. The bar is a quantity: the fill is the brand token on every option, and
+    winning is painted in the word beside it.
+    """
+    offenders: list[str] = []
+    rules = marked = 0
+    for document in (*PAGES, *SCRIPTS, *STYLESHEETS):
+        text = read(document)
+        if document.endswith((".html", ".css")):
+            for token, props in winner_rules(text):
+                rules += 1
+                painted = sorted(set(props) - WINNER_TEXT_PROPS)
+                if painted:
+                    offenders.append(f"{document}:.{token} paints the winner with {painted}")
+        for line, value in bars_marked_as_won(text):
+            marked += 1
+            offenders.append(f"{document}:{line} hands the bar the winner marker {value!r}")
+    assert not offenders, offenders
+    # Floors: measured on this tree as 4 winner rules and 0 marked bars.
+    assert rules >= 4, f"the scan read {rules} winner rules, which is not this tree"
+    assert marked == 0, f"{marked} bars carry the winner marker"
+
+
+def test_the_winner_reader_refuses_a_state_colour_on_the_bar():
+    """The readers on markup that is not the shipped bundle.
+
+    The bar half has an empty shipped subject set, so a reader that quietly found
+    no class lists would report a clean tree forever; the selector half is held to
+    the state classes that are **not** winners, because `selected` is allowed to
+    paint a fill.
+    """
+    guilty = '.prob-bar-fill.win{background:var(--success);color:var(--text)}\n'
+    innocent = (
+        ".detail-opt.selected{border-color:var(--accent);background:var(--blue-soft)}\n"
+        ".tag-open{background:var(--blue-soft);color:var(--text)}\n"
+    )
+    found = winner_rules(guilty + innocent)
+    assert [token for token, _props in found] == ["win"], found
+    assert sorted(found[0][1]) == ["background", "color"], found[0][1]
+    assert winner_rules(innocent) == [], winner_rules(innocent)
+    assert is_winner_token("isWinner") is False, "a JS identifier is not a class"
+
+    marked = bars_marked_as_won(
+        '<div class="prob-bar-fill win" style="width:40%"></div>\n'
+        '<div class="bar-fill" style="width:40%"></div>\n'
+        '<div class="detail-opt selected"></div>\n'
+    )
+    assert [line for line, _value in marked] == [1], marked
+
+    shipped_shape = bars_marked_as_won(
+        '<div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true"></div>'
+    )
+    assert len(shipped_shape) == 1, shipped_shape
+    assert bar_tokens_in("bar-fill") and not bar_tokens_in("prob-bar-label"), bar_tokens_in("bar-fill")
 
 
 # ---------------------------------------------------------------------------
@@ -2279,6 +3077,136 @@ def test_every_page_owns_its_heading_outline():
             if after - before > 1
         ]
         assert not jumps, f"{name}: skipped heading levels {jumps}"
+
+
+HEADING_BURN_RE = re.compile(
+    r"""(?:\$\(\s*|getElementById\(\s*|querySelector\(\s*)['"]#?([\w-]+)['"]\s*\)"""
+    r"""\s*\.\s*(?:innerHTML|outerHTML|textContent|innerText)\s*=(?!=)"""
+)
+
+
+def element_subtrees(html: str) -> dict[str, str]:
+    """The inner markup of every identified element, `id` → its contents.
+
+    The walk keeps the offset where each open tag ended, so the matching close can
+    slice the subtree instead of guessing its length: a container's contents are
+    exactly what a script replacing it destroys. Script, style and svg bodies are
+    cut first — a template literal is not markup the browser parsed — and a void
+    or self-closed tag owns an empty subtree."""
+    markup = re.sub(r"<(script|style|svg)\b.*?</\1>", "", html, flags=re.S)
+    subtrees: dict[str, str] = {}
+    stack: list[tuple[str, str, int]] = []
+    for match in TAG_RE.finditer(markup):
+        closing, tag, attrs = match.groups()
+        name = tag.lower()
+        if closing:
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i][0] == name:
+                    _, identifier, start = stack.pop(i)
+                    del stack[i:]
+                    if identifier:
+                        subtrees.setdefault(identifier, markup[start:match.start()])
+                    break
+            continue
+        identifier = attribute(attrs, ID_ATTR_RE)
+        start = match.end()
+        if name in VOID_TAGS or attrs.rstrip().endswith("/"):
+            if identifier:
+                subtrees.setdefault(identifier, "")
+            continue
+        stack.append((name, identifier, start))
+    return subtrees
+
+
+def test_no_script_repaints_the_container_that_carries_the_heading():
+    """An empty state is a payload, not a page.
+
+    The branch that paints its note into the article which also holds the `<h1>`
+    deletes the heading, the controls under it and the outline every screen reader
+    walks — and the rendered gate cannot see it, because the read that *succeeds*
+    is the page it opens. So no id whose own static subtree carries a heading may
+    be handed a content assignment by a script.
+
+    Both sides are measured from the bundle: the containers by walking each
+    document's tags, the writers by reading the ids `page_code()` names on the way
+    to an `innerHTML`/`textContent` assignment. `+=` is not one of them — appending
+    into a container removes no heading — and neither is a class the code reaches
+    through a selector, which paints but does not replace."""
+    containers = 0
+    writers = 0
+    offenders = []
+    for name in PAGES:
+        html = read(name)
+        headed = {
+            identifier
+            for identifier, inner in element_subtrees(html).items()
+            if re.search(r"<h1[\s>]", inner, re.I)
+        }
+        containers += len(headed)
+        painted = set(HEADING_BURN_RE.findall(page_code(name)))
+        writers += len(painted)
+        offenders += [f"{name}: #{identifier}" for identifier in sorted(headed & painted)]
+    assert containers >= 4, f"only {containers} heading-carrying containers found — the walk is blind"
+    assert writers >= 100, f"only {writers} content writes found — the reader is blind"
+    assert not offenders, f"these replace a subtree that holds the document's h1: {offenders}"
+
+
+def test_the_heading_burn_reader_reads_a_subtree_the_way_markup_nests():
+    """The reader that lets the defect through is the one that reports a clean tree.
+
+    So the shapes the shipped pages take are held here: a heading nested two
+    levels deep, a heading that is a sibling of the written container, the written
+    heading itself (painting a title is not burning it), a void element inside the
+    subtree, and the two other ways this bundle names an element."""
+    markup = (
+        '<article id="wrap"><span class="e">x</span><section><h1 id="title">T</h1></section></article>'
+        '<div id="rows"><p>a</p></div><h1>outside</h1>'
+        '<div id="voids"><img src="/x.png" alt=""><br><p>after</p></div>'
+    )
+    subtrees = element_subtrees(markup)
+    assert "wrap" in subtrees and "<h1" in subtrees["wrap"]
+    assert "title" in subtrees and "<h1" not in subtrees["title"]
+    assert "rows" in subtrees and "<h1" not in subtrees["rows"]
+    assert "voids" in subtrees and "<h1" not in subtrees["voids"]
+
+    code = (
+        '$("wrap").innerHTML = note;'
+        "document.getElementById('rows').textContent = 'x';"
+        'document.querySelector("#voids").innerText = "y";'
+        '$("title").textContent = name;'
+        '$("wrap").innerHTML += more;'
+        "$('wrap').classList.add('open');"
+    )
+    assert HEADING_BURN_RE.findall(code) == ["wrap", "rows", "voids", "title"]
+
+
+def test_the_empty_page_reader_reads_the_paths_a_route_can_take():
+    """`id_bearing_page_routes` decides which empty states a browser is ever shown.
+
+    The origin writes its holes more than one way, and a reader that recognised
+    only the bare name would hand the rendered gate a shorter list while its own
+    count still looked plausible. So the shapes are held here: a subscript, a
+    dotted attribute and a plain name all state a parameter; a literal path, a
+    path read off the request and a document that is not a literal state none.
+    The floor is tested as a floor, because a reader that quietly returned
+    nothing is the failure this whole family exists to refuse."""
+    from test_production_design import id_bearing_page_routes
+
+    source = """
+_static_page('a.html', request, path=f'/a/{row["id"]}')
+_static_page('b.html', request, path=f'/b/{bet_id}')
+_static_page('f.html', request, path=f'/f/{market.id}')
+_static_page('c.html', request, path='/c')
+_static_page('not_found.html', request, path=request.url.path)
+_static_page(PAGE, request, path=f'/d/{tg_id}')
+"""
+    assert id_bearing_page_routes(source) == [
+        ("a.html", '/a/{row["id"]}'),
+        ("b.html", "/b/{bet_id}"),
+        ("f.html", "/f/{market.id}"),
+    ]
+    with pytest.raises(AssertionError, match="the scan is blind"):
+        id_bearing_page_routes("_static_page('x.html', request, path=f'/x/{tg_id}')")
 
 
 def test_every_sprite_symbol_is_drawn_by_something():
@@ -3434,6 +4362,237 @@ def test_no_surface_asks_the_contract_flags_whether_a_market_is_tradable():
         if NEGATED_FLAG_PAIR.search(line)
     ]
     assert not offenders, offenders
+
+
+# ---------------------------------------------------------------------------
+# the Mini App's own market surfaces
+# ---------------------------------------------------------------------------
+# The laws above are keyed to `marketState(`, and the Mini App lists answered it
+# by publishing no state at all: `/api/mini/state` gave a card a question, a
+# close_at and the pools, and every other field the derivation reads stayed in
+# the ledger. So the card could not say what it was, a pool whose deadline had
+# passed was painted exactly like one still taking money, and the detail sheet
+# offered its buy panel to both. A law that only reads the derivation cannot see
+# a surface that never calls it — these three read the renderers themselves.
+
+CARD_MARKUP = re.compile(r'class="market-card')
+SHEET_OPEN = re.compile(r"\bshowDetail\(")
+BUY_OFFER = re.compile(r'data-act="buy"|ocTradeHint\(|\bbuyPanel\(')
+CONTRACT_FLAG_READ = re.compile(r"\.\s*(resolved|cancelled|expired|disputed)\b")
+
+
+def mini_app_market_painters() -> dict[str, str]:
+    """Every Mini App function that puts a market on the screen.
+
+    The set is the markup each function emits, not a list of names: a card row, a
+    detail sheet and a third market family that nobody has invented yet all join
+    by building one of the two, and a renamed `renderMarkets` leaves immediately."""
+    functions = js_functions(APP_HTML)
+    found = {name: body for name, body in functions.items()
+             if CARD_MARKUP.search(body) or SHEET_OPEN.search(body)}
+    assert len(found) >= 5, (
+        f"only {len(found)} market painters read out of app.html "
+        f"({sorted(found)}): the reader has gone blind, not the app")
+    return found
+
+
+def test_every_mini_app_market_surface_paints_its_state_and_its_clock():
+    """A market card that names no state is a card that says «open» forever, and
+    a deadline the card never mentions is the one fact that decides whether the
+    pool still takes money."""
+    offenders = []
+    for name, body in mini_app_market_painters().items():
+        if "statusTag(" not in body:
+            offenders.append(f"{name}: paints a market with no state badge")
+        if "deadlineSpan(" not in body and "deadlineBlock(" not in body:
+            offenders.append(f"{name}: paints a market with no deadline")
+    assert not offenders, offenders
+
+
+def test_the_mini_app_offers_a_buy_only_for_a_market_that_still_takes_one():
+    """`/api/mini/trade` and `/oc_buy` both refuse a pool past `close_at`, so a
+    sheet that paints the panel for one is a promise the origin breaks."""
+    offenders = [
+        f"{name}: offers a buy without asking «tradable()»"
+        for name, body in mini_app_market_painters().items()
+        if BUY_OFFER.search(body) and "tradable(" not in body
+    ]
+    assert not offenders, offenders
+
+
+def test_the_mini_app_asks_the_derivation_what_state_a_market_is_in():
+    """The contract flags say what was decided, not whether the market is still
+    live: `resolved` and `cancelled` answered from the row are how a pool whose
+    deadline passed kept offering a buy. The fields belong to `marketState`, and
+    the premise is measured on the derivation so an app.html that simply deleted
+    every field read cannot pass by having nothing to check."""
+    offenders = [
+        f"{name}: {line.strip()}"
+        for name, body in js_functions(APP_HTML).items()
+        for line in body.splitlines()
+        if CONTRACT_FLAG_READ.search(line)
+    ]
+    assert not offenders, offenders
+    derivation = js_function(read("chain.js"), "marketState")
+    assert CONTRACT_FLAG_READ.search(derivation or ""), (
+        "chain.js no longer reads the flags itself: this law has lost the file "
+        "it exists to point at")
+
+
+# ---------------------------------------------------------------------------
+# the deadline line
+# ---------------------------------------------------------------------------
+# The laws above read `marketState()` and the renderers that call it. The Mini App
+# has its own deadline helpers, written when its cards began to paint a state at
+# all: they take their words from the inline dictionary and their claim about the
+# money from whichever renderer called them, so no law above can see them.
+
+ONCHAIN_MARKERS = ("ERC-1155", "oc_redeem_hint", "ocTradeHint")
+DEADLINE_CALL = re.compile(r"(?<![\w$.])deadline(?:Span|Block)\(")
+DICTIONARY_CALL = re.compile(r"""^t\(\s*['"]([a-z0-9_]+)['"]\s*\)$""")
+
+
+def top_level_parts(arguments: str) -> list[str]:
+    """A JS argument list split at its commas, outside every quote and bracket.
+
+    A note arrives as `t('key')`, so a splitter blind to nesting would cut inside
+    the call today and inside its placeholder object the day one is added, and
+    report the note as a market argument."""
+    parts: list[str] = []
+    depth, quote, current = 0, "", []
+    for char in arguments:
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = ""
+            continue
+        if char in "\"'`":
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    parts.append("".join(current).strip())
+    assert depth == 0 and not quote, f"unbalanced argument list: {arguments!r}"
+    return parts
+
+
+def dictionary_value(language: str, key: str) -> str:
+    match = re.search(rf"\b{key}: \"([^\"]*)\"", mini_dict_line(language))
+    assert match, f"{key} is missing from the {language} dictionary"
+    return match.group(1)
+
+
+def deadline_lines(body: str) -> list[tuple[str, str | None]]:
+    """`(arguments, note key)` for every clock one renderer paints."""
+    found = []
+    for match in DEADLINE_CALL.finditer(body):
+        arguments = _call_args(body, match.end() - 1)
+        parts = top_level_parts(arguments)
+        assert 1 <= len(parts) <= 2, f"a deadline line takes a market and at most one note: {arguments!r}"
+        if len(parts) == 1:
+            found.append((arguments, None))
+            continue
+        note = DICTIONARY_CALL.match(parts[1])
+        assert note, f"the note a deadline line passes is not a dictionary call: {parts[1]!r}"
+        found.append((arguments, note.group(1)))
+    return found
+
+
+def test_a_deadline_line_speaks_only_while_the_clock_runs():
+    """A stopped clock is a state, not a time.
+
+    The Mini App painted «Завершение: 14 нояб., 09:00» beside a pool whose deadline
+    had passed a week ago and beside one somebody had already resolved — the same
+    absolute moment it paints on a live market, labelled as though it were still
+    counting down, while every site surface answers that state with the sentence
+    about the stakes. The helper now asks `marketState` and admits one state.
+
+    What replaces the clock is a claim about custody, not about the deadline: a
+    ledger pool hands its stakes back through the bot, an ERC-1155 position is
+    settled by the contract. So the sentence is passed in by the renderer that knows
+    which of the two it painted — a card promising a refund out of money the bot
+    does not hold is a worse defect than the silence it replaces. A market family
+    carrying none of the on-chain markers is read as ledger money and asked for the
+    note, which is the loud half of this law.
+    """
+    derivation = js_function(APP_HTML, "deadlineText")
+    assert derivation, "the Mini App no longer derives its deadline line in one place"
+    assert '"open"' in derivation, f"the clock no longer asks the state: {derivation}"
+    assert "awaiting" not in derivation, f"the clock still speaks for a stopped deadline: {derivation}"
+
+    offenders, painted, noted, unnoted = [], [], 0, 0
+    for name, body in sorted(mini_app_market_painters().items()):
+        for arguments, key in deadline_lines(body):
+            painted.append(name)
+            onchain = any(marker in body for marker in ONCHAIN_MARKERS)
+            if key is None:
+                unnoted += 1
+                if not onchain:
+                    offenders.append(f"{name}() paints a ledger market with no note ({arguments})")
+                continue
+            noted += 1
+            if onchain:
+                offenders.append(f"{name}() promises {key!r} for a market the contract settles")
+            for language in ("ru", "en", "zh"):
+                if not dictionary_value(language, key).strip():
+                    offenders.append(f"{key} is empty in {language}")
+    assert not offenders, offenders
+    # Floors, so the law cannot go vacuous by the scan losing every call site —
+    # measured on this tree as 6 deadline lines: 4 ledger renderers pass the note
+    # (two cards, two details) and 2 on-chain surfaces pass none.
+    assert len(painted) >= 6, sorted(painted)
+    assert noted >= 4 and unnoted >= 2, (noted, unnoted)
+
+
+def test_the_mini_app_promises_the_refund_the_site_promises():
+    """One product, one sentence about stakes that came back.
+
+    `chain.js` publishes `awaiting`'s answer as `REFUND_NOTE` and the site paints
+    it; the Mini App says the same thing through its dictionary, because a page
+    cannot read a JS constant written in another document's scope. Quoting a
+    promise in two files is how the landing ended up offering the money while the
+    market page offered the stakes, so the Russian sentence the cards paint has to
+    be the sentence the origin already publishes — read through the same reader as
+    the law above, so a renderer that quietly switched to its own key is caught by
+    this one.
+    """
+    published = re.search(r'const REFUND_NOTE = "([^"]*)"', read("chain.js"))
+    assert published, "chain.js no longer states the awaiting sentence"
+    used = {key for body in mini_app_market_painters().values() for _, key in deadline_lines(body) if key}
+    assert used == {"awaiting_note"}, used
+    flatten = lambda sentence: re.sub(r"[^\w]+", " ", sentence.lower()).strip()  # noqa: E731
+    promised = dictionary_value("ru", "awaiting_note")
+    assert flatten(promised) == flatten(published.group(1)), (promised, published.group(1))
+    for language in ("en", "zh"):
+        assert dictionary_value(language, "awaiting_note").strip(), f"{language} says nothing"
+
+
+def test_the_deadline_reader_refuses_a_stopped_clock_and_a_borrowed_promise():
+    """The readers above on argument lists this tree does not currently ship.
+
+    `top_level_parts` decides every custody judgement below it, so it is held to the
+    shapes a call site takes — a placeholder object with a comma inside, a note
+    written as a sentence rather than a key, three arguments, a call whose brackets
+    never close — and to reporting the shapes that are legal."""
+    assert top_level_parts("mk") == ["mk"]
+    assert top_level_parts("mk, t('awaiting_note')") == ["mk", "t('awaiting_note')"]
+    assert top_level_parts("mk, t('note', {amt: 1, usdc: 'x'})") == ["mk", "t('note', {amt: 1, usdc: 'x'})"]
+    assert top_level_parts("`${a}, b`") == ["`${a}, b`"]
+    with pytest.raises(AssertionError):
+        top_level_parts("mk, t('x'")
+    with pytest.raises(AssertionError):
+        deadline_lines('deadlineSpan(mk, "ставки можно вернуть в боте")')
+    with pytest.raises(AssertionError):
+        deadline_lines("deadlineSpan(a, b, c)")
+    assert deadline_lines("x = deadlineBlock(mk)") == [("mk", None)]
+    assert deadline_lines("x = deadlineBlock(mk, t('awaiting_note'))") == [
+        ("mk, t('awaiting_note')", "awaiting_note")]
 
 
 # ---------------------------------------------------------------------------

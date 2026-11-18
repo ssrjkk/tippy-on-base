@@ -12,6 +12,8 @@ import json
 import logging
 import time
 
+from bot.pct import as_pct
+
 from . import caps, config, pnl
 from .decision import decide
 from .eas import AttestationData, attest_action
@@ -57,7 +59,7 @@ async def single_cycle() -> bool:
     log.info("Decision: %s", decision.question)
     log.info("  Options: %s", decision.options)
     log.info("  Bet: $%.2f on outcome %s", decision.bet_amount_usdc, decision.bet_outcome)
-    log.info("  Confidence: %.0f%%", decision.confidence * 100)
+    log.info("  Confidence: %s%%", as_pct(decision.confidence))
     log.info("  Reasoning: %s", decision.reasoning[:120])
 
     # 4. Act — create market

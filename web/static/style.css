@@ -588,7 +588,6 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
   font-size: var(--t-micro); letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--muted-2); font-weight: 400;
 }
-.option-winner .bar-fill, .bar-fill-win { background: var(--blue); opacity: 1; }
 
 /* ---------- Leaderboard ---------- */
 .leaderboard {
@@ -1365,7 +1364,10 @@ select.input {
    exempts targets whose size is constrained by the line height of the text. */
 @media (pointer: coarse) {
   .btn, .btn-sm, .tab, .amount-chip, .cmd, .hero-badge { min-height: 44px; }
-  .nav-search, .pal-row, .palette-input { min-height: 44px; }
+  .pal-row, .palette-input { min-height: 44px; }
+  /* The shortcut hint is hidden on a phone, so the magnifier is the whole target —
+     grown to 44 px tall it was still 37 px wide, and a thumb lands on an area. */
+  .nav-search { min-height: 44px; min-width: 44px; }
   .theme-toggle { width: 44px; height: 44px; }
   .brand { min-height: 44px; }
   .author-links a, .footer-legal a {

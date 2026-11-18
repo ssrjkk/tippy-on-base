@@ -187,6 +187,12 @@ GRACE_WARN_BEFORE_HOURS: int = int(os.environ.get("GRACE_WARN_BEFORE_HOURS", "12
 # names no deadline gets this window (on-chain markets already did).
 MARKET_DEFAULT_HOURS: int = int(os.environ.get("MARKET_DEFAULT_HOURS", "168"))
 MARKET_DEFAULT_SECONDS: int = MARKET_DEFAULT_HOURS * 3600
+# The longest deadline a creator may ask for. Deliberately not an env knob, like
+# `MARKET_MIN_TRADE_MICRO`: this is the ceiling the create route refuses above, the
+# figure every field states and the horizon the grace window and the resolver sweep
+# are written against, so an operator widening it in a `.env` would move the
+# escrow clock without moving the code that reads it back.
+MARKET_MAX_DEADLINE_HOURS: int = 30 * 24
 
 # Prediction markets v2 (Polymarket-style LMSR AMM, see bot/ledger/).
 # The creator deposits a subsidy; b = subsidy / ln(n_options) guarantees the

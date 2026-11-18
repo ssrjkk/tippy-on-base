@@ -65,6 +65,21 @@ function marketState(row) {
   return closed ? "awaiting" : "open";
 }
 
+/* A percentage bar is the printed number drawn as geometry. The row says
+ * «0,4 %» and the fill under it owes the visitor 0,4 % of the track; a floor
+ * that thickens a small share into a visible bar — the `Math.max(pct, 2)` this
+ * replaced, on every option row of the site and the Mini App — paints a
+ * quantity no label claims, and on a two-option market it stands a 0 % row
+ * beside a 100 % one and asks the eye to compare them. The clamp is to the
+ * interval a percentage lives in, not to a legibility preference, and it is one
+ * function because a bar is one mechanism however many pages draw it. */
+function barWidth(value) {
+  const pct = Number(value);
+  if (!Number.isFinite(pct)) return 0;
+  const notBelowTheTrack = Math.max(pct, 0);
+  return Math.min(notBelowTheTrack, 100);
+}
+
 /* What a pool whose deadline passed still owes the reader. The sentence lives
  * beside the derivation that names the state, because every surface that paints
  * «ждёт решения» must answer «и что теперь?» with the same words: the landing

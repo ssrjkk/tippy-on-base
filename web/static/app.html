@@ -170,7 +170,9 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 /* Market / Bet Card */
 .market-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease);display:block;width:100%;text-align:left}
 .market-card:hover,.market-card:active{border-color:var(--border-strong);background:var(--card2)}
-.market-question{max-width:var(--measure);font-size:var(--t-lead);font-weight:500;margin-bottom:10px;line-height:1.4;letter-spacing:-.01em}
+/* One head for every market card: the chip never trades width with the question. */
+.card-head{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+.card-head .q{flex:1 1 auto;min-width:0;max-width:var(--measure);font-size:var(--t-lead);font-weight:500;line-height:1.4;letter-spacing:-.01em}
 .market-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:var(--t-chip);color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.03em;margin-top:8px}
 .prob-bars{display:flex;flex-direction:column;gap:8px}
 .prob-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
@@ -180,7 +182,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .prob-bar-label .win{color:var(--accent-text);font-weight:600}
 
 /* Status chips */
-.tag{display:inline-flex;align-items:center;border-radius:var(--pill);padding:2px 8px;font-size:var(--t-micro);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;flex:none;border-radius:var(--pill);padding:2px 8px;font-size:var(--t-micro);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
 /* Same law as the site's `.chip-open`: over a translucent tint --accent-text is
    4.27:1, and this label is 10 px — the furthest thing from a large-text pass. */
 .tag-open{background:var(--blue-soft);color:var(--text)}
@@ -251,7 +253,8 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .detail-opt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
 .detail-opt-name{font-weight:500;font-size:var(--t-ui)}
 .detail-opt-name.win{color:var(--accent-text);font-weight:600}
-.detail-opt-pct{font-size:var(--t-h4);font-weight:500;color:var(--accent-text);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+/* The accent says "this option won"; a colour every option wears says nothing. */
+.detail-opt-pct{font-size:var(--t-h4);font-weight:500;color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .detail-opt-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
 .detail-opt-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
 .detail-opt.pickable{cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease)}
@@ -327,13 +330,9 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .ai-item.ans .who{color:var(--success)}
 .ai-item.pending{color:var(--text4)}
 .ai-item.err{color:var(--danger)}
-.market-line{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:var(--t-small)}
-.market-line .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--accent-text);font-weight:500}
 .pot-line{font-size:var(--t-small);color:var(--text3);margin-bottom:8px}
 .pot-line b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
 .won-line{font-size:var(--t-small);font-weight:600;color:var(--accent-text);margin-bottom:8px}
-.oc-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.oc-title .q{font-size:var(--t-lead);font-weight:500;line-height:1.4;letter-spacing:-.01em}
 .shares{margin-top:6px;font-size:var(--t-meta);color:var(--accent-text)}
 .deadline{font-size:var(--t-small);color:var(--text3);margin-bottom:10px}
 .action-card{margin-top:12px;cursor:pointer;display:flex;align-items:center;gap:8px}
@@ -354,6 +353,11 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
      thumb actually taps. min-height only, so the compact rows keep their density. */
   .btn{min-height:44px}
   .input{min-height:44px}
+  /* The dashed "add option" row and the pill that carries a maximum or a copy
+     action are both buttons outside the .btn family, so neither met the floor
+     until it was named for them: 28 px of padding and text on their own. */
+  .create-add{min-height:44px}
+  .chip-btn{min-height:44px}
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -554,9 +558,9 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 
 <script>
 const I18N = {
-  ru: { wallet: "Кошелёк", balance: "Баланс", theme_toggle: "Переключить тему", nav_tabs: "Разделы приложения", market_detail: "Карточка рынка", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", option: "Вариант", amount: "Сумма", username: "Никнейм", address: "Адрес", qr_alt: "QR-код адреса пополнения", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", deposit_note: "Отправь USDC на этот адрес (сеть __CHAIN_NAME__)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн, часы (по умолчанию __DEFAULT_DEADLINE_HOURS__)", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут — пополните USDC для активации", smart_deposit_hint: "Пополните USDC на __CHAIN_NAME__ по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", tip_cap: "Максимум за один перевод — {max} USDC", trade_bounds: "От {min} до {max} USDC за одну сделку", wd_hint: "__WITHDRAW_FEE_PCT__% комиссия, минимум __MIN_WITHDRAW_USDC__ USDC, не более __MAX_WITHDRAWS_PER_DAY__ в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "Подтвердить", wd_cancel_btn: "Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе", ai: "AI-ассистент", ai_placeholder: "Спроси о рынках…", ai_you: "Вы", ai_ai: "ИИ", ai_data_who: "Данные бота", ai_no_answer: "Ответ не найден", ai_hint: "Спроси про рынок, чаевые или кошелёк.", stats: "Статистика", stat_users: "Пользователи", stat_volume: "Объём", stat_tips: "Чаевые", about_text: "Чаевые, рынки предсказаний и ставки в USDC на Base.", tos: "Условия использования", pot: "Пот", traders: "Трейдеры", deadline: "Завершение", st_open: "открыт", st_awaiting: "ждёт решения", st_resolved: "завершён", st_cancelled: "отменён", add_option: "Добавить вариант", remove: "Удалить", kind_market: "Рынок", kind_bet: "Ставка", add_app: "Добавить в Base App", add_app_error: "Не удалось добавить", buy_ok: "Куплено за {amt} USDC", bet_ok: "Ставка принята: {amt} USDC", market_created: "Рынок создан", bet_created: "Ставка создана", network_error: "Сеть недоступна", pending_parameters: "Предыдущая операция не подтверждена. Повторите исходные параметры; новые не отправлены.", response_incomplete: "Ответ операции получен не полностью. Повторите исходный запрос.", load_error: "Не удалось загрузить", error_generic: "Ошибка", dup_request: "Такой запрос уже отправлен", connect_wallet: "Сначала подключи кошелёк", open_in_app: "Открой в Telegram или Base App — так видно твой баланс", auth_stale: "Сессия истекла — закрой и снова открой приложение из чата", back: "Назад", no_top: "Топ пуст", tip_recent: "Кому ты кидал", history_more: "Показаны последние операции — вся история в боте: /history" },
-  en: { wallet: "Wallet", balance: "Balance", theme_toggle: "Switch theme", nav_tabs: "App sections", market_detail: "Market detail", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", option: "Option", amount: "Amount", username: "Username", address: "Address", qr_alt: "Deposit address QR code", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", deposit_note: "Send USDC to this address (__CHAIN_NAME__ network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline, hours (default __DEFAULT_DEADLINE_HOURS__)", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed — deposit USDC to activate", smart_deposit_hint: "Deposit USDC on __CHAIN_NAME__ to this address to trade gasless", smart_enabled: "Gasless trading is ON", tip_cap: "Up to {max} USDC per tip", trade_bounds: "From {min} to {max} USDC per trade", wd_hint: "__WITHDRAW_FEE_PCT__% fee, min __MIN_WITHDRAW_USDC__ USDC, up to __MAX_WITHDRAWS_PER_DAY__ per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "Confirm", wd_cancel_btn: "Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance", ai: "AI Assistant", ai_placeholder: "Ask about markets...", ai_you: "You", ai_ai: "AI", ai_data_who: "Bot data", ai_no_answer: "No answer", ai_hint: "Ask about a market, a tip or your wallet.", stats: "Stats", stat_users: "Users", stat_volume: "Volume", stat_tips: "Tips", about_text: "Tips, prediction markets and pool bets in USDC on Base.", tos: "Terms of Service", pot: "Pot", traders: "Traders", deadline: "Closes", st_open: "open", st_awaiting: "awaiting resolution", st_resolved: "resolved", st_cancelled: "cancelled", add_option: "Add option", remove: "Remove", kind_market: "Market", kind_bet: "Bet", add_app: "Add to Base App", add_app_error: "Could not add the app", buy_ok: "Bought for {amt} USDC", bet_ok: "Bet placed: {amt} USDC", market_created: "Market created", bet_created: "Bet created", network_error: "Network error", pending_parameters: "The previous operation is unconfirmed. Retry its original parameters; new ones were not sent.", response_incomplete: "The operation response is incomplete. Retry the original request.", load_error: "Failed to load", error_generic: "Error", dup_request: "That request has already been sent", connect_wallet: "Connect the wallet first", open_in_app: "Open in Telegram or Base App to see your balance", auth_stale: "Session expired — close the app and reopen it from the chat", back: "Back", no_top: "No leaders yet", tip_recent: "People you tip", history_more: "Showing the latest entries — the full history is in the bot: /history" },
-  zh: { wallet: "钱包", balance: "余额", theme_toggle: "切换主题", nav_tabs: "应用分区", market_detail: "卡片市场", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", option: "选项", amount: "金额", username: "用户名", address: "地址", qr_alt: "充值地址二维码", copied: "已复制！", copy: "复制", fill_fields: "请填写所有字段", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", deposit_note: "将 USDC 发送到此地址（__CHAIN_NAME__ 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，默认 __DEFAULT_DEADLINE_HOURS__）", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署，存入 USDC 即可激活", smart_deposit_hint: "在 __CHAIN_NAME__ 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", tip_cap: "单笔打赏上限 {max} USDC", trade_bounds: "单笔交易 {min}–{max} USDC", wd_hint: "手续费 __WITHDRAW_FEE_PCT__%，最低 __MIN_WITHDRAW_USDC__ USDC，每天最多 __MAX_WITHDRAWS_PER_DAY__ 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "确认", wd_cancel_btn: "取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中", ai: "AI 助手", ai_placeholder: "询问市场…", ai_you: "你", ai_ai: "AI", ai_data_who: "机器人数据", ai_no_answer: "未找到答案", ai_hint: "可以问市场、打赏或你的钱包。", stats: "统计", stat_users: "用户", stat_volume: "交易量", stat_tips: "打赏", about_text: "在 Base 上用 USDC 打赏、预测市场和奖池投注。", tos: "服务条款", pot: "奖池", traders: "交易者", deadline: "截止", st_open: "进行中", st_awaiting: "等待结算", st_resolved: "已结算", st_cancelled: "已取消", add_option: "添加选项", remove: "删除", kind_market: "市场", kind_bet: "投注", add_app: "添加到 Base App", add_app_error: "添加失败", buy_ok: "已买入 {amt} USDC", bet_ok: "投注成功：{amt} USDC", market_created: "市场已创建", bet_created: "投注已创建", network_error: "网络不可用", pending_parameters: "上一次操作尚未确认。请使用原始参数重试；新参数未发送。", response_incomplete: "操作响应不完整。请重试原始请求。", load_error: "加载失败", error_generic: "错误", dup_request: "该请求已发送", connect_wallet: "请先连接钱包", open_in_app: "在 Telegram 或 Base App 中打开即可查看余额", auth_stale: "会话已过期——请关闭应用后从聊天中重新打开", back: "返回", no_top: "暂无排行", tip_recent: "你常打赏的人", history_more: "仅显示最近的记录——完整历史请在机器人里查看：/history" }
+  ru: { wallet: "Кошелёк", balance: "Баланс", theme_toggle: "Переключить тему", nav_tabs: "Разделы приложения", market_detail: "Карточка рынка", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", opt_1: "Вариант 1", opt_2: "Вариант 2", opt_3: "Вариант 3", opt_4: "Вариант 4", amount: "Сумма", username: "Никнейм", address: "Адрес", qr_alt: "QR-код адреса пополнения", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", dep_network: "Сеть", dep_asset: "Актив", dep_confirmations: "Подтверждения", dep_contract: "Контракт USDC", dep_explorer: "Открыть в обозревателе", dep_shared: "Это общий депозитный адрес сервиса: не отправляй сюда ETH и другие токены — зачисляется только USDC на __CHAIN_NAME__", deposit_note: "Отправь USDC на этот адрес (сеть __CHAIN_NAME__)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн, часы (по умолчанию __DEFAULT_DEADLINE_HOURS__)", hours_cap: "Максимум {max} ч.", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут — пополните USDC для активации", smart_deposit_hint: "Пополните USDC на __CHAIN_NAME__ по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", tip_cap: "Максимум за один перевод — {max} USDC", trade_bounds: "От {min} до {max} USDC за одну сделку", available: "Доступно", max: "Макс.", wd_hint: "__WITHDRAW_FEE_PCT__% комиссия, минимум __MIN_WITHDRAW_USDC__ USDC, не более __MAX_WITHDRAWS_PER_DAY__ в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "Подтвердить", wd_cancel_btn: "Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе", ai: "AI-ассистент", ai_placeholder: "Спроси о рынках…", ai_you: "Вы", ai_ai: "ИИ", ai_data_who: "Данные бота", ai_no_answer: "Ответ не найден", ai_hint: "Спроси про рынок, чаевые или кошелёк.", stats: "Статистика", stat_users: "Пользователи", stat_volume: "Объём", stat_tips: "Чаевые", about_text: "Чаевые, рынки предсказаний и ставки в USDC на Base.", tos: "Условия использования", pot: "Пот", traders: "Трейдеры", deadline: "Завершение", awaiting_note: "Ставки можно вернуть в боте", st_open: "открыт", st_awaiting: "ждёт решения", st_resolved: "завершён", st_cancelled: "отменён", add_option: "Добавить вариант", remove: "Удалить", kind_market: "Рынок", kind_bet: "Ставка", add_app: "Добавить в Base App", add_app_error: "Не удалось добавить", buy_ok: "Куплено за {amt} USDC", bet_ok: "Ставка принята: {amt} USDC", market_created: "Рынок создан", bet_created: "Ставка создана", network_error: "Сеть недоступна", pending_parameters: "Предыдущая операция не подтверждена. Повторите исходные параметры; новые не отправлены.", response_incomplete: "Ответ операции получен не полностью. Повторите исходный запрос.", load_error: "Не удалось загрузить", error_generic: "Ошибка", dup_request: "Такой запрос уже отправлен", connect_wallet: "Сначала подключи кошелёк", open_in_app: "Открой в Telegram или Base App — так видно твой баланс", auth_stale: "Сессия истекла — закрой и снова открой приложение из чата", back: "Назад", no_top: "Топ пуст", tip_recent: "Кому ты кидал", history_more: "Показаны последние операции — вся история в боте: /history" },
+  en: { wallet: "Wallet", balance: "Balance", theme_toggle: "Switch theme", nav_tabs: "App sections", market_detail: "Market detail", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", opt_1: "Option 1", opt_2: "Option 2", opt_3: "Option 3", opt_4: "Option 4", amount: "Amount", username: "Username", address: "Address", qr_alt: "Deposit address QR code", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", dep_network: "Network", dep_asset: "Asset", dep_confirmations: "Confirmations", dep_contract: "USDC contract", dep_explorer: "Open in explorer", dep_shared: "This is the service's shared deposit address: send only USDC on __CHAIN_NAME__ — ETH and other tokens cannot be credited", deposit_note: "Send USDC to this address (__CHAIN_NAME__ network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline, hours (default __DEFAULT_DEADLINE_HOURS__)", hours_cap: "Up to {max} h.", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed — deposit USDC to activate", smart_deposit_hint: "Deposit USDC on __CHAIN_NAME__ to this address to trade gasless", smart_enabled: "Gasless trading is ON", tip_cap: "Up to {max} USDC per tip", trade_bounds: "From {min} to {max} USDC per trade", available: "Available", max: "Max", wd_hint: "__WITHDRAW_FEE_PCT__% fee, min __MIN_WITHDRAW_USDC__ USDC, up to __MAX_WITHDRAWS_PER_DAY__ per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "Confirm", wd_cancel_btn: "Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance", ai: "AI Assistant", ai_placeholder: "Ask about markets...", ai_you: "You", ai_ai: "AI", ai_data_who: "Bot data", ai_no_answer: "No answer", ai_hint: "Ask about a market, a tip or your wallet.", stats: "Stats", stat_users: "Users", stat_volume: "Volume", stat_tips: "Tips", about_text: "Tips, prediction markets and pool bets in USDC on Base.", tos: "Terms of Service", pot: "Pot", traders: "Traders", deadline: "Closes", awaiting_note: "Stakes can be refunded in the bot", st_open: "open", st_awaiting: "awaiting resolution", st_resolved: "resolved", st_cancelled: "cancelled", add_option: "Add option", remove: "Remove", kind_market: "Market", kind_bet: "Bet", add_app: "Add to Base App", add_app_error: "Could not add the app", buy_ok: "Bought for {amt} USDC", bet_ok: "Bet placed: {amt} USDC", market_created: "Market created", bet_created: "Bet created", network_error: "Network error", pending_parameters: "The previous operation is unconfirmed. Retry its original parameters; new ones were not sent.", response_incomplete: "The operation response is incomplete. Retry the original request.", load_error: "Failed to load", error_generic: "Error", dup_request: "That request has already been sent", connect_wallet: "Connect the wallet first", open_in_app: "Open in Telegram or Base App to see your balance", auth_stale: "Session expired — close the app and reopen it from the chat", back: "Back", no_top: "No leaders yet", tip_recent: "People you tip", history_more: "Showing the latest entries — the full history is in the bot: /history" },
+  zh: { wallet: "钱包", balance: "余额", theme_toggle: "切换主题", nav_tabs: "应用分区", market_detail: "卡片市场", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", opt_1: "选项1", opt_2: "选项2", opt_3: "选项3", opt_4: "选项4", amount: "金额", username: "用户名", address: "地址", qr_alt: "充值地址二维码", copied: "已复制！", copy: "复制", fill_fields: "请填写所有字段", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", dep_network: "网络", dep_asset: "资产", dep_confirmations: "确认数", dep_contract: "USDC 合约", dep_explorer: "在区块浏览器中查看", dep_shared: "这是服务方的共享充值地址：请只发送 __CHAIN_NAME__ 网络的 USDC，ETH 和其他代币无法入账", deposit_note: "将 USDC 发送到此地址（__CHAIN_NAME__ 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，默认 __DEFAULT_DEADLINE_HOURS__）", hours_cap: "最长 {max} 小时。", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署，存入 USDC 即可激活", smart_deposit_hint: "在 __CHAIN_NAME__ 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", tip_cap: "单笔打赏上限 {max} USDC", trade_bounds: "单笔交易 {min}–{max} USDC", available: "可用余额", max: "最大", wd_hint: "手续费 __WITHDRAW_FEE_PCT__%，最低 __MIN_WITHDRAW_USDC__ USDC，每天最多 __MAX_WITHDRAWS_PER_DAY__ 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "确认", wd_cancel_btn: "取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中", ai: "AI 助手", ai_placeholder: "询问市场…", ai_you: "你", ai_ai: "AI", ai_data_who: "机器人数据", ai_no_answer: "未找到答案", ai_hint: "可以问市场、打赏或你的钱包。", stats: "统计", stat_users: "用户", stat_volume: "交易量", stat_tips: "打赏", about_text: "在 Base 上用 USDC 打赏、预测市场和奖池投注。", tos: "服务条款", pot: "奖池", traders: "交易者", deadline: "截止", awaiting_note: "投注可在机器人内退回", st_open: "进行中", st_awaiting: "等待结算", st_resolved: "已结算", st_cancelled: "已取消", add_option: "添加选项", remove: "删除", kind_market: "市场", kind_bet: "投注", add_app: "添加到 Base App", add_app_error: "添加失败", buy_ok: "已买入 {amt} USDC", bet_ok: "投注成功：{amt} USDC", market_created: "市场已创建", bet_created: "投注已创建", network_error: "网络不可用", pending_parameters: "上一次操作尚未确认。请使用原始参数重试；新参数未发送。", response_incomplete: "操作响应不完整。请重试原始请求。", load_error: "加载失败", error_generic: "错误", dup_request: "该请求已发送", connect_wallet: "请先连接钱包", open_in_app: "在 Telegram 或 Base App 中打开即可查看余额", auth_stale: "会话已过期——请关闭应用后从聊天中重新打开", back: "返回", no_top: "暂无排行", tip_recent: "你常打赏的人", history_more: "仅显示最近的记录——完整历史请在机器人里查看：/history" }
 };
 
 let STATE = { lang: window.__seedLang || 'en', balance_usdc: 0, deposit_address: '', markets: [], bets: [], onchain_markets: [], history: [], history_truncated: false, top: [], recent_tips: [], stats: null, smart: null, username: '', tg_id: null, linked_address: '', authStale: false };
@@ -566,12 +570,20 @@ let toastTimer = null;
 // The bounds the ledger refuses with, published by the same /api/info the site
 // reads. A sheet that typed its own bound kept offering a sum the route then
 // rejected, and when the operator moved the number the screen still printed it.
+// The fee block and the chain block come out of the same answer: a deposit sheet
+// that names a network has to name the one this origin credits, and a withdrawal
+// that offers a maximum has to price the fee the ledger adds on top of it.
+let INFO = {};
 let LIMITS = {};
+let FEES = {};
 
 async function loadLimits() {
   try {
     const r = await fetch('/api/info', { credentials: 'same-origin' });
-    if (r.ok) LIMITS = (await r.json()).limits || {};
+    if (!r.ok) return;
+    INFO = await r.json();
+    LIMITS = INFO.limits || {};
+    FEES = INFO.fees || {};
   } catch(e) { /* no bounds stated beats a bounds invented */ }
 }
 
@@ -582,12 +594,114 @@ function boundAttr(pairs) {
 
 // A sentence about a bound is painted only when the origin published it: a
 // missing line says nothing, a typed number is a second copy of a config knob.
-function boundHint(template, pairs) {
+function boundHint(template, pairs, fill = usdc) {
   if (!template) return '';
   if (!pairs.every(([mark]) => template.includes(mark))) return '';
   if (pairs.some(([, key]) => LIMITS[key] == null)) return '';
-  const filled = pairs.reduce((text, [mark, key]) => text.split(mark).join(usdc(LIMITS[key])), template);
+  const filled = pairs.reduce((text, [mark, key]) => text.split(mark).join(fill(LIMITS[key])), template);
   return `<p class="hint hint-block">${esc(filled)}</p>`;
+}
+
+// The sums a money panel offers a thumb, and the one its field opens on. One
+// ladder for both panels that paint quick amounts: two ladders would be two
+// answers to "what can I tap", and only the one filtered by the balance knows
+// the difference between a 25 USDC offer and 3 USDC on the account.
+const QUICK_LADDER = [1, 5, 10, 25];
+const QUICK_DEFAULT = 5;
+
+function balanceKnown() { return STATE.tg_id !== null && STATE.tg_id !== undefined; }
+
+// `null` is the answer when no identity was resolved. 0 is a figure, and a sheet
+// that paints 0.00 says the money is gone rather than that it cannot tell whose
+// it is — the same rule the wallet header holds in renderBalance().
+function balanceMicro() {
+  return balanceKnown() ? Math.round(Number(STATE.balance_usdc || 0) * 1e6) : null;
+}
+
+// The withdrawal fee as this origin publishes it: a percent, applied to the
+// amount and then added on top of it — web/mini.py stages `amount + fee` — which
+// is why "available" and "spendable" are two numbers and are named apart.
+function feePct() { return FEES.withdraw_pct == null ? null : Number(FEES.withdraw_pct); }
+
+// The ledger's own rule: ceil, with one micro as the floor (bot/base.py).
+// Multiplying before dividing keeps an exact product exact in binary floating
+// point, which `micro * (pct / 100)` does not: 3000000 * 0.01 is
+// 30000.000000000004, and ceil there charges a micro the server never took.
+function feeMicro(micro) {
+  const pct = feePct();
+  if (pct === null || micro <= 0) return null;
+  return Math.max(Math.ceil(micro * pct / 100), 1);
+}
+
+// The largest withdrawal whose total still fits the balance. The closed form can
+// land a micro off in either direction, so it is walked back and forth until the
+// fee's own test agrees with it.
+function maxSpendable() {
+  const micro = balanceMicro();
+  const pct = feePct();
+  if (micro === null || pct === null) return null;
+  let amount = Math.floor(micro * 100 / (100 + pct));
+  while (amount > 0 && amount + feeMicro(amount) > micro) amount -= 1;
+  while (amount + feeMicro(amount + 1) <= micro) amount += 1;
+  return amount;
+}
+
+// One row, one meaning, on every panel that spends: what this account holds.
+function availableLine() {
+  const micro = balanceMicro();
+  const figure = micro === null ? '--' : usdc(micro / 1e6) + ' USDC';
+  return `<div class="wd-row"><span>${t('available')}</span><b>${figure}</b></div>`;
+}
+
+// A chip is an offer to tap, so a sum the balance cannot cover is removed rather
+// than left there to be refused, and the field opens on the ladder's standing
+// default when it still fits and otherwise on the largest amount that does. With
+// no known balance nothing is filtered: `availableLine()` already says the figure
+// is unknown, and a panel that hid every chip would say it worse.
+function quickAmounts(target) {
+  const micro = balanceMicro();
+  const fits = micro === null ? QUICK_LADDER : QUICK_LADDER.filter(v => Math.round(v * 1e6) <= micro);
+  const value = fits.includes(QUICK_DEFAULT) ? QUICK_DEFAULT : (fits.length ? fits[fits.length - 1] : null);
+  return {
+    value,
+    chips: fits.map(v => `<button class="chip${v === value ? ' active' : ''}" data-act="pickChip" data-target="${target}" data-val="${v}">${usdc(v)}</button>`).join(''),
+  };
+}
+
+// The amount a Max control types: a cent floor, never a round. Rounding 3465300
+// micro up offers 3.47 against a spendable 3.4653, and the fee on top of 3.47 is
+// more than the account holds.
+function fillMax(targetId) {
+  const el = document.getElementById(targetId);
+  const micro = maxSpendable();
+  if (micro === null) return;
+  el.value = (Math.floor(micro / 1e4) / 100).toFixed(2);
+  el.focus();
+}
+
+// A row that quotes a published figure says nothing when the origin published
+// nothing — the rule `boundHint` states for a sentence, for the read-only rows a
+// deposit sheet paints beside its QR.
+function infoRow(label, value) {
+  if (value == null || value === '') return '';
+  return `<div class="wd-row"><span>${label}</span><b>${esc(String(value))}</b></div>`;
+}
+
+// The token contract is an address a user checks before sending money to it, so
+// it keeps the block the deposit sheet already uses for an address rather than a
+// table row that would break a 42-character string mid-glyph.
+function contractRow() {
+  if (!INFO.usdc_address) return '';
+  return `<div class="mini-label late">${t('dep_contract')}</div>`
+    + `<div class="deposit-addr" id="depContract">${esc(INFO.usdc_address)}</div>`;
+}
+
+// Where a visitor can watch the deposit land, built out of the same answer that
+// names the chain: an explorer typed into markup is a link that survives the
+// operator pointing the wallet somewhere else.
+function explorerLink() {
+  if (!INFO.explorer || !INFO.usdc_address) return '';
+  return `<a class="btn btn-sm btn-secondary gap-top-sm" href="${esc(INFO.explorer)}/token/${esc(INFO.usdc_address)}" target="_blank" rel="noopener">${t('dep_explorer')}</a>`;
 }
 
 // ─── i18n ───
@@ -908,15 +1022,56 @@ function statusTag(m) {
   return `<span class="tag tag-open">${t('st_open')}</span>`;
 }
 
-/* One brand blue for every option bar: the label and the percentage carry the
- * meaning, the fill only shows weight. Winner options get the accent text colour. */
+function winnerOf(m) {
+  return marketState(m) === "resolved" ? m.winner : null;
+}
+
+/* A deadline means something only while the clock still runs, and once it has
+ * run out the state names itself. What replaces the line is a claim about
+ * custody, not about the clock: a ledger pool hands its stakes back through the
+ * bot, and an on-chain one is settled by the contract, so the caller passes the
+ * sentence its own custody can perform — a card that promises a refund it
+ * cannot make is worse than a card that says nothing. */
+function deadlineText(m) {
+  return marketState(m) === "open" && m.close_at ? timeLabel(m.close_at) : '';
+}
+
+function deadlineNote(m, note) {
+  return marketState(m) === "awaiting" ? (note || '') : '';
+}
+
+function deadlineSpan(m, note) {
+  const held = deadlineNote(m, note);
+  if (held) return `<span>${esc(held)}</span>`;
+  const close = deadlineText(m);
+  return close ? `<span>${t('deadline')}: ${close}</span>` : '';
+}
+
+function deadlineBlock(m, note) {
+  const held = deadlineNote(m, note);
+  if (held) return `<div class="deadline">${esc(held)}</div>`;
+  const close = deadlineText(m);
+  return close ? `<div class="deadline">${t('deadline')}: ${close}</div>` : '';
+}
+
+/* Whether this market still takes money is the same question as what state it
+ * is in, and it has one answer: after the deadline a pool is handed back, not
+ * bought, so a sheet that offered a buy would be offering a refusal. */
+function tradable(m) {
+  return marketState(m) === "open";
+}
+
+/* One option row for every market family, whichever engine holds the pool: the
+ * same face for the percentage, the same bar under it, the accent on the winning
+ * option only. The fill is the painted number as geometry — a floor that thickens
+ * a 0,4% row into a visible one draws a quantity no label claims. */
 function probBars(opts, pctKey, winnerIdx) {
   const rows = (opts || []).map(o => {
     const pct = Number(o[pctKey] || 0);
     const win = winnerIdx != null && o.index === winnerIdx;
     return `<div>
       <div class="prob-bar-label"><span${win ? ' class="win"' : ''}>${esc(o.label || o.name || '—')}</span><span class="num${win ? ' win' : ''}">${pctLabel(pct)}</span></div>
-      <div class="prob-bar"><div class="prob-bar-fill" aria-hidden="true" style="width:${Math.max(pct, 1)}%"></div></div>
+      <div class="prob-bar"><div class="prob-bar-fill" aria-hidden="true" style="width:${barWidth(pct)}%"></div></div>
     </div>`;
   }).join('');
   return `<div class="prob-bars">${rows}</div>`;
@@ -953,9 +1108,9 @@ function renderMarkets() {
   c.innerHTML = m.map(mk => {
     const opts = mk.options || [];
     return `<button class="market-card" data-act="openMarketDetail" data-id="${mk.id}">
-      <div class="market-question">${esc(mk.question)}</div>
-      ${probBars(opts, 'price_pct')}
-      <div class="market-meta"><span>${t('options')}: ${opts.length}</span><span>${t('traders')}: ${mk.traders || 0}</span></div>
+      <div class="card-head"><span class="q">${esc(mk.question)}</span>${statusTag(mk)}</div>
+      ${probBars(opts, 'price_pct', winnerOf(mk))}
+      <div class="market-meta"><span>${t('traders')}: ${mk.traders || 0}</span>${deadlineSpan(mk, t('awaiting_note'))}</div>
     </button>`;
   }).join('') + ocBlock();
 }
@@ -967,15 +1122,10 @@ function ocBlock() {
 }
 
 function ocCard(m) {
-  /* The flags say what the contract decided, not whether the market is still
-   * tradable — only `marketState` answers that, and the deadline line reads the
-   * same answer as the tag beside it. */
-  const state = marketState(m);
-  const close = (state === "open" || state === "awaiting") && m.close_at ? timeLabel(m.close_at) : '';
   return `<button class="market-card" data-act="openOcDetail" data-id="${m.id}">
-    <div class="oc-title"><span class="q">#${m.id} ${esc(m.question)}</span>${statusTag(m)}</div>
-    ${probBars(m.options || [], 'price_pct', m.resolved ? m.winner : null)}
-    <div class="market-meta"><span>ERC-1155 · USDC</span>${close ? `<span>${t('deadline')}: ${close}</span>` : ''}</div>
+    <div class="card-head"><span class="q">#${m.id} ${esc(m.question)}</span>${statusTag(m)}</div>
+    ${probBars(m.options || [], 'price_pct', winnerOf(m))}
+    <div class="market-meta"><span>ERC-1155 · USDC</span>${deadlineSpan(m)}</div>
   </button>`;
 }
 
@@ -1010,31 +1160,19 @@ async function openOcDetail(id) {
     if (!r.ok) throw new Error();
     const mk = await r.json();
     const opts = mk.options || [];
-    const state = marketState(mk);
-    const close = (state === "open" || state === "awaiting") && mk.close_at ? timeLabel(mk.close_at) : '';
-    const rows = opts.map(o => {
-      const pct = Number(o.price_pct || 0);
-      const win = mk.resolved && mk.winner === o.index;
-      const mine = o.shares > 0 ? `<div class="shares">${t('your_shares')}: ${formatShares(o.shares)}</div>` : '';
-      return `<div class="detail-opt">
-        <div class="detail-opt-head">
-          <div class="detail-opt-name${win ? ' win' : ''}">${esc(o.label || '—')}</div>
-          <div class="detail-opt-pct">${pctLabel(pct)}</div>
-        </div>
-        <div class="detail-opt-bar"><div class="detail-opt-bar-fill" aria-hidden="true" style="width:${Math.max(pct, 1)}%"></div></div>
-        ${mine}
-      </div>`;
-    }).join('');
-    const heldWinner = mk.resolved && opts.some(o => o.index === mk.winner && o.shares > 0);
+    const winner = winnerOf(mk);
+    const rows = optRows(opts, 'price_pct', winner, false, o =>
+      (o.shares > 0 ? `<div class="shares">${t('your_shares')}: ${formatShares(o.shares)}</div>` : ''));
+    const heldWinner = winner != null && opts.some(o => o.index === winner && o.shares > 0);
     let actions = '';
     if (heldWinner) actions = `<div class="won-line">${t('you_won')}</div>` + actionCard('i-check', t('oc_redeem_hint').replace('{id}', id));
     /* The trade hint is a promise about a bot command, and /oc_buy refuses a
      * market whose deadline has passed — so it goes with the state, not with the
      * two flags that say nobody has decided the outcome yet. */
-    else if (state === "open") actions = actionCard('i-send', ocTradeHint(id));
+    else if (tradable(mk)) actions = actionCard('i-send', ocTradeHint(id));
     showDetail(detailShell('#' + mk.id, `
       <div class="detail-question">${esc(mk.question)}</div>
-      ${close ? `<div class="deadline">${t('deadline')}: ${close}</div>` : ''}
+      ${deadlineBlock(mk)}
       <div class="detail-options">${rows}</div>
       ${actions}`, statusTag(mk)));
   } catch (e) {
@@ -1049,11 +1187,10 @@ function renderBets() {
   if (!b.length) { c.innerHTML = `<div class="empty">${t('no_bets')}</div>`; return; }
   c.innerHTML = b.map(bet => {
     const opts = bet.options || [];
-    const lines = opts.map(o => `<div class="market-line"><span>${esc(o.label || o.name || '—')}</span><span class="num">${pctLabel(o.chance_pct)}</span></div>`).join('');
     return `<button class="market-card" data-act="openBetDetail" data-id="${bet.id}">
-      <div class="market-question">${esc(bet.question)}</div>
-      <div class="pot-line">${t('pot')}: <b>${usdc(bet.pot_usdc || bet.pot)} USDC</b></div>
-      ${lines}
+      <div class="card-head"><span class="q">${esc(bet.question)}</span>${statusTag(bet)}</div>
+      ${probBars(opts, 'chance_pct', winnerOf(bet))}
+      <div class="market-meta"><span>${t('pot')}: ${usdc(bet.pot_usdc || bet.pot)} USDC</span>${deadlineSpan(bet, t('awaiting_note'))}</div>
     </button>`;
   }).join('');
 }
@@ -1175,21 +1312,18 @@ function openTipSheet() {
   const recentHtml = recent.length ? `
       <div class="input-label">${t('tip_recent')}</div>
       <div class="chips">${recent.map(r => `<button class="chip chip-name" data-act="pickTipTo" data-val="${esc(r.to)}">${esc(r.label)}</button>`).join('')}</div>` : '';
+  const amt = quickAmounts('tipAmt');
   openModal(`
     <div class="modal-title">${t('send_tip')}</div>
+    ${availableLine()}
     <div class="input-group">
       <label class="input-label">${t('username')}</label>
       <input class="input" id="tipTo" placeholder="@username" autocomplete="off">${recentHtml}
     </div>
     <div class="input-group">
       <label class="input-label">${t('amount')}, USDC</label>
-      <div class="chips" id="tipChips">
-        <button class="chip" data-act="pickChip" data-target="tipAmt" data-val="1">1</button>
-        <button class="chip active" data-act="pickChip" data-target="tipAmt" data-val="5">5</button>
-        <button class="chip" data-act="pickChip" data-target="tipAmt" data-val="10">10</button>
-        <button class="chip" data-act="pickChip" data-target="tipAmt" data-val="25">25</button>
-      </div>
-      <input class="input mono" id="tipAmt" type="number" step="0.01" min="0.01" value="5" placeholder="0.00"${boundAttr([['max', 'max_tip_usdc']])} inputmode="decimal">
+      <div class="chips" id="tipChips">${amt.chips}</div>
+      <input class="input mono" id="tipAmt" type="number" step="0.01" min="0.01" value="${amt.value === null ? '' : amt.value}" placeholder="0.00"${boundAttr([['max', 'max_tip_usdc']])} inputmode="decimal">
       ${boundHint(t('tip_cap'), [['{max}', 'max_tip_usdc']])}
     </div>
     <button class="btn btn-primary btn-full" data-act="doTip">${t('send')}</button>
@@ -1228,6 +1362,14 @@ function openDepositSheet() {
         <button class="btn btn-sm btn-secondary gap-top-sm" data-act="copyAddr" data-addr="${esc(addr)}">${t('copy')}</button>
       </div>
     </div>
+    <div class="input-group">
+      ${infoRow(t('dep_network'), INFO.chain_name)}
+      ${INFO.usdc_address ? infoRow(t('dep_asset'), 'USDC') : ''}
+      ${infoRow(t('dep_confirmations'), LIMITS.deposit_confirmations)}
+      ${contractRow()}
+      ${explorerLink()}
+    </div>
+    ${INFO.usdc_address ? `<p class="hint hint-block">${t('dep_shared')}</p>` : ''}
   `);
 }
 
@@ -1237,8 +1379,19 @@ function copyAddr(addr) {
 
 // ─── Withdraw (two-step: stage, then confirm) ───
 function openWithdrawSheet() {
+  // The fee rides on top of the amount, so the largest sum the account covers is
+  // below its balance. The control that states that figure is the one that types
+  // it, and it appears only when what it types also clears the withdrawal floor:
+  // a Max button offering 0.40 against a 1 USDC minimum is a refusal with a
+  // label on it.
+  const spendable = maxSpendable();
+  const floorMicro = LIMITS.min_withdraw_usdc == null
+    ? null : Math.round(Number(LIMITS.min_withdraw_usdc) * 1e6);
+  const canMax = spendable !== null && spendable > 0
+    && (floorMicro === null || spendable >= floorMicro);
   openModal(`
     <div class="modal-title">${t('withdraw')}</div>
+    ${availableLine()}
     <div class="input-group">
       <label class="input-label">${t('address')}</label>
       <input class="input mono" id="wdAddr" placeholder="0x..." autocomplete="off" spellcheck="false">
@@ -1246,6 +1399,7 @@ function openWithdrawSheet() {
     <div class="input-group">
       <label class="input-label">${t('amount')}, USDC</label>
       <input class="input mono" id="wdAmt" type="number" step="0.01" placeholder="0.00" inputmode="decimal"${boundAttr([['min', 'min_withdraw_usdc']])}>
+      ${canMax ? `<button class="chip-btn" data-act="fillMax" data-target="wdAmt">${t('max')}</button>` : ''}
     </div>
     <p class="hint hint-block">${t('wd_hint')}</p>
     <button class="btn btn-primary btn-full" data-act="stageWithdraw">${t('withdraw')}</button>
@@ -1324,28 +1478,35 @@ let BUY = null;
 
 function optionLabel(o, i) { return o.label || o.name || String(i + 1); }
 
-function optRows(opts, pctKey) {
+/* One option row for both money engines and for both kinds of sheet: pickable
+ * when the sheet is buying, plain when it is only showing, and the same face for
+ * the label, the percentage and the bar either way. A row that could not be
+ * bought used to still carry data-act="pickOpt", which is a control that answers
+ * nothing, and a dead control is the defect this file has gates against. */
+function optRows(opts, pctKey, winnerIdx, pickable, extra) {
   return (opts || []).map((o, i) => {
     const pct = Number(o[pctKey] || 0);
-    return `<button class="detail-opt pickable${i === 0 ? ' selected' : ''}" data-act="pickOpt" data-i="${i}">
-      <div class="detail-opt-head">
-        <div class="detail-opt-name">${esc(optionLabel(o, i))}</div>
+    const win = winnerIdx != null && o.index === winnerIdx;
+    const parts = `<div class="detail-opt-head">
+        <div class="detail-opt-name${win ? ' win' : ''}">${esc(optionLabel(o, i))}</div>
         <div class="detail-opt-pct">${pctLabel(pct)}</div>
       </div>
-      <div class="detail-opt-bar"><div class="detail-opt-bar-fill" aria-hidden="true" style="width:${Math.max(pct, 1)}%"></div></div>
-    </button>`;
+      <div class="detail-opt-bar"><div class="detail-opt-bar-fill" aria-hidden="true" style="width:${barWidth(pct)}%"></div></div>`;
+    return pickable
+      ? `<button class="detail-opt pickable${i === 0 ? ' selected' : ''}" data-act="pickOpt" data-i="${i}">${parts}</button>`
+      : `<div class="detail-opt">${parts}${extra ? extra(o) : ''}</div>`;
   }).join('');
 }
 
 function buyPanel() {
-  const chips = [1, 5, 10, 25].map(v =>
-    `<button class="chip${v === 5 ? ' active' : ''}" data-act="pickChip" data-target="tradeAmt" data-val="${v}">${v}</button>`).join('');
+  const amt = quickAmounts('tradeAmt');
   // A pool bet and an LMSR trade are refused by different caps, and both panels
   // are this one markup — the ceiling is read from the kind being bought.
   const cap = BUY && BUY.kind === 'bet' ? 'max_bet_usdc' : 'max_trade_usdc';
   return `<div class="buy-panel">
-    <div class="chips">${chips}</div>
-    <input class="input mono" id="tradeAmt" type="number" step="0.01" value="5" placeholder="0.00" inputmode="decimal" aria-label="${esc(t('amount'))}"${boundAttr([['min', 'min_trade_usdc'], ['max', cap]])}>
+    ${availableLine()}
+    <div class="chips">${amt.chips}</div>
+    <input class="input mono" id="tradeAmt" type="number" step="0.01" value="${amt.value === null ? '' : amt.value}" placeholder="0.00" inputmode="decimal" aria-label="${esc(t('amount'))}"${boundAttr([['min', 'min_trade_usdc'], ['max', cap]])}>
     ${boundHint(t('trade_bounds'), [['{min}', 'min_trade_usdc'], ['{max}', cap]])}
     <button class="btn btn-primary btn-full" id="buyBtn" data-act="buy"></button>
   </div>`;
@@ -1367,12 +1528,12 @@ function openMarketDetail(id) {
   const mk = (STATE.markets || []).find(m => m.id == id);
   if (!mk) return;
   const opts = mk.options || [];
-  BUY = { kind: 'mkt', id: mk.id, opts, opt: 0 };
+  BUY = tradable(mk) ? { kind: 'mkt', id: mk.id, opts, opt: 0 } : null;
   showDetail(detailShell(t('kind_market'), `
       <div class="detail-question">${esc(mk.question)}</div>
-      <div class="market-meta sheet-gap"><span>${t('options')}: ${opts.length}</span><span>${t('traders')}: ${mk.traders || 0}</span></div>
-      <div class="detail-options">${optRows(opts, 'price_pct')}</div>
-      ${buyPanel()}`));
+      <div class="market-meta sheet-gap"><span>${t('traders')}: ${mk.traders || 0}</span>${deadlineSpan(mk, t('awaiting_note'))}</div>
+      <div class="detail-options">${optRows(opts, 'price_pct', winnerOf(mk), BUY !== null)}</div>
+      ${BUY ? buyPanel() : ''}`, statusTag(mk)));
   setBuyLabel();
 }
 
@@ -1380,12 +1541,13 @@ function openBetDetail(id) {
   const bet = (STATE.bets || []).find(b => b.id == id);
   if (!bet) return;
   const opts = bet.options || [];
-  BUY = { kind: 'bet', id: bet.id, opts, opt: 0 };
+  BUY = tradable(bet) ? { kind: 'bet', id: bet.id, opts, opt: 0 } : null;
   showDetail(detailShell(t('kind_bet'), `
       <div class="detail-question">${esc(bet.question)}</div>
       <div class="pot-line">${t('pot')}: <b>${usdc(bet.pot_usdc || bet.pot)} USDC</b></div>
-      <div class="detail-options">${optRows(opts, 'chance_pct')}</div>
-      ${buyPanel()}`));
+      ${deadlineBlock(bet, t('awaiting_note'))}
+      <div class="detail-options">${optRows(opts, 'chance_pct', winnerOf(bet), BUY !== null)}</div>
+      ${BUY ? buyPanel() : ''}`, statusTag(bet)));
   setBuyLabel();
 }
 
@@ -1422,14 +1584,15 @@ function openCreateMarket() {
     <div class="input-group">
       <label class="input-label">${t('options')}</label>
       <div class="create-options" id="mkOpts">
-        <div class="create-opt-row"><input class="input" placeholder="Option 1"></div>
-        <div class="create-opt-row"><input class="input" placeholder="Option 2"></div>
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_1')}" data-i18n-ph="opt_1"></div>
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_2')}" data-i18n-ph="opt_2"></div>
       </div>
       <button class="create-add" data-act="addCreateOpt" data-container="mkOpts">${icon('i-plus')} ${t('add_option')}</button>
     </div>
     <div class="input-group">
       <label class="input-label">${t('hours')}</label>
-      <input class="input" id="mkHours" type="number" min="1" placeholder="24">
+      <input class="input" id="mkHours" type="number" min="1"${boundAttr([['max', 'max_deadline_hours']])}>
+      ${boundHint(t('hours_cap'), [['{max}', 'max_deadline_hours']], num)}
     </div>
     <button class="btn btn-primary btn-full" data-act="doCreateMarket">${t('create')}</button>
   `);
@@ -1445,14 +1608,15 @@ function openCreateBet() {
     <div class="input-group">
       <label class="input-label">${t('options')}</label>
       <div class="create-options" id="btOpts">
-        <div class="create-opt-row"><input class="input" placeholder="Option 1"></div>
-        <div class="create-opt-row"><input class="input" placeholder="Option 2"></div>
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_1')}" data-i18n-ph="opt_1"></div>
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_2')}" data-i18n-ph="opt_2"></div>
       </div>
       <button class="create-add" data-act="addCreateOpt" data-container="btOpts">${icon('i-plus')} ${t('add_option')}</button>
     </div>
     <div class="input-group">
       <label class="input-label">${t('hours')}</label>
-      <input class="input" id="btHours" type="number" min="1" placeholder="24">
+      <input class="input" id="btHours" type="number" min="1"${boundAttr([['max', 'max_deadline_hours']])}>
+      ${boundHint(t('hours_cap'), [['{max}', 'max_deadline_hours']], num)}
     </div>
     <button class="btn btn-primary btn-full" data-act="doCreateBet">${t('create')}</button>
   `);
@@ -1461,10 +1625,10 @@ function openCreateBet() {
 function addCreateOpt(containerId) {
   const c = document.getElementById(containerId);
   if (c.children.length >= 4) return;
-  const n = c.children.length + 1;
+  const key = `opt_${c.children.length + 1}`;
   const row = document.createElement('div');
   row.className = 'create-opt-row';
-  row.innerHTML = `<input class="input" placeholder="${esc(t('option'))} ${n}"><button class="create-opt-rm" data-act="rmCreateOpt" aria-label="${esc(t('remove'))}">${icon('i-minus')}</button>`;
+  row.innerHTML = `<input class="input" placeholder="${esc(t(key))}" data-i18n-ph="${key}"><button class="create-opt-rm" data-act="rmCreateOpt" aria-label="${esc(t('remove'))}">${icon('i-minus')}</button>`;
   c.appendChild(row);
 }
 
@@ -1617,6 +1781,7 @@ document.addEventListener('click', (e) => {
   if (act === 'hideDetail') { hideDetail(); return; }
   if (act === 'toast') { toast(el.dataset.msg); return; }
   if (act === 'pickChip') { pickChip(el, el.dataset.target, parseInt(el.dataset.val, 10)); return; }
+  if (act === 'fillMax') { fillMax(el.dataset.target); return; }
   if (act === 'pickTipTo') { pickTipTo(el); return; }
   if (act === 'doTip') { doTip(); return; }
   if (act === 'stageWithdraw') { stageWithdraw(); return; }

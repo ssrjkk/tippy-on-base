@@ -2945,6 +2945,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "At most 4 options, 64 characters each.",
         "zh": "最多 4 个选项，每个 64 个字符。",
     },
+    "api_deadline_long": {
+        "ru": "Дедлайн длиннее {max} часов.",
+        "en": "The deadline is more than {max} hours.",
+        "zh": "截止时间超过 {max} 小时。",
+    },
     "api_question_empty": {
         "ru": "Спроси что-нибудь.",
         "en": "Ask something.",

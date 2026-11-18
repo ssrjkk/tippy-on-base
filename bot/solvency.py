@@ -11,6 +11,7 @@ import time
 
 from bot import base, config
 from bot.ledger import async_ledger as ledger
+from bot.pct import as_pct
 
 log = logging.getLogger("tipbot.solvency")
 
@@ -112,7 +113,7 @@ async def _check_solvency(bot) -> None:
     elif owed > 0 and delta / owed < 0.05:
         _last_alert_ts = now
         msg = (
-            f"⚠️ <b>LOW MARGIN</b> ({delta / owed * 100:.1f}%)\n"
+            f"⚠️ <b>LOW MARGIN</b> ({as_pct(delta / owed)}%)\n"
             f"Reserves: ${reserves_micro / _MICRO:.2f}\n"
             f"Liabilities: ${owed / _MICRO:.2f}\n"
             f"Buffer: ${delta / _MICRO:.2f}\n"

@@ -315,6 +315,7 @@ bot/
 │  └─ network.py        chain labels, explorer URLs
 ├─ ai.py                provider chain: failover, parks, shared daily budget
 ├─ ai_data.py           /ask without a model, answered from the ledger
+├─ pct.py               the one rounder for an odds percentage (Decimal, HALF_UP)
 ├─ qr.py                local QR generation
 ├─ smart_wallet.py      ERC-4337: UserOp build/sign, paymaster data, approve+trade sync
 ├─ paymaster.py         Base Paymaster integration: gasless onboarding (10 free txs)
@@ -363,14 +364,14 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts alembic
-python -m pytest -q -m "not production"   # 1436 passed
+python -m pytest -q -m "not production"   # 1473 passed
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password
 `tipbot`): `tests/conftest.py` drops and recreates `tipbot_test` once per
 session, so the dev database is never touched. Point `TEST_DATABASE_URL` and
 `TEST_ADMIN_DATABASE_URL` elsewhere if your server listens somewhere else. The
-177 `production`-marked tests are excluded from this run — they check the
+198 `production`-marked tests are excluded from this run — they check the
 deployed site and belong to the `Prod Health Check` workflow.
 
 What is tested *for real* (not mocked): money conservation across every flow

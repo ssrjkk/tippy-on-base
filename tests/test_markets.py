@@ -472,7 +472,13 @@ def test_amm_market_view_shape(ledger):
     view = ledger.amm_market_view(mid)
     assert view["id"] == mid
     assert len(view["options"]) == 2
-    assert abs(sum(o["price_pct"] for o in view["options"]) - 100.0) < 0.01
+    # `price_pct` is the painted odds face — one decimal (`ODDS_DP` in
+    # `bot/pct.py`). Rounding each option on its own does not conserve the sum:
+    # an option may move by up to half a tick, so a market's options can read
+    # 100.1 in total. An exact-100 assertion would be a promise this product's
+    # arithmetic never makes.
+    assert abs(sum(o["price_pct"] for o in view["options"]) - 100.0) <= 0.05 * len(view["options"])
+    assert all(round(o["price_pct"], 1) == o["price_pct"] for o in view["options"])
     assert view["liquidity_micro"] == 50 * USDC
 
 
@@ -848,7 +854,7 @@ def test_api_predictions_endpoint(ledger):
         assert len(data) == 1
         assert data[0]["id"] == mid
         assert data[0]["traders"] == 1
-        assert abs(sum(o["price_pct"] for o in data[0]["options"]) - 100.0) < 0.01
+        assert abs(sum(o["price_pct"] for o in data[0]["options"]) - 100.0) <= 0.05 * len(data[0]["options"])
         r = client.get(f"/api/prediction/{mid}")
         assert r.status_code == 200
         assert r.json()["liquidity_usdc"] > 0

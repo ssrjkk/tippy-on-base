@@ -15,7 +15,7 @@ import os
 import re
 import time
 import urllib.parse
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from bot import base, config, i18n
 from bot.ledger import IdempotencyDuplicate, blocked_destination
 from bot.ledger import async_ledger as ledger
+from bot.pct import as_pct, share
 from bot.tx_view import rows_view
 from web.auth import COOKIE_NAME, SESSION_TTL_SECONDS, make_session, parse_session, secure_request
 from web.refusals import refuse, refuse_protocol
@@ -243,16 +244,21 @@ async def mini_state(request: Request) -> dict:
     for m in market_rows:
         view = market_views.get(int(m['id']))
         if view:
-            markets.append({'id': view['id'], 'question': view['question'], 'close_at': view['close_at'], 'traders': view['traders'], 'options': [{'index': o['index'], 'label': o['label'], 'price_pct': o['price_pct']} for o in view['options']]})
+            # status and winner travel with the question because the card that lists
+            # a market has to say what state it is in, and the only derivation of
+            # that state (web/static/chain.js) reads these two fields plus close_at.
+            # A list that published none of them could only paint 'open' forever.
+            markets.append({'id': view['id'], 'question': view['question'], 'close_at': view['close_at'], 'status': view['status'], 'winner': view['winner'], 'traders': view['traders'], 'options': [{'index': o['index'], 'label': o['label'], 'price_pct': o['price_pct']} for o in view['options']]})
     bets = []
     bet_rows = await ledger.bets_by_status('open', 6)
     # Same reason as bulk_amm_market_views above: bet_totals() per row was one
-    # query per market on the app's hottest endpoint. chance_pct keeps the
-    # `100 * pool / pot` form rather than the view's `pool / pot * 100` — the two
-    # float orderings can round apart, and this number is shown to the user.
+    # query per market on the app's hottest endpoint. chance_pct is the view's
+    # own `share(pool, pot)`, not a second expression for the same ratio: this
+    # endpoint and /api/bets used to divide the same pot in two float orderings
+    # that could round apart, and the number is shown to the user.
     for view in await ledger.bulk_market_views([int(b['id']) for b in bet_rows]):
         pot = view['pot']
-        bets.append({'id': view['id'], 'question': view['question'], 'creator': int(view['creator']['id']), 'pot_usdc': _fmt(pot), 'options': [{'index': o['index'], 'label': o['label'], 'pool_usdc': _fmt(o['pool']), 'chance_pct': round(100 * o['pool'] / pot, 1) if pot else 0.0} for o in view['options']]})
+        bets.append({'id': view['id'], 'question': view['question'], 'close_at': view['close_at'], 'status': view['status'], 'winner': view['winner'], 'expired': view['expired'], 'creator': int(view['creator']['id']), 'pot_usdc': _fmt(pot), 'options': [{'index': o['index'], 'label': o['label'], 'pool_usdc': _fmt(o['pool']), 'chance_pct': share(o['pool'], pot)} for o in view['options']]})
     lang = request.state.lang
     history = await rows_view(await ledger.history(tg_id, HISTORY_ROWS), lang, ledger)
     from bot import tip_targets
@@ -622,7 +628,7 @@ async def mini_onchain_market(market_id: int, request: Request) -> dict:
             {
                 'index': i,
                 'label': o,
-                'price_pct': float((Decimal(str(prices[i])) * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'price_pct': as_pct(prices[i]),
                 'shares': balances[i] if i < len(balances) else 0,
             }
             for i, o in enumerate(options)
@@ -640,7 +646,7 @@ class CreateBody(BaseModel):
 def _parse_deadline(hours: float | None) -> int | None:
     if not hours or hours <= 0:
         return None
-    return int(time.time() + min(hours, 30 * 24) * 3600)
+    return int(time.time() + hours * 3600)
 
 @router.post('/api/mini/create', tags=['markets'])
 async def mini_create(body: CreateBody, request: Request) -> dict:
@@ -654,6 +660,11 @@ async def mini_create(body: CreateBody, request: Request) -> dict:
         raise refuse(request, 400, 'api_options_limit')
     if len(question) > 200:
         raise refuse(request, 400, 'api_question_long')
+    # A deadline past the ceiling is refused, never truncated: a creator who asked
+    # for 60 days and got a market that closes in 30 has money locked on a clock
+    # they did not choose, and the receipt would say it was created.
+    if body.hours and body.hours > config.MARKET_MAX_DEADLINE_HOURS:
+        raise refuse(request, 400, 'api_deadline_long', max=config.MARKET_MAX_DEADLINE_HOURS)
     close_at = _parse_deadline(body.hours)
     if body.kind == 'market':
         subsidy_micro = _to_micro(body.subsidy_usdc)

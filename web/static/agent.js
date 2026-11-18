@@ -28,6 +28,17 @@
     return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
+  // Odds take the one decimal every other percentage in this product takes, and
+  // they are handed to it as percentages: `/api/agent/audit` publishes
+  // `confidence_pct`, so nothing here multiplies the stored ratio a second time.
+  // `Math.round(e.confidence * 100) + '%'` was a second rounder at a second
+  // precision: the same audit line read 99% here and 100% beside it.
+  function fmtPct(x) {
+    var n = Number(x);
+    if (!isFinite(n)) n = 0;
+    return n.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  }
+
   function fmtTime(sec) {
     var d = new Date(sec * 1000);
     return isNaN(d.getTime()) ? '—' : d.toLocaleString('ru-RU', {
@@ -51,7 +62,7 @@
     return '<div class="option">' +
       '<div class="option-top"><span class="option-label">' + esc(label) + '</span>' +
       '<span class="option-val">' + fmtMoney(used) + ' / ' + fmtCount(total) + ' ' + esc(unit) + '</span></div>' +
-      '<div class="bar"><div class="bar-fill' + cls + '" aria-hidden="true" style="width:' + Math.max(pct, 2).toFixed(1) + '%"></div></div>' +
+      '<div class="bar"><div class="bar-fill' + cls + '" aria-hidden="true" style="width:' + barWidth(pct).toFixed(1) + '%"></div></div>' +
       '</div>';
   }
 
@@ -90,7 +101,7 @@
     var bet = e.bet_placed
       ? 'ставка ' + fmtMoney(e.bet_amount_usdc) + ' USDC'
       : 'без ставки';
-    var conf = typeof e.confidence === 'number' ? ' · ' + Math.round(e.confidence * 100) + '%' : '';
+    var conf = typeof e.confidence_pct === 'number' ? ' · ' + fmtPct(e.confidence_pct) : '';
     var question = e.question ? ' · ' + e.question : '';
     return '<div class="row">' +
       '<span class="row-k"><span class="mono">' + esc(fmtTime(e.ts)) + '</span>' +

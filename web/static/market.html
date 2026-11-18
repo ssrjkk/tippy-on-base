@@ -33,19 +33,21 @@
     <article class="page" id="market">
       <span class="eyebrow" id="m-kind">Ставка-пул</span>
       <h1 class="page-title" id="m-question">Загрузка…</h1>
-      <div class="page-meta" id="m-meta"></div>
+      <div id="m-body">
+        <div class="page-meta" id="m-meta"></div>
 
-      <div class="market-card">
-        <div id="m-options"></div>
-        <div class="market-footer">
-          <span class="pot" id="m-pot"></span>
-          <span class="pot" id="m-creator"></span>
+        <div class="market-card">
+          <div id="m-options"></div>
+          <div class="market-footer">
+            <span class="pot" id="m-pot"></span>
+            <span class="pot" id="m-creator"></span>
+          </div>
         </div>
-      </div>
 
-      <div class="cta-row" id="m-cta" hidden>
-        <a class="btn btn-primary" id="m-bet" target="_blank" rel="noopener">Поставить в Telegram</a>
-        <button class="btn btn-ghost" id="m-share" type="button">Скопировать ссылку</button>
+        <div class="cta-row" id="m-cta" hidden>
+          <a class="btn btn-primary" id="m-bet" target="_blank" rel="noopener">Поставить в Telegram</a>
+          <button class="btn btn-ghost" id="m-share" type="button">Скопировать ссылку</button>
+        </div>
       </div>
 
       <section class="page-block">
@@ -143,7 +145,7 @@
               <span class="option-label">${esc(o.label)}</span>
               <span class="option-val">${fmtUSDC(o.pool_usdc)} USDC · ${fmtPct(o.probability)} · ${esc(String(o.backers))} чел.</span>
             </div>
-            <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(o.probability, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
+            <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${barWidth(o.probability)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
           </div>`;
         }).join("");
         $("m-pot").innerHTML = "Пул: <b>" + fmtUSDC(m.pot_usdc) + " USDC</b> · " + esc(String(m.total_backers)) + "&nbsp;чел.";
@@ -181,7 +183,11 @@
           }, 10000);
         }
       } catch (e) {
-        $("market").innerHTML = '<div class="empty">Пул #' + esc(betId) +
+        /* The heading names the pool the reader asked for even when the read
+         * fails: replacing the article would take the h1 — and the document
+         * outline — with it. */
+        $("m-question").textContent = "Пул #" + betId;
+        $("m-body").innerHTML = '<div class="empty">Пул #' + esc(betId) +
           ' не найден. Открытые пулы — на <a class="m-link" href="/#markets">главной</a>.</div>';
       }
     })();

@@ -11,6 +11,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot import i18n
 
 from ..ledger import lmsr_prices
+from ..pct import as_pct
 from . import _common as common
 from .bets import _parse_deadline, _rel_deadline
 
@@ -18,7 +19,7 @@ __all__ = ['_market_card', '_market_create', '_markets_text', '_notify_market_re
 _SELL_PCTS = ('25', '50', '100')
 
 def _pct(p: Decimal) -> str:
-    return f'{int((p * 100).to_integral_value(rounding=ROUND_HALF_UP))}%'
+    return f'{as_pct(p)}%'
 
 def _bar(p: Decimal, width: int=10) -> str:
     filled = int((p * width).to_integral_value(rounding=ROUND_HALF_UP))

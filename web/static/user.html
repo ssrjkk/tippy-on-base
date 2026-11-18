@@ -41,6 +41,8 @@
         <button class="btn btn-ghost" id="u-share" type="button">Скопировать ссылку</button>
       </div>
 
+      <div class="empty" id="user-empty" hidden></div>
+
       <section class="page-block" id="figures" hidden>
         <span class="eyebrow">Через Tippy прошло</span>
         <div class="rows">
@@ -149,22 +151,44 @@
       const info = await fetch("/api/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
       applyNetInfo(info);
 
-      let u;
+      let u = null;
+      let unread = false;
       try {
         const r = await fetch("/api/user/" + encodeURIComponent(tgId));
         if (!r.ok) throw new Error();
         u = await r.json();
       } catch (e) {
-        $("profile").innerHTML = '<div class="empty">Профиль не загрузился — обнови страницу.</div>';
-        return;
+        unread = true;
       }
 
-      const moved = FIGURES.some(([, key]) => Number(u[key] || 0) > 0);
-      if (!u.username && !moved && !u.is_owner) {
-        /* /api/user answers 200 with zeros for an id that has never transacted —
-         * it must not become an enumeration oracle — so this, not the failed
-         * fetch above, is the branch a stranger typing an id reaches. */
-        $("profile").innerHTML = '<div class="empty">Через Tippy здесь пока ничего не проходило. Профиль появится, как только этот пользователь что-нибудь отправит или получит.</div>';
+      const moved = !unread && FIGURES.some(([, key]) => Number(u[key] || 0) > 0);
+      /* /api/user answers 200 with zeros for an id that has never transacted —
+       * it must not become an enumeration oracle — so this, not the failed
+       * fetch above, is the branch a stranger typing an id reaches. */
+      const blank = !unread && !u.username && !moved && !u.is_owner;
+
+      /* The heading, the donate link and the share control belong to the
+       * document, not to the data: an empty profile is still a profile somebody
+       * was linked to, and wiping the article to show a note removes the h1 a
+       * screen reader announces and the one button that can still tip this id. */
+      $("u-share").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(location.href);
+          $("u-share").textContent = "Ссылка скопирована";
+          setTimeout(() => { $("u-share").textContent = "Скопировать ссылку"; }, 2000);
+        } catch (e) { /* clipboard denied: the address bar still has the link */ }
+      });
+      if (info.bot_username) {
+        $("u-donate").href = "https://t.me/" + encodeURIComponent(info.bot_username) +
+          "?start=donate_" + encodeURIComponent(tgId);
+      }
+      $("user-name").textContent = handle(unread ? null : u.username, tgId);
+
+      if (unread || blank) {
+        $("user-empty").textContent = unread
+          ? "Профиль не загрузился — обнови страницу."
+          : "Через Tippy здесь пока ничего не проходило. Профиль появится, как только этот пользователь что-нибудь отправит или получит.";
+        $("user-empty").hidden = false;
         return;
       }
 
@@ -174,7 +198,6 @@
         $("user-avatar").textContent = u.username.replace(/^@/, "")[0].toUpperCase();
         $("user-avatar").hidden = false;
       }
-      $("user-name").textContent = handle(u.username, tgId);
       const meta = [];
       if (u.is_owner) meta.push("<span>это твой профиль</span>");
       else if (!moved) meta.push("<span>Через Tippy пока ничего не проходило</span>");
@@ -183,17 +206,6 @@
         $("user-meta").hidden = false;
       }
 
-      if (info.bot_username) {
-        $("u-donate").href = "https://t.me/" + encodeURIComponent(info.bot_username) +
-          "?start=donate_" + encodeURIComponent(tgId);
-      }
-      $("u-share").addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(location.href);
-          $("u-share").textContent = "Ссылка скопирована";
-          setTimeout(() => { $("u-share").textContent = "Скопировать ссылку"; }, 2000);
-        } catch (e) { /* clipboard denied: the address bar still has the link */ }
-      });
 
       if (moved || u.is_owner) {
         FIGURES.forEach(([id, key]) => { $(id).textContent = fmtUSDC(u[key]); });

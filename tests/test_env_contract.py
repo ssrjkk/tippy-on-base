@@ -219,3 +219,119 @@ def test_every_number_alembic_writes_into_a_set_statement_comes_from_the_guard()
         if not re.search(rf"^{name} = _milliseconds\(", source, re.M)
     )
     assert not unguarded, f"{unguarded} reach a SQL statement without being read as a number first"
+
+
+# ---------------------------------------------------------------------------
+# The other half of the contract: a knob is only one file's default if the code
+# reads it from that file. `agent/tools.py` imports `agent.config` as `config`
+# and `bot/config.py` was never in scope there, so the deadline ceiling added in
+# wave 36 raised AttributeError on every market the agent tried to create — a
+# check the author verified by reading the name, which is spelled right.
+
+
+CONST_ATTR = re.compile(r"[A-Z][A-Z0-9_]{3,}$")
+LOCAL_PACKAGES = ("bot", "web", "agent")
+
+
+def _python_sources():
+    for name in APP_DIRS:
+        folder = ROOT / name
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.rglob("*.py")):
+            if "node_modules" not in path.parts:
+                yield path
+
+
+def _module_bindings(tree: ast.AST, package: str) -> dict[str, str]:
+    """Every name the file binds, mapped to the dotted path it was imported from."""
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                out[alias.asname or alias.name.split(".")[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                base = package if node.level == 1 else package.rsplit(".", node.level - 1)[0]
+                prefix = f"{base}.{node.module}" if node.module else base
+            else:
+                prefix = node.module or ""
+            for alias in node.names:
+                name = alias.asname or alias.name
+                out[name] = f"{prefix}.{alias.name}" if prefix else alias.name
+    return out
+
+
+def _is_importable_module(dotted: str) -> bool:
+    import importlib
+
+    if dotted.split(".")[0] not in LOCAL_PACKAGES:
+        return False
+    try:
+        import inspect
+
+        return inspect.ismodule(importlib.import_module(dotted))
+    except Exception:  # noqa: BLE001 — a module this harness cannot load is not evidence of a missing knob
+        return False
+
+
+def _knobs_read_off_a_module() -> list[tuple[str, int, str, str]]:
+    """`(file, line, module, NAME)` for every constant read through an import."""
+    found: list[tuple[str, int, str, str]] = []
+    for path in _python_sources():
+        rel = path.relative_to(ROOT)
+        package = ".".join(rel.parts[:-1])
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+        except SyntaxError:  # a template or a script the harness cannot parse
+            continue
+        bindings = {
+            name: dotted for name, dotted in _module_bindings(tree, package).items()
+            if _is_importable_module(dotted)
+        }
+        if not bindings:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.ctx, ast.Load)
+                and isinstance(node.value, ast.Name)
+                and node.value.id in bindings
+                and CONST_ATTR.fullmatch(node.attr)
+            ):
+                found.append((rel.as_posix(), node.lineno, bindings[node.value.id], node.attr))
+    return found
+
+
+def test_every_knob_the_runtime_reads_exists_on_the_module_it_reads_it_from():
+    read = _knobs_read_off_a_module()
+    assert len(read) >= 40, f"only {len(read)} module-read constants found — this scan needs re-reading"
+    missing = sorted(
+        f"{path}:{line}: {module}.{name}"
+        for path, line, module, name in read
+        if not hasattr(import_module(module), name)
+    )
+    assert not missing, (
+        "read from a module that does not define them (AttributeError at runtime): "
+        + "; ".join(missing)
+    )
+
+
+def import_module(dotted: str):  # noqa: E402 — defined after use, resolved at call time
+    import importlib
+
+    return importlib.import_module(dotted)
+
+
+def test_the_module_binding_reader_resolves_the_imports_this_tree_actually_writes():
+    def bound(source: str, package: str) -> dict[str, str]:
+        return _module_bindings(ast.parse(source), package)
+
+    assert bound("from . import config", "agent")["config"] == "agent.config"
+    assert bound("from bot import config", "agent")["config"] == "bot.config"
+    assert bound("from .. import config as runtime", "bot.ledger")["runtime"] == "bot.config"
+    assert bound("import bot.config", "agent")["bot"] == "bot.config"
+    assert bound("import bot.config as cfg", "agent")["cfg"] == "bot.config"
+    assert bound("from bot.ledger import Ledger", "web")["Ledger"] == "bot.ledger.Ledger"
+    # `from bot import config` binds a module; `from bot.i18n import t` does not.
+    assert _is_importable_module("bot.config") and not _is_importable_module("bot.i18n.t")

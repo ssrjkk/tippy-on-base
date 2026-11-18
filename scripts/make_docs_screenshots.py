@@ -68,7 +68,7 @@ MENU_PAD_BOTTOM = 24
 
 
 def _read(rel: str) -> str:
-    return (ROOT / rel).read_text(encoding="utf-8")
+    return (ROOT / rel).read_text(encoding="utf-8-sig")
 
 
 def _css_block(css: str, selector: str) -> str:

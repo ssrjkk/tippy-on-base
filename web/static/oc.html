@@ -33,13 +33,15 @@
     <article class="page" id="oc">
       <span class="eyebrow" id="oc-kind">Ончейн-рынок</span>
       <h1 class="page-title" id="oc-question">Загрузка…</h1>
-      <div class="page-meta" id="oc-meta"></div>
+      <div id="oc-body">
+        <div class="page-meta" id="oc-meta"></div>
 
-      <div class="market-card">
-        <div id="oc-options"></div>
-        <div class="market-footer">
-          <span class="pot" id="oc-pool"></span>
-          <span class="pot" id="oc-creator"></span>
+        <div class="market-card">
+          <div id="oc-options"></div>
+          <div class="market-footer">
+            <span class="pot" id="oc-pool"></span>
+            <span class="pot" id="oc-creator"></span>
+          </div>
         </div>
       </div>
 
@@ -114,7 +116,11 @@
         if (!r.ok) throw new Error();
         m = await r.json();
       } catch (e) {
-        $("oc").innerHTML = '<div class="empty">Ончейн-рынок #' + esc(marketId) +
+        /* The heading names the market the reader asked for even when the read
+         * fails, and the generic bot link below it still works: replacing the
+         * article would take the h1 — and the document outline — with it. */
+        $("oc-question").textContent = "Ончейн-рынок #" + marketId;
+        $("oc-body").innerHTML = '<div class="empty">Ончейн-рынок #' + esc(marketId) +
           ' не найден — возможно, контракты ещё не развёрнуты в этой сети. Список рынков: <a class="m-link" href="/#onchain-markets">на главной</a>.</div>';
         return;
       }
@@ -151,7 +157,7 @@
             <span class="option-label">${esc(o.label)}</span>
             <span class="option-val">${fmtPct(pct)}</span>
           </div>
-          <div class="bar"><div class="bar-fill${isWinner ? " bar-fill-win" : ""}" aria-hidden="true" style="width:${Math.max(pct, 2)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
+          <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${barWidth(pct)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
         </div>`;
       }).join("");
 

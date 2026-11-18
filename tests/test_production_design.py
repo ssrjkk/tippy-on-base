@@ -14,12 +14,13 @@ Marked `production`: it needs the live site, and it belongs to
 means the site really is broken or the design broke with it.
 """
 
+import ast
 import json
 import os
 import re
 import urllib.error
 import urllib.request
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,7 @@ from test_design_system import (
     LIGHT,
     MINI_LIGHT,
     mono_class_tokens,
+    read,
     resolve,
     state_vocabulary,
 )
@@ -169,18 +171,24 @@ async ({tokens, sizes}) => {
   for (const row of document.querySelectorAll('.option, .detail-opt, .market-card')) {
     const fill = row.querySelector('.bar-fill, .prob-bar-fill, .detail-opt-bar-fill');
     if (!fill) continue;
-    const track = fill.parentElement.getBoundingClientRect();
-    const painted = fill.getBoundingClientRect();
+    const track = fill.parentElement;
+    const painted = fill;
     const label = (row.querySelector('.option-label, .detail-opt-label, h3, .m-question') || {}).textContent || '';
     // Same rule as probBars: read the percentage from the element that prints it.
     // A row's own text can carry another number — a threshold in the question, an
     // amount — and comparing that against the bar calls agreement a bug.
     const value = row.querySelector('.option-val, .detail-opt-val, .num') || row;
     const match = /(\\d+(?:[.,]\\d+)?)\\s*%/.exec(value.textContent || '');
+    // Layout width, not the painted rectangle: `.bar-fill` enters with
+    // `animation: growX … backwards`, which scales the box for up to 1.5 s and
+    // would make the same row measure 0 % or 60 % depending on when the probe
+    // happened to run. What the row *claims* is the resolved `width`, and that is
+    // also the only form a floor or a `min-width` cannot hide in.
     optionRows.push({
       label: label.trim().slice(0, 24),
       textPct: match ? Number(match[1].replace(',', '.')) : null,
-      barPct: track.width ? Number((painted.width / track.width * 100).toFixed(2)) : null,
+      barPct: track.offsetWidth ? Number((painted.offsetWidth / track.offsetWidth * 100).toFixed(2)) : null,
+      trackWidth: track.offsetWidth,
     });
   }
 
@@ -200,9 +208,9 @@ async ({tokens, sizes}) => {
     const rect = el.getBoundingClientRect();
     if (!rect.width || !rect.height) continue;
     if (getComputedStyle(el).display === 'none') continue;
-    if (rect.height < 43.5) {
+    if (rect.height < 43.5 || rect.width < 43.5) {
       controls.push({where: path(el), text: (el.textContent || '').trim().slice(0, 28),
-                     height: Number(rect.height.toFixed(1))});
+                     height: Number(rect.height.toFixed(1)), width: Number(rect.width.toFixed(1))});
     }
   }
 
@@ -259,12 +267,13 @@ async ({tokens, sizes}) => {
       // threshold against the bar and call the disagreement a bug.
       const num = labels[i].querySelector('.num') || labels[i];
       const match = /(\\d+(?:[.,]\\d+)?)\\s*%/.exec(num.textContent || '');
-      const track = bars[i].getBoundingClientRect();
-      const fill = bars[i].firstElementChild.getBoundingClientRect();
+      const track = bars[i];
+      const fill = bars[i].firstElementChild;
       probBars.push({
         label: (labels[i].textContent || '').trim().slice(0, 24),
         textPct: match ? Number(match[1].replace(',', '.')) : null,
-        barPct: track.width ? Number((fill.width / track.width * 100).toFixed(2)) : null,
+        barPct: track.offsetWidth ? Number((fill.offsetWidth / track.offsetWidth * 100).toFixed(2)) : null,
+        trackWidth: track.offsetWidth,
       });
     }
   }
@@ -319,6 +328,10 @@ async ({tokens, sizes}) => {
   return {
     contrast, numeric, controls, bars, optionRows, probBars, api,
     skeletons, clipped, headings, images, themeColors, typeScale, unrevealed,
+    pointer: {
+      coarse: matchMedia('(pointer: coarse)').matches,
+      anyCoarse: matchMedia('(any-pointer: coarse)').matches,
+    },
     marketId: marketId ? Number(marketId) : null,
     title: document.title,
     theme: document.documentElement.dataset.theme || getComputedStyle(document.body).backgroundColor,
@@ -897,8 +910,19 @@ def test_no_horizontal_overflow(request, facet):
 def test_every_control_on_the_phone_is_big_enough(request, facet):
     """The 44 px floor was set for thumbs, and a thumb lives on every page a phone
     opens — not only on the landing and on /app. Mini App first, because AGENTS.md
-    calls it the primary surface and it is where the money is actually spent."""
+    calls it the primary surface and it is where the money is actually spent.
+
+    Both dimensions, because a target is an area: a field grown to 44 px tall and
+    left 37 px wide is a control a thumb still misses, and the law used to report it
+    as passing. And the pointer is proven coarse before anything is judged, because
+    the CSS that grows these targets lives in `@media (pointer: coarse)`: if the
+    browser answers a fine pointer, the grown sizes never apply and a green board
+    would only mean the desktop layout was measured twice.
+    """
     data = request.getfixturevalue(facet)
+    assert data["pointer"]["coarse"], (
+        f"{facet} is judged by a thumb rule while the browser reports a fine pointer "
+        f"({data['pointer']}): the @media (pointer: coarse) blocks cannot apply")
     assert data["controls"] == [], json.dumps(data["controls"], ensure_ascii=False)
 
 
@@ -983,7 +1007,12 @@ def test_option_bars_are_the_percentages_the_page_prints(market_page):
     painted width has to equal the printed percentage, and every option the API
     reports has to appear on the page. The row set is not assumed to be the only
     thing of its kind on the page — a page may repeat a figure elsewhere — so the
-    count is checked as coverage, not as equality."""
+    count is checked as coverage, not as equality.
+
+    The slack is one pixel of that row's own track, plus the half-tick of the
+    1 dp the text rounds to. It used to be a flat 1.5 %, because the template
+    floored a small share at 2 % and the gate had to forgive the floor it was
+    measuring; with the floor gone in `barWidth()`, the width IS the number."""
     record = market_page["api"].get(f"/api/market/{market_page['marketId']}")
     rows = market_page["optionRows"]
     assert rows, "the market page painted no option rows at all"
@@ -992,9 +1021,10 @@ def test_option_bars_are_the_percentages_the_page_prints(market_page):
     for index, row in enumerate(rows):
         if row["textPct"] is None or row["barPct"] is None:
             continue
-        want = max(row["textPct"], 2.0)
-        assert abs(row["barPct"] - want) <= 1.5, (
-            f"row {index} ({row['label']}): полоса {row['barPct']}%, написано {row['textPct']}%"
+        one_pixel = 100.0 / row["trackWidth"] if row["trackWidth"] else 0.5
+        assert abs(row["barPct"] - row["textPct"]) <= one_pixel + 0.05, (
+            f"row {index} ({row['label']}): полоса {row['barPct']}%, написано {row['textPct']}% "
+            f"(трек {row['trackWidth']}px, допуск {one_pixel + 0.05:.2f}pp)"
         )
 
     painted = [row["textPct"] for row in rows if row["textPct"] is not None]
@@ -1302,6 +1332,143 @@ def test_the_document_names_its_own_heading_and_chrome(request, facet):
         "(prefers-color-scheme: light)",
         "(prefers-color-scheme: dark)",
     }, f"{facet}: theme-color metas are {data['themeColors']}"
+
+
+# ---------------------------------------------------------------------------
+# the empty read
+# ---------------------------------------------------------------------------
+
+SERVER_SRC = (Path(__file__).resolve().parents[1] / "web" / "server.py").read_text(
+    encoding="utf-8-sig")
+
+# An id this ledger cannot have issued: the serials and the Telegram ids on the
+# origin both still sit under twelve digits, so fifteen nines is a request the
+# data has no way to answer. The law checks that the branch was really taken
+# rather than trusting the number, because a probe that resolved would measure a
+# data page and report it as an empty state.
+PROBE_ID = "9" * 15
+
+
+def path_parameter(node: ast.expr | None, source: str) -> str | None:
+    """The literal shape of a `_static_page(path=…)` argument, holes as braces.
+
+    `f'/u/{tg_id}'` is a JoinedStr and not a constant, so each piece is read on
+    its own: the text between the holes verbatim, and every hole written back as
+    `{` plus the source of whatever stands in it — a name, a subscript, an
+    attribute — because the gate asks only whether the path is built from
+    something, and a reader that recognised just the bare name would drop a route
+    written any other way without a trace. A path taken off an object
+    (`request.url.path`) is a path the visitor typed rather than a route this
+    origin declares, so it is not a hole and answers None. A path carrying no
+    `{…}` is returned as written and refused by the caller, which is what keeps
+    `/tos` and `/agent` out of a gate about id-bearing pages."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        parts: list[str] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                parts.append(value.value)
+            elif isinstance(value, ast.FormattedValue):
+                inner = ast.get_source_segment(source, value.value)
+                if inner is None:
+                    return None
+                parts.append("{" + inner + "}")
+            else:
+                return None
+        return "".join(parts)
+    return None
+
+
+def id_bearing_page_routes(source: str = SERVER_SRC) -> list[tuple[str, str]]:
+    """(document, path) for every page the origin builds for a path carrying an
+    id, read out of the arguments of its own `_static_page` calls.
+
+    The pair is one call's two arguments — the file it renders and the path it
+    was asked to render it at — so a fourth id-bearing surface joins this gate by
+    being written and not by being named here. The count is floored because the
+    whole subject set is one AST walk: a scan that parsed nothing would
+    parametrise nothing, and every empty state would go unmeasured in a green run."""
+    routes: list[tuple[str, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") == "_static_page"):
+            continue
+        if not node.args or not (isinstance(node.args[0], ast.Constant)
+                                 and isinstance(node.args[0].value, str)):
+            continue
+        page = node.args[0].value
+        path = next((path_parameter(kw.value, source)
+                     for kw in node.keywords if kw.arg == "path"), None)
+        if path and "{" in path:
+            routes.append((page, path))
+    routes = sorted(set(routes))
+    assert len(routes) >= 3, f"only {len(routes)} id-bearing pages in server.py — the scan is blind"
+    return routes
+
+
+EMPTY_STATE_JS = """
+() => {
+  const note = document.querySelector('.empty');
+  const headings = [...document.querySelectorAll('h1')];
+  const shown = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.height > 0 && box.width > 0 && getComputedStyle(el).visibility !== 'hidden';
+  };
+  return {
+    h1s: headings.map((el) => el.textContent.trim()),
+    noteVisible: !!note && shown(note),
+    noteText: note ? note.textContent.trim() : '',
+    outsideHeading: !note || !headings.some((el) => el.contains(note)),
+    chrome: !!document.querySelector('header .brand') && !!document.querySelector('footer'),
+    controls: [...document.querySelectorAll('main a, main button')].filter(shown).length,
+  };
+}
+"""
+
+
+@pytest.mark.parametrize("page_name,path_with_id", id_bearing_page_routes())
+def test_an_empty_read_is_still_a_page(browser, page_name, path_with_id):
+    """A not-found is an answer, and the answer is still a document.
+
+    Three surfaces used to take a failed read as a licence to replace the whole
+    article: the branch that painted its note into the container carrying the
+    `<h1>` removed the heading, the controls under it and the outline a screen
+    reader walks, so a visitor following a link to a pool that had been closed
+    landed in a page with no title. The source gate
+    (`tests/test_design_system.py`) refuses that shape in the files; this measures
+    the painted result, because a heading is destroyed by what the browser
+    composes and not by what a reader matched.
+
+    Every premise is checked on the rendered page rather than assumed: the note
+    must be visible — which is how the law knows it is looking at the empty branch
+    and not at a load that found its data — and then the document must still carry
+    exactly one heading, in the text the route named, outside the note, with its
+    chrome and with something on it a visitor can act on."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    loader = re.search(r"<h1[^>]*>(.*?)</h1>", read(page_name), re.S | re.I)
+    assert loader, f"{page_name} ships no <h1> for a browser to keep"
+    context = open_context(browser, theme="dark", viewport=MOBILE, xff=XFF_POOL[7], touch=True)
+    try:
+        page = context.new_page()
+        probed = re.sub(r"\{[^{}]+\}", PROBE_ID, path_with_id)
+        go(page, probed)
+        try:
+            page.wait_for_selector(".empty", state="visible", timeout=15000)
+        except PlaywrightTimeoutError:
+            pytest.fail(f"{page_name} at {probed}: no empty note was painted, so this load "
+                        "answered with data and the empty state was never measured")
+        seen = page.evaluate(EMPTY_STATE_JS)
+        assert len(seen["h1s"]) == 1, f"{page_name} at {probed}: headings are {seen['h1s']}"
+        assert seen["h1s"][0] != loader.group(1).strip(), (
+            f"{page_name}: the heading still says {seen['h1s'][0]!r}, which is what the "
+            "document said before any read happened")
+        assert seen["noteText"], f"{page_name}: the empty state paints no words"
+        assert seen["outsideHeading"], f"{page_name}: the note is inside the heading it replaced"
+        assert seen["chrome"], f"{page_name}: the empty read lost the page chrome"
+        assert seen["controls"] >= 1, f"{page_name}: nothing on the empty page can be acted on"
+    finally:
+        context.close()
 
 
 def test_a_painted_image_has_a_name_and_a_box(landing_phone, mini_app):
@@ -1631,42 +1798,314 @@ def test_the_open_drawer_states_the_bounds_this_origin_publishes(browser, theme)
 
 
 # ---------------------------------------------------------------------------
-# the three Mini App sheets that move money
+# the Mini App layers a thumb opens
 # ---------------------------------------------------------------------------
 
-SHEET_OPENERS = ("tip", "deposit", "withdraw")
+REGEX_ALLOWED_AFTER = "([{,;:=!&|?+-*%<>~^"
 
-SHEET_SEED_JS = """
-(name) => {
+
+def _opens_a_regex(text: str, index: int) -> bool:
+    """Whether this `/` starts a literal rather than dividing what came before."""
+    back = index - 1
+    while back >= 0 and text[back] in " \t\r\n":
+        back -= 1
+    return back < 0 or text[back] in REGEX_ALLOWED_AFTER
+
+
+def _skip_regex(text: str, index: int) -> int:
+    """The offset just past the `/…/flags` literal that starts at `index`.
+
+    A character class is its own world: app.html's own `esc()` writes `/[&<>"']/g`, and
+    both quote characters sit inside it. A reader that opened a string there swallowed
+    every `}` after it and called the whole file unclosed."""
+    in_class = False
+    scan = index + 1
+    while scan < len(text):
+        char = text[scan]
+        if char == "\\":
+            scan += 2
+            continue
+        if char == "[":
+            in_class = True
+        elif char == "]":
+            in_class = False
+        elif char == "/" and not in_class:
+            return scan + 1
+        scan += 1
+    return len(text)
+
+
+def _js_body(text: str, brace: int) -> str:
+    """The characters between a `{` and the `}` that closes it.
+
+    A brace inside a string, a template literal, a regex or a comment is markup, not a
+    block, and a template's `${…}` is code inside that markup: every layer in app.html
+    paints itself out of a backtick template holding a whole screen of `<div>`s, and the
+    tip sheet builds a nested template right inside one. A reader that counted the braces
+    of that markup stopped wherever the template happened to close a tag, and a reader
+    that closed the outer template on the inner backtick swallowed the rest of the file —
+    either way the layer under it was reported as calling nothing. The pairing of layers
+    against `openModal` call sites is what makes that failure loud rather than silent."""
+    frames: list[str] = []
+    index = brace
+    quote = ""
+    while index < len(text):
+        char = text[index]
+        if quote == "`":
+            if char == "\\":
+                index += 2
+                continue
+            if char == "`":
+                quote = ""
+            elif char == "$" and text[index + 1:index + 2] == "{":
+                frames.append("interp")
+                quote = ""
+                index += 2
+                continue
+            index += 1
+            continue
+        if quote:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+            index += 1
+            continue
+        if char in "'\"`":
+            quote = char
+        elif char == "/" and text[index + 1:index + 2] == "/":
+            newline = text.find("\n", index)
+            if newline == -1:
+                break
+            index = newline
+            continue
+        elif char == "/" and text[index + 1:index + 2] == "*":
+            end = text.find("*/", index + 2)
+            index = len(text) if end == -1 else end + 2
+            continue
+        elif char == "/" and _opens_a_regex(text, index):
+            index = _skip_regex(text, index)
+            continue
+        elif char == "{":
+            frames.append("brace")
+        elif char == "}":
+            frame = frames.pop()
+            if frame == "interp":
+                quote = "`"
+            if not frames:
+                return text[brace + 1:index]
+        index += 1
+    raise AssertionError("an unclosed brace in app.html")
+
+
+MODAL_CALL = "openModal("
+LAYER_SIGNATURE = re.compile(r"function\s+([A-Za-z0-9_]+)\s*\(([^)]*)\)\s*\{")
+
+# A layer opened from a row the app does not hold must be handed that row, so the
+# row is written here. `mini_app_layers()` pairs this table against the fields each
+# layer's own template reads and against the number of `openModal` call sites in
+# app.html, so a new field or a new seeded layer fails the build instead of painting
+# `undefined` where a withdrawal amount should be.
+SEED_ARG_LAYERS: dict[str, dict[str, str]] = {
+    "showWithdrawConfirm": {
+        "token": "0f" * 32,
+        "amount": "1 250,00",
+        "fee": "6,25",
+        "total": "1 256,25",
+        "balance_after": "88,00",
+        "address": "0x" + "a1b2" * 10,
+    },
+}
+
+
+def _modal_callers(text: str) -> list[tuple[str, str, str]]:
+    """`(name, arguments, body)` for every function in this JS that hands markup over."""
+    callers = []
+    for match in LAYER_SIGNATURE.finditer(text):
+        if match.group(1) == "openModal":
+            continue
+        body = _js_body(text, match.end() - 1)
+        if MODAL_CALL in body:
+            callers.append((match.group(1), match.group(2).strip(), body))
+    return callers
+
+
+def modal_layers_in(text: str) -> list[tuple[str, str, str]]:
+    """The layers of one JS source, paired against its own call sites.
+
+    The pairing is what makes the reader accountable: a body cut short by a brace the
+    scanner mistook for a block loses its layer, and one layer fewer beside the same
+    number of `openModal` calls is an assertion, not a shorter test run.
+    """
+    callers = _modal_callers(text)
+    sites = text.count(MODAL_CALL) - text.count(f"function {MODAL_CALL}")
+    assert len(callers) == sites, (
+        f"this source calls {MODAL_CALL} {sites} times but {[name for name, _, _ in callers]} "
+        "were read as layers: the reader is losing a body, not the app hiding a layer")
+    return callers
+
+
+def mini_app_layers() -> tuple[str, ...]:
+    """Every Mini App layer a thumb brings up over the screen it is on.
+
+    The subject set is the app's source, not a list kept here. Three sheets used to
+    be named by hand, and the two create screens — where a market is actually born,
+    with their own inputs, option rows and buttons — were measured by no law below at
+    all. Deriving the set instead of typing it turned up a sixth layer the hand-written
+    name and the zero-argument reader both missed: `showWithdrawConfirm(d)`, the screen
+    a withdrawal is approved on. A layer painted over the full screen by an id — the
+    market detail — has its own gate.
+    """
+    callers = modal_layers_in(APP_HTML)
+    assert len(callers) >= 5, f"only {len(callers)} layers read out of app.html: the reader went blind"
+    for name, arguments, body in callers:
+        if arguments:
+            assert name in SEED_ARG_LAYERS, (
+                f"{name}({arguments}) opens a layer from a row nothing supplies: it is measured "
+                "by no law until SEED_ARG_LAYERS describes that row")
+            reads = frozenset(re.findall(rf"\b{re.escape(arguments)}\.([a-z_][a-z0-9_]*)", body))
+            assert reads == frozenset(SEED_ARG_LAYERS[name]), (
+                f"{name}() reads {sorted(reads)} from {arguments} but the seed supplies "
+                f"{sorted(SEED_ARG_LAYERS[name])}: one of them paints nothing")
+        else:
+            assert name not in SEED_ARG_LAYERS, (
+                f"{name}() takes no argument, so {name} is seeded by a row nobody reads")
+    return tuple(name for name, _, _ in callers)
+
+
+def test_the_layer_reader_reads_a_body_the_app_writes_as_a_template():
+    """The reader on markup that is not the file it usually gets.
+
+    Every layer in app.html paints itself out of a backtick template holding a whole
+    screen of `<div>`s, and a template's own text carries braces: the first version of
+    this scanner counted one of those and stopped reading where the markup happened to
+    close a tag, so the layer below it — the one the money is approved on — was simply
+    not in the walk, and the walk was green.
+    """
+    closed_brace = (
+        "function openTipSheet() {\n"
+        "  const close = `}</div>`;\n"
+        "  openModal(`<b>${close}</b>`);\n"
+        "}\n"
+        "function showWithdrawConfirm(d) { openModal(`<i>${d.token}</i>`); }\n"
+        "function closeModal() { hide(); }\n"
+    )
+    assert [name for name, _, _ in modal_layers_in(closed_brace)] == ["openTipSheet", "showWithdrawConfirm"]
+
+    in_a_comment_and_a_string = (
+        "function openDepositSheet() {\n"
+        "  // if (ready) { paint(); }\n"
+        '  const label = "a } b";\n'
+        "  openModal(`<p>${label}</p>`);\n"
+        "}\n"
+    )
+    assert [name for name, _, _ in modal_layers_in(in_a_comment_and_a_string)] == ["openDepositSheet"]
+
+    escaped_backtick = (
+        "function openCreateMarket() { openModal(`<p>\\`}</p>`); }\n"
+    )
+    assert [name for name, _, _ in modal_layers_in(escaped_backtick)] == ["openCreateMarket"]
+
+    # app.html's own `esc()` is written with both quote characters inside a regex
+    # character class. A reader that opened a string on the first of them swallowed
+    # every `}` after it — and then called the whole file unclosed.
+    regex_class = (
+        'function esc(s) { return String(s).replace(/[&<>"\']/g, c => ({'
+        '"&": "&amp;", "<": "&lt;"})[c]); }\n'
+        "function openWithdrawSheet() { openModal(`<p>${esc('x')}</p>`); }\n"
+    )
+    assert [name for name, _, _ in modal_layers_in(regex_class)] == ["openWithdrawSheet"]
+
+    # The tip sheet builds a template inside the `${}` of a template. Closing the outer
+    # one on the inner backtick left everything after it to be read as code.
+    nested_template = (
+        "function openTipSheet() {\n"
+        "  const rows = list.map(r => `<b>${esc(r)}</b>`).join('');\n"
+        "  openModal(`<div>${rows}</div>`);\n"
+        "}\n"
+    )
+    assert [name for name, _, _ in modal_layers_in(nested_template)] == ["openTipSheet"]
+
+    # A named function nested inside a layer is counted by both, and the pairing says
+    # so instead of letting one layer answer for two.
+    nested = "function openCreateBet() { function inner() { openModal(`<p>`); } inner(); }\n"
+    with pytest.raises(AssertionError, match="the reader is losing a body"):
+        modal_layers_in(nested)
+
+    # The template this source is written in is the one the scanner must not mistake
+    # for a block, so a body whose `${}` pairs are unbalanced is a real defect.
+    with pytest.raises(AssertionError, match="unclosed brace"):
+        modal_layers_in("function openBroken() { openModal(`<p>`);\n")
+
+
+SHEET_SEED_JS = r"""
+({name, row, balance, known}) => {
   /* A bottom sheet is not in the rendering until a thumb taps its button, so the
      wallet walk that covers /app sees the same empty document an anonymous
      visitor sees — and the sheets are the only screens on this product where
      money actually leaves. They are opened here through the very function the
      tab bar calls, which needs no session: the deposit sheet paints its QR from
-     STATE, and STATE is what the page fills when there is nothing to fill. */
-  const opener = window['open' + name[0].toUpperCase() + name.slice(1) + 'Sheet'];
-  if (typeof opener !== 'function') return {error: 'the Mini App exposes no ' + name + ' sheet'};
-  opener();
+     STATE, and STATE is what the page fills when there is nothing to fill. The
+     one layer that opens from a server row is handed that row from Python, so
+     what it paints is the shape the withdrawal response really carries. */
+  const opener = window[name];
+  if (typeof opener !== 'function') return {error: `the Mini App exposes no ${name}()`};
+  if (balance !== undefined && balance !== null) {
+    /* The account behind a money panel is the other input it paints from, and it
+       is session data: an anonymous probe is handed an empty STATE, so the
+       filtering has one balance to judge against and no more. Writing the figure
+       into STATE is the same assignment the detail seed already makes to
+       `STATE.markets` — the template, the primitives and the tap handler stay the
+       shipped ones, and only the account behind them is supplied. `known: false`
+       is the other real case: no identity resolved, so the panel must say it
+       cannot tell rather than say the money is gone. */
+    STATE.tg_id = known === false ? null : 1;
+    STATE.balance_usdc = balance;
+  }
+  if (row === null) opener(); else opener(row);
   const sheet = document.getElementById('modalSheet');
   return {
     open: document.getElementById('modalOverlay').classList.contains('show'),
     controls: sheet.querySelectorAll('a[href], button, input, select, textarea').length,
     modal: sheet.getAttribute('aria-modal'),
     label: sheet.getAttribute('aria-label') || '',
+    // The language the panel paints its labels in: it comes from the session, and
+    // a law that looks for a row by its label has to look in that language.
+    lang: STATE.lang,
     // The bounds as the visitor's browser sees them: `input.min`/`input.max` are
     // the properties the field's own validation runs on, and the hint line is the
     // sentence the sheet paints beside it.
-    fields: [...sheet.querySelectorAll('input[type=number]')].map((el) => ({
+    fields: [...sheet.querySelectorAll('input[type=number], input[inputmode=decimal]')].map((el) => ({
       id: el.id, min: el.min, max: el.max, step: el.step, value: el.value,
     })),
     hints: [...sheet.querySelectorAll('.hint')].map((el) => el.textContent.trim()).filter(Boolean),
+    // One row, one meaning: the figures a panel states beside its fields — the
+    // balance, the network, the confirmation window. Read as label/value pairs so
+    // a law can ask which figure a named row carries instead of squinting at text.
+    rows: [...sheet.querySelectorAll('.wd-row')].map((el) => ({
+      label: el.querySelector('span') ? el.querySelector('span').textContent.trim() : '',
+      value: el.querySelector('b') ? el.querySelector('b').textContent.trim() : '',
+    })),
+    // The sums a thumb can tap, with the value the tap would type. `pickChip` is
+    // the amount family: the tip sheet paints a second `.chip` row above this one
+    // for repeat recipients, and a handle is not a sum.
+    chips: [...sheet.querySelectorAll('[data-act="pickChip"]')].map((el) => ({
+      text: el.textContent.trim(), val: el.dataset.val, active: el.classList.contains('active'),
+    })),
+    links: [...sheet.querySelectorAll('a[href]')].map((el) => el.getAttribute('href')),
+    // The figures the layer paints, so a law can ask whether the money a screen
+    // shows is the money the app was handed. `attrs` is where a one-use token
+    // lives: it rides back to the server on a button, it is never text.
+    painted: sheet.textContent.replace(/\s+/g, " ").trim(),
+    attrs: [...sheet.querySelectorAll("*")].map((el) => Array.from(el.attributes).map((a) => a.value).join(" ")).join(" "),
   };
 }
 """
 
 
-def open_sheet(browser, sheet, theme):
-    """One Mini App money sheet, open, walked by a real Tab key on a phone.
+def open_layer(browser, layer, theme, balance=None, known=True, act=None, walk=True):
+    """One Mini App layer, open, walked by a real Tab key on a phone.
 
     `aria-modal="true"` on `#modalSheet` is a promise to a screen reader that
     nothing outside the sheet exists. Measured before this helper, the keyboard
@@ -1674,10 +2113,15 @@ def open_sheet(browser, sheet, theme):
     stops that stayed inside were 0 in the deposit sheet, 2 in the withdraw
     sheet and 6 in the tip sheet, and the visitor who cannot see the scrim ended
     up able to activate a button behind it while the accessibility tree said it
-    was gone."""
+    was gone.
+
+    `balance` and `known` are the account the panel paints from, `act` is a
+    JavaScript source run once the layer has settled, and `walk=False` skips the
+    eleven keypresses: a law that judges painted figures does not need them and
+    should not pay for them."""
     context = open_context(
         browser, theme=theme, viewport=MOBILE,
-        xff=XFF_POOL[(SHEET_OPENERS.index(sheet) * 2 + (theme == "light")) % len(XFF_POOL)],
+        xff=XFF_POOL[(mini_app_layers().index(layer) * 2 + (theme == "light")) % len(XFF_POOL)],
         touch=True,
     )
     try:
@@ -1688,21 +2132,26 @@ def open_sheet(browser, sheet, theme):
         page.on("pageerror", lambda error: errors.append(str(error)))
         go(page, "/app")
         page.wait_for_timeout(2500)
-        seeded = page.evaluate(SHEET_SEED_JS, sheet)
+        seeded = page.evaluate(
+            SHEET_SEED_JS,
+            {"name": layer, "row": SEED_ARG_LAYERS.get(layer), "balance": balance, "known": known},
+        )
         if seeded.get("error"):
             pytest.fail(seeded["error"])
-        assert seeded["open"], f"the {sheet} sheet never opened in {theme}"
+        assert seeded["open"], f"{layer}() never opened in {theme}"
         # The sheet slides up over 0.3 s; a rect caught mid-transform is not a
         # size and a contrast sample taken there is not the paint the user sees.
         page.wait_for_timeout(500)
-        data = page.evaluate(MEASURE_JS, measure_arguments("/app", MOBILE[0]))
+        data = {"acted": page.evaluate(act) if act else None}
+        data.update(page.evaluate(MEASURE_JS, measure_arguments("/app", MOBILE[0])))
         data["pageerrors"] = errors
         data["counted"] = seeded
-        data["sheet"] = sheet
+        data["sheet"] = layer
         stops = []
-        for _ in range(10):
-            page.keyboard.press("Tab")
-            stops.append(page.evaluate(DIALOG_STOP_JS, "#modalSheet"))
+        if walk:
+            for _ in range(10):
+                page.keyboard.press("Tab")
+                stops.append(page.evaluate(DIALOG_STOP_JS, "#modalSheet"))
         data["stops"] = stops
         return data
     finally:
@@ -1710,20 +2159,30 @@ def open_sheet(browser, sheet, theme):
 
 
 @pytest.mark.parametrize("theme", ["dark", "light"])
-@pytest.mark.parametrize("sheet", SHEET_OPENERS)
-def test_the_money_sheet_keeps_the_keyboard_it_promised(browser, sheet, theme):
-    """Every Tab stop stays inside the open sheet and paints a ring, and the
-    sheet is a phone surface like the screen behind it, so it is held to the same
+@pytest.mark.parametrize("layer", mini_app_layers())
+def test_an_open_layer_keeps_the_keyboard_it_promised(browser, layer, theme):
+    """Every Tab stop stays inside the open layer and paints a ring, and the
+    layer is a phone surface like the screen behind it, so it is held to the same
     touch floor, the same composited contrast and the same clipping rule — the
     three checks that had never once run against a sheet."""
-    probe = open_sheet(browser, sheet, theme)
+    probe = open_layer(browser, layer, theme)
     counted = probe["counted"]
-    assert counted["controls"] >= 1, f"{sheet} in {theme} opened with nothing to tab to"
-    assert counted["modal"] == "true", f"{sheet}: aria-modal says {counted['modal']!r}"
-    assert counted["label"], f"{sheet}: aria-modal with no name is an anonymous dialog"
+    assert counted["controls"] >= 1, f"{layer} in {theme} opened with nothing to tab to"
+    assert counted["modal"] == "true", f"{layer}: aria-modal says {counted['modal']!r}"
+    assert counted["label"], f"{layer}: aria-modal with no name is an anonymous dialog"
+    row = SEED_ARG_LAYERS.get(layer)
+    if row:
+        # The pairing above proves this table names the fields the template reads;
+        # this proves the render really carries them, so a layer cannot keep passing
+        # by painting `undefined` where the money a thumb is about to approve should be.
+        invisible = {field: value for field, value in row.items()
+                     if value not in counted["painted"] and value not in counted["attrs"]}
+        assert not invisible, (
+            f"{layer} was handed {sorted(row)} and shows none of {sorted(invisible)} "
+            f"in {theme}: {counted['painted']!r}")
     assert probe["pageerrors"] == [], probe["pageerrors"]
     escaped = [stop for stop in probe["stops"] if not stop["inside"]]
-    assert not escaped, f"{sheet} in {theme}: Tab left the sheet {json.dumps(escaped, ensure_ascii=False)}"
+    assert not escaped, f"{layer} in {theme}: Tab left the sheet {json.dumps(escaped, ensure_ascii=False)}"
     inside = [stop for stop in probe["stops"] if stop["inside"]]
     naked = [stop for stop in inside if not paints_a_ring(stop)]
     assert not naked, json.dumps(naked, ensure_ascii=False)
@@ -1731,53 +2190,395 @@ def test_the_money_sheet_keeps_the_keyboard_it_promised(browser, sheet, theme):
     assert probe["contrast"] == [], json.dumps(probe["contrast"], ensure_ascii=False)
     assert probe["clipped"] == [], json.dumps(probe["clipped"], ensure_ascii=False)
     assert probe["scrollWidth"] <= MOBILE[0], (
-        f"the {sheet} sheet overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
-    assert_on_the_scale(probe, f"the {sheet} sheet in {theme}")
+        f"the {layer} layer overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
+    assert_on_the_scale(probe, f"the {layer} layer in {theme}")
 
 
-# The field id each money sheet types its amount into, and the published key that
-# bounds it. `tests/test_web.py` ties these names to the route's own `refuse()`
-# kwargs; what only a browser can answer is whether the sheet painted them.
+# The field ids each layer types a bound figure into, and the published key that
+# bounds each. `tests/test_web.py` ties these names to the route's own `refuse()`
+# kwargs; what only a browser can answer is whether the layer painted them.
 SHEET_BOUND_FIELDS = {
-    "tip": ("tipAmt", {"max": "max_tip_usdc"}),
-    "withdraw": ("wdAmt", {"min": "min_withdraw_usdc"}),
+    "openTipSheet": [("tipAmt", {"max": "max_tip_usdc"})],
+    "openWithdrawSheet": [("wdAmt", {"min": "min_withdraw_usdc"})],
+    # A create sheet chooses a deadline, not a sum: the cap the route answers
+    # `api_deadline_long` under is the same kind of bound a thumb can break.
+    "openCreateMarket": [("mkHours", {"max": "max_deadline_hours"})],
+    "openCreateBet": [("btHours", {"max": "max_deadline_hours"})],
 }
+assert set(SHEET_BOUND_FIELDS) <= set(mini_app_layers()), (
+    f"a layer this table names is no longer a layer app.html opens: "
+    f"{sorted(set(SHEET_BOUND_FIELDS) - set(mini_app_layers()))}")
 
 
 @pytest.mark.parametrize("theme", ["dark", "light"])
-@pytest.mark.parametrize("sheet", sorted(SHEET_BOUND_FIELDS))
-def test_the_open_sheet_states_the_bounds_this_origin_publishes(browser, sheet, theme):
-    """The money sheet is where the sum is chosen, and until now it chose it blind:
-    the Mini App read no published bound at all, so its tip field accepted 5 000
-    against a `MAX_TIP_USDC` of 1 000 and the ledger answered the tap with a
-    refusal. The attribute is what blocks the sum and the hint is what tells the
-    visitor why, so both are measured here against this origin's `/api/info`."""
+@pytest.mark.parametrize("layer", sorted(SHEET_BOUND_FIELDS))
+def test_an_open_layer_states_the_bounds_this_origin_publishes(browser, layer, theme):
+    """The layer is where the sum or the clock is chosen, and until now it chose
+    them blind: the Mini App read no published bound at all, so its tip field
+    accepted 5 000 against a `MAX_TIP_USDC` of 1 000, its create sheets offered any
+    deadline against the ceiling `MARKET_MAX_DEADLINE_HOURS` sets, and the ledger
+    answered each tap with a refusal. The attribute is what blocks the figure and the hint
+    is what tells the visitor why, so both are measured here against this origin's
+    `/api/info`."""
     limits = json.loads(_get("/api/info")[2])["limits"]
-    counted = open_sheet(browser, sheet, theme)["counted"]
-    field_id, keys = SHEET_BOUND_FIELDS[sheet]
-    fields = [f for f in counted["fields"] if f["id"] == field_id]
-    assert fields, f"the {sheet} sheet paints no #{field_id}: {counted['fields']}"
-    field = fields[0]
+    counted = open_layer(browser, layer, theme)["counted"]
     painted_hints = [number for hint in counted["hints"] for number in _painted_decimals(hint)]
-    for attr, key in keys.items():
-        assert key in limits, f"/api/info publishes no {key}: {sorted(limits)}"
-        assert field[attr] != "", f"#{field_id} carries no {attr} in {theme}"
-        assert Decimal(field[attr]) == Decimal(str(limits[key])), (
-            f"#{field_id}.{attr}={field[attr]} while this origin publishes "
-            f"{key}={limits[key]} ({theme})")
-        assert Decimal(field[attr]) in painted_hints, (
-            f"#{field_id}.{attr}={field[attr]} is enforced but never said: "
-            f"{counted['hints']}")
+    for field_id, keys in SHEET_BOUND_FIELDS[layer]:
+        fields = [f for f in counted["fields"] if f["id"] == field_id]
+        assert fields, f"the {layer} layer paints no #{field_id}: {counted['fields']}"
+        field = fields[0]
+        for attr, key in keys.items():
+            assert key in limits, f"/api/info publishes no {key}: {sorted(limits)}"
+            assert field[attr] != "", f"#{field_id} carries no {attr} in {theme}"
+            assert Decimal(field[attr]) == Decimal(str(limits[key])), (
+                f"#{field_id}.{attr}={field[attr]} while this origin publishes "
+                f"{key}={limits[key]} ({theme})")
+            assert Decimal(field[attr]) in painted_hints, (
+                f"#{field_id}.{attr}={field[attr]} is enforced but never said: "
+                f"{counted['hints']}")
+
+
+# ── the account a money panel chooses against ─────────────────────────────────
+#
+# A sheet that takes a sum has one input the earlier laws never supplied: what
+# the account holds. The rows, chips and links below are read out of the open
+# layer, and the balance is handed to the shipped primitive that paints them —
+# the same assignment `DETAIL_SEED_JS` already makes to `STATE.markets`, so the
+# template, the filtering and the tap handler under test are the shipped ones.
+
+
+def _mini_app_functions() -> dict[str, str]:
+    """`{name: body}` for every function app.html declares, at any depth.
+
+    The scan is the file's own signature pattern, so a helper that paints a panel
+    inside a layer is a function this reader can reach and account for."""
+    out = {}
+    for match in LAYER_SIGNATURE.finditer(APP_HTML):
+        out[match.group(1)] = _js_body(APP_HTML, match.end() - 1)
+    return out
+
+
+def mini_app_surfaces() -> dict[str, str]:
+    """Every full-screen layer the Mini App can bring up, and how it is opened.
+
+    The modal sheets come out of the app's own `openModal` call sites; the market
+    detail is the one layer painted into an id rather than a sheet, and
+    `test_the_market_detail_keeps_the_keyboard_inside_itself` fails if it ever
+    stops opening, so this table cannot quietly keep measuring a screen that is
+    gone."""
+    surfaces = dict.fromkeys(mini_app_layers(), "sheet")
+    surfaces["openMarketDetail"] = "detail"
+    return surfaces
+
+
+def surfaces_painting(primitive: str) -> tuple[tuple[str, str], ...]:
+    """`(layer, kind)` for every Mini App surface whose code paints `primitive`,
+    whether its own body calls it or a panel it hosts does.
+
+    The subject set is app.html: a money panel joins the laws below by calling the
+    primitive, so a fourth panel needs no edit here and a panel that stops calling
+    it leaves the law by the same door."""
+    funcs = _mini_app_functions()
+    surfaces = []
+    for name, kind in sorted(mini_app_surfaces().items()):
+        body = funcs.get(name)
+        assert body is not None, f"{name} is a surface app.html no longer declares"
+        painters = [body] if f"{primitive}(" in body else [
+            funcs[helper] for helper in re.findall(r"\b([A-Za-z][A-Za-z0-9_]*)\(", body)
+            if helper in funcs and helper != name and f"{primitive}(" in funcs[helper]
+        ]
+        if painters:
+            surfaces.append((name, kind))
+    assert surfaces, (
+        f"no Mini App surface paints {primitive}(): the primitive is dead, renamed, "
+        "or this reader went blind")
+    return tuple(surfaces)
+
+
+def quick_amount_surfaces() -> tuple[tuple[str, str, str], ...]:
+    """`(layer, kind, field id)` for every surface that offers a quick amount.
+
+    `quickAmounts(target)` names the field its chips type into, which is what pairs
+    a chip row with the sum it owes. A surface that calls it for two fields, or for
+    none, is reported instead of guessed at."""
+    funcs = _mini_app_functions()
+    surfaces = []
+    for name, kind in surfaces_painting("quickAmounts"):
+        body = funcs[name]
+        painters = [body] if "quickAmounts(" in body else [
+            funcs[helper] for helper in re.findall(r"\b([A-Za-z][A-Za-z0-9_]*)\(", body)
+            if helper in funcs and helper != name and "quickAmounts(" in funcs[helper]
+        ]
+        targets = {
+            match.group(1)
+            for painter in painters
+            for match in re.finditer(r"quickAmounts\('(\w+)'\)", painter)
+        }
+        assert len(targets) == 1, (
+            f"{name} offers quick amounts for {sorted(targets) or 'no field'}: one chip "
+            "row owes exactly one amount field")
+        surfaces.append((name, kind, targets.pop()))
+    return tuple(surfaces)
+
+
+def open_mini_app_surface(browser, name, kind, balance=None, known=True) -> dict:
+    """One Mini App surface opened on a phone, with everything it painted.
+
+    The keyboard walk is skipped: these laws judge the figures a panel paints, and
+    the Tab order is judged by `test_an_open_layer_keeps_the_keyboard_it_promised`
+    on the very same layers."""
+    if kind == "sheet":
+        return open_layer(browser, name, "dark", balance=balance, known=known, walk=False)
+    return open_detail(browser, "dark", balance=balance, known=known, walk=False)
+
+
+def quick_ladder() -> list[int]:
+    """The sums app.html offers a thumb, read out of the one ladder it declares."""
+    declared = re.search(r"const QUICK_LADDER = \[([0-9,\s]+)\];", APP_HTML)
+    assert declared, "app.html declares no QUICK_LADDER for the money panels to filter"
+    rungs = [int(value) for value in re.findall(r"\d+", declared.group(1))]
+    assert len(rungs) >= 3, f"the ladder offers {rungs}: a ladder this short filters nothing"
+    return rungs
+
+
+def quick_default() -> int:
+    """The rung a money field opens on, out of the same declaration."""
+    standing = re.search(r"const QUICK_DEFAULT = (\d+);", APP_HTML)
+    assert standing, "app.html declares no QUICK_DEFAULT"
+    return int(standing.group(1))
+
+
+_MONEY_FIGURE = re.compile(r"\d{1,3}(?:[  ,]\d{3})*(?:[.,]\d{2})?\b")
+
+
+def _money_figures(text: str) -> list[Decimal]:
+    """Every two-decimal money figure in painted text, as a number.
+
+    `usdc()` writes through `toLocaleString` in the interface language, so the
+    same figure arrives as «3,43» in one session and `3.43` in another, and the
+    group separator is a space in ru and a comma in en. The two decimals the money
+    mechanism owes (see `tests/test_design_system.py`) are what tell an en group
+    separator from an ru decimal mark, which is why a count or a percentage never
+    answers as a figure here."""
+    figures = []
+    for token in _MONEY_FIGURE.findall(text.replace(" ", " ")):
+        if not re.search(r"[.,]\d{2}$", token):
+            continue
+        head = re.sub(r"[ ,]", "", token[:-3])
+        figures.append(Decimal(f"{head}.{token[-2:]}"))
+    return figures
+
+
+def _i18n_word(lang: str, key: str) -> str:
+    """One Mini App label, out of the dictionary the app itself ships for that
+    language. A law that typed the English word would fail every Russian session
+    and pass every English one, which is the defect the panel had."""
+    for line in APP_HTML.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(f"{lang}: {{"):
+            continue
+        found = re.search(rf'\b{key}: "([^"]*)"', stripped)
+        assert found, f"the {lang} dictionary carries no {key}"
+        return found.group(1)
+    raise AssertionError(f"app.html ships no {lang} dictionary")
+
+
+# The account shapes a money panel can be measured on. `known=False` is not a
+# number: with no identity resolved the panel knows nothing, and hiding every
+# offer would say «the money is gone» on a screen that cannot tell whose it is.
+BALANCE_SHAPES: tuple[tuple[str, float, bool], ...] = (
+    ("an empty account", 0.0, True),
+    ("an account below the ladder's standing default", 3.4, True),
+    ("an account above every rung", 120.0, True),
+    ("no identity resolved", 999.0, False),
+)
+
+
+@pytest.mark.parametrize("shape", range(len(BALANCE_SHAPES)))
+def test_a_quick_amount_is_offered_only_when_the_account_covers_it(browser, shape):
+    """A chip is an offer to tap, and an offer the balance cannot cover is a
+    refusal the page could have predicted: the tip sheet and the buy panel typed
+    the same four rungs by hand, so on a 3.40 USDC account both offered 25 and the
+    ledger answered the tap.
+
+    Measured against the ladder out of app.html, on every surface that paints one,
+    for the four account shapes above — including the one that is not a figure at
+    all, where nothing is filtered and the balance row says so."""
+    label, balance, known = BALANCE_SHAPES[shape]
+    rungs = quick_ladder()
+    standing = quick_default()
+    offered = rungs if not known else [v for v in rungs if v <= balance]
+    opening = standing if standing in offered else (offered[-1] if offered else None)
+    measured = 0
+    for name, kind, field_id in quick_amount_surfaces():
+        counted = open_mini_app_surface(
+            browser, name, kind, balance=balance, known=known)["counted"]
+        chips = counted["chips"]
+        measured += 1
+        assert [chip["val"] for chip in chips] == [str(v) for v in offered], (
+            f"{name} on {label} offers {[chip['val'] for chip in chips]}, "
+            f"the ladder filtered to {offered}")
+        for chip in chips:
+            figures = _money_figures(chip["text"])
+            assert len(figures) == 1 and figures[0] == Decimal(chip["val"]), (
+                f"{name}: a chip labelled {chip['text']!r} taps {chip['val']}")
+        active = [chip for chip in chips if chip["active"]]
+        assert len(active) == (1 if offered else 0), (
+            f"{name} on {label} marks {len(active)} of {len(chips)} chips selected")
+        if offered:
+            assert Decimal(active[0]["val"]) == Decimal(opening), (
+                f"{name} on {label} opens on {active[0]['val']}, not on {opening}")
+        fields = [f for f in counted["fields"] if f["id"] == field_id]
+        assert fields, f"{name} offers quick amounts and paints no #{field_id}"
+        if opening is None:
+            assert fields[0]["value"] == "", (
+                f"#{field_id} on {label} opens on {fields[0]['value']!r} "
+                "with nothing on the account")
+        else:
+            # The field's own value is the number the tap submits, not the figure
+            # the chip shows: `1` here and `1.00` there are the same sum.
+            assert Decimal(fields[0]["value"]) == Decimal(opening), (
+                f"#{field_id} on {label} opens on {fields[0]['value']!r}, "
+                f"the chip row says {opening}")
+        figures = [value for row in counted["rows"] for value in _money_figures(row["value"])]
+        if known:
+            assert Decimal(str(balance)) in figures, (
+                f"{name} on {label} paints {counted['rows']} and never the balance")
+        else:
+            assert any(row["value"] == "--" for row in counted["rows"]), (
+                f"{name} on {label} paints {counted['rows']} for an account it cannot "
+                "identify: a figure it has no right to, or silence about the unknown")
+    assert measured >= 2, f"only {measured} quick-amount surfaces were measured"
+
+
+def test_the_available_row_is_the_balance_this_origin_reports(browser):
+    """The row was added this wave, and a row is only worth having if the figure
+    in it is the figure the account holds: the sheet paints the balance
+    `/api/mini/state` handed it, in the money face, labelled in the language the
+    session is in. Compared as numbers, because the same balance is «1 250,00» in
+    one interface language and `1,250.00` in another."""
+    if not SESSION_COOKIE:
+        pytest.skip(
+            "the balance is session data (/api/mini/state): without DESIGN_GATE_SESSION "
+            "every panel paints the unknown-figure branch and there is no number to compare"
+        )
+    state = json.loads(_get_with_session("/api/mini/state")[2])
+    balance = Decimal(str(state["balance_usdc"]))
+    measured = 0
+    for name, kind in surfaces_painting("availableLine"):
+        counted = open_mini_app_surface(browser, name, kind)["counted"]
+        word = _i18n_word(counted["lang"], "available")
+        labelled = [row for row in counted["rows"] if row["label"] == word]
+        assert len(labelled) == 1, (
+            f"{name} paints {len(labelled)} rows labelled {word!r} in {counted['lang']}: "
+            "one row, one meaning")
+        assert _money_figures(labelled[0]["value"]) == [balance], (
+            f"{name} says {labelled[0]['value']!r} beside the sum for a session whose "
+            f"/api/mini/state balance is {balance}")
+        measured += 1
+    assert measured >= 3, (
+        f"only {measured} panels were measured against the published balance")
+
+
+SHEET_MAX_CLICK_JS = """
+() => {
+  /* A real tap, through the delegated handler the shipped page installs, on the
+     control the sheet paints when — and only when — the account can cover a
+     withdrawal. */
+  const btn = document.querySelector('#modalSheet [data-act="fillMax"]');
+  if (!btn) return {error: 'the withdraw sheet paints no Max control'};
+  btn.click();
+  const target = document.getElementById(btn.dataset.target);
+  if (!target) return {error: `Max names #${btn.dataset.target}, which the sheet does not have`};
+  return {typed: target.value, target: btn.dataset.target};
+}
+"""
+
+
+def test_the_max_control_types_a_sum_the_fee_still_fits(browser):
+    """The withdrawal fee is added on top of the sum, so a balance is not a
+    withdrawal: on a 3.4653 USDC account at the published percent the largest
+    whole cent that still leaves room for the fee is 3.43, and 3.47 — the same
+    figure rounded up — needs 3.51 the account never held. The sheet offered no
+    maximum at all and left the ledger to refuse whatever the thumb typed.
+
+    Nothing here knows the app's arithmetic: the answer is judged against the
+    fee the origin publishes, both for fitting and for being the largest
+    whole cent that fits, because a maximum that leaves a cent on the account is
+    the same defect wearing a friendlier number."""
+    info = json.loads(_get("/api/info")[2])
+    fee_rate = Decimal(str(info["fees"]["withdraw_pct"])) / 100
+    floor = Decimal(str(info["limits"]["min_withdraw_usdc"]))
+    balance = Decimal("3.4653")
+    probe = open_layer(
+        browser, "openWithdrawSheet", "dark", balance=float(balance),
+        act=SHEET_MAX_CLICK_JS, walk=False,
+    )
+    acted = probe["acted"]
+    assert acted, "the Max tap never ran: the law would measure an empty dictionary"
+    assert not acted.get("error"), acted.get("error")
+    assert acted["target"] == "wdAmt", acted
+
+    typed = Decimal(acted["typed"])
+
+    def total(amount: Decimal) -> int:
+        """What the ledger would debit: the amount plus its own fee, in micro."""
+        micro = int(amount * 1_000_000)
+        fee = max(int((Decimal(micro) * fee_rate).to_integral_value(rounding=ROUND_CEILING)), 1)
+        return micro + fee
+
+    held = int(balance * 1_000_000)
+    assert typed >= floor, f"Max typed {typed}, below the {floor} this origin refuses under"
+    assert total(typed) <= held, (
+        f"Max typed {typed} whose total {total(typed)} micro is over a {balance} balance")
+    assert total(typed + Decimal("0.01")) > held, (
+        f"Max typed {typed} while {typed + Decimal('0.01')} also fits the {balance} balance")
+
+
+def test_the_deposit_sheet_names_the_chain_the_asset_and_the_window_this_origin_publishes(browser):
+    """An address alone is not enough to send money to: the same 42 characters
+    mean a different token on a different chain, the funds land only after the
+    sweep's confirmation window, and the address is shared custodial space. Every
+    one of those figures is published by this origin, so the sheet quotes them
+    from `/api/info` — and a link that goes anywhere else is a link the config
+    never approved."""
+    info = json.loads(_get("/api/info")[2])
+    counted = open_layer(browser, "openDepositSheet", "dark", walk=False)["counted"]
+    assert len(counted["rows"]) >= 3, f"the deposit sheet paints {counted['rows']}"
+    values = [row["value"] for row in counted["rows"]]
+    assert info["chain_name"] in values, f"{values} names no chain this origin publishes"
+    assert "USDC" in values, f"{values} never says which asset is credited"
+    confirmations = [
+        number for value in values for number in _painted_decimals(value)
+        if number == number.to_integral_value()
+    ]
+    window = Decimal(str(info["limits"]["deposit_confirmations"]))
+    assert window in confirmations, (
+        f"the sheet paints {values} while /api/info publishes a {window}-block window")
+    assert info["usdc_address"] in counted["painted"], (
+        "the deposit sheet shows no token contract beside its address")
+    expected = f"{info['explorer']}/token/{info['usdc_address']}"
+    assert expected in counted["links"], (
+        f"the sheet links {counted['links']} where {expected} was published")
+    for href in counted["links"]:
+        assert href.startswith(f"{info['explorer']}/"), (
+            f"a deposit link leaves the published explorer: {href}")
 
 
 DETAIL_SEED_JS = """
-() => {
+({balance, known} = {}) => {
   /* The market detail is the screen a bet is actually placed on, and like the
      sheets it is not in the rendering until a card is tapped: `#detailView`
      ships `hidden`, its rows come from STATE.markets, and `openMarketDetail` is
      the same call the card makes — so the seeded row goes through the real
-     template, not a copy of it. */
+     template, not a copy of it. The balance is supplied the same way the sheet
+     seed supplies it, because the buy panel inside this layer offers quick
+     amounts and a panel that offers them cannot be judged without one. */
   if (typeof openMarketDetail !== 'function') return {error: 'the Mini App exposes no market detail'};
+  if (balance !== undefined && balance !== null) {
+    STATE.tg_id = known === false ? null : 1;
+    STATE.balance_usdc = balance;
+  }
   STATE.markets = [{
     id: 1, question: 'Рынок для замера скрытого экрана', traders: 12,
     options: [
@@ -1792,12 +2593,23 @@ DETAIL_SEED_JS = """
     inert: view.inert === true,
     appInert: document.getElementById('app').inert === true,
     controls: view.querySelectorAll('a[href], button, input, select, textarea').length,
+    lang: STATE.lang,
+    rows: [...view.querySelectorAll('.wd-row')].map((el) => ({
+      label: el.querySelector('span') ? el.querySelector('span').textContent.trim() : '',
+      value: el.querySelector('b') ? el.querySelector('b').textContent.trim() : '',
+    })),
+    chips: [...view.querySelectorAll('.chip')].map((el) => ({
+      text: el.textContent.trim(), val: el.dataset.val, active: el.classList.contains('active'),
+    })),
+    fields: [...view.querySelectorAll('input[type=number], input[inputmode=decimal]')].map((el) => ({
+      id: el.id, min: el.min, max: el.max, step: el.step, value: el.value,
+    })),
   };
 }
 """
 
 
-def open_detail(browser, theme):
+def open_detail(browser, theme, balance=None, known=True, walk=True):
     """The Mini App's third full-screen layer, open, walked the same way."""
     context = open_context(browser, theme=theme, viewport=MOBILE,
                            xff=XFF_POOL[6 if theme == "dark" else 7], touch=True)
@@ -1809,7 +2621,7 @@ def open_detail(browser, theme):
         page.on("pageerror", lambda error: errors.append(str(error)))
         go(page, "/app")
         page.wait_for_timeout(2500)
-        seeded = page.evaluate(DETAIL_SEED_JS)
+        seeded = page.evaluate(DETAIL_SEED_JS, {"balance": balance, "known": known})
         if seeded.get("error"):
             pytest.fail(seeded["error"])
         assert seeded["open"], f"the market detail never opened in {theme}"
@@ -1994,7 +2806,11 @@ def test_no_mini_app_screen_cuts_its_text_without_a_mark(mini_screens):
 
 def test_mini_app_bars_are_the_percentages_they_print(mini_screens):
     """A probability row is a number and a bar. The bar is decoration the moment
-    the two disagree, and a user reads the bar first."""
+    the two disagree, and a user reads the bar first.
+
+    The slack is one pixel of that row's own track plus the half-tick of the 1 dp
+    the text rounds to; it used to be a flat 1.5 %, which was the template's
+    1 % floor to a zero row forgiven rather than a measurement."""
     if not SESSION_COOKIE:
         pytest.skip(
             "the lists are session data (/api/mini/state): without DESIGN_GATE_SESSION "
@@ -2006,10 +2822,11 @@ def test_mini_app_bars_are_the_percentages_they_print(mini_screens):
             if row["textPct"] is None or row["barPct"] is None:
                 continue
             checked += 1
-            want = max(row["textPct"], 1.0)  # the template clamps a zero to 1%
-            assert abs(row["barPct"] - want) <= 1.5, (
+            one_pixel = 100.0 / row["trackWidth"] if row["trackWidth"] else 0.5
+            assert abs(row["barPct"] - row["textPct"]) <= one_pixel + 0.05, (
                 f"tab{tab} row {index} ({row['label']}): полоса {row['barPct']}%, "
-                f"написано {row['textPct']}%"
+                f"написано {row['textPct']}% (трек {row['trackWidth']}px, "
+                f"допуск {one_pixel + 0.05:.2f}pp)"
             )
     assert checked >= 4, (
         f"only {checked} probability rows were measured — the screens are empty, "
@@ -2037,6 +2854,22 @@ def _get(path: str) -> tuple[int, str, str]:
     with urllib.request.urlopen(request, timeout=30) as response:
         body = response.read().decode("utf-8", "replace")
         return response.status, response.headers.get("content-type", ""), body
+
+
+def _get_with_session(path: str) -> tuple[int, str, str]:
+    """The same probe a signed-in Mini App makes. `/api/mini/*` answers the
+    session, so an anonymous GET would be a different document and a comparison
+    against it would judge the probe rather than the page."""
+    request = urllib.request.Request(
+        f"{PROD_URL}{path}",
+        headers={
+            "user-agent": USER_AGENT,
+            "x-forwarded-for": XFF_POOL[7],
+            "cookie": f"{session_cookie_name()}={SESSION_COOKIE}",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.status, response.headers.get("content-type", ""), response.read().decode("utf-8", "replace")
 
 
 def require_public_origin() -> None:

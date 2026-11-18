@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 from bot.ledger import async_ledger as ledger
+from bot.pct import as_pct
 
 from . import caps, config
 
@@ -125,7 +126,7 @@ async def get_pnl_report(tg_id: int) -> dict:
     state["peak_equity_micro"] = peak
     _save_pnl_state(state)
 
-    drawdown_pct = 0.0 if peak <= 0 else (peak - equity) / peak * 100
+    drawdown_pct = 0.0 if peak <= 0 else as_pct((peak - equity) / peak)
     return {
         "total_trades": len(state["trades"]),
         "resolved_trades": sum(1 for t in state["trades"] if t.get("resolved")),
@@ -159,7 +160,7 @@ async def check_drawdown(tg_id: int) -> str | None:
     if not halted and loss >= threshold:
         halted = True
         log.error(
-            "agent stop-loss tripped: PnL %d micro <= -%.1f%% of peak equity %d micro",
+            "agent stop-loss tripped: PnL %d micro <= -%s%% of peak equity %d micro",
             report["total_pnl_micro"], stop_pct, peak,
         )
     elif halted and loss <= threshold / 2:

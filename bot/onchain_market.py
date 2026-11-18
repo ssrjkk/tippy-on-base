@@ -17,6 +17,7 @@ from pathlib import Path
 from web3 import Web3
 
 from . import config
+from .pct import as_pct
 
 log = logging.getLogger(__name__)
 
@@ -790,11 +791,11 @@ def price_pct(price) -> float:
 
     The market list used the builtin `round()` (banker's, on a float) while the
     market page used Decimal ROUND_HALF_UP, so one market could show 12,34% on
-    the card and 12,35% on its own page. One field, one rounding.
+    the card and 12,35% on its own page. One field, one rounding, at the one
+    decimal every odds face in the bundle paints: a second decimal is not a
+    finer reading, it is a number `toLocaleString` rounds a second time.
     """
-    from decimal import ROUND_HALF_UP, Decimal
-
-    return float((Decimal(str(price)) * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    return as_pct(price)
 
 
 async def market_views(limit: int = 12) -> list[dict]:

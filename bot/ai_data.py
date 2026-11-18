@@ -22,6 +22,7 @@ from . import i18n
 from .commands_catalog import BOT_COMMAND_SPECS
 from .ledger import MICRO
 from .ledger import async_ledger as ledger
+from .pct import from_pct
 
 _MARKET_RE = re.compile(
     r"\bрын\w*|\bмаркет(?!инг)\w*|котировк|оддс|шанс|вероятн|price|odds|market|chance|probab|percent"
@@ -70,7 +71,10 @@ def _usd(micro: int) -> str:
 
 
 def _pct(price: float) -> str:
-    return f"{price:.1f}%"
+    # `price` is the API's own `price_pct`: already a percentage, already rounded
+    # once by `bot/pct.py`. A `{price:.1f}` here was a second rounder — the
+    # builtin's, over a float — deciding the face a second time.
+    return f"{from_pct(price)}%"
 
 
 def _options_text(view: dict) -> str:
