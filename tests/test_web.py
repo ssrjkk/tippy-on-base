@@ -2085,6 +2085,54 @@ def _limits_the_origin_publishes(client):
     return published
 
 
+def test_the_info_key_reader_refuses_the_shapes_the_publisher_takes(tmp_path):
+    """`tests/test_production_health.py::api_info_keys` decides the live-origin
+    staleness law, so it is held here, in ordinary CI, to the shapes `api_info`
+    actually writes and to the two it would have to grow: a nested value that is
+    not a dict literal publishes no keys, and a payload assembled at runtime is a
+    publisher no AST can inventory — which the reader reports instead of answering
+    with an empty set that would certify any deployment."""
+    from test_production_health import api_info_keys
+
+    shipped = tmp_path / "server.py"
+    shipped.write_text("""
+def api_info():
+    return {
+        'bot_username': 1,
+        'chain_id': 2,
+        'chain_name': 3,
+        'explorer': 4,
+        'usdc_address': 5,
+        'commands': [],
+        'fees': {'withdraw_pct': 2, 'win_pct': 3},
+        'limits': {'min_trade_usdc': 4, 'max_tip_usdc': 5, 'max_bet_usdc': 6,
+                   'max_trade_usdc': 7, 'min_withdraw_usdc': 8, 'deposit_confirmations': 9,
+                   'max_withdraws_per_day': 10, 'min_subsidy_usdc': 11, 'max_subsidy_usdc': 12,
+                   'max_deadline_hours': 13},
+        'smart_wallet_enabled': True,
+        'onchain_markets_enabled': True,
+        'ai_mode': 'data',
+        'x402': x402_info(),
+    }
+""", encoding="utf-8")
+    read = api_info_keys(shipped)
+    assert read[""] == {"bot_username", "chain_id", "chain_name", "explorer", "usdc_address",
+                        "commands", "fees", "limits", "smart_wallet_enabled",
+                        "onchain_markets_enabled", "ai_mode", "x402"}
+    assert read["fees"] == {"withdraw_pct", "win_pct"}
+    assert "x402" not in read, "a value that is not a dict literal publishes no keys here"
+
+    runtime = tmp_path / "runtime.py"
+    runtime.write_text("def api_info():\n    return build()\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="one dict literal"):
+        api_info_keys(runtime)
+
+    gone = tmp_path / "gone.py"
+    gone.write_text("def api_health():\n    return {}\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="no `api_info`"):
+        api_info_keys(gone)
+
+
 def _bound_assigned_by_script(sources):
     """`(attr, limits key)` pairs each shipped script or sheet binds to one
     input id: `bindBound('wdAmount', L, [['min', 'min_withdraw_usdc']])` on the

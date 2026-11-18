@@ -1,5 +1,7 @@
+import ast
 import hashlib
 import importlib.util
+import json
 import re
 import urllib.error
 import urllib.request
@@ -137,6 +139,78 @@ def test_the_published_edge_still_answers_what_it_cannot_find():
 
     missing = get("/wave33-no-such-asset.css")
     assert missing[0] != 200, f"a missing stylesheet answered {missing[0]} {missing[1].get('content-type')}"
+
+
+# ---------------------------------------------------------------------------
+# the running origin against this checkout
+# ---------------------------------------------------------------------------
+#
+# The bundle law above reads the files Pages hands out. The other half of every
+# page is a program: `deploy/run.py` serves the markup off the disk at request
+# time, so a visitor sees this checkout's HTML answering from a Python process
+# that started whenever the host last rebooted it. Measured on 2026-11-18: the live
+# origin (started 13:16) ran a `web/server.py` whose last commit landed at 20:26, so
+# `/api/info` answered eight of the eleven bounds this checkout publishes — no
+# `default_deadline_hours`, no `max_deadline_hours`, no `deposit_confirmations` — and
+# every sheet binding a published bound was painted from a response that lacked it, so
+# the rendered bounds gates went red on a correct tree. Nothing read the
+# running program before that: an asset is compared with a file, a process is
+# compared with nothing. So the process is measured through the one document it
+# publishes whose shape this checkout decides — the key set of `api_info()`'s own
+# dict literal, read from the AST. What a page binds and what the origin answers
+# have to be the same set; a value is not compared, because the deployed `.env`
+# is not this machine's `.env` and a knob is allowed to differ.
+
+SERVER_SOURCE = Path(__file__).resolve().parents[1] / "web" / "server.py"
+
+
+def api_info_keys(source: Path = SERVER_SOURCE) -> dict[str, set[str]]:
+    """The key sets of the dict literal `api_info()` returns, one entry per
+    nested dict it builds: `''` for the top level, then `'fees'` and `'limits'`."""
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    fn = next((n for n in tree.body
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "api_info"), None)
+    assert fn is not None, f"{source} carries no `api_info` — the reader found no publisher"
+    payload = next((n.value for n in ast.walk(fn) if isinstance(n, ast.Return)
+                    and isinstance(n.value, ast.Dict)), None)
+    assert payload is not None, "api_info returns something other than one dict literal"
+
+    def keys_of(node: ast.Dict) -> set[str]:
+        return {k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+
+    out = {"": keys_of(payload)}
+    for key, value in zip(payload.keys, payload.values):
+        if isinstance(key, ast.Constant) and isinstance(value, ast.Dict):
+            out[str(key.value)] = keys_of(value)
+    assert len(out[""]) >= 10, f"only {sorted(out[''])} read at the top level — the AST walk is blind"
+    assert len(out.get("limits", ())) >= 8, (
+        f"only {sorted(out.get('limits', ()))} bounds read — the nested walk is blind")
+    assert len(out.get("fees", ())) >= 2, (
+        f"only {sorted(out.get('fees', ()))} fees read — the nested walk is blind")
+    return out
+
+
+def test_the_running_origin_publishes_every_key_this_checkout_publishes():
+    published = api_info_keys()
+    status, headers, body = get("/api/info")
+    assert status == 200, f"/api/info answered {status} ({headers.get('content-type')})"
+    assert not headers.get("content-type", "").startswith("text/html"), (
+        "/api/info answered the landing page, not the origin")
+    live = json.loads(body.decode("utf-8"))
+
+    findings = []
+    for group, expected in published.items():
+        got = set(live) if group == "" else set((live.get(group) or {}).keys())
+        missing = sorted(expected - got)
+        extra = sorted(got - expected)
+        if missing or extra:
+            findings.append({"group": group or "top level", "published by this checkout": sorted(expected),
+                             "answered by the origin": sorted(got), "missing": missing, "extra": extra})
+    assert not findings, (
+        "the origin answering the live site is not this checkout:\n"
+        + json.dumps(findings, indent=2)
+        + "\nRestart the deployed origin (`deploy/run.py`) — the markup a visitor reads is "
+          "served from disk by a process older than the files it renders.")
 
 
 def test_prod_csp_and_mime_types(page):

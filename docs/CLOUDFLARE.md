@@ -130,6 +130,23 @@ that was never published is still absent, and it is absent silently. `--commit-d
 is what lets a working tree publish, and it is also how a deploy stops meaning
 anything about a commit.
 
+One page reaches the visitor from three vehicles at once, and each ages separately. The markup is
+rendered from disk by the origin process at request time; the `*.js` and `*.css` come from this
+hand-published bundle; and the bounds a field binds come from whatever `deploy/run.py` was started
+whenever the host last restarted. Measured 2026-11-18 with all three in view: the published
+`chain.js` was 3,945 bytes against this checkout's 4,748 and did not define `barWidth`, while four
+call sites in freshly served markup reached for it — the Mini App's market list, its market detail,
+`/m/{id}` and `/oc/{id}` each threw, and `/m/{id}` answered its readers with «Пул #N не найден» for
+four pools that `/api/market/{id}` returned in full. Five of the 21 bundle assets were behind `main`
+that day. The origin answering `/api/info` published eight of the eleven bounds this checkout
+publishes — `default_deadline_hours`, `max_deadline_hours` and `deposit_confirmations` were missing —
+because the process was older than `web/server.py`. So after any wave that touches markup,
+`web/static` or a published bound: republish the bundle, and restart the origin.
+`test_the_running_origin_publishes_every_key_this_checkout_publishes` holds the live answer to the
+key set read out of `api_info()`'s own dict literal, in both directions, and the bundle hashes every
+file the edge can answer against this checkout; both are in the run below, and a red result there is
+evidence a deploy is owed, not evidence the tree is wrong.
+
 ```bash
 python -m pytest tests/test_production_health.py -m production
 ```

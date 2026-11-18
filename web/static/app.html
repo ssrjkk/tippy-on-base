@@ -1725,6 +1725,7 @@ async function askAI() {
       chat.insertAdjacentHTML('beforeend', `<div class="ai-item err">${esc(errMsg(d, r.status))}</div>`);
     }
   } catch(e) {
+    console.error('/ask', e);
     pending.remove();
     chat.insertAdjacentHTML('beforeend', `<div class="ai-item err">${esc(t('network_error'))}</div>`);
   }

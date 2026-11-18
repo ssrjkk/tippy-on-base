@@ -3333,14 +3333,18 @@ def mono_class_tokens(css: str) -> list[str]:
 # controls: what a visitor can click, and what is allowed to appear at all
 # ---------------------------------------------------------------------------
 
+SCRIPT_SRC_RE = re.compile(r'<script[^>]*\bsrc="/([\w.-]+\.js)"')
+
+
 def page_scripts(name: str) -> tuple[str, ...]:
     """The scripts a document loads from this bundle, read off the document.
 
     This was a hand-written map of page → scripts. A page added to `PAGES` and
     missing from that map raised `KeyError` in the middle of an unrelated gate,
     and a page whose script list changed silently kept being measured against the
-    old one — so the pair is measured from the `<script src>` tags instead."""
-    return tuple(re.findall(r'<script src="/([\w.-]+\.js)"', read(name)))
+    old one — so the pair is measured from the `<script src>` tags instead, in any
+    attribute order a document may write them in."""
+    return tuple(SCRIPT_SRC_RE.findall(read(name)))
 
 
 def page_code(name: str) -> str:
@@ -4967,3 +4971,236 @@ def test_the_awaiting_note_is_written_once_in_the_file_that_derives_the_state():
             assert text.index('src="/chain.js"') < text.index(f'src="/{name}"'), (
                 f"{page} loads {name} before the derivation that defines the note"
             )
+
+
+# ---------------------------------------------------------------------------
+# A helper a page reaches is a file the page loads.
+# ---------------------------------------------------------------------------
+
+# The two halves of this bundle travel on different vehicles: the origin reads the
+# markup off the disk at request time, while a `*.js` asset reaches the visitor from
+# the hand-published Pages bundle. A symbol added on one side and called from the
+# other is therefore a `ReferenceError` on the live host even when the checkout is
+# one commit — measured on 2026-11-18, when the published `chain.js` carried no
+# `barWidth` while `/app` already called it, and every market detail in the Mini App
+# threw on open. The tree cannot re-measure a CDN, but it can refuse the shape on its
+# own: a document whose global scope calls a function only another file defines,
+# without loading that file, is the same break waiting for the first tap.
+
+FUNC_DEF_RE = re.compile(r"^[ \t]*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(", re.M)
+ARROW_DEF_RE = re.compile(
+    r"^[ \t]*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?"
+    r"(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>",
+    re.M)
+CALL_RE = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(")
+
+
+def defined_functions(text: str) -> set[str]:
+    return set(FUNC_DEF_RE.findall(text)) | set(ARROW_DEF_RE.findall(text))
+
+
+def bundle_function_names() -> set[str]:
+    names: set[str] = set()
+    for js in SCRIPTS:
+        names |= defined_functions(read(js))
+    assert len(names) >= 20, (
+        f"only {len(names)} functions read out of {len(SCRIPTS)} bundle scripts — "
+        "the definition reader has gone blind"
+    )
+    return names
+
+
+def functions_a_page_reaches(scope: str, owned: set[str]) -> set[str]:
+    """Bundle-owned names this scope calls, whether or not it defines them."""
+    return {n for n in CALL_RE.findall(scope) if n in owned}
+
+
+def unreached_functions(scope: str, owned: set[str]) -> set[str]:
+    """Bundle-owned names this scope calls without defining."""
+    return functions_a_page_reaches(scope, owned) - defined_functions(scope)
+
+
+def test_every_bundle_function_a_page_reaches_is_one_the_page_loads():
+    owned = bundle_function_names()
+    definers = {js: defined_functions(read(js)) for js in SCRIPTS}
+    scopes = {page: page_code(page) for page in PAGES}
+    reached = {page: functions_a_page_reaches(scope, owned) for page, scope in scopes.items()}
+    offenders = []
+    for page, scope in scopes.items():
+        for name in sorted(unreached_functions(scope, owned)):
+            offenders.append({
+                "page": page,
+                "calls": name,
+                "defined in": sorted(js for js, fns in definers.items() if name in fns),
+                "page loads": list(page_scripts(page)),
+            })
+    assert len(scopes) == len(PAGES), f"measured {len(scopes)} of {len(PAGES)} documents"
+    assert sum(1 for page in PAGES if page_scripts(page)) >= 4, (
+        "fewer than four documents load a bundle script — the `<script src>` reader is blind"
+    )
+    # Measured this wave: 208 page/helper pairs over the eight documents — the landing
+    # alone reaches 138, the Mini App 22, and every list page 10. Without this floor the
+    # law would pass by the call reader going blind, which is the one failure this class
+    # of gate always has: a `CALL_RE` that matched nothing would certify the same tree
+    # that shipped `barWidth` to a page that never loaded the file defining it.
+    assert sum(len(names) for names in reached.values()) >= 150, (
+        f"only {sum(len(names) for names in reached.values())} page/helper calls read — "
+        "the call reader has gone blind"
+    )
+    assert not offenders, "a page calls a helper no script in its scope defines:\n" + json.dumps(
+        offenders, indent=2)
+
+
+def test_the_scope_reader_refuses_the_call_shapes_a_page_ships():
+    owned = {"barWidth", "marketState", "shortAddr"}
+
+    def calls(text: str) -> set[str]:
+        return unreached_functions(text, owned)
+
+    assert calls("style.width = barWidth(pct)") == {"barWidth"}
+    assert calls("function barWidth(v) { return v }\nbarWidth(3)") == set()
+    assert calls("    const barWidth = (x) =>\n        x * 100;\n    barWidth(3)") == set()
+    assert calls("    function barWidth(v) { return v }\n    barWidth(3)") == set()
+    assert calls("const barWidth = (v) => v;\nbarWidth(3)") == set()
+    assert calls("const shortAddr = v => v;\nshortAddr(a)") == set()
+    assert calls("async function marketState(r) { return r }\nmarketState(r)") == set()
+    assert calls("chain.barWidth(pct)") == set(), "a property call is not the global helper"
+    assert calls("myBarWidth(pct) barWidthX(pct)") == set(), "a longer name is not this name"
+    assert calls("<div>nothing here reaches the bundle</div>") == set()
+    assert SCRIPT_SRC_RE.findall('<script src="/chain.js"></script><script defer src="/x.js">'
+                                 '<script src="/y.js" defer></script>') == ["chain.js", "x.js", "y.js"], (
+        "a `<script src>` the reader cannot reach is a helper the law cannot see"
+    )
+    assert SCRIPT_SRC_RE.findall('<script src="https://cdn.example/z.js"></script>') == [], (
+        "a script from another origin is not this bundle's file"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A refusal and a crash are two answers, and a page that paints either owes a log.
+# ---------------------------------------------------------------------------
+
+# `/m/{id}` wraps its read *and* its paint in one `try`, so a throw anywhere in
+# that block fell into the `catch` that says «не найден» — the page blamed the
+# origin for its own crash, and wrote the verdict where a visitor reads it.
+# Measured on the live host on 2026-11-18, while the published `chain.js` had no
+# `barWidth`: all four open pools answered «Пул #N не найден» to a browser, and
+# `/api/market/5` answered `200` with the same four pools to the same visitor
+# twenty seconds later. Nothing in the console said why.
+
+CATCH_RE = re.compile(r"\bcatch\s*(?:\([^)]*\))?\s*\{")
+TRY_RE = re.compile(r"\btry\s*\{")
+# A write into the document: replacing or appending a node's content, or handing
+# it markup. A comparison is not one, which is why the assignment ends where a
+# second `=` would begin.
+DOCUMENT_WRITE_RE = re.compile(
+    r"\.\s*(?:innerHTML|outerHTML|textContent|innerText)\s*\+?=(?!=)"
+    r"|\.\s*insertAdjacentHTML\s*\(")
+MISSING_RECORD_RE = re.compile(r"не найден|нет данных|not found", re.I)
+LOG_RE = re.compile(r"console\s*\.\s*(?:error|warn)\s*\(")
+GUARD_RE = re.compile(r"\bif\s*\(")
+
+
+def block_after_brace(text: str, brace: int) -> str:
+    """The body of the brace-matched block whose `{` sits at `brace`.
+
+    Braces inside a string literal or a comment are counted, the same way every
+    other markup reader in this file counts them: a template literal writing
+    `${x}` or a CSS block inside a string stays balanced, and a block that is
+    unbalanced outside one is a syntax error the browser refuses before this law
+    ever sees it."""
+    depth = 0
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace + 1:i]
+    raise AssertionError(f"the block opening at offset {brace} never closes")
+
+
+def catch_and_try(text: str) -> list[tuple[str, str]]:
+    """`[(catch body, body of the try it answers)]` for every block catch in `text`.
+
+    The nearest `try` that opens before the `catch` is its own try — that is what
+    decides whether «не найден» is honest: if the try stops at the read, nothing
+    that reaches the catch painted anything and the record really was refused."""
+    trys = [m.end() - 1 for m in TRY_RE.finditer(text)]
+    out: list[tuple[str, str]] = []
+    for m in CATCH_RE.finditer(text):
+        preceding = [p for p in trys if p < m.start()]
+        out.append((block_after_brace(text, m.end() - 1),
+                    block_after_brace(text, max(preceding)) if preceding else ""))
+    return out
+
+
+def test_a_page_never_answers_a_crash_with_the_words_for_a_missing_record():
+    """An empty state is an answer about the record; a crash is an answer about the page.
+
+    Two clauses, because the live defect needed both: a `catch` that writes into
+    the document must log what it caught — an error the console never sees is the
+    reason this hid for a wave, behind a card that looked like a working 404 — and
+    a `catch` that names a missing record while its own try also paints must
+    *guard* that wording, because a try that reached the paint has already been
+    answered by the origin."""
+    offenders: list[dict] = []
+    writers = missing_cards = 0
+    pages = [name for name in PAGES if "fetch(" in inline_scripts(read(name))]
+    for name in pages:
+        for body, try_body in catch_and_try(inline_scripts(read(name))):
+            if not DOCUMENT_WRITE_RE.search(body):
+                continue
+            writers += 1
+            if not LOG_RE.search(body):
+                offenders.append({"page": name,
+                                  "why": "writes into the document and logs nothing",
+                                  "catch": " ".join(body.split())[:180]})
+            if not MISSING_RECORD_RE.search(body):
+                continue
+            missing_cards += 1
+            if DOCUMENT_WRITE_RE.search(try_body) and not GUARD_RE.search(body):
+                offenders.append({"page": name,
+                                  "why": "says a record is missing for any throw of a try that also paints",
+                                  "catch": " ".join(body.split())[:180]})
+    assert len(pages) >= 4, f"only {pages} fetch from their own scripts — the inline reader is blind"
+    # Measured this wave: four catches write the document (`/m`, `/oc`, the profile
+    # copy control and the agent chat), two of them in the words for a missing
+    # record. A reader that quietly lost them would report a clean tree forever.
+    assert writers >= 4, f"only {writers} document-writing catches read — the write reader is blind"
+    assert missing_cards >= 2, f"only {missing_cards} missing-record catches read — the wording reader is blind"
+    assert not offenders, "a page dresses one failure as another:\n" + json.dumps(offenders, indent=2)
+
+
+def test_the_catch_reader_reads_the_shapes_a_page_takes():
+    """Both clauses above are only as good as the pairing this does."""
+    def pair(text: str) -> tuple[str, str]:
+        found = catch_and_try(text)
+        assert len(found) == 1, found
+        return found[0]
+
+    refused = ("try { const r = await fetch('/a'); if (!r.ok) throw new Error();"
+               " m = await r.json(); } catch (e) { $('b').innerHTML = 'не найден'; console.error(e); }")
+    body, try_body = pair(refused)
+    assert DOCUMENT_WRITE_RE.search(body) and LOG_RE.search(body)
+    assert not DOCUMENT_WRITE_RE.search(try_body), "a try that only reads was read as a paint"
+
+    painted = ("try { const r = await fetch('/a'); m = await r.json();"
+               " if (m.text === 'x') $('b').innerHTML = m.text; }"
+               " catch (e) { $('b').innerHTML = 'не найден'; }")
+    body, try_body = pair(painted)
+    assert DOCUMENT_WRITE_RE.search(try_body), "a painted try is the shape the guard clause exists for"
+    assert not GUARD_RE.search(body), "an unguarded missing-record wording must be reported"
+
+    assert DOCUMENT_WRITE_RE.search("chat.insertAdjacentHTML('beforeend', '<p>x</p>')")
+    assert not DOCUMENT_WRITE_RE.search("if (x.textContent === 'a') { paint(); }"), (
+        "a comparison is not a write")
+    assert catch_and_try("fetch('/a').catch(() => ({}));") == [], (
+        "an arrow `.catch` that hands back an object is not a caught block")
+
+    nested = ("try { paint(); } catch (e) { if (a) { $('b').textContent = 'x'; }"
+              " console.error('why', e); }")
+    body, try_body = pair(nested)
+    assert GUARD_RE.search(body) and DOCUMENT_WRITE_RE.search(body) and LOG_RE.search(body)
+    assert try_body.strip() == "paint();", "a nested brace ended the try early"
+

@@ -119,10 +119,12 @@
     infoPromise.then(applyNetInfo);
 
     (async () => {
+      let read = false;
       try {
         const r = await fetch("/api/market/" + encodeURIComponent(betId));
         if (!r.ok) throw new Error();
         const m = await r.json();
+        read = true;
         const winnerIdx = m.status === "resolved" && m.winner != null ? m.winner : null;
 
         $("m-kind").textContent = "Ставка-пул · #" + m.id;
@@ -186,9 +188,21 @@
         /* The heading names the pool the reader asked for even when the read
          * fails: replacing the article would take the h1 — and the document
          * outline — with it. */
+        if (!read) {
+          $("m-question").textContent = "Пул #" + betId;
+          $("m-body").innerHTML = '<div class="empty">Пул #' + esc(betId) +
+            ' не найден. Открытые пулы — на <a class="m-link" href="/#markets">главной</a>.</div>';
+          return;
+        }
+        /* Past this line the origin answered, so the thing that failed is this
+         * page, and «не найден» would blame the pool for the crash. Measured
+         * 2026-11-18: the published chain.js had no barWidth, so all four live
+         * pools answered «не найден» while /api/market/5 answered 200 — and
+         * nothing wrote a word about it anywhere a human could read. */
+        console.error("/m/" + betId + " render", e);
         $("m-question").textContent = "Пул #" + betId;
-        $("m-body").innerHTML = '<div class="empty">Пул #' + esc(betId) +
-          ' не найден. Открытые пулы — на <a class="m-link" href="/#markets">главной</a>.</div>';
+        $("m-body").innerHTML = '<div class="empty">Страница не смогла показать пул #' + esc(betId) +
+          '. Данные отвечают — попробуйте обновить; открытые пулы: <a class="m-link" href="/#markets">на главной</a>.</div>';
       }
     })();
   </script>

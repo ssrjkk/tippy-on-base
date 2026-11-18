@@ -224,7 +224,10 @@
             await navigator.clipboard.writeText(u.deposit_address);
             $("u-copy").textContent = "Адрес скопирован";
             setTimeout(() => { $("u-copy").textContent = "Скопировать адрес"; }, 2000);
-          } catch (e) { $("u-copy").textContent = "Не удалось скопировать"; }
+          } catch (e) {
+            console.warn("/u/ copy", e);
+            $("u-copy").textContent = "Не удалось скопировать";
+          }
         });
       }
 

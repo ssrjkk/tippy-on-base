@@ -54,7 +54,7 @@
   has ever read.
 - `python -m pytest -q -m "not production"` — 11–17 min (measured 643 s alone on the host, 949 s
   with another project's suite sharing it, 1,012 s alone on the run this wave pinned its counts to),
-  1473 tests (198 more, marked `production`, run
+  1478 tests (199 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -127,7 +127,7 @@
   emails and `t.me`/`x.com` handles); every documented gate command equals what CI actually
   runs (`_ci_gate_commands()` reads the ruff directory list and the pytest selection out of
   `.github/workflows/ci.yml`, so a lint line missing three of the seven directories and a suite
-  line that pulls in the 198 `production` tests both fail, while a targeted-file run that still
+  line that pulls in the 199 `production` tests both fail, while a targeted-file run that still
   states its `-m` is allowed); and no document tells a human to reach this host on a port the
   tree does not listen on (`_ports_the_stack_answers_on()` derives the live set from the
   `postgresql://` authorities, `WEB_PORT`, every loopback port a tracked `deploy/` program binds
@@ -564,6 +564,33 @@
   the same wipe in the on-chain page, a fourth page that no list names reaching the gate by being
   written, the subtree walk made blind, the writer scan made blind, and the shipped `user.html` wipe
   restored in the tree and re-rendered against a live origin.
+- **A crash is not a missing record, and a page that says otherwise has already lost the money.**
+  `/m/{id}` wrapped the fetch *and* the paint in one `try`, and its one `catch` painted «Пул #N не
+  найден»: measured 2026-11-18 on the live site, all four open pools answered that sentence while
+  `/api/market/5` returned 200 with a full payload, because the published `chain.js` had no
+  `barWidth` and the paint died on the first option row. The visitor was told the pool did not exist,
+  the owner was told nothing at all — no `console.error`, no log, no gate. The shape was not unique:
+  `oc.html` caught its own render errors into the same not-found wording, `user.html` swallowed a
+  clipboard refusal, and the Mini App's AI catch erased the pending bubble without a trace.
+  `tests/test_design_system.py::test_a_page_never_answers_a_crash_with_the_words_for_a_missing_record`
+  now reads both halves out of the inline scripts of every page that fetches — measured this wave as
+  four pages (`app.html`, `market.html`, `oc.html`, `user.html`), four catches that write into the
+  document and all four of them logging, and two catches whose own wording names a missing record
+  (`market.html`, guarded by a `read` flag because its `try` also paints, and `oc.html`, which owes
+  no guard because its `try` only reads). A writing catch that logs nothing is a crash no human will
+  ever see; a not-found card whose `try` also paints is a crash wearing the not-found wording; and
+  the floors refuse a scan that went blind. `block_after_brace` matches braces rather than guessing
+  from line offsets, and `test_the_catch_reader_reads_the_shapes_a_page_takes` holds the readers to
+  the shapes the shipped pages take: a read-only `try` beside a painting one, a comparison against an
+  assignment, `+=`, `insertAdjacentHTML`, an arrow `.catch(() => ({}))` that owes no log, and a
+  `try { … try { … } catch { … } } catch { … }` nesting whose outer body must still end at its own
+  brace. Seven mutations were proven to fire: `market.html` reverted to the defect as shipped, its
+  crash card left with no `console.error`, its not-found branch left with no guard, `oc.html` left
+  with no log, the document-write reader blinded, the missing-record reader blinded, and the page
+  reader blinded. What the law cannot see: a catch whose card says something *else* wrong — it judges
+  only the two wordings that hide a crash — and the wording of the crash card itself, which no gate
+  here can read. The fix keeps the heading outside the failure both times, because the article that
+  carries the `<h1>` is the same container the card would have replaced.
 - **A clock is a bound too, and the money law could not see it.** `MARKET_MAX_DEADLINE_HOURS` is the
   ceiling `/api/mini/create` answers `api_deadline_long` under, and three surfaces typed a deadline
   against it blind: both Mini App create sheets carried no `max` at all, and the landing wrote
@@ -746,8 +773,66 @@
   `max-age` against this checkout and against `_headers`; the companion law asks the two paths that
   must never reach the bundle (`/robots.txt`, a missing `.css`) what the edge does with them. Both
   are `production` — an ordinary green run does not prove a deploy happened, and
-  `--commit-dirty=true` is precisely why a deploy proves nothing about a commit either. Published the
-  same wave: 21 bundle assets, bytes and windows identical to the tree.
+  `--commit-dirty=true` is precisely why a deploy proves nothing about a commit either. Measured
+  again on 2026-11-18: the published bundle is 21 assets and five of them — `agent.js`, `app.js`,
+  `chain.js`, `site.js` and `style.css` — are still the bytes of a Pages deploy behind `main`, while
+  every font, every image and both cache windows match. So this law is red on the live host by
+  itself, and stays red until someone runs the publish: a green production run is evidence a deploy
+  happened, never a substitute for one.
+- **A page ships on two vehicles and is answered by a third, and all three are measured.** The
+  markup is rendered from disk by the running origin at request time, the `*.js` and `*.css` reach
+  the visitor from the hand-published Pages bundle, and the numbers a sheet binds come from the
+  process started whenever the host last restarted it. One checkout can therefore be three
+  versions, and on 2026-11-18 it was, in two directions at once. The published `chain.js` is 3,945 B
+  against this tree's 4,748 and names `barWidth` nowhere, while four call sites in markup the origin
+  serves fresh today — `app.html:1074`, `app.html:1494`, `market.html:150` and `oc.html:161` — reach
+  for it, so every option row of the Mini App's market list, of its market detail, of `/m/{id}` and
+  of `/oc/{id}` threw `ReferenceError: barWidth is not defined` while it was still building its own
+  HTML. (The landing's bars are painted from `app.js`, stale in the same deploy, so the two old
+  files agree with each other and that page broke nowhere: a page breaks where fresh markup meets a
+  stale script, not wherever a wave happened to stop.) And the origin answering `/api/info` — this
+  host's `deploy/run.py`, started at 13:16 against a `web/server.py` whose last commit landed at
+  20:26 — published eight of the eleven bounds this checkout publishes, no `default_deadline_hours`,
+  no `max_deadline_hours` and no `deposit_confirmations`, which is why the rendered drawer and sheet
+  gates went red on a tree that was correct.
+  `tests/test_design_system.py::test_every_bundle_function_a_page_reaches_is_one_the_page_loads`
+  closes the first shape inside ordinary CI: a document's global scope is the concatenation of the
+  bundle files its own `<script src="/…">` tags name plus its inline blocks — read with the
+  `page_scripts` and `page_code` readers and no second map of page to scripts — and a function the
+  bundle owns, which the scope calls and nowhere in it defines, is a helper reached from a file the
+  page never loads. Measured this wave as 208 page/helper pairs over the eight documents
+  (`index.html` 138, `app.html` 22, `agent.html` 18, `market.html`, `oc.html` and `user.html` 10
+  each, `legal.html` and `not_found.html` 0) drawn from 146 bundle-owned names across five scripts,
+  with a floor on the pairs, because a `CALL_RE` that quietly matched nothing would otherwise
+  certify exactly the tree that broke the Mini App.
+  `test_the_scope_reader_refuses_the_call_shapes_a_page_ships` holds the four regexes to the shapes
+  the shipped files take: a `function` at column zero and one indented, an arrow on one line and one
+  wrapped at its body, `const x = (v) =>` and `const x = v =>`, an `async` definition,
+  `chain.barWidth(pct)` which is a property and not the global helper, `myBarWidth(pct)` which is a
+  longer name and not this one, `<script defer src=…>` and `<script src=… defer>` in either attribute
+  order, and an off-origin `https://cdn…/z.js` which is not a file of this bundle. Six mutations were
+  proven to fire: `chain.js`'s script tag removed from `app.html`, a `shortAddr` call added to
+  `legal.html`, `FUNC_DEF_RE` blinded, `ARROW_DEF_RE` blinded, `CALL_RE` blinded, and `SCRIPT_SRC_RE`
+  blinded.
+  `tests/test_production_health.py::test_the_running_origin_publishes_every_key_this_checkout_publishes`
+  closes the second: `api_info_keys()` takes the key sets out of the AST of `api_info()`'s own dict
+  literal — the 12 top-level keys, the 2 fees and the 11 bounds — and holds the live `/api/info` to
+  them in both directions, so an origin answering fewer bounds is named key by key and an origin
+  answering a key the tree no longer publishes is named too. Values are not compared: the deployed
+  `.env` is not this machine's `.env`, and a knob is allowed to differ. Six more mutations were
+  proven to fire: a bound added to the literal the deployment cannot answer, a bound removed from
+  the literal while the origin still answers it, a bound renamed inside it, a top-level key renamed,
+  the bound block published through a call instead of a literal, and the literal-key walk blinded —
+  the last two tripping the reader's own floors rather than reading empty, which is what a vacuous
+  publisher looks like. That reader is held in ordinary CI by
+  `tests/test_web.py::test_the_info_key_reader_refuses_the_shapes_the_publisher_takes`, on a
+  miniature publisher and on the two shapes that would make the law meaningless: a payload assembled
+  at runtime and a module with no `api_info` in it.
+  What none of this sees: a helper reached through a variable (`window[name]()`), a script a document
+  loads from another origin, a bound whose *name* is published by a process that is otherwise the
+  right one, and every difference between the deployed process and this checkout that the published
+  key set does not show. The fix for both live findings is one republish of Pages and one restart of
+  the origin — shared-state actions, so the maintainer's word, not a green gate's.
 - **One file, one cache window, read in three places.** Before this wave the site had no promise
   about how long anything may be cached: the middleware's blanket `setdefault('Cache-Control',
   'no-store…')` covered the origin's own assets, and Pages answered the same files with

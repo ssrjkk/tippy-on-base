@@ -116,6 +116,7 @@
         if (!r.ok) throw new Error();
         m = await r.json();
       } catch (e) {
+        console.error("/oc/" + marketId + " read", e);
         /* The heading names the market the reader asked for even when the read
          * fails, and the generic bot link below it still works: replacing the
          * article would take the h1 — and the document outline — with it. */
