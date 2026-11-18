@@ -217,6 +217,155 @@ this tree:
 python -m pytest tests/test_production_health.py -m production
 ```
 
+## The origin on a Windows host
+
+The VPS above is the shape this project ships to. The origin the live edge points
+at today runs on a Windows machine: `deploy/run.py` serving `127.0.0.1:8000`,
+reached through a named tunnel by `deploy/cloudflared.exe`, supervised by
+`deploy/watchdog.ps1 -Once` from Task Scheduler (the `\TippyOriginWatchdog` task,
+every few minutes).
+
+**Two replicas, each with its own metrics port.** With a single replica the public
+health endpoint answered 200 for 6 of 19 probes (32%) while that same process's
+`/ready` answered 200 for 10 of the 19 (53%), and the origin behind it answered
+every loopback request in 0.24 s. The page was down because one connector had no
+edge connections, not because anything behind it was. The pair was re-walked this
+wave over 87 samples, both replicas read on the same pass at
+`http://127.0.0.1:20241/ready` and `http://127.0.0.1:20242/ready`: `20241` answered
+ready for 73 of 87 (84%), `20242` for 45 of 87 (52%), and the two together for 73
+of 87 (84%). Read beside the single-replica walk above, the pair is the better
+tunnel; read beside itself, the second replica bought this host nothing, because
+both connectors die on one shared egress — the host lost every edge connection for
+one contiguous 68-second window, and the origin answered loopback the whole time.
+So the availability here comes from the supervisor replacing the replica that went
+quiet, not from the count; the count is what lets it do that without taking the
+page down while it does (the older walk held three samples in which one replica had
+no connection at all and the page still served). Each replica writes its own logfile
+(`data/runtime/cloudflared-20241.log`, `data/runtime/cloudflared-20242.log`),
+because cloudflared takes one `--logfile` per process.
+
+**Two separate things were killing the connections.** Over the whole connector log
+this host registered 35,943 edge connections with a median lifetime of 20 seconds,
+82% of them dead inside a minute, and the deaths were dominated by QUIC errors —
+the VPN/TUN interface answers cloudflared's QUIC precheck with PASS and then drops
+the long-lived UDP streams. `--protocol http2` removed that class outright: zero
+QUIC errors on this host since the pin, in all three launchers
+(`deploy/tunnel.py`, `deploy/launch.py`, `deploy/watchdog.ps1`).
+
+What the pin did not remove was the other one, and for a while the supervisor was
+the one holding the knife. `--edge-bind-address` named the Wi-Fi address that
+already carried 82 of 82 established `:443` sockets, so it selected nothing, while
+a connector that carried it lost its edge connections every 22-173 s (median
+101 s, 49 deaths in 30 minutes) — and the same binary without it registered four
+connections and terminated none in the ten minutes the comparison ran. The
+watchdog then treated a missing flag as evidence of a wrong route and stopped the
+process, which restarted the churn it was meant to heal. No launcher on this host
+passes the flag, and the container in `docker-compose.yml` runs
+`command: tunnel run` on a VM with no TUN interface, where QUIC is not the failure
+and neither setting is needed.
+
+**A Telegram failure used to end the web server with it.** `deploy/run.py` polls
+Telegram and serves FastAPI in one process, so whatever stops polling can stop the
+site — and until this wave the retry rule named `TelegramNetworkError` alone. Aiogram
+raises that class for a client-side network fault and builds `TelegramServerError`
+from any 5xx Telegram answers, as a sibling rather than a child, so «Telegram server
+says - Bad Gateway» at `get_me` re-raised, ended the polling task, closed the ledger
+and took `/` down with it until the supervisor started the process again. Over the
+270 h ending 2026-11-17 the supervisor's own log carries `origin=False` on 1,830 of
+5,563 verdict passes and 707 origin starts. One tuple now answers «is this Telegram's
+to fix?» — `TRANSIENT_TELEGRAM_ERRORS` in `bot/main.py`, read by both entrypoints and
+both polling loops — and `tests/test_bot_main_lifecycle.py` derives the family from
+aiogram's own class hierarchy instead of a list kept here: every server-side class
+must be covered, no permanent answer may be, and a retry site that hand-names a single
+class fails the build. A revoked token still ends the process, because spinning on it
+keeps the site answering HTTP for a bot that answers nobody. Measured the night the fix
+shipped: `api.telegram.org` became unreachable from this host, and
+`data/runtime/origin.err.log` filled with `telegram failed, retrying in 15s` warnings
+while the origin kept answering its health endpoint and every pass line read
+`origin=True`.
+
+**The windows the supervisor judges by.** A probe is one instant, and this host's
+connection sets turn over every minute or two while the page serves, so a verdict
+is a window, never a sample:
+
+| Rule | Value | Why |
+|---|---|---|
+| Startup grace, connector | 90 s | a replica four seconds old has no connections by definition |
+| Confirm probes before replacing | 3, 15 s apart | one `/ready` 503 was the old trigger and the page was up |
+| Wait for the pair before judging the public path | 45 s | the pass used to probe the edge microseconds after starting a connector that could not yet answer: 4,745 of 5,526 logged passes said `public=False` (86%) |
+| Public probes | 3, 5 s apart | one request through one edge POP says nothing about the site |
+| Startup grace, origin | 600 s | `run.py` runs the alembic chain before it binds a socket |
+| Origin verdict | 3 probes, all `silent` | see below |
+
+Three outcomes for a probe, and only the third condemns an origin: `ok`, `answered` (a `/ready`
+503, or a 200 whose `db` is not `ok` — a fault the process is reporting, which a
+restart would hide while it killed Telegram polling with it) and `silent` (nothing
+answered at the HTTP layer at all). A connector is replaced when its whole window
+failed to say `ok`; the origin is replaced only when its whole window was `silent`,
+which is the wedged-process case this host has actually produced.
+
+**What the public leg asks, and what it is allowed to answer.** `$PublicOrigin` is the
+site, `$PublicHealth` is `$PublicOrigin` plus `/api/health`, and `$PublicControl` is
+`$PublicOrigin` plus `/fonts.css`: the `ASSET` branch of `functions/[[path]].js`
+answers a stylesheet out of the bundle before the function names the origin, so the
+tunnel, the app and the database decide nothing about that request, and a 200 proves
+this machine finished a handshake with Pages. It is probed because the answer it gives
+is not the answer the measurement gives: `$PublicHealth` is tried `$PublicProbes`
+times, `$PublicProbeDelaySeconds` apart, and the verdict is one of `$PublicOutcomes`.
+`ok` is the page being up. `down` is a measured failure — an HTTP answer that is not
+the health the site owes, or nothing at all while the witness answered anything
+(including a 404, which is still proof of a route). `unreachable` is this host having
+no route to look, and it deliberately does not fail the pass: measured while the
+origin answered every loopback request, TCP to both `tippy-egi.pages.dev` addresses
+opened in 9-33 ms and every HTTPS request to that hostname then died inside the
+handshake, so a leg that cannot finish a handshake holds no evidence about a
+visitor's page — while a scheduled task that exits 1 every few minutes for hours says
+nothing on the occasion it exists to speak. It is still printed in the pass line and
+still named by `-Check`, and the vantage that does see this site from outside is the
+`production` suite, which `.github/workflows/prod-health-check.yml` runs on GitHub's
+runners rather than from this machine.
+
+Read the state without touching anything:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File deploy/watchdog.ps1 -Check
+```
+
+It answers `OriginReady`, `OriginOutcome`, `ConnectorReady`, `PublicOutcome`,
+`PublicReady`, `Connectors`, `Origins`, `ReplicaPorts` and `ReadyPorts` — the last two
+together are what distinguishes "the tunnel is down" from "one of two replicas is
+down", which the single boolean it replaced could not say, and the two outcome fields
+are what says whether the supervisor will reboot anything at all.
+
+`tests/test_watchdog.py` runs these rules rather than reading them: the restart
+verdicts are executed as the PowerShell that produces them against a truth table,
+and a mutation of the grace period or the probe window in a copy of the script is
+required to move the verdict — so the numbers in this table are the numbers the
+supervisor uses.
+
+### Why the card came, and what each reason says
+
+The outage card is the one page this project writes without the origin, so it is
+the one place an outage can be named. It carries the word twice — the
+`x-tippy-outage-reason` response header and the `data-reason` attribute on its own
+hint line — so an outage is read with `curl -I https://tippy-egi.pages.dev/api/health`
+instead of opened in a browser and guessed at. `functions/[[path]].js` chooses the
+word in one function, `outageReason()`, from which branch was taken; it never reads
+an exception, because a page anyone can request must not quote what broke. Four
+words, one per branch:
+
+| Reason | What the edge measured | Remedy |
+|---|---|---|
+| `no-backend` | Nothing was asked at all: `BACKEND_URL` is empty on the Pages project, so the function has no origin to reach and the host behind the tunnel is irrelevant | Set `BACKEND_URL` in the Pages project's environment (section 3 above names the value) and publish the deployment; nothing on this host needs touching, and `curl -I` of any dynamic page answers 200 once the variable has arrived |
+| `deadline` | A connection was made and the origin said nothing for the whole window — `UPSTREAM_DEADLINE_MS` spent without a first byte, which the code treats as the end of the retry rather than a blink worth a second wait | Read `deploy/watchdog.ps1 -Check`: `OriginOutcome: silent` with a live process is the wedged uvicorn the supervisor now replaces by itself, so check the pass lines in `data/runtime/watchdog.log` before starting anything by hand |
+| `refused` | The connection was made to nothing: no process listens, or it closed the socket mid-request, so every attempt threw before a window could expire | `Origins` in `-Check` is empty when the app has exited — `data/runtime/origin.err.log` carries the traceback that ended it, and the next scheduled pass starts the process again |
+| `gateway-5xx` | Something answered, and it was not the app: a 520-527 from Cloudflare's side, or a bare 502/503/504 carrying HTML instead of the JSON every error the app raises renders as | Compare the two logs on the host: `data/runtime/cloudflared-20241.log` and `data/runtime/cloudflared-20242.log` for `timeout: no recent network activity`, `data/runtime/origin.out.log` for a process that is up but not serving — the pin to `http2` is why the first is no longer the common cause |
+
+A reason the code can print and this table does not name, or a row for a word the
+code cannot produce, fails `tests/test_design_system.py` — the same file also drives
+the shipped function against each of these shapes and refuses a card whose printed
+word is not the one that shape deserves.
+
 ## Logs and rollbacks
 
 - Function logs: `wrangler pages deployment tail --project-name tippy`
@@ -228,9 +377,10 @@ python -m pytest tests/test_production_health.py -m production
 
 | Symptom | Cause |
 |---|---|
-| 503 maintenance card on every dynamic page | `BACKEND_URL` missing on the project, or the origin is down (the function replaces a gateway 5xx that carries no JSON) |
+| 503 maintenance card on every dynamic page | The card names its own reason in `x-tippy-outage-reason`; the four words and their remedies are in [Why the card came](#why-the-card-came-and-what-each-reason-says) |
 | `cloudflared: Could not lookup srv records on _v2-origintunneld._tcp.argotunnel.com` | The host's resolver answers A but not SRV, which is how VPN/TUN resolvers behave. Allow SRV for `argotunnel.com`, or run the origin where DNS is normal |
-| The origin serves `127.0.0.1:8000` fine, `http://127.0.0.1:20241/ready` says 503, and Pages shows the maintenance card | The connector was started with `--protocol auto`. A VPN/TUN interface answers cloudflared's QUIC precheck with PASS and then drops the long-lived UDP streams, so each connection registers and dies on `timeout: no recent network activity` and the watchdog keeps restarting a tunnel that can never be ready. All three local launchers (`deploy/tunnel.py`, `deploy/launch.py`, `deploy/watchdog.ps1`) pin `http2`, whose TCP path the same precheck also passes |
+| The origin serves `127.0.0.1:8000` fine, `/ready` says 503, and Pages shows the maintenance card | Two causes, measured on this host and described in [The origin on a Windows host](#the-origin-on-a-windows-host). (1) `--protocol auto`: a VPN/TUN interface answers cloudflared's QUIC precheck with PASS and then drops the long-lived UDP streams, so each connection registers and dies on `timeout: no recent network activity`. All three local launchers pin `http2`, whose TCP path the same precheck also passes. (2) `--edge-bind-address`: it selects an address every tunnel connection already uses and costs the connector its edge connections every 22-173 s. Neither flag belongs in the command any more, and one replica is not enough — the second answers while the first has no connection |
+| `/` serves and `-Check` says the origin is ready, but the bot answers nobody | Telegram's side of the wire, not this host's: `api.telegram.org` unreachable, or Telegram answering 5xx. The retry rule keeps the process — and the web server inside it — up and logs each failure as `telegram failed, retrying in 15s` in `data/runtime/origin.err.log`. A `TelegramUnauthorizedError` there instead means the token is revoked, and that answer ends the process deliberately: a supervisor that kept restarting it would only hide the one report that says what broke |
 | Every page shows the landing page | A `_redirects` rewrite is still in the bundle |
 | Signs in, then immediately signed out | `Secure` cookie rejected: check `X-Forwarded-Proto` and that the origin is https |
 | `/index.html` (or any `*.html`) answers 200 with the template | The Pages project is serving the bundle without the origin: `BundleFiles` refuses those paths, so a raw template means the function did not run for it |

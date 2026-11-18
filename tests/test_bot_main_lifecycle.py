@@ -11,9 +11,15 @@ Invariants:
 """
 
 import asyncio
+import re
 import signal
+from pathlib import Path
+
+import pytest
 
 from bot import main as bot_main
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _watcher_done():
@@ -190,11 +196,133 @@ def test_sigterm_stops_the_process_gracefully(monkeypatch):
     assert closed == [True]
 
 
-def test_polling_error_is_retried_not_fatal(monkeypatch):
-    """A Telegram network blip restarts polling; it must not take the whole
-    process (and the ledger close) down with it."""
+def _telegram_server_side_bases():
+    """The aiogram classes that report a failure on Telegram's side of the wire.
+
+    Read off the library's own hierarchy, not from a list kept here: `check_response`
+    builds a `TelegramServerError` for any 5xx Telegram answers, and today that family
+    is `TelegramServerError` plus its one child `RestartingTelegram` (Telegram saying
+    it is restarting). A new 5xx class in a future aiogram joins the law by existing.
+    """
+    from aiogram.exceptions import TelegramNetworkError, TelegramServerError
+
+    def descendants(cls):
+        found = [cls]
+        for sub in cls.__subclasses__():
+            found.extend(descendants(sub))
+        return found
+
+    server_side = {TelegramNetworkError, *descendants(TelegramServerError)}
+    assert len(server_side) >= 3, f"aiogram's 5xx family reads {sorted(server_side)} — the walker is blind"
+    return server_side
+
+
+def _telegram_permanent_classes():
+    """The answers that say this process is wrong, which retrying cannot fix."""
+    from aiogram.exceptions import TelegramBadRequest, TelegramUnauthorizedError
+
+    def descendants(cls):
+        found = [cls]
+        for sub in cls.__subclasses__():
+            found.extend(descendants(sub))
+        return found
+
+    permanent = {*descendants(TelegramUnauthorizedError), *descendants(TelegramBadRequest)}
+    assert len(permanent) >= 2, f"aiogram's permanent-answer family reads {sorted(permanent)}"
+    return permanent
+
+
+def test_the_retry_rule_covers_every_server_side_answer_and_no_permanent_one():
+    """One named tuple decides which Telegram failures are worth another try.
+
+    The shipped rule named `TelegramNetworkError` alone, and that class does *not*
+    contain `TelegramServerError`: aiogram builds the second from a 5xx status, as a
+    sibling. So «Telegram server says - Bad Gateway» at `get_me` fell through
+    `raise exc`, ended `_start_bot_polling`, and took the combined process — the web
+    server and the money paths with it — down for the minutes until the supervisor
+    started it again. `data/runtime/watchdog.log` measured that shape over the 270 h ending 2026-11-17:
+    origin=False on 1,830 of 5,563 verdict passes and 707 origin starts.
+
+    Coverage, because that is what `isinstance` asks: every server-side class has to
+    sit under one of the tuple's members, and no permanent answer may.
+    """
+    for cls in _telegram_server_side_bases():
+        assert issubclass(cls, bot_main.TRANSIENT_TELEGRAM_ERRORS), (
+            f"{cls.__name__} is Telegram's to fix, and the retry rule does not cover it — "
+            "a polling restart is what a 5xx asks for, not a dead process"
+        )
+    for cls in _telegram_permanent_classes():
+        assert not issubclass(cls, bot_main.TRANSIENT_TELEGRAM_ERRORS), (
+            f"{cls.__name__} is a permanent answer (a revoked token, a malformed call); "
+            "retrying it forever hides the one report that says what broke"
+        )
+    assert len(bot_main.TRANSIENT_TELEGRAM_ERRORS) >= 2, (
+        "the retry rule names one class again, which is how a Telegram 5xx killed the site"
+    )
+
+
+def test_no_retry_site_names_one_telegram_class_by_hand():
+    """The retry decision is the tuple, everywhere, or it is the bug again.
+
+    Three sites ask this question (`bot/main.py`'s polling supervisor and the two
+    loops in `deploy/run.py`). A site that hand-names one class reads one family and
+    re-raises the other, which is exactly what shipped until this wave. The scan is
+    scoped to the functions that back off with `RETRY_SECONDS`, because that sleep is
+    what makes a handler a *retry* decision: `bot/base.py:739` catches
+    `TelegramBadRequest` where the call happens, and that is a normal refusal, not a
+    retry rule. The count of tuple-using sites is floored so a scan that finds nothing
+    cannot pass.
+    """
+    import ast
+
+    shared_tuple = re.compile(r"\bTRANSIENT_TELEGRAM_ERRORS\b")
+    class_name = re.compile(r"(?:Telegram\w*Error|RestartingTelegram)$")
+    sources = sorted((ROOT / "bot").glob("*.py")) + sorted((ROOT / "deploy").glob("*.py"))
+    assert sources, "no runtime sources to walk"
+    hand_named: list[str] = []
+    shared: list[str] = []
+    for path in sources:
+        text = path.read_text(encoding="utf-8-sig")
+        tree = ast.parse(text)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.AsyncFunctionDef | ast.FunctionDef):
+                continue
+            if "RETRY_SECONDS" not in (ast.get_source_segment(text, node) or ""):
+                continue
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.ExceptHandler) and inner.type is not None:
+                    targets = inner.type.elts if isinstance(inner.type, ast.Tuple) else [inner.type]
+                elif (
+                    isinstance(inner, ast.Call)
+                    and isinstance(inner.func, ast.Name)
+                    and inner.func.id == "isinstance"
+                    and len(inner.args) >= 2
+                ):
+                    targets = [inner.args[1]]
+                else:
+                    continue
+                for target in targets:
+                    segment = ast.get_source_segment(text, target) or ""
+                    if shared_tuple.search(segment):
+                        shared.append(f"{path.name}:{inner.lineno}")
+                    elif class_name.search(segment):
+                        hand_named.append(f"{path.name}:{inner.lineno} {segment}")
+    assert len(shared) >= 3, f"only {shared} retry decisions read the shared tuple — the reader is blind"
+    assert not hand_named, f"these sites decide a Telegram retry over a single class: {hand_named}"
+
+
+@pytest.mark.parametrize(
+    "error_cls",
+    [pytest.param(c, id=c.__name__) for c in _telegram_server_side_bases()],
+)
+def test_a_server_side_telegram_answer_is_retried_and_not_fatal(monkeypatch, error_cls):
+    """A Telegram failure on Telegram's side restarts polling; it must not take the
+    whole process (and the ledger close) down with it.
+
+    Parametrized over the family the law above derives, so `RestartingTelegram` — a
+    class this repo has never named — is measured too.
+    """
     from aiogram import Dispatcher
-    from aiogram.exceptions import TelegramNetworkError
 
     attempts = []
 
@@ -205,9 +333,9 @@ def test_polling_error_is_retried_not_fatal(monkeypatch):
     monkeypatch.setattr(bot_main, "RETRY_SECONDS", 0.01)
 
     async def _flaky(self, *bots, **kw):
-        attempts.append(len(attempts))
+        attempts.append(error_cls.__name__)
         if len(attempts) == 1:
-            raise TelegramNetworkError(message="unreachable", method="getUpdates")
+            raise error_cls(message="telegram said no", method="getUpdates")
         await asyncio.sleep(60)
 
     monkeypatch.setattr(Dispatcher, "start_polling", _flaky)
@@ -218,8 +346,8 @@ def test_polling_error_is_retried_not_fatal(monkeypatch):
             if len(attempts) >= 2:
                 break
             await asyncio.sleep(0.005)
-        assert len(attempts) >= 2, "polling was never restarted after the network error"
-        assert closed == [], "a network blip tore the process down instead of retrying"
+        assert len(attempts) >= 2, f"{error_cls.__name__} was never retried — polling stayed dead"
+        assert closed == [], f"{error_cls.__name__} tore the process down instead of retrying"
         task.cancel()
         try:
             await task
@@ -227,6 +355,40 @@ def test_polling_error_is_retried_not_fatal(monkeypatch):
             pass
 
     asyncio.run(_scene())
+
+
+def test_a_revoked_token_ends_the_process_instead_of_retrying_forever(monkeypatch):
+    """401 is not Telegram's fault, and spinning on it keeps the site up while the
+    bot answers nobody.
+
+    The other half of the retry rule: without this, widening the transient set to
+    «everything from aiogram» would pass every test above.
+    """
+    from aiogram import Dispatcher
+    from aiogram.exceptions import TelegramUnauthorizedError
+
+    attempts = []
+
+    async def _quiet():
+        await asyncio.sleep(60)
+
+    closed = _stub_entrypoint(monkeypatch, (("quiet", _quiet),))
+    monkeypatch.setattr(bot_main, "RETRY_SECONDS", 0.01)
+
+    async def _refused(self, *bots, **kw):
+        attempts.append(len(attempts))
+        raise TelegramUnauthorizedError(message="token revoked", method="getUpdates")
+
+    monkeypatch.setattr(Dispatcher, "start_polling", _refused)
+
+    async def _scene():
+        task = asyncio.create_task(bot_main.main())
+        with pytest.raises(TelegramUnauthorizedError):
+            await asyncio.wait_for(task, timeout=20)
+
+    asyncio.run(_scene())
+    assert len(attempts) == 1, f"a permanent answer retried {len(attempts)} times"
+    assert closed == [True], "the process did not shut down over a permanent answer"
 
 
 def test_main_passes_its_stop_event_to_webhook_mode(monkeypatch):

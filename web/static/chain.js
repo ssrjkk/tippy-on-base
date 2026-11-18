@@ -65,6 +65,15 @@ function marketState(row) {
   return closed ? "awaiting" : "open";
 }
 
+/* What a pool whose deadline passed still owes the reader. The sentence lives
+ * beside the derivation that names the state, because every surface that paints
+ * «ждёт решения» must answer «и что теперь?» with the same words: the landing
+ * promised «можно вернуть деньги» and /m/{id} promised «ставки можно вернуть»
+ * for one fact, and a reader who saw both could not tell which money moves.
+ * It names the bot, because after the deadline the bot is where the refund is
+ * claimed (`/markets` -> «Отменить») and this page has no control to offer. */
+const REFUND_NOTE = "ставки можно вернуть в боте";
+
 /* The countdown is the only deadline text, and once the deadline is gone it has
  * nothing to count: the chip says that. Returning "" here rather than a
  * "прошёл" string is what makes a contradictory line impossible to build. */

@@ -14,13 +14,18 @@
     });
   }
 
-  function fmt(x, dp) {
+  // Money is painted with two decimals, counts with none: the precision is
+  // in the name, not in an argument a call site can forget.
+  function fmtMoney(x) {
     var n = Number(x);
     if (!isFinite(n)) n = 0;
-    return n.toLocaleString('ru-RU', {
-      minimumFractionDigits: dp == null ? 2 : dp,
-      maximumFractionDigits: dp == null ? 2 : dp,
-    });
+    return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtCount(x) {
+    var n = Number(x);
+    if (!isFinite(n)) n = 0;
+    return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
   function fmtTime(sec) {
@@ -45,7 +50,7 @@
     var cls = pct >= 100 ? ' bar-fill-over' : pct >= 80 ? ' bar-fill-warn' : '';
     return '<div class="option">' +
       '<div class="option-top"><span class="option-label">' + esc(label) + '</span>' +
-      '<span class="option-val">' + fmt(used) + ' / ' + fmt(total, 0) + ' ' + esc(unit) + '</span></div>' +
+      '<span class="option-val">' + fmtMoney(used) + ' / ' + fmtCount(total) + ' ' + esc(unit) + '</span></div>' +
       '<div class="bar"><div class="bar-fill' + cls + '" aria-hidden="true" style="width:' + Math.max(pct, 2).toFixed(1) + '%"></div></div>' +
       '</div>';
   }
@@ -65,10 +70,10 @@
     $('agent-stats').hidden = false;
     $('agent-state-row').hidden = false;
     $('caps-block').hidden = false;
-    $('s-balance').textContent = fmt(s.balance_usdc);
-    $('s-markets').textContent = fmt(s.markets_created, 0);
-    $('s-bets').textContent = fmt(s.bets_placed, 0);
-    $('s-errors').textContent = fmt(caps.consecutive_errors, 0);
+    $('s-balance').textContent = fmtMoney(s.balance_usdc);
+    $('s-markets').textContent = fmtCount(s.markets_created);
+    $('s-bets').textContent = fmtCount(s.bets_placed);
+    $('s-errors').textContent = fmtCount(caps.consecutive_errors);
 
     var chip = $('s-cooldown');
     var cooling = !!caps.cooldown_active;
@@ -83,7 +88,7 @@
 
   function entryRow(e) {
     var bet = e.bet_placed
-      ? 'ставка ' + fmt(e.bet_amount_usdc) + ' USDC'
+      ? 'ставка ' + fmtMoney(e.bet_amount_usdc) + ' USDC'
       : 'без ставки';
     var conf = typeof e.confidence === 'number' ? ' · ' + Math.round(e.confidence * 100) + '%' : '';
     var question = e.question ? ' · ' + e.question : '';

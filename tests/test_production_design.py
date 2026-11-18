@@ -1653,6 +1653,13 @@ SHEET_SEED_JS = """
     controls: sheet.querySelectorAll('a[href], button, input, select, textarea').length,
     modal: sheet.getAttribute('aria-modal'),
     label: sheet.getAttribute('aria-label') || '',
+    // The bounds as the visitor's browser sees them: `input.min`/`input.max` are
+    // the properties the field's own validation runs on, and the hint line is the
+    // sentence the sheet paints beside it.
+    fields: [...sheet.querySelectorAll('input[type=number]')].map((el) => ({
+      id: el.id, min: el.min, max: el.max, step: el.step, value: el.value,
+    })),
+    hints: [...sheet.querySelectorAll('.hint')].map((el) => el.textContent.trim()).filter(Boolean),
   };
 }
 """
@@ -1726,6 +1733,41 @@ def test_the_money_sheet_keeps_the_keyboard_it_promised(browser, sheet, theme):
     assert probe["scrollWidth"] <= MOBILE[0], (
         f"the {sheet} sheet overflows a {MOBILE[0]} px screen: {probe['scrollWidth']} px")
     assert_on_the_scale(probe, f"the {sheet} sheet in {theme}")
+
+
+# The field id each money sheet types its amount into, and the published key that
+# bounds it. `tests/test_web.py` ties these names to the route's own `refuse()`
+# kwargs; what only a browser can answer is whether the sheet painted them.
+SHEET_BOUND_FIELDS = {
+    "tip": ("tipAmt", {"max": "max_tip_usdc"}),
+    "withdraw": ("wdAmt", {"min": "min_withdraw_usdc"}),
+}
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("sheet", sorted(SHEET_BOUND_FIELDS))
+def test_the_open_sheet_states_the_bounds_this_origin_publishes(browser, sheet, theme):
+    """The money sheet is where the sum is chosen, and until now it chose it blind:
+    the Mini App read no published bound at all, so its tip field accepted 5 000
+    against a `MAX_TIP_USDC` of 1 000 and the ledger answered the tap with a
+    refusal. The attribute is what blocks the sum and the hint is what tells the
+    visitor why, so both are measured here against this origin's `/api/info`."""
+    limits = json.loads(_get("/api/info")[2])["limits"]
+    counted = open_sheet(browser, sheet, theme)["counted"]
+    field_id, keys = SHEET_BOUND_FIELDS[sheet]
+    fields = [f for f in counted["fields"] if f["id"] == field_id]
+    assert fields, f"the {sheet} sheet paints no #{field_id}: {counted['fields']}"
+    field = fields[0]
+    painted_hints = [number for hint in counted["hints"] for number in _painted_decimals(hint)]
+    for attr, key in keys.items():
+        assert key in limits, f"/api/info publishes no {key}: {sorted(limits)}"
+        assert field[attr] != "", f"#{field_id} carries no {attr} in {theme}"
+        assert Decimal(field[attr]) == Decimal(str(limits[key])), (
+            f"#{field_id}.{attr}={field[attr]} while this origin publishes "
+            f"{key}={limits[key]} ({theme})")
+        assert Decimal(field[attr]) in painted_hints, (
+            f"#{field_id}.{attr}={field[attr]} is enforced but never said: "
+            f"{counted['hints']}")
 
 
 DETAIL_SEED_JS = """
@@ -2154,7 +2196,9 @@ def test_the_documented_production_run_size_is_the_size_of_this_run(request):
     agents = (root / "AGENTS.md").read_text(encoding="utf-8-sig")
     readme = (root / "README.md").read_text(encoding="utf-8")
     claims = {
-        "whitepaper ru": re.search(r"\d+ обычных тестов \+ (\d+) боевой", paper),
+        # Russian numeral agreement gives «теста»/«боевых» after 1432 where 1408 took
+        # «тестов»/«боевой»; the captured digits are the statement, the ending is not.
+        "whitepaper ru": re.search(r"\d+ обычных тест(?:ов|а) \+ (\d+) боев(?:ой|ых)", paper),
         "whitepaper en": re.search(r"\d+ ordinary \+ (\d+) production", paper),
         "whitepaper short": re.search(r"\d+ \+ (\d+) tests", paper),
         "AGENTS.md": re.search(r"\d+ tests \((\d+) more, marked", agents),

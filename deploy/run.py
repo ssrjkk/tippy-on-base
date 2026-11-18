@@ -147,7 +147,6 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
     process via the stop event so the supervisor/health check can restart it.
     """
     from aiogram import Dispatcher
-    from aiogram.exceptions import TelegramNetworkError
 
     from bot import main as bot_main
     from bot.handlers import router
@@ -194,8 +193,8 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
                         if poll in done:
                             exc = poll.exception()
                             if exc is not None:
-                                if isinstance(exc, TelegramNetworkError):
-                                    log.warning("telegram unreachable, retrying in %ds: %s",
+                                if isinstance(exc, bot_main.TRANSIENT_TELEGRAM_ERRORS):
+                                    log.warning("telegram failed, retrying in %ds: %s",
                                                 bot_main.RETRY_SECONDS, exc)
                                     await asyncio.sleep(bot_main.RETRY_SECONDS)
                                     continue
@@ -213,8 +212,8 @@ async def _start_bot_polling(stop: asyncio.Event | None = None) -> None:
                 try:
                     await dp.start_polling(tg_bot, skip_updates=True, handle_signals=False)
                     break
-                except TelegramNetworkError as e:
-                    log.warning("telegram unreachable, retrying in %ds: %s",
+                except bot_main.TRANSIENT_TELEGRAM_ERRORS as e:
+                    log.warning("telegram failed, retrying in %ds: %s",
                                 bot_main.RETRY_SECONDS, e)
                     await asyncio.sleep(bot_main.RETRY_SECONDS)
     finally:

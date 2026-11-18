@@ -1,4 +1,4 @@
-"""Web dashboard API tests (FastAPI TestClient)."""
+﻿"""Web dashboard API tests (FastAPI TestClient)."""
 
 import json
 import re
@@ -1487,7 +1487,10 @@ def test_the_documents_agree_on_the_size_of_their_own_run():
     # compared the documents to each other. Here they must still agree.
     readme = (root / "README.md").read_text(encoding="utf-8")
     stated = [
-        re.search(r"(\d+) обычных тестов \+ (\d+) боевой", paper),
+        # `тестов|теста` and `боевой|боевых` are Russian numeral agreement, not two
+        # statements: 1432 governs «теста», 1408 governed «тестов». The digits are still
+        # captured, so a stale count fails exactly as before.
+        re.search(r"(\d+) обычных тест(?:ов|а) \+ (\d+) боев(?:ой|ых)", paper),
         re.search(r"(\d+) ordinary \+ (\d+) production", paper),
         re.search(r"(\d+) \+ (\d+) tests", paper),
         re.search(r"(\d+) tests \((\d+) more, marked",
@@ -1537,7 +1540,7 @@ def test_the_documented_suite_size_is_the_size_of_this_run(request):
     agents = (root / "AGENTS.md").read_text(encoding="utf-8-sig")
     readme = (root / "README.md").read_text(encoding="utf-8")
     claims = {
-        "whitepaper ru": re.search(r"(\d+) обычных тестов \+ \d+ боевой", paper),
+        "whitepaper ru": re.search(r"(\d+) обычных тест(?:ов|а) \+ \d+ боев(?:ой|ых)", paper),
         "whitepaper en": re.search(r"(\d+) ordinary \+ \d+ production", paper),
         "whitepaper short": re.search(r"(\d+) \+ \d+ tests", paper),
         "AGENTS.md": re.search(r"(\d+) tests \((\d+) more, marked", agents),
@@ -1751,37 +1754,6 @@ def test_the_dust_floor_answers_the_same_word_below_and_above_it(client, ledger)
     assert "больше нуля" not in typed.json()["detail"], typed.json()
 
 
-def _dust_refusing_routes():
-    """The paths whose handler answers `api_amount_dust`, read off the decorators."""
-    import ast
-
-    root = Path(__file__).resolve().parents[1]
-    found = set()
-    for rel in ("web/server.py", "web/mini.py"):
-        tree = ast.parse((root / rel).read_text(encoding="utf-8-sig"))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            keys = {
-                call.args[2].value
-                for call in ast.walk(node)
-                if isinstance(call, ast.Call)
-                and call.func.__class__.__name__ == "Name"
-                and call.func.id == "refuse"
-                and len(call.args) > 2
-                and isinstance(call.args[2], ast.Constant)
-                and isinstance(call.args[2].value, str)
-            }
-            if "api_amount_dust" not in keys:
-                continue
-            for dec in node.decorator_list:
-                first = dec.args[0] if isinstance(dec, ast.Call) and dec.args else None
-                if (isinstance(first, ast.Constant) and isinstance(first.value, str)
-                        and first.value.startswith("/")):
-                    found.add(first.value)
-    return sorted(found)
-
-
 def _route_call_matcher(path):
     """A regex for the way a shipped script spells a route: whole path in one
     string, or the part before the first `{placeholder}` quoted and the id
@@ -1808,38 +1780,159 @@ def _enclosing_function(text, idx):
     return text[before[-1]: after[0] if after else len(text)]
 
 
-def test_the_floor_a_dust_refusal_names_is_the_floor_the_inputs_ship(client, ledger):
-    """A bound the server refuses with has to be the bound the page blocks.
-    Three surfaces typed it (two `min` attributes and one Russian sentence), so
-    raising the floor would have left the panel quoting a trade the ledger then
-    refused — and the sentence the reader saw was written by a different hand
-    than the number the API answers."""
+def _money_bounds_by_route():
+    """`route -> {attr: (config name, Decimal)}` for every refusal that names a
+    money bound. The value is resolved through the handler's own assignments:
+    `min=_exact(min_micro)` where `min_micro = _cap_micro(config.MIN_WITHDRAW_USDC)`
+    is the same number, and a name ending in `_MICRO` is a micro-unit figure
+    while every other money knob this repository configures is a USDC figure."""
+    import ast
     from decimal import Decimal
 
     from bot import config as cfg
 
-    floor_usdc = Decimal(cfg.MARKET_MIN_TRADE_MICRO) / Decimal(10**6)
-    routes = _dust_refusing_routes()
-    assert routes, "no route answers api_amount_dust — this gate has stopped measuring"
+    root = Path(__file__).resolve().parents[1]
+    out = {}
+    for rel in ("web/server.py", "web/mini.py"):
+        tree = ast.parse((root / rel).read_text(encoding="utf-8-sig"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            routes = [
+                d.args[0].value
+                for d in node.decorator_list
+                if isinstance(d, ast.Call) and d.args
+                and isinstance(d.args[0], ast.Constant)
+                and isinstance(d.args[0].value, str)
+            ]
+            if not routes:
+                continue
+            assigned = {
+                t.id: ast.unparse(stmt.value)
+                for stmt in ast.walk(node)
+                if isinstance(stmt, ast.Assign)
+                for t in stmt.targets
+                if isinstance(t, ast.Name)
+            }
+            for call in ast.walk(node):
+                if not (isinstance(call, ast.Call)
+                        and getattr(call.func, "id", "") in ("refuse", "refuse_protocol")):
+                    continue
+                for kw in call.keywords:
+                    if kw.arg not in ("min", "cap"):
+                        continue
+                    text = ast.unparse(kw.value)
+                    names = set(re.findall(r"\bconfig\.([A-Z0-9_]+)", text))
+                    if not names and re.fullmatch(r"_\w+\((\w+)\)", text):
+                        inner = re.fullmatch(r"_\w+\((\w+)\)", text).group(1)
+                        names = set(re.findall(r"\bconfig\.([A-Z0-9_]+)", assigned.get(inner, "")))
+                    if len(names) != 1:
+                        raise AssertionError(f"{rel}: {text} names {sorted(names)} — not one bound")
+                    name = names.pop()
+                    raw = getattr(cfg, name)
+                    value = (Decimal(raw) / Decimal(10**6)) if name.endswith("_MICRO") else Decimal(str(raw))
+                    attr = "min" if kw.arg == "min" else "max"
+                    for route in routes:
+                        out.setdefault(route, {})[attr] = (name, value)
+    return out
 
-    # `/api/info` publishes it, so a page never has to remember the number.
-    limits = client.get("/api/info").json()["limits"]
-    assert Decimal(str(limits["min_trade_usdc"])) == floor_usdc
 
-    # …and so does the quote endpoint the drawer reads its own bounds from.
+def _limits_the_origin_publishes(client):
+    """Every USDC number `/api/info` answers with, so a page never has to
+    remember one: the limits block and the x402 block it publishes beside it."""
+    from decimal import Decimal
+
+    info = client.get("/api/info").json()
+    published = {}
+    for block in ("limits", "x402"):
+        for key, value in (info.get(block) or {}).items():
+            if isinstance(value, (int, float)) and key.endswith(("_usdc", "_micro")):
+                published[f"{block}.{key}"] = Decimal(str(value))
+    return published
+
+
+def _bound_assigned_by_script(sources):
+    """`(attr, limits key)` pairs each shipped script or sheet binds to one
+    input id: `bindBound('wdAmount', L, [['min', 'min_withdraw_usdc']])` on the
+    site and `boundAttr([['min', 'min_withdraw_usdc']])` inside the Mini App's
+    own template, whose field id is the input the pair is interpolated into."""
+    pairs = {}
+    for text in sources.values():
+        for m in re.finditer(
+            r"""bindBound\(\s*['"](\w+)['"]\s*,\s*\w+\s*,\s*(\[.*?\])\s*\)""", text, re.S
+        ):
+            pairs.setdefault(m.group(1), set()).update(
+                (a, k) for a, k in re.findall(r"""\[\s*['"](\w+)['"]\s*,\s*['"]([\w.]+)['"]""", m.group(2))
+            )
+        for m in re.finditer(r"""boundAttr\(\s*(\[.*?\])\s*\)""", text, re.S):
+            head = text[max(0, m.start() - 400):m.start()]
+            # The sheet paints several fields in one template: the id this
+            # interpolation decorates is the closest one before it, not the first.
+            found = re.findall(r"""id=[\\]?['"](\w+)['"]""", head)
+            if not found:
+                continue
+            field = found[-1]
+            for attr, lit, ident in re.findall(
+                r"""\[\s*['"](\w+)['"]\s*,\s*(?:['"](\w+)['"]|(\w+))\s*\]""", m.group(1)
+            ):
+                if lit:
+                    keys = [lit]
+                else:
+                    # The buy panel is one markup for a pool bet and an LMSR
+                    # trade, so its ceiling is a name chosen at run time: every
+                    # key its arms answer is a key the field states.
+                    decl = re.search(r"const\s+" + re.escape(ident) + r"\s*=\s*([^;]+)", head)
+                    expr = decl.group(1) if decl else ""
+                    keys = re.findall(r"""['"](\w+)['"]""", expr.split("?", 1)[-1])
+                pairs.setdefault(field, set()).update((attr, k) for k in keys)
+    return pairs
+
+
+def test_the_bound_a_route_refuses_with_is_the_bound_the_field_states(client, ledger):
+    """A money field is the only place a user learns the bound before the
+    refusal, and every bound this repository enforces was already copied into
+    markup or not copied at all: `min="0"` on a withdrawal the route rejects
+    under `MIN_WITHDRAW_USDC`, a subsidy floor of 0 against a configured 10, an
+    absent ceiling on a tip, and the whole Mini App, which never read the
+    published numbers at all.
+
+    Both halves are measured from the tree: the bound comes out of the
+    handler's own `refuse(..., min=config.X)` through the assignments it
+    resolves to, and the field comes out of the HTML attribute or the script
+    that binds the published key to it. A bound no endpoint publishes is a
+    bound a page can only invent."""
+    from decimal import Decimal
+
+    routes = _money_bounds_by_route()
+    assert len(routes) >= 6, f"only {len(routes)} routes name a money bound"
+    published = _limits_the_origin_publishes(client)
+    assert len(published) >= 8, f"only {len(published)} bounds are published"
+
+    # (a) every bound a refusal states is published, so a page can read it.
+    unbound = []
+    for route, bounds in routes.items():
+        for attr, (name, value) in bounds.items():
+            if value not in published.values():
+                unbound.append(f"{route} refuses on {attr}={value} ({name}), which nothing publishes")
+    assert not unbound, unbound
+
+    # The quote endpoint is the second publisher of the same two numbers: the
+    # drawer reads its bounds off the quote it just asked for, so the quote and
+    # /api/info cannot be allowed to answer different floors for one market.
     mid = _one_market(ledger)
     quote = client.get(
         f"/api/prediction/{mid}/quote", params={"option": 0, "amount": "5"}
     ).json()
-    assert Decimal(str(quote["min_trade_usdc"])) == floor_usdc
+    for key, attr in (("min_trade_usdc", "min"), ("max_trade_usdc", "max")):
+        assert Decimal(str(quote[key])) == routes["/api/prediction/{market_id}/quote"][attr][1], key
 
     static = Path(__file__).resolve().parents[1] / "web" / "static"
-    pages = sorted(static.glob("*.html"))
-    scripts = sorted(static.glob("*.js"))
-    sources = {p.name: p.read_text(encoding="utf-8-sig") for p in pages + scripts}
-
+    sources = {
+        p.name: p.read_text(encoding="utf-8-sig")
+        for p in sorted(static.glob("*.html")) + sorted(static.glob("*.js"))
+    }
     typed_into = {}
-    for name, text in sources.items():
+    for text in sources.values():
         for route in routes:
             for hit in re.finditer(_route_call_matcher(route), text):
                 body = _enclosing_function(text, hit.start())
@@ -1848,30 +1941,107 @@ def test_the_floor_a_dust_refusal_names_is_the_floor_the_inputs_ship(client, led
                     r"""|(?:getElementById|\$)\(\s*['"](\w+)['"]\s*\)\s*\.value)""",
                     body,
                 ):
-                    typed_into.setdefault(read.group(1) or read.group(2), name)
-    assert typed_into, f"nothing in web/static types an amount into {routes}"
+                    typed_into.setdefault(read.group(1) or read.group(2), set()).add(route)
+    assert typed_into, "no shipped field types an amount into a bound-refusing route"
 
-    for input_id, origin in sorted(typed_into.items()):
-        mins = [
-            m.group(1)
-            for name, text in sources.items()
-            if name.endswith(".html")
-            for m in [re.search(
-                r"<input\b[^>]*id=[\"']" + re.escape(input_id) + r"[\"'][^>]*?\bmin=[\"']([^\"']*)[\"']",
-                text,
-            )]
-            if m
-        ]
-        assert mins, f"{origin} types into #{input_id}, whose markup states no floor"
-        assert all(Decimal(m) == floor_usdc for m in mins), (input_id, mins)
+    # A create-market form reads a question, a deadline and a subsidy: only the
+    # money field is held to the money bound.
+    def is_money_field(input_id):
+        for text in sources.values():
+            tag = re.search(
+                r"<input\b[^>]*id=[\"']" + re.escape(input_id) + r"[\"'][^>]*>", text, re.S
+            )
+            if tag:
+                chunk = tag.group(0)
+                return bool(
+                    re.search(r"""type=[\"']number[\"']""", chunk)
+                    and re.search(r"""inputmode=[\"']decimal[\"']|step=[\"']0\.\d+[\"']""", chunk)
+                )
+        return False
 
-    # …and a bounds sentence is built from the published number, never typed:
-    # the drawer used to write the lower bound out itself in Russian.
-    offenders = [
-        f"{name}: {m.group(0)}"
-        for name, text in sources.items()
-        for m in re.finditer(r"От\s+\d+(?:[.,]\d+)?\s+до", text)
-    ]
+    amount_fields = {k: v for k, v in typed_into.items() if is_money_field(k)}
+    assert len(amount_fields) >= 5, f"only {len(amount_fields)} money fields were read"
+
+    bindings = _bound_assigned_by_script(sources)
+
+    # The Mini App's `LIMITS` is the only reader of the published bounds block,
+    # so a mutation that changes where it reads from (`.limits` → `.fees`)
+    # leaves every `boundAttr` call pointing at an empty object. The source must
+    # state the block name, and that block must carry every key a `boundAttr`
+    # call references — a block of percentages cannot answer for USDC bounds.
+    app_text = sources.get("app.html", "")
+    limits_assign = re.search(r"LIMITS\s*=\s*\(await\s+r\.json\(\)\)\.(\w+)", app_text)
+    if limits_assign:
+        block = limits_assign.group(1)
+        info = client.get("/api/info").json()
+        block_keys = set((info.get(block) or {}).keys())
+        bound_keys = {key for pairs in bindings.values() for attr, key in pairs}
+        missing = bound_keys - block_keys
+        assert not missing, (
+            f"Mini App reads LIMITS from .{block}, which carries {block_keys}; "
+            f"boundAttr references {bound_keys}, missing {missing}"
+        )
+
+    def published_value(key):
+        """The limits block and the x402 block are one namespace to a page: a
+        binding names the key, the origin answers it under one of the two."""
+        for cand in (f"limits.{key}", f"x402.{key}", key):
+            if cand in published:
+                return published[cand]
+        return None
+
+    checked = 0
+    failures = []
+    for input_id, refs in sorted(amount_fields.items()):
+        markup = next(
+            (text for text in sources.values()
+             if re.search(r"<input\b[^>]*id=[\"']" + re.escape(input_id) + r"[\"']", text)),
+            "",
+        )
+        tag = re.search(r"<input\b[^>]*id=[\"']" + re.escape(input_id) + r"[\"'][^>]*>", markup, re.S)
+        for route in sorted(refs):
+            for attr, (name, value) in sorted(routes[route].items()):
+                checked += 1
+                literal = re.search(r"\b" + attr + r"=[\"']([^\"']*)[\"']", tag.group(0)) if tag else None
+                stated = []
+                if literal:
+                    stated.append(("markup", Decimal(literal.group(1))))
+                for b_attr, key in sorted(bindings.get(input_id, ())):
+                    if b_attr != attr:
+                        continue
+                    bound = published_value(key)
+                    if bound is None:
+                        failures.append(
+                            f"#{input_id} binds {attr} to '{key}', a key no block of "
+                            f"/api/info answers ({route} refuses at {value})"
+                        )
+                    else:
+                        stated.append((f"{key} bound at run time", bound))
+                if not stated:
+                    failures.append(
+                        f"#{input_id} types into {route}, which refuses on {attr}={value} "
+                        f"({name}); the field states no bound"
+                    )
+                elif any(d != value for _, d in stated):
+                    failures.append(
+                        f"#{input_id} states {[(where, str(d)) for where, d in stated]} for "
+                        f"{attr}, but {route} refuses at {value} ({name})"
+                    )
+    assert not failures, failures
+    assert checked >= 8, f"only {checked} field/bound pairs were measured"
+
+    # (b) …and a bounds *sentence* is built from the published number too. The
+    # drawer used to paint «От 0.01 до 500 USDC» from a typed literal while the
+    # ceiling beside it came from the API, so one operator edit moved one figure.
+    typed = re.compile(
+        r"(?:\b(?:от|до|из|from|to|per|за|минимум|максимум|minimum|maximum|至少|上限)\b\W{0,8})"
+        r"(?:\$\s?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s*USDC|USDC\s*\$?\d+(?:[.,]\d+)?)",
+        re.I,
+    )
+    offenders = [f"{name}: {m.group(0)!r}"
+                 for name, text in sources.items()
+                 for line in text.splitlines()
+                 for m in typed.finditer(line)]
     assert not offenders, offenders
 
 

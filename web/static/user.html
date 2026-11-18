@@ -32,24 +32,24 @@
   <main>
     <article class="page" id="profile">
       <span class="eyebrow">Профиль Tippy</span>
-      <div class="avatar" id="user-avatar">·</div>
+      <div class="avatar" id="user-avatar" hidden></div>
       <h1 class="page-title" id="user-name">Загрузка…</h1>
-      <div class="page-meta" id="user-meta"></div>
+      <div class="page-meta" id="user-meta" hidden></div>
 
       <div class="cta-row">
         <a class="btn btn-primary" id="u-donate" href="https://t.me/__BOT_USERNAME__" target="_blank" rel="noopener">Поддержать в Telegram</a>
         <button class="btn btn-ghost" id="u-share" type="button">Скопировать ссылку</button>
       </div>
 
-      <section class="page-block">
+      <section class="page-block" id="figures" hidden>
         <span class="eyebrow">Через Tippy прошло</span>
-        <div class="stats">
-          <div class="stat-card"><div class="stat-value" id="u-received">–</div><div class="stat-label">Получено чаевых</div></div>
-          <div class="stat-card"><div class="stat-value" id="u-sent">–</div><div class="stat-label">Отправлено чаевых</div></div>
-          <div class="stat-card"><div class="stat-value" id="u-won">–</div><div class="stat-label">Выиграно на рынках</div></div>
-          <div class="stat-card"><div class="stat-value" id="u-placed">–</div><div class="stat-label">Поставлено на рынках</div></div>
-          <div class="stat-card"><div class="stat-value" id="u-fees">–</div><div class="stat-label">Комиссия создателя</div></div>
-          <div class="stat-card" id="u-balance-card" hidden><div class="stat-value" id="u-balance">–</div><div class="stat-label">Твой баланс</div></div>
+        <div class="rows">
+          <div class="row"><span class="row-k">Получено чаевых</span><b class="row-v" id="u-received">–</b></div>
+          <div class="row"><span class="row-k">Отправлено чаевых</span><b class="row-v" id="u-sent">–</b></div>
+          <div class="row"><span class="row-k">Выиграно на рынках</span><b class="row-v" id="u-won">–</b></div>
+          <div class="row"><span class="row-k">Поставлено на рынках</span><b class="row-v" id="u-placed">–</b></div>
+          <div class="row"><span class="row-k">Комиссия создателя</span><b class="row-v" id="u-fees">–</b></div>
+          <div class="row" id="u-balance-row" hidden><span class="row-k">Твой баланс</span><b class="row-v" id="u-balance">–</b></div>
         </div>
       </section>
 
@@ -122,7 +122,7 @@
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
       })[c]);
     const fmtUSDC = (x) =>
-      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
     // tx_log.created_at is epoch seconds.
     const fmtDate = (sec) => {
       const n = Number(sec || 0);
@@ -132,6 +132,16 @@
       });
     };
     const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
+    /* The figures this page may publish about anyone. A profile is a receipt of
+     * movement, so when every one of them is zero the block says so instead of
+     * painting five tiles of 0,00 for an id that has never transacted. */
+    const FIGURES = [
+      ["u-received", "tips_received_usdc"],
+      ["u-sent", "tips_sent_usdc"],
+      ["u-won", "bets_won_usdc"],
+      ["u-placed", "bets_placed_usdc"],
+      ["u-fees", "creator_fees_usdc"],
+    ];
 
     const tgId = location.pathname.split("/").filter(Boolean).pop();
 
@@ -145,17 +155,33 @@
         if (!r.ok) throw new Error();
         u = await r.json();
       } catch (e) {
-        $("profile").innerHTML = '<div class="empty">Профиль ещё не появился — этот пользователь ничего не отправлял и не получал через Tippy.</div>';
+        $("profile").innerHTML = '<div class="empty">Профиль не загрузился — обнови страницу.</div>';
         return;
       }
 
-      const name = u.username || ("id" + tgId);
-      $("user-avatar").textContent = name.replace(/^@/, "")[0].toUpperCase();
+      const moved = FIGURES.some(([, key]) => Number(u[key] || 0) > 0);
+      if (!u.username && !moved && !u.is_owner) {
+        /* /api/user answers 200 with zeros for an id that has never transacted —
+         * it must not become an enumeration oracle — so this, not the failed
+         * fetch above, is the branch a stranger typing an id reaches. */
+        $("profile").innerHTML = '<div class="empty">Через Tippy здесь пока ничего не проходило. Профиль появится, как только этот пользователь что-нибудь отправит или получит.</div>';
+        return;
+      }
+
+      if (u.username) {
+        /* The monogram is the first letter of a name. "id12345" has none, and
+         * inventing an "I" tile gives a face to a profile that has no face. */
+        $("user-avatar").textContent = u.username.replace(/^@/, "")[0].toUpperCase();
+        $("user-avatar").hidden = false;
+      }
       $("user-name").textContent = handle(u.username, tgId);
-      $("user-meta").innerHTML = [
-        "<span>Чаевых получено: " + fmtUSDC(u.tips_received_usdc) + " USDC</span>",
-        u.is_owner ? "<span>это твой профиль</span>" : "",
-      ].filter(Boolean).join("<span>·</span>");
+      const meta = [];
+      if (u.is_owner) meta.push("<span>это твой профиль</span>");
+      else if (!moved) meta.push("<span>Через Tippy пока ничего не проходило</span>");
+      if (meta.length) {
+        $("user-meta").innerHTML = meta.join("");
+        $("user-meta").hidden = false;
+      }
 
       if (info.bot_username) {
         $("u-donate").href = "https://t.me/" + encodeURIComponent(info.bot_username) +
@@ -169,13 +195,12 @@
         } catch (e) { /* clipboard denied: the address bar still has the link */ }
       });
 
-      $("u-received").textContent = fmtUSDC(u.tips_received_usdc);
-      $("u-sent").textContent = fmtUSDC(u.tips_sent_usdc);
-      $("u-won").textContent = fmtUSDC(u.bets_won_usdc);
-      $("u-placed").textContent = fmtUSDC(u.bets_placed_usdc);
-      $("u-fees").textContent = fmtUSDC(u.creator_fees_usdc);
+      if (moved || u.is_owner) {
+        FIGURES.forEach(([id, key]) => { $(id).textContent = fmtUSDC(u[key]); });
+        $("figures").hidden = false;
+      }
       if (u.is_owner) {
-        $("u-balance-card").hidden = false;
+        $("u-balance-row").hidden = false;
         $("u-balance").textContent = fmtUSDC(u.balance_usdc);
         $("support-how").hidden = false;
         $("u-address").textContent = u.deposit_address;

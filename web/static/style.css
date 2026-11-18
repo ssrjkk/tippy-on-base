@@ -500,15 +500,14 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .market-footer {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline;
   gap: 2px 14px; margin-top: 14px;
-  font-size: var(--t-chip); font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  font-size: var(--t-chip); color: var(--muted);
 }
-/* At 360px the two halves of the row are what should break, not a figure away
-   from its unit. Gluing the value inside <b> is what that sentence always
-   meant; nowrap on the whole span made the line rigid and the card 117px
-   wider than the page. */
-.pot b { white-space: nowrap; }
+/* The figure is the mono element, not the row: the footer also carries the
+   creator's handle and a link, and the money face on a name draws @bob as a
+   checksum. Same split as the Mini App's `.pot-line`. The nowrap stays glued to
+   the value: at 360px the two halves of the row are what should break, not a
+   figure away from its unit. */
+.pot b { white-space: nowrap; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .pot { color: var(--muted); }
 .status-open { color: var(--accent-text); font-weight: 500; }
 .status-closed { color: var(--muted-2); }
@@ -831,7 +830,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .page-id { color: var(--muted-2); font-family: var(--font-mono);
   font-variant-numeric: tabular-nums; font-weight: 400; letter-spacing: -0.02em; }
 .page-meta {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 28px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 28px;
   color: var(--muted); font-size: var(--t-meta); font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }

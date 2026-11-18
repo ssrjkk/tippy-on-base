@@ -181,7 +181,7 @@
           </div>
           <div class="field">
             <label class="label" for="tipAmount">Сумма, USDC</label>
-            <input class="input" id="tipAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <input class="input mono" id="tipAmount" type="number" min="0.01" max="1000" step="0.01" inputmode="decimal" placeholder="0.00" />
             <div class="amount-chips" id="tipChips"></div>
             <div class="hint" id="tipLimit"></div>
           </div>
@@ -196,7 +196,7 @@
           </div>
           <div class="field">
             <label class="label" for="wdAmount">Сумма, USDC</label>
-            <input class="input" id="wdAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <input class="input mono" id="wdAmount" type="number" min="1" step="0.01" inputmode="decimal" placeholder="0.00" />
             <div class="amount-chips" id="wdChips"></div>
             <div class="hint" id="wdLimits"></div>
           </div>
@@ -231,7 +231,7 @@
           </div>
           <div class="field">
             <label class="label" for="tradeAmount">Сумма, USDC</label>
-            <input class="input" id="tradeAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <input class="input mono" id="tradeAmount" type="number" min="0.01" max="500" step="0.01" inputmode="decimal" placeholder="0.00" />
             <div class="hint" id="tradeLimit"></div>
           </div>
           <button class="btn btn-primary" data-act="buyShares">Купить доли</button>
@@ -249,7 +249,7 @@
           </div>
           <div class="field">
             <label class="label" for="betAmount">Сумма, USDC</label>
-            <input class="input" id="betAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <input class="input mono" id="betAmount" type="number" min="0.01" max="500" step="0.01" inputmode="decimal" placeholder="0.00" />
             <div class="hint" id="betLimit"></div>
           </div>
           <button class="btn btn-primary" data-act="placeBet">Поставить</button>
@@ -278,7 +278,7 @@
           </div>
           <div class="field" id="subsidyField">
             <label class="label" for="newSubsidy">Субсидия ликвидности, USDC</label>
-            <input class="input" id="newSubsidy" type="number" min="0" step="1" inputmode="decimal" placeholder="10" />
+            <input class="input mono" id="newSubsidy" type="number" min="10" max="1000" step="1" inputmode="decimal" placeholder="10" />
             <div class="hint" id="subsidyLimits"></div>
           </div>
           <button class="btn btn-primary" data-act="createMarket">Создать</button>
@@ -313,7 +313,7 @@
             </div>
             <div class="field">
               <label class="label" for="ocMaxCost">Макс. цена, USDC</label>
-              <input class="input" id="ocMaxCost" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="1.00" />
+              <input class="input mono" id="ocMaxCost" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="1.00" />
             </div>
           </div>
           <button class="btn btn-primary" data-act="smartBuy">Купить без газа</button>
@@ -471,7 +471,7 @@
           </div>
           <div class="field">
             <label class="label" for="x402Amount">Сумма, USDC</label>
-            <input class="input" id="x402Amount" type="number" step="0.01" inputmode="decimal" placeholder="0.10" />
+            <input class="input mono" id="x402Amount" type="number" min="0.01" max="1000" step="0.01" inputmode="decimal" placeholder="0.10" />
             <div class="amount-chips" id="x402Amounts"></div>
             <p class="hint" id="x402Bounds">Пределы и время жизни счёта читаются с этого же сайта.</p>
           </div>
@@ -647,7 +647,7 @@
         </div>
         <div class="field">
           <label class="label" for="quoteAmount">Сумма сделки, USDC</label>
-          <input class="input" id="quoteAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="10.00" />
+          <input class="input mono" id="quoteAmount" type="number" min="0.01" max="500" step="0.01" inputmode="decimal" placeholder="10.00" />
           <div class="amount-chips" id="quoteChips"></div>
           <div class="hint" id="quoteLimit"></div>
         </div>

@@ -24,7 +24,8 @@
 // page is returned instead of a raw error — the site never shows a stack of
 // internal text. It carries its own copy of the Base tokens from
 // web/static/style.css because the page has to render with the asset bundle
-// missing too.
+// missing too, and it names the one thing the origin cannot say from a grave:
+// which measurement put it there.
 
 const ASSET = /\.(?:css|js|mjs|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|otf|map|webmanifest)$/i;
 
@@ -34,7 +35,31 @@ const ASSET = /\.(?:css|js|mjs|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|otf|ma
 // the outage keeps it.
 const UPSTREAM_DEADLINE_MS = 15000;
 
-const MAINTENANCE = `<!doctype html>
+// The four ways this edge can end up painting the card, and the one sentence each
+// says to the visitor. `docs/CLOUDFLARE.md` gives every one of these words its own
+// remedy, and a gate holds the two lists together: a reason the code can produce
+// that the runbook never names is a card nobody knows how to clear, and a runbook
+// row for a reason the code cannot produce sends an operator hunting for a fault
+// that does not exist.
+const OUTAGE_REASONS = {
+  'no-backend': 'Origin не настроен в этом проекте Pages.',
+  'deadline': 'Origin не успел ответить за отведённое время.',
+  'refused': 'Origin не принимает соединение.',
+  'gateway-5xx': 'Ответил прокси перед origin, а не приложение.',
+};
+
+// The only place a reason is chosen, so the vocabulary stays four words and the
+// answer comes from which branch was taken — never from what an exception said.
+// A card that quoted a failure would be this edge leaking its own internals into
+// a page that anyone can open.
+function outageReason({ hasBackend = true, upstream = null, expired = false } = {}) {
+  if (!hasBackend) return 'no-backend';
+  if (upstream) return 'gateway-5xx';
+  if (expired) return 'deadline';
+  return 'refused';
+}
+
+const MAINTENANCE = (reason) => `<!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -114,17 +139,19 @@ const MAINTENANCE = `<!doctype html>
       <a class="btn btn-primary" href="https://t.me/TippyOnBaseBot">Бот в Telegram</a>
       <a class="btn btn-ghost" href="https://github.com/ssrjkk/tippy-on-base">Исходный код</a>
     </div>
-    <div class="hint">503 · автоповтор через 5 минут</div>
+    <div class="hint" data-reason="${reason}">${OUTAGE_REASONS[reason]}<br>503 · автоповтор через 5 минут</div>
   </div>
 </body>
 </html>`;
 
-function maintenance() {
+function maintenance(reason) {
   // The one document this edge writes by itself, so the one document that has to
   // carry the protection layer by hand: the origin stamps nosniff, Referrer-Policy
   // and no-store on everything it answers, and a card that asks to be read again
-  // in five minutes cannot itself be cached.
-  return new Response(MAINTENANCE, {
+  // in five minutes cannot itself be cached. The reason goes out as a header as
+  // well as in the markup, because an operator reads an outage with `curl -I` far
+  // more often than with a browser.
+  return new Response(MAINTENANCE(reason), {
     status: 503,
     headers: {
       'content-type': 'text/html; charset=utf-8',
@@ -132,6 +159,7 @@ function maintenance() {
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'no-referrer',
+      'x-tippy-outage-reason': reason,
     },
   });
 }
@@ -154,7 +182,7 @@ export async function onRequest(context) {
   }
 
   const backend = (env.BACKEND_URL || '').replace(/\/+$/, '');
-  if (!backend) return maintenance();
+  if (!backend) return maintenance(outageReason({ hasBackend: false }));
 
   const headers = new Headers(request.headers);
   // The origin has its own hostname; forwarding pages.dev as Host makes the
@@ -212,7 +240,9 @@ export async function onRequest(context) {
       if (expired) break;
     }
   }
-  const answer = upstream && !isDown(upstream) ? upstream : maintenance();
+  const answer = upstream && !isDown(upstream)
+    ? upstream
+    : maintenance(outageReason({ upstream, expired }));
   // The deadline guarded the wait for the first byte. Once the origin has begun
   // answering, a body still arriving is a live page, and letting the timer fire
   // would truncate a half-delivered document and call it a maintenance window.

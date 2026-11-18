@@ -692,7 +692,28 @@ def _ports_the_stack_answers_on() -> set[str]:
         text = path.read_text(encoding="utf-8-sig", errors="replace")
         bind |= set(re.findall(r"(?:127\.0\.0\.1|localhost):(\d{2,5})\b", text))
     assert bind, "no tracked deploy/ program binds a loopback port — the third source went blind"
-    return ports | web_port | bind
+    # A block of replicas derived from a base and a count is a set of ports this host
+    # answers on too. `deploy/watchdog.ps1` formats `127.0.0.1:{0}` from
+    # `$MetricsPortBase`, so the literal scan above sees only the base, and a runbook
+    # that tells an operator to probe the second replica — which is the entire point of
+    # the pair — would be refused for stating the truth.
+    replica_ports: set[str] = set()
+    for name in sorted(_tracked_files("deploy")):
+        path = ROOT / name
+        if path.suffix.lower() != ".ps1":
+            continue
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        base = re.search(r"(?m)^\s*\$MetricsPortBase\s*=\s*(\d{2,5})\s*$", text)
+        count = re.search(r"(?m)^\s*\$ConnectorReplicas\s*=\s*(\d{1,2})\s*$", text)
+        if base and count:
+            replica_ports |= {
+                str(port) for port in range(int(base.group(1)), int(base.group(1)) + int(count.group(1)))
+            }
+    assert replica_ports, (
+        "no deploy/ script derives a connector replica block — the reader that "
+        "legitimises the metrics ports in the docs went blind"
+    )
+    return ports | web_port | bind | replica_ports
 
 
 def test_no_document_tells_a_human_to_reach_a_port_the_stack_does_not_answer_on():
@@ -1941,3 +1962,200 @@ def test_the_threshold_reader_attributes_a_figure_to_the_knob_beside_it(tmp_path
 
     attributed, _, _ = probe("first line\nsecond line\n`LARGE_USDC` is 500 USDC here\n")
     assert attributed[0][1] == 3, attributed
+
+
+# ---------------------------------------------------------------------------
+# A count of proven mutations is a claim about a list, and the list is counted.
+# ---------------------------------------------------------------------------
+
+_MUTATION_CLAIM = re.compile(
+    r"\b(\d{1,3}|[A-Za-z]+(?:-[A-Za-z]+)?)\s+mutations?\s+were\s+proven\s+to\s+fire", re.I
+)
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60}
+_CLAIM_WINDOW = 3000
+
+
+def _count_word(token: str) -> int | None:
+    """The number a prose claim states, as a word or as digits, or None when it is not a number.
+
+    «Seventeen laws», «25 laws» and «twenty-five mutations» are one kind of claim; «these
+    mutations» and «last mutations» state no count, and reading the word beside them as a
+    number would fail a sentence that promises nothing.
+    """
+    token = token.lower()
+    if token.isdigit():
+        return int(token)
+    if token in _WORD_NUMBER:
+        return _WORD_NUMBER[token]
+    head, dash, tail = token.partition("-")
+    if dash and head in _TENS and tail in _WORD_NUMBER:
+        return _TENS[head] + _WORD_NUMBER[tail]
+    return None
+
+
+def _clauses_of(span: str) -> list[str]:
+    """Split an enumeration at its top-level commas, outside backtick spans and brackets.
+
+    A comma inside `` `credit(…, 'fee')` `` belongs to the span, and a bracket a span carries
+    opens no level: a reader that counted either would read one mutation as two.
+    """
+    clauses, buf, depth, in_span = [], "", 0, False
+    for ch in span:
+        if ch == "`":
+            in_span = not in_span
+        elif not in_span:
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            elif ch == "," and depth == 0:
+                clauses.append(buf)
+                buf = ""
+                continue
+        buf += ch
+    clauses.append(buf)
+    out = []
+    for clause in clauses:
+        clause = " ".join(clause.split()).strip().rstrip(".!")
+        if clause.lower().startswith("and "):
+            clause = clause[4:].strip()
+        if clause:
+            out.append(clause)
+    return out
+
+
+def _enumeration_after(tail: str) -> list[str] | None:
+    """The list a claim introduces, colon form or bracketed, or None when it names no list."""
+    colon, paren = tail.find(": "), tail.find(" (")
+    spots = [p for p in (colon, paren) if p >= 0]
+    if not spots:
+        return None
+    intro = min(spots)
+    if ". " in tail[:intro]:
+        return None
+    # `find(" (")` reports the space before the bracket, so the introducer has to be read from
+    # the character after it. A slice taken at that index starts with a space, matches neither
+    # "(" nor ": ", and the bracketed list is then returned whole — both brackets attached and
+    # the closing one counted as part of the last clause. The reader test below hands it both.
+    head = tail[intro:].lstrip()
+    if head.startswith("("):
+        depth, in_span = 0, False
+        for k, ch in enumerate(head):
+            if ch == "`":
+                in_span = not in_span
+            elif not in_span:
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0:
+                        return _clauses_of(head[1:k])
+        return None
+    if head.startswith(": "):
+        cut = head.find(". ")
+        return _clauses_of(head[2:cut] if cut >= 0 else head[2:])
+    return None
+
+
+def _documented_mutation_counts() -> list[tuple[str, int, list[str]]]:
+    """Every count of proven mutations a first-party document states, with the clauses it names.
+
+    The subject set is `MARKDOWN` — the tracked `*.md` these laws already read — so a count
+    added to a new document is inside the law the moment the file is, and no wave has to add
+    its own paragraph to a list here.
+    """
+    found: list[tuple[str, int, list[str]]] = []
+    for path in MARKDOWN:
+        flat = " ".join(_prose(path.read_text(encoding="utf-8")).split())
+        for match in _MUTATION_CLAIM.finditer(flat):
+            stated = _count_word(match.group(1))
+            if stated is None:
+                continue
+            tail = flat[match.end(): match.end() + _CLAIM_WINDOW]
+            clauses = _enumeration_after(tail)
+            found.append((path.name, stated, clauses if clauses is not None else []))
+    return found
+
+
+def test_every_documented_mutation_count_is_the_number_of_clauses_it_names():
+    claims = _documented_mutation_counts()
+    assert len(claims) >= 2, (
+        f"only {len(claims)} documents state a mutation count — the reader found "
+        "«N mutations were proven to fire» in fewer places than the tree writes it, so this "
+        "law would be certifying a scan that went blind"
+    )
+
+    unnamed = [(name, stated) for name, stated, clauses in claims if not clauses]
+    assert not unnamed, (
+        f"{unnamed} — a document states how many mutations were proven to fire and names no "
+        "list beside it. The number then belongs to a scratch run that no longer exists: nobody "
+        "reading the file can re-count it, and the next wave has no choice but to trust it."
+    )
+
+    wrong = [(name, stated, len(clauses)) for name, stated, clauses in claims if stated != len(clauses)]
+    assert not wrong, (
+        "a stated count is not the number of clauses it enumerates — either one clause bundled "
+        "several mutations (which a reader cannot re-count) or the list lost an item:\n"
+        + "\n".join(f"  {name}: says {stated}, names {count}" for name, stated, count in wrong)
+    )
+
+    total = sum(len(clauses) for _name, _stated, clauses in claims)
+    assert total >= 12, (
+        f"the documents name {total} mutations between them, far under the 28 read this wave — "
+        "the clause reader is losing items rather than the prose shrinking"
+    )
+
+
+def test_the_mutation_clause_reader_reads_the_shapes_a_prose_list_takes():
+    """The reader on markup that is not the file it usually gets.
+
+    The shipped prose uses one colon list and one bracketed list, both written by hand; either
+    can gain a bracketed span, a hyphenated number or a stray sentence break tomorrow, and a
+    reader that quietly returns nothing reports a clean tree over a claim it never read.
+    """
+
+    def read(text: str) -> list[tuple[int, list[str]]]:
+        flat = " ".join(text.split())
+        out = []
+        for match in _MUTATION_CLAIM.finditer(flat):
+            stated = _count_word(match.group(1))
+            if stated is None:
+                continue
+            clauses = _enumeration_after(flat[match.end(): match.end() + _CLAIM_WINDOW])
+            out.append((stated, clauses if clauses is not None else []))
+        return out
+
+    colon = read("Six mutations were proven to fire: a, b, and c. What the laws cannot see: x.")
+    assert colon == [(6, ["a", "b", "c"])], f"{colon} — a colon list ends at its own sentence"
+
+    bracketed = read("Six mutations were proven to fire (a, b, and c). Done.")
+    assert bracketed == [(6, ["a", "b", "c"])], (
+        f"{bracketed} — the bracketed introducer is found at the space before it, so a reader "
+        "that slices there keeps the space, matches neither form, and returns the whole list "
+        "with both brackets attached"
+    )
+
+    def one(text: str) -> tuple[int, list[str]]:
+        """One claim read out of one sentence — a reader that found none, or two, is blind."""
+        claims = read(text)
+        assert len(claims) == 1, f"{claims} — exactly one count was written in {text!r}"
+        return claims[0]
+
+    _stated, spans = one(
+        "Four mutations were proven to fire: a `fee` row, a `credit(…, 'fee')` call, "
+        "a `x, y` span that is one clause, and a `z)` closer inside a span. End."
+    )
+    assert len(spans) == 4, spans
+    assert any("x, y" in c for c in spans), spans
+    assert not any(c.endswith(")") for c in spans), spans
+
+    assert one("Twenty-five mutations were proven to fire: a, b.")[0] == 25, "a hyphenated word"
+    assert one("25 mutations were proven to fire: a, b.")[0] == 25, "digits"
+    assert read("These mutations were proven to fire, and the record is gone.") == []
+    assert one("Nine mutations were proven to fire. The list is late: a, b.")[1] == [], (
+        "a full stop ends the claim, and a list arriving in the next sentence enumerates "
+        "nothing this number can be checked against"
+    )
+    assert one("Nine mutations were proven to fire (a, b, c")[1] == [], (
+        "a bracket that never closes is not a list"
+    )

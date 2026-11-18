@@ -26,7 +26,9 @@ Three deliberate choices:
   asks for all fail.** They are the same drift in three costumes.
 """
 
+import json
 import re
+import subprocess
 from itertools import pairwise
 from pathlib import Path
 
@@ -236,23 +238,40 @@ def rule_selector_and_body(css: str) -> list[tuple[str, str]]:
     ]
 
 
+def _body_from_open_brace(text: str, brace: int) -> str | None:
+    """The characters between a `{` and the `}` that closes it."""
+    depth = 0
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace + 1:i]
+    return None
+
+
 def js_function(text: str, name: str) -> str | None:
     """The body of a named JS function, braces matched. None if it is not there.
 
     Needed because the design contract is about specific screens — a count over a
     whole file lets one component borrow another component's empty state."""
     match = re.search(rf"function\s+{re.escape(name)}\s*\([^)]*\)\s*\{{", text)
-    if not match:
-        return None
-    depth = 0
-    for i in range(match.end() - 1, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return text[match.end():i]
-    return None
+    return None if match is None else _body_from_open_brace(text, match.end() - 1)
+
+
+def js_functions(text: str) -> dict[str, str]:
+    """Every named function in the file, body included, in source order.
+
+    A law that names the screens it reads is a law that stops reading when a
+    screen is renamed or a new one is added, so the subject set of the repaint
+    laws below is the whole answer of this reader."""
+    found = {}
+    for match in re.finditer(r"function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{", text):
+        body = _body_from_open_brace(text, match.end() - 1)
+        if body is not None:
+            found[match.group(1)] = body
+    return found
 
 
 # ---------------------------------------------------------------------------
@@ -592,6 +611,452 @@ def test_mono_implies_tabular_digits():
                 )
         assert not offenders, f"{surface}: {offenders}"
         assert not resets, f"{surface}: the font: shorthand wipes the variant after it: {resets}"
+
+
+INPUT_TAG_RE = re.compile(r"<input\b[^>]*?/?>", re.S)
+LABEL_TEXT_RE = re.compile(r"""(?:class="input-label"|class="label")[^>]*>([^<]{1,160})""")
+CLASS_ATTR_RE = re.compile(r"""class=[\"']([^\"']*)[\"']""")
+MONEY_TAG_RE = re.compile(r"""type=[\"']number[\"']""")
+DECIMAL_TAG_RE = re.compile(r"""inputmode=[\"']decimal[\"']|step=[\"']0\.\d+[\"']""")
+ADDRESS_TAG_RE = re.compile(r"""placeholder=[\"']0x""", re.I)
+ADDRESS_LABEL_RE = re.compile(r"""address|адрес""", re.I)
+
+
+def typed_field_spans(text: str) -> list[tuple[int, int, str]]:
+    """Every `<input>` this file types money or an address into, as a span.
+
+    Money is a numeric field the markup itself calls decimal (`inputmode="decimal"`
+    or a fractional `step`) or whose own label says USDC; an address is the field
+    whose placeholder starts with `0x` or whose label names an address. A count —
+    hours, shares — is neither, and stays in the interface face. The placeholder
+    of a text field is prose («будет ли BTC выше 120k USDC?») and never decides
+    the kind on its own."""
+    labels = [(m.end(), m.group(1)) for m in LABEL_TEXT_RE.finditer(text)]
+    found = []
+    for tag in INPUT_TAG_RE.finditer(text):
+        chunk = tag.group(0)
+        nearby = [lab for pos, lab in labels if pos <= tag.start() < pos + 500]
+        label = nearby[-1] if nearby else ""
+        if MONEY_TAG_RE.search(chunk) and (DECIMAL_TAG_RE.search(chunk) or "USDC" in label):
+            found.append((tag.start(), tag.end(), "money"))
+        elif ADDRESS_TAG_RE.search(chunk) or ADDRESS_LABEL_RE.search(label):
+            found.append((tag.start(), tag.end(), "address"))
+    return found
+
+
+def test_every_money_and_address_field_is_drawn_in_the_mono_face():
+    """A typed amount is read as a number, not as a word: in the interface face
+    "1 000,00" and "11,00" start at different widths and a `0x` address is proof-
+    read letter by letter, so the field the user checks before signing is the one
+    field the contract says must be mono.
+
+    The subject set is every `<input>` on every page, so a new money sheet joins
+    by existing. Both directions are measured: a money field in the UI face
+    fails, and a field that puts the money face on something that is neither
+    money nor an address fails too. The Mini App is judged against its own
+    stylesheet, because that is the one that paints it.
+    """
+    measured: list[tuple[str, str]] = []
+    for page in PAGES:
+        text = read(page)
+        css = APP_HTML if page == "app.html" else CSS
+        declared = [
+            selector.strip()
+            for selector, body in rule_selector_and_body(css)
+            if ".mono" in selector.split(",")[0].split() or selector.strip() == ".mono"
+        ]
+        assert declared, f"{page}: nothing declares a .mono class in the stylesheet that paints it"
+        mono_ok = any(
+            "var(--font-mono)" in body and "tabular-nums" in body
+            for selector, body in rule_selector_and_body(css)
+            if re.search(r"(^|[\s,])\.mono([\s,{]|$)", selector)
+        )
+        assert mono_ok, f"{page}: .mono does not pair the mono face with tabular digits"
+
+        kinds = {(start, end): kind for start, end, kind in typed_field_spans(text)}
+        bare, wrong = [], []
+        for tag in INPUT_TAG_RE.finditer(text):
+            classes = " ".join(CLASS_ATTR_RE.findall(tag.group(0))).split()
+            kind = kinds.get((tag.start(), tag.end()))
+            if kind and "mono" not in classes:
+                bare.append(f"{page}: {kind} field {tag.group(0)[:90]}")
+            if "mono" in classes and not kind:
+                wrong.append(
+                    f"{page}: the money face on a field that is neither money nor address: {tag.group(0)[:90]}"
+                )
+        assert not bare, f"money/address fields painted in the interface face: {bare}"
+        assert not wrong, wrong
+        measured.extend((page, kind) for kind in kinds.values())
+
+    money = sum(1 for _, kind in measured if kind == "money")
+    addresses = sum(1 for _, kind in measured if kind == "address")
+    assert money >= 8, f"only {money} money fields were read — this law has stopped measuring"
+    assert addresses >= 2, f"only {addresses} address fields were read"
+
+
+# A name is read from the payload fields the runtime answers a person with: the
+# handle or username on a row, and the label the `recent_tips` rows carry — that
+# array holds people, `o.label` holds market options and `tx.label` holds a
+# ledger line, so the reader names the row it means.
+NAME_READ_RE = re.compile(r"\.(?:handle|username|nickname|user_name)\b|\br\.label\b")
+# An element that closes itself paints no children, so it never joins the chain.
+VOID_TAGS = frozenset((
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
+    "param", "source", "track", "wbr", "use", "path", "circle", "rect", "line",
+    "polygon", "polyline", "ellipse", "stop",
+))
+TAG_RE = re.compile(r"<(/?)([a-zA-Z][\w:.-]*)([^>]*)>", re.S)
+CLASS_ATTR_RE = re.compile(r"""class\s*=\s*(\\?["'])(.*?)\1""", re.S)
+
+
+def _class_tokens(tag_text):
+    return {
+        c
+        for value in CLASS_ATTR_RE.findall(tag_text)
+        for c in value.split()
+        if re.fullmatch(r"[a-zA-Z][\w-]*", c)
+    }
+
+
+def _enclassed_chain(text, pos):
+    """Class sets of the elements the offset sits inside, innermost first.
+
+    The walk goes backwards from the name and balances on closes, so a template
+    that opens a `<div>` in one string and closes it in another cannot corrupt it
+    the way a forward pass over the whole file would."""
+    start = max(0, pos - 20000)
+    pending = 0
+    chain = []
+    for match in reversed(list(TAG_RE.finditer(text, start, pos))):
+        closing, tag, attrs = match.group(1), match.group(2).lower(), match.group(3)
+        if tag in VOID_TAGS or attrs.rstrip().endswith("/"):
+            continue
+        if closing:
+            pending += 1
+        elif pending:
+            pending -= 1
+        else:
+            chain.append(_class_tokens(match.group(0)))
+    return chain
+
+
+def _font_rules(css):
+    """`[(ancestor_requirements, matched_classes, specificity, order, family)]`
+    for every rule that names a font family with a plain class as its subject."""
+    rules = []
+    for order, (selector, body) in enumerate(rule_selector_and_body(css)):
+        found = re.findall(r"(font-family|font-variant-numeric)\s*:\s*([^;{}]+)", body)
+        family = next((value for name, value in found if name == "font-family"), None)
+        if family is None:
+            continue
+        parts = [p for p in re.split(r"[\s>+~]+", selector) if p]
+        if not parts:
+            continue
+        matched = set(re.findall(r"\.([a-zA-Z][\w-]*)", parts[-1]))
+        if not matched:
+            continue
+        ancestors = [set(re.findall(r"\.([a-zA-Z][\w-]*)", p)) for p in parts[:-1]]
+        rules.append(
+            (
+                ancestors,
+                matched,
+                len(matched) + sum(len(a) for a in ancestors),
+                order,
+                family.strip(),
+            )
+        )
+    return rules
+
+
+def _family_at(chain, level, rules):
+    """The family a browser would compute for the chain element at `level`: the
+    most specific rule matching it, or the answer inherited from its parent."""
+    candidates = [
+        rule
+        for rule in rules
+        if rule[1] <= chain[level]
+        and all(any(required <= other for other in chain[level + 1:]) for required in rule[0])
+    ]
+    if candidates:
+        return max(candidates, key=lambda rule: (rule[2], rule[3]))[4]
+    return _family_at(chain, level + 1, rules) if level + 1 < len(chain) else ""
+
+
+def test_no_element_paints_a_person_name_in_the_mono_face():
+    """The mono contract has two halves, and until now only one was measured.
+    `test_every_money_and_address_field_is_drawn_in_the_mono_face` walks `<input>`
+    tags, so it could not see the Mini App's recent-recipient chips: `.chip` puts
+    the money face on everything in it, and the people a user already tips were
+    drawn as if they were amounts — letters spaced for columns, `tabular-nums`
+    aligning nothing, and a handle that reads like a checksum.
+
+    The subject set is every shipped markup file and renderer, each judged against
+    the stylesheet that actually paints it. A name is the payload field the
+    runtime answers with (`handle`, `username`, `nickname`), so the law follows a
+    new screen by reading the tree, not by remembering its class. The cascade is
+    resolved the way a browser does it: the innermost element carrying a matching
+    `font-family` answers, so `.chip.chip-name` resets the chip that carries it and
+    a class added to the markup is what the gate requires, not a comment."""
+    measured = []
+    offenders = []
+    for name in (*PAGES, *SCRIPTS):
+        text = read(name)
+        # `app.html` is the one document that ships its own stylesheet; every other
+        # file in the directory, `app.js` included, is painted by `style.css`.
+        css = APP_HTML if name == "app.html" else CSS
+        rules = _font_rules(css)
+        for hit in NAME_READ_RE.finditer(text):
+            chain = _enclassed_chain(text, hit.start())
+            if not chain:
+                continue
+            measured.append((name, hit.group(0)))
+            family = _family_at(chain, 0, rules)
+            if "--font-mono" in family:
+                offenders.append(
+                    f"{name}: {hit.group(0)} painted in {family} by the chain {chain[:3]}"
+                )
+    assert measured, "no shipped file paints a person's name — this law reads nothing"
+    assert len(measured) >= 6, (
+        f"only {len(measured)} name sites were read — the reader has gone blind"
+    )
+    assert not offenders, f"the money face is drawing a name: {offenders}"
+
+
+def test_the_name_face_reader_refuses_the_two_shapes_it_exists_for():
+    """A law that only ever answers "clean" is a reader that stopped reading. The
+    chip is run against both mutations the finding actually was: the class taken
+    out of the markup, and the reset taken out of the stylesheet."""
+    rules = _font_rules(APP_HTML)
+    reset = [rule for rule in rules if "chip-name" in rule[1]]
+    assert reset, "nothing resets the chip face for a name"
+    chip = [rule for rule in rules if rule[1] == {"chip"}]
+    assert chip and "--font-mono" in chip[0][4], ".chip no longer puts the money face on a chip"
+
+    at_the_chip = _enclassed_chain(APP_HTML, APP_HTML.index("esc(r.label)"))
+    assert any("chip-name" in classes for classes in at_the_chip), at_the_chip
+    class_removed = [
+        classes - {"chip-name"} if "chip-name" in classes else classes for classes in at_the_chip
+    ]
+    assert "--font-mono" in _family_at(class_removed, 0, rules)
+
+    reset_removed = [rule for rule in rules if "chip-name" not in rule[1]]
+    assert "--font-mono" in _family_at(at_the_chip, 0, reset_removed)
+
+
+def test_an_action_tile_is_one_word_in_every_language_the_mini_app_ships():
+    """The three money tiles share one row: `.action-btn{flex:1}` at 390 px gives
+    each of them roughly a third of a phone, and the tip tile was labelled
+    `send_tip` — «Отправить чаевые» — while its neighbours read «Пополнить» and
+    «Вывести». One label wrapped to two lines, so the row had a taller card, a
+    ragged icon baseline and a label nothing else on the screen says.
+
+    The subject set is the tiles the shipped markup carries, and the copy is the
+    Mini App's own three dictionaries, so a fourth tile or a new translation is
+    measured the day it joins. What the law refuses is whitespace: a label with a
+    space in it fits one line here only by luck of the language.
+    """
+    def values(language):
+        return dict(
+            re.findall(
+                r'([a-z][a-z0-9_]*)\s*:\s*"((?:[^"\\]|\\.)*)"', mini_dict_line(language)
+            )
+        )
+
+    tiles = re.findall(r'<button class="action-btn"[\s\S]*?</button>', APP_HTML)
+    assert len(tiles) >= 3, f"only {len(tiles)} action tiles were read"
+    dicts = {language: values(language) for language in ("ru", "en", "zh")}
+    offenders = []
+    for tile in tiles:
+        keys = re.findall(r'data-i18n="([a-z0-9_]+)"', tile)
+        assert len(keys) == 1, f"a tile paints {len(keys)} labels: {tile[:120]}"
+        for language in ("ru", "en", "zh"):
+            assert keys[0] in dicts[language], f"{language} answers no {keys[0]}"
+            copied = dicts[language][keys[0]]
+            if copied.split() != [copied] or len(copied) > 10:
+                offenders.append(f"{language}:{keys[0]}={copied!r}")
+    assert not offenders, f"an action tile is labelled with more than one word: {offenders}"
+
+
+def _class_of_nearest_tag(body: str, needle: str) -> set[str]:
+    """Classes of the tag that opens the payload `needle` paints inside.
+
+    The row is built in a template string, so the class a rendered element carries
+    is read out of the renderer rather than from a selector someone remembers."""
+    at = body.index(needle)
+    attrs = re.findall(r'class="([^"]*)"', body[:at])
+    assert attrs, f"nothing before {needle!r} carries a class — the reader has gone blind"
+    return {
+        token
+        for token in attrs[-1].split("$")[0].split()
+        if re.fullmatch(r"[a-zA-Z][\w-]*", token)
+    }
+
+
+def _row_classes(body: str) -> list[str]:
+    """Every static class the renderer puts on an element, in template order."""
+    found = []
+    for value in re.findall(r'class="([^"]*)"', body):
+        found += [t for t in value.split("$")[0].split() if re.fullmatch(r"[a-zA-Z][\w-]*", t)]
+    return found
+
+
+def _subject_classes(selector: str) -> set[str]:
+    parts = [p for p in selector.split() if p]
+    return set(re.findall(r"\.([a-zA-Z][\w-]*)", parts[-1])) if parts else set()
+
+
+def test_money_direction_is_painted_once_in_a_history_row():
+    """The direction of a movement is one fact, and a history row said it three
+    times: the sign, the colour of the amount, and a green or red disc behind the
+    arrow. The third is the one that breaks the contract — `style.css` keeps
+    `--success`/`--danger` on figures (`.wallet-row b.pos`, `.lb-amt`, `.row-v`),
+    so a tinted icon made the Mini App the only surface in the product where a
+    state colour paints a piece of chrome, and a row whose money is a refund
+    rather than income looked like a withdrawal at a glance.
+
+    The subject set is the row's own class family in app.html's stylesheet, so a
+    new part of the row joins the law by existing. The count is pinned too: two
+    rules, `.pos` and `.neg`, are what one direction-coloured fact looks like, and
+    a third is either the disc back or the colour moved somewhere else. The JS half
+    asks that the class and the sign of an amount are keyed off the same field — a
+    cell that colours by `kind` while it signs by `incoming` is the same
+    contradiction between two lines of one template."""
+    family = [(sel, body) for sel, body in rule_selector_and_body(APP_HTML) if ".tx-" in sel]
+    assert family, "app.html ships no .tx- rule — this reader reads nothing"
+    state = [(sel, body) for sel, body in family
+             if re.search(r"--(?:success|danger)(?:-bg)?\b", body)]
+    offenders = [sel for sel, _ in state if "amount" not in sel]
+    assert not offenders, f"a state colour paints {offenders}: the amount already says it"
+    assert len(state) == 2, f"direction is painted by {len(state)} rules, not 2: {state}"
+
+    row = js_function(APP_HTML, "renderHistory")
+    assert row, "renderHistory is not a function the reader can find"
+    amount = re.search(r'class="tx-amount \$\{([^}]*)\}"[^>]*>\s*\$\{([^}]*)\}', row)
+    assert amount, "the amount cell no longer decides its class and its sign from two expressions"
+    keys = [re.findall(r"(?:tx|row|mk|bet)\.\w+", group) for group in amount.groups()]
+    assert keys[0] and keys[0] == keys[1], f"the sign and the colour disagree about {keys}"
+
+
+def test_the_history_row_keeps_its_clock_in_the_money_face_and_its_note_out():
+    """A timestamp is a figure — it belongs in the columns of a money ladder — and
+    the reason, ref or note under it is a sentence. Until this wave the row painted
+    both in one `.tx-time` span, so a note like `@mishka_tip` was drawn with the
+    tabular money face: the same defect the chip law refuses, one element earlier.
+
+    The two classes are read out of the renderer, not named here: the clock is the
+    element wrapping `timeLabel(`, the note is the element wrapping the escaped
+    counterparty. A new element carrying either payload is inside the law the
+    moment it exists, and a note that moves into the clock's own span fails."""
+    rules = _font_rules(APP_HTML)
+    row = js_function(APP_HTML, "renderHistory")
+    clock = _class_of_nearest_tag(row, "timeLabel(")
+    note = _class_of_nearest_tag(row, "esc(sub)")
+    assert clock and note, f"the row paints no classed clock or note: {clock} {note}"
+    assert clock != note, f"one span {clock} carries both the timestamp and the note"
+    clock_family = _family_at([clock], 0, rules)
+    assert "--font-mono" in clock_family, f"the timestamp left the money face for {clock_family}"
+    assert "--font-mono" not in _family_at([note], 0, rules), "the note is drawn as a checksum"
+    tabular = [
+        sel
+        for sel, body in rule_selector_and_body(APP_HTML)
+        if "tabular-nums" in body and clock <= _subject_classes(sel)
+    ]
+    assert tabular, f"{clock} takes the money face without the fixed digits that come with it"
+
+
+def test_every_part_of_a_rendered_row_declares_its_own_weight():
+    """`.tx-time` set a size and no weight, so the same class painted 500 while it
+    sat inside `.tx-title` and 400 on the line below it — one label, two weights,
+    decided by which branch of the cascade the markup happened to take. A part of a
+    row that sizes its own text has to weight its own text.
+
+    The subject set is the classes the renderer emits, and the stylesheet is read
+    with the same last-part matching a browser resolves, so `.tx-amount.pos` answers
+    for `tx-amount` and a class nobody weights is reported by name.
+    """
+    row = js_function(APP_HTML, "renderHistory")
+    emitted = list(dict.fromkeys(_row_classes(row)))
+    assert len(emitted) >= 5, f"only {len(emitted)} classes read out of the row: {emitted}"
+    sized, offenders = [], []
+    for cls in emitted:
+        for sel, body in rule_selector_and_body(APP_HTML):
+            if cls not in _subject_classes(sel) or "font-size" not in body:
+                continue
+            sized.append(cls)
+            if "font-weight" not in body:
+                offenders.append(f"{cls} — {sel}")
+    assert len(set(sized)) >= 4, (
+        f"only {sorted(set(sized))} row parts size their text: the reader lost the sheet"
+    )
+    assert not offenders, f"a row part takes its weight from a parent: {offenders}"
+
+
+def test_the_smart_account_line_says_its_state_once():
+    """The SmartAccount card answers one question — is the wallet deployed — and it
+    answers it twice: a word (`smart_deployed` / `smart_not_deployed`) and a state
+    class (`.ok` / `.warn`, the two colours `--success`/`--warning` are reserved
+    for). The fetch and the paint were split apart this wave so a language switch
+    repaints the line, and a split is exactly where the two halves drift: a card
+    that reads `d.enabled` for its colour and `d.deployed` for its word tells the
+    user the wallet works in green while the line says it is not deployed.
+
+    The law pairs them **per element**, the way a user sees them: the node whose
+    class carries the state and the node whose text carries it are matched by the
+    variable each is painted through, and the field each ternary reads has to be
+    the same. A first version read the whole function as one set and let a
+    hardcoded word pass, because another line still had a ternary in it."""
+    body = js_function(APP_HTML, "renderSmartWallet")
+    assert body, "renderSmartWallet() is not a function the reader can find"
+    toggled: dict[str, set[str]] = {}
+    for var, field in re.findall(r"([A-Za-z_$][\w$]*)\.classList\.toggle\([^;]*?\bd\.(\w+)", body):
+        toggled.setdefault(var, set()).add(field)
+    worded: dict[str, set[str]] = {}
+    for var, field in re.findall(
+        r"([A-Za-z_$][\w$]*)\.textContent\s*=\s*\bd\.(\w+)\s*\?", body
+    ):
+        worded.setdefault(var, set()).add(field)
+    assert toggled and worded, f"the card paints no state class ({toggled}) or state word ({worded})"
+    assert set(toggled) == set(worded), (
+        f"the class is toggled on {sorted(toggled)} and the word chosen on {sorted(worded)}"
+    )
+    for var in toggled:
+        assert toggled[var] == worded[var], (
+            f"{var} is coloured by {sorted(toggled[var])} and worded by {sorted(worded[var])}"
+        )
+
+
+def test_the_row_reader_refuses_the_shapes_the_three_laws_exist_for():
+    """Each of the three laws above is run against the defect it was written for,
+    on a copy of the shipped source with one thing moved."""
+    rules = _font_rules(APP_HTML)
+    assert "--font-mono" in _family_at([{"tx-amount"}], 0, rules)
+    assert "--font-mono" in _family_at([{"tx-time"}], 0, rules)
+    assert "--font-mono" not in _family_at([{"tx-who"}], 0, rules)
+
+    tinted = APP_HTML.replace(
+        ".tx-amount.pos{",
+        ".tx-icon.in{background:var(--success-bg);color:var(--success)}\n.tx-amount.pos{",
+        1,
+    )
+    state = [sel for sel, body in rule_selector_and_body(tinted)
+             if ".tx-" in sel and re.search(r"--(?:success|danger)(?:-bg)?\b", body)]
+    assert len(state) == 3, state
+    assert any(".tx-icon" in sel for sel in state if "amount" not in sel), state
+
+    merged = APP_HTML.replace('<span class="tx-who">', '<span class="tx-time">', 1)
+    row = js_function(merged, "renderHistory")
+    assert _class_of_nearest_tag(row, "timeLabel(") == _class_of_nearest_tag(row, "esc(sub)")
+
+    unweighted = APP_HTML.replace(
+        ".tx-time{font-size:var(--t-chip);font-weight:400;",
+        ".tx-time{font-size:var(--t-chip);",
+        1,
+    )
+    assert any(
+        "font-size" in body and "font-weight" not in body
+        for sel, body in rule_selector_and_body(unweighted)
+        if "tx-time" in _subject_classes(sel)
+    )
 
 
 def test_no_font_family_bypasses_the_tokens():
@@ -936,6 +1401,153 @@ def test_painted_percentages_take_the_interface_locale():
     assert not offenders, offenders
 
 
+# ---------------------------------------------------------------------------
+# number formatters
+# ---------------------------------------------------------------------------
+
+FUNCTION_HEAD = re.compile(r"function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{")
+ARROW_HEAD = re.compile(
+    r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*"
+)
+FRACTION_KEY = re.compile(r"(minimumFractionDigits|maximumFractionDigits|maximumSignificantDigits)\s*:\s*(\d+)")
+
+# What a formatter's own name promises, and the one precision that promise owes.
+# A number whose precision is an argument is a number whose precision is decided
+# by whichever call site forgot to pass one, so the mechanism is read from the
+# name and the digits from the body, and the two have to agree everywhere.
+MECHANISMS = {
+    "fee": (re.compile(r"fee", re.IGNORECASE), {"maximumSignificantDigits": "15"}),
+    "raw": (re.compile(r"micro", re.IGNORECASE), {"maximumFractionDigits": "6", "minimumFractionDigits": "0"}),
+    "clock": (re.compile(r"time|date|day", re.IGNORECASE), {}),
+    "odds": (re.compile(r"pct|percent|chance|odds|probability", re.IGNORECASE),
+             {"minimumFractionDigits": "1", "maximumFractionDigits": "1"}),
+    "money": (re.compile(r"usdc|usd|money|balance|share", re.IGNORECASE),
+              {"minimumFractionDigits": "2", "maximumFractionDigits": "2"}),
+    "count": (re.compile(r"count|^num$", re.IGNORECASE),
+              {"minimumFractionDigits": "0", "maximumFractionDigits": "0"}),
+}
+
+
+def _span_end(text: str, start: int) -> int:
+    """Index just past a function body: brace-matched for a block, past the
+    statement-ending semicolon for an expression."""
+    if text[start] != "{":
+        end = text.find(";", start)
+        return len(text) if end == -1 else end + 1
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return len(text)
+
+
+def _all_occurrences(text: str, needle: str) -> list[int]:
+    out, at = [], text.find(needle)
+    while at != -1:
+        out.append(at)
+        at = text.find(needle, at + len(needle))
+    return out
+
+
+def _span_to(text: str, start: int) -> str:
+    return text[start:_span_end(text, start)]
+
+
+def js_number_formatters(name: str) -> list[tuple[str, dict[str, str]]]:
+    """(formatter name, fraction-digit options) for every function in a shipped
+    document that turns a number into text through `toLocaleString`."""
+    text = read(name)
+    found: list[tuple[str, dict[str, str]]] = []
+    for head in FUNCTION_HEAD.finditer(text):
+        body = _span_to(text, head.end() - 1)
+        if "toLocaleString(" in body:
+            found.append((head.group(1), dict(FRACTION_KEY.findall(body))))
+    for head in ARROW_HEAD.finditer(text):
+        body = _span_to(text, head.end())
+        if "toLocaleString(" in body:
+            found.append((head.group(1), dict(FRACTION_KEY.findall(body))))
+    return found
+
+
+def mechanism_of(formatter: str) -> list[str]:
+    return [key for key, (pattern, _) in MECHANISMS.items() if pattern.search(formatter)]
+
+
+def every_formatter() -> list[tuple[str, str, dict[str, str]]]:
+    return [
+        (document, formatter, digits)
+        for document in (*PAGES, *SCRIPTS)
+        for formatter, digits in js_number_formatters(document)
+    ]
+
+
+def test_every_painted_number_states_the_precision_its_mechanism_owes():
+    """One product, one grammar per kind of number.
+
+    `maximumFractionDigits` alone let a column of odds paint "25%" beside
+    "24,9%" and a balance paint "38,5" on the site beside "38,50" in the Mini
+    App — the same USDC written two ways on the same day by the same product.
+    Money is two decimals, odds one, counts none, a fee states the configured
+    rate in significant digits, and a raw on-chain amount keeps its six.
+    """
+    offenders: list[str] = []
+    seen: dict[str, int] = {}
+    for document, formatter, digits in every_formatter():
+        kinds = mechanism_of(formatter)
+        if len(kinds) > 1 and set(kinds) != {"fee", "odds"}:
+            offenders.append(f"{document}:{formatter} names two mechanisms {kinds}")
+            continue
+        if not kinds:
+            offenders.append(f"{document}:{formatter} formats a number and names no mechanism")
+            continue
+        kind = "fee" if "fee" in kinds else kinds[0]
+        seen[kind] = seen.get(kind, 0) + 1
+        want = MECHANISMS[kind][1]
+        if digits != want:
+            offenders.append(f"{document}:{formatter} is {kind} and declares {digits}, not {want}")
+    assert not offenders, offenders
+    # Floors, so the law cannot go vacuous by the scan losing every formatter —
+    # measured on this tree as money 8, odds 5, count 3, fee 1, raw 1, clock 3.
+    assert seen.get("money", 0) >= 4, f"the scan read {seen} money formatters"
+    assert seen.get("odds", 0) >= 4, f"the scan read {seen} odds formatters"
+    assert seen.get("count", 0) >= 2, f"the scan read {seen} count formatters"
+    assert seen.get("fee", 0) == 1, f"the rate is stated by {seen.get('fee', 0)} formatters, seen {seen}"
+    assert sum(seen.values()) >= 15, f"the scan read {seen}, which is not the tree"
+
+
+def formatter_spans(text: str) -> list[tuple[int, int]]:
+    """Character ranges of every named function body in a document."""
+    spans = []
+    for head in FUNCTION_HEAD.finditer(text):
+        spans.append((head.end() - 1, _span_end(text, head.end() - 1)))
+    for head in ARROW_HEAD.finditer(text):
+        spans.append((head.end(), _span_end(text, head.end())))
+    return spans
+
+
+def test_no_number_is_formatted_outside_a_named_formatter():
+    """A call site that formats inline is a precision no law reads: the shipped
+    documents may reach `toLocaleString` only from inside a function whose name
+    states what it is counting."""
+    total = 0
+    for document in (*PAGES, *SCRIPTS):
+        text = read(document)
+        outside = [
+            text[:at].count("\n") + 1
+            for at in _all_occurrences(text, "toLocaleString(")
+            if not any(start <= at < end for start, end in formatter_spans(text))
+        ]
+        assert not outside, (
+            f"{document} formats a number at lines {outside}, outside any named formatter"
+        )
+        total += text.count("toLocaleString(")
+    assert total >= 20, f"the scan read {total} number calls, which is not this bundle"
+
+
 def test_the_chart_has_both_an_empty_and_a_failed_state():
     """No data and a failed request are two different answers, and both are part
     of the design: a bare <div> in either branch renders as a blank rectangle
@@ -998,6 +1610,93 @@ def test_mini_app_dictionaries_have_identical_key_sets():
     for language in ("en", "zh"):
         difference = reference ^ defined[language]
         assert not difference, f"{language} differs from ru by {sorted(difference)}"
+
+
+def localized_painters(text: str | None = None) -> tuple[dict, dict]:
+    """JS functions that paint localized copy, split into two kinds.
+
+    A *repainter* assigns `innerHTML`/`textContent` to something it looked up in
+    the document, so the screen is rebuilt from the current language whenever it
+    runs. A *builder* appends one row into a thing the user is assembling, and its
+    content is the user's, not the app's — `renderAll()` cannot re-derive it
+    without inventing rows. The split is what lets the law below state its blind
+    spot instead of quietly excluding a file.
+
+    `t(` has to be a call, not a substring: `setTimeout(`, `requestAnimationFrame`
+    callbacks and `.split(` all carry a `t(`, and a reader that matches them
+    reports every function that schedules anything as a language leak.
+    """
+    local = re.compile(r"(?<![\w$.])t\(")
+    paint = re.compile(
+        r"(?:\b[A-Za-z_$][\w$]*|document\.getElementById\([^)]*\))\s*\.(?:innerHTML|textContent)\s*="
+    )
+    repaint, build = {}, {}
+    for name, body in js_functions(text if text is not None else APP_HTML).items():
+        if not local.search(body):
+            continue
+        if "document.createElement" in body:
+            build[name] = body
+        elif paint.search(body):
+            repaint[name] = body
+    return repaint, build
+
+
+def test_a_language_switch_repaints_every_list_the_mini_app_ships():
+    """`setLang()` called `applyI18n()` and `renderMore()`. The first walks the
+    `data-i18n` attributes — static labels only — and the second repaints one tab.
+    Every history row, market row and bet row is built from `t()` *inside its own*
+    render function, so switching language on the Settings screen changed the tab
+    bar and left the money list in the language it was drawn in until the app was
+    reopened. Two screens were in the same class and said nothing: the SmartAccount
+    card, whose status line is painted from `t()` after a fetch nobody re-runs, and
+    the detail sheet's buy button. A user who cannot read the language they are in
+    has no way to find the control that fixes it.
+
+    The subject set is the app's own painting functions, read out of the file: a
+    new screen joins the law the moment it paints localized text into a document
+    node, and `renderAll()` must reach it. What is a builder rather than a repaint
+    is pinned by name, because that set is exactly the count of things the law
+    cannot reach and a new one has to be argued about, not absorbed."""
+    repaint, build = localized_painters()
+    assert len(repaint) >= 6, (
+        f"only {sorted(repaint)} localized painters read from app.html — the reader lost the file"
+    )
+    assert set(build) == {"addCreateOpt"}, (
+        f"the builders this repaint law cannot reach changed: {sorted(build)} — "
+        "a new one needs a repaint path, not an exception here"
+    )
+    every = js_function(APP_HTML, "renderAll")
+    assert every, "no renderAll() to reach the screens from"
+    unreachable = sorted(n for n in repaint if not re.search(rf"\b{n}\s*\(", every))
+    assert not unreachable, f"{unreachable} paint localized text and no repaint pass reaches them"
+
+    switch = js_function(APP_HTML, "setLang")
+    assert switch, "setLang() is not a function the reader can find"
+    assert "renderAll()" in switch, "a language switch no longer repaints the whole app"
+    narrower = sorted({n for n in (*repaint, "applyI18n") if re.search(rf"\b{n}\s*\(", switch)})
+    assert not narrower, f"setLang() repaints {narrower} beside renderAll(): the narrower call is the bug"
+
+
+def test_the_repaint_reader_refuses_a_screen_it_cannot_reach():
+    """The reader is run against markup that is not the shipped file: a screen
+    renderAll never calls, a builder that appends into the user's own form, a
+    language switch that settles for one tab, and the `setTimeout(` decoy that
+    made the first version report every function with a timer as a language leak."""
+    sample = """
+      function renderAll() { applyI18n(); renderA(); renderC(); }
+      function renderA() { const c = document.getElementById('a'); c.innerHTML = t('x'); }
+      function renderB() { const c = document.getElementById('b'); c.innerHTML = t('y'); }
+      function renderC() { document.getElementById('c').textContent = t('w'); }
+      function addRow() { const r = document.createElement('div'); r.innerHTML = t('z'); }
+      function snooze() { const el = document.getElementById('d'); el.textContent = 'x'; setTimeout(() => el.remove(), 9); }
+      function setLang() { applyI18n(); renderA(); }
+    """
+    repaint, build = localized_painters(sample)
+    assert set(repaint) == {"renderA", "renderB", "renderC"}, repaint
+    assert set(build) == {"addRow"} and "snooze" not in repaint
+    every = js_function(sample, "renderAll")
+    assert re.search(r"\brenderB\s*\(", every) is None
+    assert "renderAll()" not in js_function(sample, "setLang")
 
 
 def test_no_emoji_is_used_as_an_icon_in_the_web_ui():
@@ -1384,7 +2083,7 @@ def test_the_favicon_is_one_mark_every_page_can_render():
 
 
 EDGE = ROOT / "functions" / "[[path]].js"
-MAINTENANCE_RE = re.compile(r"const MAINTENANCE = `(.*?)`;\n\nfunction maintenance", re.S)
+MAINTENANCE_RE = re.compile(r"const MAINTENANCE = \([^)]*\) => `(.*?)`;\n\nfunction maintenance", re.S)
 
 
 def test_the_edge_maintenance_card_obeys_the_same_document_contract():
@@ -2134,7 +2833,7 @@ def test_the_edge_card_sends_the_headers_the_origin_sends():
     a browser with neither, and a card whose own body is cacheable is a card that
     outlives the outage it describes."""
     source = EDGE.read_text(encoding="utf-8-sig")
-    block = re.search(r"function maintenance\(\) \{.*?headers: \{(.*?)\}", source, re.S)
+    block = re.search(r"function maintenance\([^)]*\) \{.*?headers: \{(.*?)\n    \}", source, re.S)
     assert block, "maintenance() no longer builds its headers inline where this gate reads them"
     headers = {name.strip().lower(): value.strip()
                for name, value in re.findall(r"'([^']+)':\s*'([^']*)'", block.group(1))}
@@ -2143,6 +2842,10 @@ def test_the_edge_card_sends_the_headers_the_origin_sends():
     assert headers.get("cache-control") == "no-store", headers
     assert headers.get("retry-after") == "300", headers
     assert headers.get("content-type", "").startswith("text/html"), headers
+    assert "x-tippy-outage-reason" in block.group(1), (
+        "the reason the card exists is only in its body, so `curl -I` of an outage "
+        "reports nothing about it and the operator opens a browser to learn the cause"
+    )
 
 
 def test_the_edge_answers_a_silent_origin_inside_the_window_the_doc_promises():
@@ -2186,15 +2889,272 @@ def test_the_edge_answers_a_silent_origin_inside_the_window_the_doc_promises():
         "meant to bound the wait for the first byte"
     )
     doc = (ROOT / "docs" / "CLOUDFLARE.md").read_text(encoding="utf-8-sig")
-    paragraphs = [block for block in doc.split("\n\n") if "UPSTREAM_DEADLINE_MS" in block]
-    assert len(paragraphs) == 1, (
-        f"the deadline is promised in {len(paragraphs)} paragraphs of the doc; two "
-        "places state one number and only one of them can be right"
+    blocks = [block for block in doc.split("\n\n") if "UPSTREAM_DEADLINE_MS" in block]
+    assert blocks, "no block of the runbook names the deadline the card is built on"
+    with_a_figure = [b for b in blocks if re.search(r"\*\*(\d+) s\*\*", b)]
+    assert len(with_a_figure) == 1, (
+        f"{len(with_a_figure)} blocks bold a seconds figure beside UPSTREAM_DEADLINE_MS; "
+        "two places state one number and only one of them can be right"
     )
-    promised = re.findall(r"\*\*(\d+) s\*\*", paragraphs[0])
+    promised = re.findall(r"\*\*(\d+) s\*\*", with_a_figure[0])
     assert promised == [str(seconds)], (
         f"the doc bolds {promised} where the code arms {seconds} s"
     )
+    for other in blocks:
+        if other is with_a_figure[0]:
+            continue
+        assert not re.search(r"\d+(?:\.\d+)?\s*s\b", other), (
+            f"a second mention of the deadline carries its own wait: {other[:120]!r}"
+        )
+
+
+def _outage_vocabulary(source: str) -> dict[str, str]:
+    """The reason words the card may say, with the sentence each one paints."""
+    block = re.search(r"const OUTAGE_REASONS = \{(.*?)\n\};", source, re.S)
+    assert block, "the edge no longer keeps its outage reasons in one named object"
+    pairs = re.findall(r"'([a-z0-9-]+)': '([^']+)'", block.group(1))
+    assert pairs, "OUTAGE_REASONS holds nothing this gate can read"
+    assert len(pairs) == len(dict(pairs)), f"a duplicated reason word: {pairs}"
+    reasons = dict(pairs)
+    assert len(reasons) >= 3, (
+        f"{sorted(reasons)} — fewer than three reasons is a card that says less than "
+        "the function measured, which is how `maintenance()` used to answer every "
+        "outage with the same sentence"
+    )
+    assert len(set(reasons.values())) == len(reasons), f"two reasons share one sentence: {reasons}"
+    return reasons
+
+
+def _reason_chooser(source: str) -> str:
+    body = re.search(r"function outageReason\(\{.*?\} = \{\}\) \{(.*?)\n\}", source, re.S)
+    assert body, (
+        "outageReason() moved or changed shape, so the word the card prints has no "
+        "reader and the vocabulary below would be compared with nothing"
+    )
+    return body.group(1)
+
+
+def test_the_edge_card_says_only_a_reason_the_measurement_can_produce():
+    """The card is the only answer this edge writes by itself, so it is the only
+    place an outage can be named: the origin that could have explained is the thing
+    that is missing. Four things have to hold for that name to mean anything.
+
+    The word list and the branch list are one set — a reason the chooser cannot
+    return is a sentence nothing paints, and a returned word the card does not know
+    prints `undefined` where a visitor asked for a reason. The reason reaches the
+    page in a machine-readable attribute and in a response header, because an
+    operator reading an outage with `curl -I` should not have to open a browser.
+    Every card call takes its word from the chooser, so no call site can hand-pick
+    a flattering one. And the chooser reads its three inputs and nothing else: a
+    reason taken from an exception object would be this edge quoting its own
+    internals on a page anyone can request. The fifth thing is the word against the
+    sentence: each reason must state the fact only its branch can know."""
+    source = EDGE.read_text(encoding="utf-8-sig")
+    reasons = _outage_vocabulary(source)
+    chooser = _reason_chooser(source)
+
+    produced = set(re.findall(r"return '([a-z0-9-]+)';", chooser))
+    assert produced == set(reasons), (
+        f"the chooser can return {sorted(produced)} while the card knows {sorted(reasons)}"
+    )
+    assert not re.search(r"\b(?:error|err|exception|cause|message|stack)\b", chooser, re.I), (
+        "the reason is read off a failure rather than off the branch taken"
+    )
+
+    # Which branch paints which word is proved by running the function; which
+    # sentence a word deserves is proved here. A sentence moved between two reasons
+    # keeps every call site, header and attribute intact and still lies to the
+    # visitor: `refused` wearing the deadline's words tells an operator to wait for a
+    # slow origin when nothing listens at all. One distinguishing noun per fact,
+    # frozen beside the code it describes — the anchor must sit in its own reason's
+    # sentence and in nobody else's, so a reword that drops the fact is reported.
+    anchors = {
+        "no-backend": "настроен",
+        "deadline": "время",
+        "refused": "соединение",
+        "gateway-5xx": "прокси",
+    }
+    assert set(anchors) == set(reasons), (
+        f"the sentences are keyed to {sorted(anchors)} and the card answers for {sorted(reasons)}"
+    )
+    for reason, anchor in anchors.items():
+        assert len(anchor) >= 5, f"{anchor!r} is too short to name a fact"
+        assert anchor in reasons[reason], (
+            f"`{reason}` says {reasons[reason]!r}, which no longer states the "
+            f"{anchor!r} its branch measured"
+        )
+        worn = sorted(word for word, sentence in reasons.items()
+                      if word != reason and anchor in sentence)
+        assert not worn, (
+            f"the sentence of `{reason}` states the {anchor!r} that belongs to {worn}: "
+            "two reasons now promise the same measurement and the card cannot tell them apart"
+        )
+
+    calls = source.count("maintenance(") - source.count("function maintenance(")
+    wired = len(re.findall(r"maintenance\(outageReason\(", source))
+    assert calls >= 2 and calls == wired, (
+        f"{calls} places ask the edge for a card and only {wired} take the word from "
+        "outageReason(): the rest choose their own excuse"
+    )
+
+    html = MAINTENANCE_RE.search(source)
+    assert html, "the edge maintenance card is gone or its template shape changed"
+    markup = html.group(1)
+    interpolated = set(re.findall(r"\$\{[^{}]*\}", markup))
+    assert interpolated == {"${reason}", "${OUTAGE_REASONS[reason]}"}, (
+        f"the card interpolates {sorted(interpolated)} — only the reason word and its "
+        "fixed sentence may reach a page that the origin never answered"
+    )
+    assert 'data-reason="${reason}"' in markup, (
+        "the reason is painted as prose only, so nothing downstream can branch on it"
+    )
+
+
+_EDGE_REASON_DRIVER = """
+import http from 'node:http';
+import { onRequest } from './function.mjs';
+
+const origin = http.createServer((req, res) => {
+  const path = req.url.split('?')[0];
+  if (path === '/html502') {
+    res.writeHead(502, { 'content-type': 'text/html' });
+    res.end('bad gateway from a proxy in front of uvicorn');
+    return;
+  }
+  if (path === '/json502') {
+    res.writeHead(502, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ detail: 'the app itself answered 502' }));
+    return;
+  }
+  if (path === '/slow') { return; }
+  if (path === '/reset') { res.socket.destroy(); return; }
+  res.writeHead(200, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ status: 'ok' }));
+});
+await new Promise((ready) => origin.listen(0, '127.0.0.1', ready));
+const base = `http://127.0.0.1:${origin.address().port}`;
+const assets = { fetch: async () => new Response('missing', { status: 404 }) };
+
+async function ask(path, backend) {
+  const res = await onRequest({
+    request: new Request(`https://tippy.test${path}`),
+    env: { ASSETS: assets, BACKEND_URL: backend },
+  });
+  const body = res.status === 503 ? await res.text() : '';
+  return {
+    status: res.status,
+    type: res.headers.get('content-type'),
+    reason: res.headers.get('x-tippy-outage-reason'),
+    attribute: (body.match(/data-reason="([^"]*)"/) || [])[1] ?? null,
+    painted: (body.match(/data-reason="[^"]*">([^<]*)<br/) || [])[1] ?? null,
+    blank: body.includes('undefined'),
+    leaked: /ECONNRESET|socket|TypeError|fetch failed/i.test(body),
+  };
+}
+
+const out = {
+  'no-backend': await ask('/anything', ''),
+  'serving': await ask('/anything', base),
+  'app-own-502': await ask('/json502', base),
+  'proxy-502': await ask('/html502', base),
+  'refused': await ask('/reset', base),
+  'silent': await ask('/slow', base),
+};
+console.log(JSON.stringify(out));
+origin.close();
+"""
+
+
+def test_the_reason_the_card_gives_is_the_reason_the_measured_shape_produced(tmp_path):
+    """Read, the vocabulary above is four words in an object; run, it is a verdict
+    about a wire. The shipped Function is imported and driven against a local origin
+    that answers each of the shapes an outage actually takes — configured, serving,
+    its own JSON 502, a proxy's HTML 502, a connection refused, a connection that
+    says nothing — and the reason each pass prints has to be the one that shape
+    deserves.
+
+    The only edit is the window: `UPSTREAM_DEADLINE_MS` is shortened so the silent
+    case costs 1.2 s instead of the 15 s the doc promises, and the deadline itself is
+    measured by the law above against the unedited file. Without running it, the
+    defect this law found stays invisible: `outageReason({ upstream })` reads a
+    spent window as `refused`, because the branch flag was never handed over — the
+    card then blamed a refused connection for an origin that simply said nothing."""
+    source = EDGE.read_text(encoding="utf-8-sig")
+    reasons = _outage_vocabulary(source)
+    short, subs = re.subn(
+        r"const UPSTREAM_DEADLINE_MS = \d+;",
+        "const UPSTREAM_DEADLINE_MS = 1200;",
+        source,
+    )
+    assert subs == 1, f"the deadline constant was replaced {subs} times — the run measures nothing"
+    (tmp_path / "function.mjs").write_bytes(short.encode("utf-8"))
+    (tmp_path / "driver.mjs").write_bytes(_EDGE_REASON_DRIVER.encode("utf-8"))
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "driver.mjs")],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=tmp_path, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    observed = json.loads(result.stdout.strip().splitlines()[-1])
+
+    cards = {name: row for name, row in observed.items() if row["status"] == 503}
+    said = {row["reason"] for row in cards.values()}
+    assert said == set(reasons), (
+        f"the shapes produced {sorted(said)} while the card knows {sorted(reasons)}"
+    )
+    expected = {
+        "no-backend": "no-backend", "proxy-502": "gateway-5xx",
+        "refused": "refused", "silent": "deadline",
+    }
+    assert set(cards) == set(expected), sorted(cards)
+    for name, reason in expected.items():
+        row = cards[name]
+        assert row["reason"] == reason, (name, row)
+        assert row["attribute"] == reason, (name, row)
+        assert row["painted"] == reasons[reason], (name, row["painted"], reasons[reason])
+        assert not row["blank"], f"{name} paints an undefined sentence: {row}"
+        assert not row["leaked"], f"{name} leaks the failure text into the page: {row}"
+
+    assert observed["serving"]["status"] == 200 and observed["serving"]["reason"] is None, (
+        "a serving origin got the card"
+    )
+    assert observed["app-own-502"]["status"] == 502, (
+        "the app's own 502 was replaced by the card: the reason would then describe a "
+        "gateway that never spoke for the application"
+    )
+    assert "json" in (observed["app-own-502"]["type"] or ""), observed["app-own-502"]
+
+
+def test_the_doc_gives_every_outage_reason_its_own_remedy():
+    """A reason the runbook does not name is a card an operator has to re-derive.
+    The table has one row per word the Function can print, no row for a word the
+    Function cannot print, and a remedy in each row — because the four reasons point
+    at four different places to fix."""
+    source = EDGE.read_text(encoding="utf-8-sig")
+    reasons = _outage_vocabulary(source)
+    doc = (ROOT / "docs" / "CLOUDFLARE.md").read_text(encoding="utf-8-sig")
+    rows: dict[str, list[str]] = {}
+    for line in doc.splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        word = cells[0].strip("`")
+        if word in reasons:
+            assert word not in rows, f"`{word}` is answered twice in the runbook"
+            rows[word] = cells
+    assert set(rows) == set(reasons), (
+        f"the runbook names {sorted(set(rows))} and the edge prints {sorted(reasons)}"
+    )
+    for word, cells in sorted(rows.items()):
+        assert len(cells) >= 3, f"the `{word}` row has no remedy column: {cells}"
+        remedy = cells[-1]
+        assert len(remedy) >= 40, f"the `{word}` remedy is a stub: {remedy!r}"
+        assert "`" in remedy or "watchdog" in remedy.lower(), (
+            f"the `{word}` remedy names nothing an operator can run or read: {remedy!r}"
+        )
+    header = [line for line in doc.splitlines() if line.startswith("| Reason |")]
+    assert len(header) == 1, f"{len(header)} reason tables; one vocabulary needs one place"
 
 
 def test_the_headers_reader_reads_every_block_the_file_writes(tmp_path):
@@ -2474,3 +3434,377 @@ def test_no_surface_asks_the_contract_flags_whether_a_market_is_tradable():
         if NEGATED_FLAG_PAIR.search(line)
     ]
     assert not offenders, offenders
+
+
+# ---------------------------------------------------------------------------
+# framed tile grids, separators, and the sentence a dead deadline leaves
+# ---------------------------------------------------------------------------
+
+
+def _matching_brace(text: str, open_at: int) -> int:
+    depth = 0
+    for index in range(open_at, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    return -1
+
+
+def top_level_rules(css: str) -> list[tuple[int, str, str]]:
+    """Rules outside every at-block, as `(order, selector, body)`.
+
+    `rule_selector_and_body` flattens `@media`, so a mobile override of `.stats`
+    comes back with the same standing as its base declaration. A layout law has
+    to measure the layout a wide visitor gets, and the whole point of a responsive
+    rule is that it answers a different width — so the contents of an at-block are
+    skipped here rather than trusted."""
+    stripped = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    rules, i = [], 0
+    while i < len(stripped):
+        brace = stripped.find("{", i)
+        close = _matching_brace(stripped, brace) if brace >= 0 else -1
+        if close < 0:
+            break
+        selector = stripped[i:brace].strip()
+        if selector and not selector.startswith("@"):
+            rules.append((len(rules), selector, " ".join(stripped[brace + 1 : close].split())))
+        i = close + 1
+    return rules
+
+
+def _subject_classes(selector: str) -> set[str]:
+    """The classes a rule actually paints: the last compound of each comma part."""
+    found: set[str] = set()
+    for part in selector.split(","):
+        tokens = part.strip().split()
+        if tokens:
+            found |= set(re.findall(r"\.([A-Za-z][\w-]*)", tokens[-1]))
+    return found
+
+
+def _tracks_of(value: str) -> list[str]:
+    """Track sizes split on the spaces that separate them — not the ones inside
+    `repeat(3, 1fr)`, which is the form the shipped stylesheet writes."""
+    parts, buf, depth = [], [], 0
+    for char in value:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        if char.isspace() and depth == 0:
+            if buf:
+                parts.append(re.sub(r"\s+", "", "".join(buf)))
+                buf = []
+            continue
+        buf.append(char)
+    if buf:
+        parts.append(re.sub(r"\s+", "", "".join(buf)))
+    return parts
+
+
+def _equal_tracks(value: str) -> int | None:
+    """N when the declaration is exactly N equal `1fr` columns, else None.
+
+    `minmax()`, `auto-fill` and mixed tracks are content-sized: how many columns
+    they lay out is the browser's answer, not the stylesheet's, so a fixed tile
+    count is not owed to them and a short last row is not a hole."""
+    total = 0
+    for part in _tracks_of(value):
+        repeated = re.fullmatch(r"repeat\((\d+),1fr\)", part)
+        if repeated:
+            total += int(repeated.group(1))
+        elif part == "1fr":
+            total += 1
+        else:
+            return None
+    return total or None
+
+
+def _element_inner(text: str, start: int) -> tuple[int, int] | None:
+    """Offsets of the content of the element whose `<` sits at `start`."""
+    opening = TAG_RE.match(text, start)
+    if not opening:
+        return None
+    name, attrs = opening.group(2).lower(), opening.group(3)
+    if name in VOID_TAGS or attrs.rstrip().endswith("/"):
+        return None
+    depth, inner_start = 1, opening.end()
+    for tag in TAG_RE.finditer(text, inner_start):
+        name, attrs = tag.group(2).lower(), tag.group(3)
+        if name in VOID_TAGS:
+            continue
+        if tag.group(1):
+            depth -= 1
+            if depth == 0:
+                return inner_start, tag.start()
+        elif not attrs.rstrip().endswith("/"):
+            depth += 1
+    return None
+
+
+def _direct_children(text: str, inner_start: int, inner_end: int) -> list[set[str]]:
+    """Class sets of the top-level elements this document **paints** inside the span.
+
+    An element carrying `hidden` is not painted, so it is not a cell: the shipped
+    profile table had six markup tiles whose sixth was `hidden` until a signed-in
+    visitor arrived, which is five drawn tiles in three columns and a hole the
+    source tags did not show."""
+    found, depth = [], 0
+    for tag in TAG_RE.finditer(text, inner_start, inner_end):
+        name, attrs = tag.group(2).lower(), tag.group(3)
+        if tag.group(1):
+            if name not in VOID_TAGS and not attrs.rstrip().endswith("/"):
+                depth -= 1
+            continue
+        if depth == 0 and not re.search(r"\bhidden\b", attrs):
+            found.append(_class_tokens(tag.group(0)))
+        if name not in VOID_TAGS and not attrs.rstrip().endswith("/"):
+            depth += 1
+    return found
+
+
+def _tile_grids_in(page: str, text: str, css: str) -> list[dict]:
+    """Every framed N-column tile grid this document lays out, with its cell count."""
+    tracks: dict[str, tuple[int, int]] = {}
+    grids: set[str] = set()
+    framed: set[str] = set()
+    closing: set[str] = set()
+    for order, selector, body in top_level_rules(css):
+        subject = _subject_classes(selector)
+        if not subject:
+            continue
+        columns = re.search(r"grid-template-columns\s*:\s*([^;]+)", body)
+        if columns and (n := _equal_tracks(columns.group(1))):
+            for cls in subject:
+                tracks[cls] = (order, n)
+        if re.search(r"display\s*:\s*(?:inline-)?grid\b", body):
+            grids |= subject
+        if re.search(r"border-(?:top|left)\s*:\s*[1-9]", body):
+            framed |= subject
+        if re.search(r"border(?:-(?:right|bottom))?\s*:\s*[1-9]", body):
+            closing |= subject
+    found = []
+    for tag in TAG_RE.finditer(text):
+        if tag.group(1):
+            continue
+        classes = _class_tokens(tag.group(0))
+        owned = [tracks[c] for c in classes if c in tracks]
+        if not owned:
+            continue
+        n = max(owned)[1]
+        if n < 2 or not (classes & grids) or not (classes & framed):
+            continue
+        inner = _element_inner(text, tag.start())
+        if inner is None:
+            continue
+        kids = _direct_children(text, inner[0], inner[1])
+        # A container the renderer fills is measured where it is painted, by the
+        # rendered gate; markup that carries no tiles promises no count.
+        if not kids or not all(kid & closing for kid in kids):
+            continue
+        found.append({"page": page, "classes": sorted(classes), "tracks": n, "cells": len(kids)})
+    return found
+
+
+def framed_tile_grids() -> list[dict]:
+    """The same measurement across the directory, each page against its own sheet.
+
+    The subject set is built from three derived conditions, none of them typed: a
+    class the stylesheet makes a grid of N equal `1fr` columns, that same rule
+    painting the opening hairlines (`border-top`/`border-left`), and every child
+    carrying a class that paints a closing hairline. Those two borders are one
+    continuous table, so a last row that is short is a hole in the frame — which
+    is why a grid with a `gap` between its cards (`.stats-grid`, `.market-card`)
+    is not in scope: its short row is a ragged edge, not an empty cell.
+    """
+    return [
+        grid
+        for name in PAGES
+        for grid in _tile_grids_in(name, read(name), APP_HTML if name == "app.html" else CSS)
+    ]
+
+
+def test_a_framed_tile_grid_paints_no_empty_cell():
+    """The profile table was five **painted** tiles in a three-column hairline
+    grid — six in markup, the sixth `hidden` until a signed-in visitor arrived —
+    so every profile on every wide screen closed its own frame with one empty
+    cell whose borders stopped where the missing tile began.
+
+    A cell count that is not a multiple of the column count is only a defect when
+    the cells share a border, so the premise of the law and the count it judges
+    are both read from the shipped files: the track count from the stylesheet that
+    paints the grid, the cells from the markup that fills it — and a markup child
+    carrying `hidden` is no cell, because nothing draws it. `user.html` now states
+    its figures in `.rows`, a list that declares no columns of equal tracks and so
+    promises the reader no count to be a multiple of."""
+    measured = framed_tile_grids()
+    assert len(measured) >= 3, (
+        f"only {len(measured)} framed tile grids were read — the reader has gone blind"
+    )
+    holes = [
+        f"{g['page']} {'.'.join(g['classes'])}: {g['cells']} tiles in {g['tracks']} columns "
+        f"leaves {g['tracks'] - g['cells'] % g['tracks']} empty cell(s)"
+        for g in measured
+        if g["cells"] % g["tracks"]
+    ]
+    assert not holes, holes
+
+
+def test_the_tile_grid_reader_owes_a_cell_to_five_tiles_in_three_columns():
+    """The law above can only pass by measuring, so the reader is run on markup
+    that is not in the tree: the defect itself — six tiles of which the shipped
+    one hid — its fix, the media-query trap, and the framed premise that keeps a
+    ragged card grid out of scope."""
+    framed = (
+        ".stats { display: grid; grid-template-columns: repeat(3, 1fr);"
+        " border-top: 1px solid #000; border-left: 1px solid #000 }"
+        ".stat-card { border-right: 1px solid #000; border-bottom: 1px solid #000 }"
+        "@media (max-width: 600px) { .stats { grid-template-columns: 1fr } }"
+    )
+    tiles = '<div class="stat-card">x</div>'
+    hole = _tile_grids_in("synthetic.html", f'<div class="stats">{tiles * 5}</div>', framed)
+    assert [(g["tracks"], g["cells"]) for g in hole] == [(3, 5)], hole
+    # The shape the shipped tree really carried: six markup tiles, the last one
+    # `hidden`. Source tags say a full row, the drawn page says a hole, and a
+    # reader that counts tags certifies the hole instead of reporting it.
+    six_with_one_hidden = f'<div class="stats">{tiles * 5}<div class="stat-card" hidden>x</div></div>'
+    assert [(g["tracks"], g["cells"]) for g in
+            _tile_grids_in("synthetic.html", six_with_one_hidden, framed)] == [(3, 5)]
+    # A row that closes full is measured too — the law judges the count, the reader
+    # does not filter it, so a reader that only reported holes could not be caught.
+    full = _tile_grids_in("synthetic.html", f'<div class="stats">{tiles * 6}</div>', framed)
+    assert [(g["tracks"], g["cells"]) for g in full] == [(3, 6)], full
+    assert not [g for g in full if g["cells"] % g["tracks"]], full
+    # The column count is read from the spelling the shipped sheet actually uses:
+    # `repeat(3, 1fr)` carries a space inside the parentheses, and a reader that
+    # split the value on whitespace answers None for it and measures nothing.
+    assert _equal_tracks("repeat(3, 1fr)") == 3
+    assert _equal_tracks("1fr 1fr 1fr") == 3
+    assert _equal_tracks("repeat(auto-fill, minmax(180px, 1fr))") is None
+    assert _equal_tracks("1fr 240px") is None
+
+    # An unframed grid of the same shape is a card list, not a table: no law here.
+    cards = (
+        ".cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px }"
+        ".card { border: 1px solid #000 }"
+    )
+    assert _tile_grids_in("synthetic.html", f'<div class="cards">{tiles * 5}</div>', cards) == []
+    # ...and a framed grid whose children paint no closing hairline is out too.
+    assert _tile_grids_in(
+        "synthetic.html",
+        '<div class="stats"><div>x</div><div>x</div></div>',
+        framed,
+    ) == []
+    # Content-sized columns promise no count, so a short last row is not a hole.
+    fluid = (
+        ".stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));"
+        " border-top: 1px solid #000 }"
+        ".stat-card { border-right: 1px solid #000 }"
+    )
+    assert _tile_grids_in("synthetic.html", f'<div class="stats">{tiles * 5}</div>', fluid) == []
+
+
+SEPARATOR_BOX_RE = re.compile(r"<(span|div|b|i|em|small|strong)\b([^>]*)>([^<]{1,12})</\1\s*>")
+ENTITY_RE = re.compile(r"&(?:[a-zA-Z]+|#\d+);")
+LETTER_OR_DIGIT_RE = re.compile(r"[0-9A-Za-z\u0400-\u04ff]")
+# One entity paints one glyph, however many source characters it costs to say it.
+_GLYPH = "·"
+
+
+def separator_boxes(text: str) -> list[tuple[int, str]]:
+    """Anonymous elements whose entire painted payload is punctuation.
+
+    An element that carries an `id` or a `class` is a named thing — `–` inside
+    `<b id="wallet-balance">` is a value waiting for the fetch, and the `.dot`
+    beside the Mini App's live status is a designed indicator. What has no name
+    and no letters is a separator: layout dressed as content."""
+    found = []
+    for match in SEPARATOR_BOX_RE.finditer(text):
+        attrs, body = match.group(2), match.group(3)
+        if re.search(r"\b(?:id|class)\s*=", attrs):
+            continue
+        payload = ENTITY_RE.sub(_GLYPH, body).strip()
+        if not payload or len(payload) > 4 or LETTER_OR_DIGIT_RE.search(payload):
+            continue
+        found.append((match.start(), match.group(0)))
+    return found
+
+
+def test_no_meta_row_is_joined_with_an_anonymous_punctuation_box():
+    """`.page-meta` is `display:flex` with `gap: 14px`, so its items are already
+    separated by the layout. Five shipped documents joined them with
+    `<span>·</span>` on top of that: a box of one glyph floating in the gap the
+    layout already pays for, and a child of the accessibility tree that says
+    nothing to anyone.
+
+    The subject set is every document **and** script in the bundle: three of the
+    five joiners were built inside JS string literals, and a law that read only
+    tags would have certified those three as clean."""
+    found = [
+        f"{name}: {box!r}"
+        for name in (*PAGES, *SCRIPTS)
+        for _, box in separator_boxes(read(name))
+    ]
+    assert not found, f"punctuation is being painted as a layout child: {found}"
+
+
+def test_the_separator_reader_still_reads_the_joiner_it_exists_to_refuse():
+    """After the fix the subject set is empty, which is exactly how a blind reader
+    passes forever. Every shape below is the one the finding actually was, and the
+    one it was not."""
+    joined = '<div class="page-meta"><span>Адрес</span><span>·</span><span>Base</span></div>'
+    assert [box for _, box in separator_boxes(joined)] == ["<span>·</span>"]
+    assert [box for _, box in separator_boxes("<span>&middot;</span>")] == ["<span>&middot;</span>"]
+    assert separator_boxes('<span>|</span>') and separator_boxes('<i>—</i>')
+    # A value placeholder is a named element holding a pending figure.
+    assert separator_boxes('<b id="wallet-balance">–</b>') == []
+    assert separator_boxes('<span class="dot">.</span>') == []
+    # Text is text, however short, and so is a glyph with words beside it.
+    assert separator_boxes("<span>b</span>") == []
+    assert separator_boxes("<span>· Base</span>") == []
+
+
+def documents_loading(script: str) -> list[str]:
+    return [name for name in PAGES if f'src="/{script}"' in read(name)]
+
+
+REFUND_NOTE_DEF_RE = re.compile(r"\b(?:const|let|var)\s+REFUND_NOTE\s*=")
+
+
+def test_the_awaiting_note_is_written_once_in_the_file_that_derives_the_state():
+    """A pool whose deadline passed and that nobody resolved is the fourth state,
+    and the sentence beside it is the answer to «и что теперь?» — so it is the one
+    line on the site a visitor may not get two versions of. The landing promised
+    «можно вернуть деньги» while /m/{id} promised «ставки можно вернуть» for the
+    same money, and nothing in the tree could notice, because two literals in two
+    files are not a diff.
+
+    The durable shape is the one every other answer to a derived state already
+    uses: the sentence lives in `chain.js`, next to `marketState()` and
+    `deadlineLine()` that produce the state it describes. The law then measures
+    that shape, not the wording: exactly one definition, and every document that
+    prints the sentence — or loads the script that does — loads the derivation
+    before it, because a page that reads `REFUND_NOTE` without `chain.js` renders
+    `undefined` where a refund should be promised."""
+    definers = [n for n in (*PAGES, *SCRIPTS) if REFUND_NOTE_DEF_RE.search(read(n))]
+    assert definers == ["chain.js"], f"the awaiting note is written in {definers}"
+    assert documents_loading("chain.js"), "chain.js is loaded by no page"
+
+    users = [n for n in (*PAGES, *SCRIPTS) if "REFUND_NOTE" in read(n)]
+    assert len(users) >= 3, f"only {users} read the awaiting note — the reader is blind"
+    for name in users:
+        if name == "chain.js":
+            continue
+        if name.endswith(".html"):
+            assert name in documents_loading("chain.js"), f"{name} prints the note without chain.js"
+            continue
+        pages = documents_loading(name)
+        assert pages, f"{name} reads the note but no page loads it"
+        for page in pages:
+            text = read(page)
+            assert text.index('src="/chain.js"') < text.index(f'src="/{name}"'), (
+                f"{page} loads {name} before the derivation that defines the note"
+            )

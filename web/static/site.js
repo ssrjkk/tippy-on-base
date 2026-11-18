@@ -10,7 +10,7 @@
 
   var MICRO = 1000000;
   var $ = function (id) { return document.getElementById(id); };
-  var info = { limits: {}, fees: {}, smart_wallet_enabled: false, onchain_markets_enabled: false };
+  var info = { limits: {}, fees: {}, x402: {}, smart_wallet_enabled: false, onchain_markets_enabled: false };
   var me = null;
   var state = null;
   var staged = null;      // staged withdrawal, awaiting confirm
@@ -26,13 +26,19 @@
     });
   }
 
-  function fmt(x, dp) {
+  // Money is painted with two decimals, counts with none. A formatter that
+  // takes its precision as an argument is a formatter a page can misuse:
+  // the number it prints is decided by whichever call site forgot the dp.
+  function fmtMoney(x) {
     var n = Number(x);
     if (!isFinite(n)) n = 0;
-    return n.toLocaleString('ru-RU', {
-      minimumFractionDigits: dp == null ? 2 : dp,
-      maximumFractionDigits: dp == null ? 2 : dp,
-    });
+    return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtCount(x) {
+    var n = Number(x);
+    if (!isFinite(n)) n = 0;
+    return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
   // Amounts already carry 6 decimals from the server; trailing zeros dropped.
@@ -40,12 +46,13 @@
     return String(x).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   }
 
-  // Rates and odds, in the page's own separator and without invented precision:
-  // "1%" for a 1% fee, "2,5%" for a 2.5% one, "57,7%" for a probability.
-  function pctLabel(x, dp) {
+  // Rates and odds state their own precision, in the page's own separator:
+  // min equals max, so a column of odds never mixes "25%" with "24,9%" and the
+  // tabular figures under it line up.
+  function pctLabel(x) {
     var n = Number(x);
     if (!isFinite(n)) n = 0;
-    return n.toLocaleString('ru-RU', { maximumFractionDigits: dp == null ? 1 : dp }) + '%';
+    return n.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
   }
 
   // tx_log stores created_at as epoch seconds, so it has to be read as a number:
@@ -155,7 +162,7 @@
     return request;
   }
 
-  function usd(x) { return fmt(x) + ' USDC'; }
+  function usd(x) { return fmtMoney(x) + ' USDC'; }
 
   function num(id) {
     var v = parseFloat($(id).value);
@@ -255,10 +262,25 @@
       var i = await api('/api/info');
       info.limits = i.limits || {};
       info.fees = i.fees || {};
+      info.x402 = i.x402 || {};
       info.smart_wallet_enabled = !!i.smart_wallet_enabled;
       info.onchain_markets_enabled = !!i.onchain_markets_enabled;
       renderLimits();
     } catch (e) { /* hints stay blank rather than showing invented numbers */ }
+  }
+
+  /* The bound the ledger refuses with is the bound the field blocks. The
+   * markup remembered some of them — `min="0"` on a withdrawal the route
+   * rejects under `MIN_WITHDRAW_USDC` — so a panel offered a sum the server
+   * then refused, and the number in the HTML was written by a different hand
+   * than the one that enforces it. */
+  function bindBound(id, source, pairs) {
+    var el = $(id);
+    if (!el || !source) return;
+    pairs.forEach(function (pair) {
+      var v = source[pair[1]];
+      if (v != null) el[pair[0]] = v;
+    });
   }
 
   function renderLimits() {
@@ -268,13 +290,15 @@
     }
     if (L.max_trade_usdc) {
       $('tradeLimit').textContent = L.min_trade_usdc
-        ? 'От ' + fmt(L.min_trade_usdc) + ' до ' + usd(L.max_trade_usdc) + ' за одну сделку.'
+        ? 'От ' + fmtMoney(L.min_trade_usdc) + ' до ' + usd(L.max_trade_usdc) + ' за одну сделку.'
         : 'Максимум за одну сделку — ' + usd(L.max_trade_usdc) + '.';
     }
-    if (L.min_trade_usdc) {
-      // The floor the ledger enforces, not the one the markup remembered.
-      $('tradeAmount').min = L.min_trade_usdc;
-    }
+    bindBound('tipAmount', L, [['max', 'max_tip_usdc']]);
+    bindBound('tradeAmount', L, [['min', 'min_trade_usdc'], ['max', 'max_trade_usdc']]);
+    bindBound('betAmount', L, [['max', 'max_bet_usdc']]);
+    bindBound('wdAmount', L, [['min', 'min_withdraw_usdc']]);
+    bindBound('newSubsidy', L, [['min', 'min_subsidy_usdc'], ['max', 'max_subsidy_usdc']]);
+    bindBound('x402Amount', info.x402, [['min', 'min_usdc'], ['max', 'max_usdc']]);
     if (L.max_bet_usdc) {
       $('betLimit').textContent = 'Максимум на одну ставку — ' + usd(L.max_bet_usdc) + '.';
     }
@@ -301,7 +325,7 @@
       var b = document.createElement('button');
       b.className = 'amount-chip';
       b.type = 'button';
-      b.textContent = fmt(v, 0);
+      b.textContent = fmtCount(v);
       b.dataset.act = 'chip';
       b.dataset.target = targetId;
       b.dataset.value = v;
@@ -328,7 +352,7 @@
     }
     $('wsName').textContent = state.username ? '@' + state.username : 'Пользователь';
     $('wsId').textContent = 'id ' + state.tg_id;
-    $('wsBalance').textContent = fmt(state.balance_usdc);
+    $('wsBalance').textContent = fmtMoney(state.balance_usdc);
     $('balAvailable').textContent = usd(state.balance_usdc);
     $('depositAddress').textContent = state.deposit_address;
     $('depositQr').src = '/qr?size=220&data=' + encodeURIComponent(state.deposit_address);
@@ -464,7 +488,7 @@
       return '<div class="row"><span class="row-k">' + esc(r.label || r.kind) +
         (sub ? ' <span class="hint">' + esc(sub) + '</span>' : '') +
         '<br><span class="hint">' + esc(fmtDate(r.created_at)) + '</span></span>' +
-        '<b class="row-v ' + (r.incoming ? 'pos' : 'neg') + '">' + (r.incoming ? '+' : '−') + fmt(r.amount_usdc) + '</b></div>';
+        '<b class="row-v ' + (r.incoming ? 'pos' : 'neg') + '">' + (r.incoming ? '+' : '−') + fmtMoney(r.amount_usdc) + '</b></div>';
     }).join('');
   }
 
@@ -489,9 +513,9 @@
       var win = p.value_usdc - p.cost_usdc;
       return '<div class="row"><span class="row-k">#' + esc(p.market_id) + ' '
         + esc(p.question) + ' <span class="hint">→ ' + esc(p.option) + '</span></span>' +
-        '<b class="row-v">' + fmt(p.value_usdc) +
+        '<b class="row-v">' + fmtMoney(p.value_usdc) +
         ' <span class="hint ' + (win >= 0 ? 'pos' : 'neg') + '">' +
-        (win >= 0 ? '+' : '') + fmt(win) + '</span></b></div>';
+        (win >= 0 ? '+' : '') + fmtMoney(win) + '</span></b></div>';
     }).join('');
   }
 
@@ -693,7 +717,7 @@
 
   async function refreshBalance(v) {
     if (typeof v === 'number') {
-      $('wsBalance').textContent = fmt(v);
+      $('wsBalance').textContent = fmtMoney(v);
       $('balAvailable').textContent = usd(v);
       if (state) state.balance_usdc = v;
     }

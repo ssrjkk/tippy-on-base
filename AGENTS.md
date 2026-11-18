@@ -36,7 +36,7 @@
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
 - `python -m pytest -q -m "not production"` — 11–16 min (measured 643 s alone on the host, 949 s
-  with another project's suite sharing it), 1383 tests (173 more, marked `production`, run
+  with another project's suite sharing it), 1436 tests (177 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -109,13 +109,16 @@
   emails and `t.me`/`x.com` handles); every documented gate command equals what CI actually
   runs (`_ci_gate_commands()` reads the ruff directory list and the pytest selection out of
   `.github/workflows/ci.yml`, so a lint line missing three of the seven directories and a suite
-  line that pulls in the 173 `production` tests both fail, while a targeted-file run that still
+  line that pulls in the 177 `production` tests both fail, while a targeted-file run that still
   states its `-m` is allowed); and no document tells a human to reach this host on a port the
   tree does not listen on (`_ports_the_stack_answers_on()` derives the live set from the
-  `postgresql://` authorities, `WEB_PORT` and every loopback port a tracked `deploy/` program
-  binds — cloudflared's metrics `127.0.0.1:20241` is a port this host answers on because
-  `deploy/watchdog.ps1` names it, and the third source is asserted non-empty so a doc cannot gain
-  a free port by the deploy tree going unread; measured this wave as 5432, 8000 and 20241 —
+  `postgresql://` authorities, `WEB_PORT`, every loopback port a tracked `deploy/` program binds
+  **and** the connector replica block a tracked `deploy/` script derives from its own
+  `$MetricsPortBase` and `$ConnectorReplicas` — cloudflared's metrics `127.0.0.1:20241` and
+  `20242` are ports this host answers on because `deploy/watchdog.ps1` starts two replicas and
+  `docs/CLOUDFLARE.md` tells an operator to probe each one's `/ready`; the binding and the
+  derived sources are each asserted non-empty, so a doc cannot gain a free port by the deploy
+  tree going unread; measured this wave as 5432, 8000, 20241 and 20242 —
   `docs/CONTRIBUTING.md` promised a published database port of its own and `docs/OPERATIONS.md`
   had Prometheus scrape the app on a port that is not `WEB_PORT`; neither compose file has a
   ports key at all, so the stack answers on the compose network and `app:8000` is what a
@@ -151,11 +154,13 @@
   guessed — which found one real defect: `docs/DEPLOY.md` had put both rates in one
   parenthetical as bare numbers, so an operator holding a `.env` diff could not tell which
   figure was the withdrawal fee and which the win fee; the line now names each fee beside its
-  own number. Eight mutations were proven to fire (a paywall row written as `fee`, a
-  `credit(…, 'fee')`, a moved citation, a renamed variable in code, a truncated quote in the doc,
-  and three wrong rates in three different documents). What the laws cannot see is stated here: a
-  rate written under proposal wording («proposed», «levers», «would») is exempt — §7.2's 0.5%
-  scenario is a what-if, not a promise — and a document may still describe a fee qualitatively.
+  own number. Eight mutations were proven to fire: a paywall row written as `fee`, a
+  `credit(…, 'fee')`, a citation moved off the line that writes the fee, a `creator_income`
+  renamed in code, a quote of a payout expression truncated in the doc, one wrong win rate,
+  one wrong withdrawal rate, and one more wrong rate in a third document. What the laws cannot
+  see is stated here: a rate written under proposal wording («proposed», «levers», «would») is
+  exempt — §7.2's 0.5% scenario is a what-if, not a promise — and a document may still
+  describe a fee qualitatively.
 - **The pictures a document ships are files in this tree, and `tests/test_docs.py` reads them as
   files.** `scripts/make_docs_screenshots.py` shoots every `docs/screenshots` PNG and writes a
   `tEXt` pair into each: `tippy-surface` (which surface the file pictures) and
@@ -199,6 +204,26 @@
   `git ls-files web/*.py`, and `tests/test_web.py` keeps only the half that is not an inventory —
   five documents publishing one suite size must agree with each other, and
   `test_the_documented_suite_size_is_the_size_of_this_run` pins that figure to the run.
+- **A count of mutations a document prints is the number of clauses it names.** Three paragraphs of
+  this file proved gates by a number nothing backed: wave 31 claimed eight, and enumerated six
+  clauses (the seventh and eighth hid inside «three wrong rates in three different documents»); wave
+  34 claimed seventeen over fifteen, bundling three `-Check` keys into one clause and two tunnel
+  protocols into another; wave 33 claimed twenty-five and named one.
+  `test_every_documented_mutation_count_is_the_number_of_clauses_it_names` reads every such claim out
+  of the tracked `*.md` through `_prose()`: `_MUTATION_CLAIM` takes the digits or the number word
+  (zero..twenty, and a tens-hyphen like `twenty-five`) standing beside the sentence that says the
+  mutations fired, `_enumeration_after()` takes the list that follows it in the same sentence — colon
+  form or parenthesised — and `_clauses_of()` splits that list at **top-level** commas only, outside
+  backtick spans and brackets, so a comma or a closing bracket inside a code span stays inside its
+  own clause. Measured this wave: two claims, twenty-eight clauses, every count equal to its own
+  enumeration. A claim with no enumeration fails too, and so a count the file can no longer
+  reconstruct is stated as no count rather than as a padded one: wave 33's scratch tree is deleted,
+  so its sentence now names what was mutated and leaves the number out — a number no clause list
+  backs is exactly what this law refuses, and repeating it would be that same unbackable claim
+  written twice. `test_the_mutation_clause_reader_reads_the_shapes_a_prose_list_takes` holds the
+  reader to the shapes prose actually takes (both list forms, a comma and a closer inside a span, a
+  hyphenated word, digits, «These mutations…» which states no count, a full stop before the list, an
+  unclosed bracket), because a reader that quietly found no list would report a clean tree forever.
 - **A roadmap promise is a claim about the tree, gated in both directions.** The README `##
   Roadmap` section is parsed from the file — a bullet that wraps is one bullet, `~~struck~~` is
   the markup for *done* — and the resolvers are the ones the rest of the docs use: environment
@@ -311,8 +336,93 @@
   failure), and the **edge maintenance card** in `functions/[[path]].js` held to the same document
   contract as the pages — it is served without the origin, so nothing else measures it.
   It reads files only — no browser, no database, so it runs in ordinary CI.
+- **One product writes one grammar per kind of number, and the grammar is read off the formatter
+  that states it.** A `maximumFractionDigits` option is not a grammar: a column of odds painted one row
+  with a decimal and the next without, and the same USDC balance carried two decimals in the Mini App
+  and one on the site — one product writing the same money two ways on the same day. `MECHANISMS` fixes
+  the answer per kind (money two decimals, odds one, counts none, the fee rate in significant digits, a
+  raw on-chain amount its six, a clock no fraction options at all) and names each kind by the words a
+  formatter's own name has to carry (`usdc`/`balance`/`share`, `pct`/`chance`/`odds`, `count`/`num`,
+  `fee`, `micro`, `time`/`date`/`day`).
+  `test_every_painted_number_states_the_precision_its_mechanism_owes` takes every formatter out of
+  `PAGES + SCRIPTS` (`every_formatter()` reads the function and arrow bodies that call `toLocaleString`),
+  fails a formatter naming no mechanism, one naming two (the single allowed pair is fee-and-odds, judged
+  as a fee), and one declaring digits its kind does not owe. Measured this wave as 22 formatters and
+  the same 22 `toLocaleString` calls: money 8, odds 5, count 3, fee 1, raw 1, clock 4 — with a floor per kind
+  and on the total, because a scan that quietly lost every formatter would report a clean tree. Its pair
+  `test_no_number_is_formatted_outside_a_named_formatter` refuses a `toLocaleString` reached outside a
+  function body — an inline format is a precision no law reads — and pins the call count so that reader
+  stays awake. What it cannot see is a mechanism whose words no formatter name carries, which is why a
+  new number face is named for what it counts, not for where it paints.
+- **A rendered row is a set of parts, and every part owes its own type and one direction only.** The
+  history row said its direction three times — the sign, the colour of the amount, and a green or red
+  disc behind the arrow — and the disc is the one that breaks the contract: `style.css` keeps the state
+  colours on figures (`.wallet-row b.pos`, `.lb-amt`, `.row-v`), so a tinted icon made the Mini App the
+  only surface in the product where a state colour paints chrome, and a row whose money is a refund read
+  as a withdrawal at a glance. `test_money_direction_is_painted_once_in_a_history_row` takes the row's
+  own class family out of `app.html`'s stylesheet, allows a state colour only on a selector naming
+  `amount`, pins the count at the two rules one fact looks like, and requires the amount cell's class
+  and its sign to be keyed off the same field in the renderer — a cell coloured by one field and signed
+  by another is a contradiction inside one template.
+  `test_the_history_row_keeps_its_clock_in_the_money_face_and_its_note_out` separates two payloads the
+  row used to paint in one span: the timestamp is a figure and keeps the money face with the tabular
+  digits that come with it, the counterparty note is a sentence and does not, because a name drawn in
+  the mono face reads as a checksum. Both classes are read out of the renderer
+  (`_class_of_nearest_tag`), so a new element carrying either payload is inside the law the moment it
+  exists. `test_every_part_of_a_rendered_row_declares_its_own_weight` is the third shape: `.tx-time` set
+  a size and no weight, so the same class painted heavier inside `.tx-title` and lighter on the line
+  below, decided by which branch of the cascade the markup happened to take — every class the renderer
+  emits must weight the text it sizes, matched the way a browser resolves it (`.tx-amount.pos` answers
+  for `tx-amount`). `test_the_row_reader_refuses_the_shapes_the_three_laws_exist_for` runs all three
+  readers on markup that is not the shipped file.
+- **A language switch is a repaint, not a reload.** `setLang()` used to call `applyI18n()` and
+  `renderMore()`: the first rewrites only the `data-i18n` labels, the second one tab, so switching on the
+  Settings screen changed the tab bar and left every history, market and bet row in the language it was
+  drawn in until the app was reopened — and a user who cannot read the language they are in is shown no
+  control that fixes it. Two screens were in the same class and said nothing: the SmartAccount card,
+  whose status line came from `t()` inside a fetch nobody re-ran, and the detail sheet's buy button,
+  labelled at open time. The fix is at the primitive layer: `renderAll()` is the one repaint pass every
+  screen is reachable from, the SmartAccount fetch and paint are split into `loadSmartWallet()` and
+  `renderSmartWallet()` over `STATE.smart`, and `setLang()` calls `renderAll()` and nothing narrower.
+  `test_a_language_switch_repaints_every_list_the_mini_app_ships` derives its subject set from the file —
+  `localized_painters()` splits the app's functions into repainters, which write localized text into a
+  document node, and builders, which create the node they write into — requires every repainter to be
+  called by `renderAll`, pins the builder set by name because that set is exactly what the law cannot
+  reach, and refuses a `setLang` that also calls a single screen beside `renderAll()`. Measured this wave
+  as 7 repainters and 1 builder (`addCreateOpt`, which appends into the market the user is still
+  writing). `test_the_repaint_reader_refuses_a_screen_it_cannot_reach` keeps that reader honest on
+  synthetic markup, including the `setTimeout(` decoy that made the first version report every function
+  holding a timer as a language leak. What the law cannot see is a painter that receives its localized
+  text as a **parameter** instead of calling `t()`: the create-market option rows and the market detail
+  still carry their add-time language for that reason, and are kept as open follow-ups rather than
+  absorbed into an exception list.
+- **A framed grid owns its last row, and a flex gap is already a separator.** The profile table was six
+  markup tiles in a three-column hairline grid whose sixth tile shipped `hidden`, so what the browser
+  drew was five tiles and an empty cell closing a frame whose own borders stopped where the missing tile
+  began.
+  `test_a_framed_tile_grid_paints_no_empty_cell` reads both of its premises out of the shipped files —
+  the track count from the stylesheet that paints the grid, the cells from the markup that fills it —
+  and applies only where the cells share a border, which is what keeps a ragged card grid out of scope;
+  the cell count is the count of **painted** children, because a tag-counting reader saw `user.html` as
+  six-in-three and certified the hole it exists to refuse (`_direct_children` drops a child carrying
+  `hidden`, and the reader test hands it exactly that shape).
+  `user.html` now states its figures in `.rows`, a list that declares no equal-track columns and so
+  promises no count to be a multiple of anything, and
+  `test_the_tile_grid_reader_owes_a_cell_to_five_tiles_in_three_columns` runs the reader on the defect,
+  on its fix, on the media-query trap and on the framed premise. What that law cannot see is a tile
+  hidden by `style="display:none"` rather than by `hidden`: it still counts as a cell, and the interface
+  contract already refuses that form of show/hide, so the blind spot is the contract's own premise and
+  not an exception list. The other half of the same class:
+  `.page-meta` is `display:flex` with `gap: 14px`, and five documents joined its items with a
+  punctuation span on top of that — a box of one glyph floating in the gap the layout already pays for,
+  and a child of the accessibility tree that says nothing.
+  `test_no_meta_row_is_joined_with_an_anonymous_punctuation_box` reads every document **and**
+  script in the bundle, because three of those five joiners were built inside JS string literals and a
+  tag-only reader would have certified them as clean, and
+  `test_the_separator_reader_still_reads_the_joiner_it_exists_to_refuse` keeps that reader awake now
+  that its shipped subject set is empty.
 - **The alembic chain is the only writer of this database's schema, and that is measured
-  against the code, not remembered.** `Ledger.__init__` runs `alembic upgrade head` and applies
+ `Ledger.__init__` runs `alembic upgrade head` and applies
   nothing after it; `bot/ledger/_schema.py` (the idempotent `CREATE TABLE IF NOT EXISTS` string
   `ensure_schema()` used to apply on top of the chain) is deleted, because a second source that
   is applied unconditionally is a second source nobody diffs: the chain lacked `recurring_payments`,
@@ -370,6 +480,20 @@
   read in one pass, because only the rendered text can show the two bounds disagreeing — and an origin
   that publishes no floor makes the drawer paint no bounds sentence, which the gate reports as itself
   instead of passing on an empty panel.
+- **The bound a route refuses with is the bound the field states.** A money field is the only place a
+  user learns a limit before the refusal, and every bound this repository enforces was either copied
+  into markup by hand or not copied at all: a withdrawal field whose own `min` let through every sum the
+  route rejects under `MIN_WITHDRAW_USDC`, a create-market subsidy floor left at whatever the browser
+  defaults to while the config sets another, a tip field with no ceiling named, and the whole Mini App,
+  which read none of the published numbers and so let the ledger answer a tap the input could have
+  refused. `test_the_bound_a_route_refuses_with_is_the_bound_the_field_states` measures both halves from
+  the tree — the bound out of the handler's own `refuse(..., min=config.X)` through the assignments it
+  resolves to, the field out of the HTML attribute or the script that binds a published key to it — and
+  fails a bound no endpoint publishes, because a page facing one can only invent it. The rendered half is
+  `tests/test_production_design.py::test_the_open_sheet_states_the_bounds_this_origin_publishes`
+  (`production`): the sheet where the sum is chosen is judged against that origin's `/api/info`, because
+  only the painted panel can show the attribute and the hint disagreeing, and the hint is what tells a
+  visitor *why* a sum was refused rather than that it was.
 - **A market state is one word, and each of the layers that carries it is measured.**
   `bets.status` and `markets.status` store `open | resolved | cancelled` — read off the
   DDL's own comments (`schema_states()`), not typed here — and the interface answers a
@@ -386,6 +510,17 @@
   is tradable (the Mini App did, and offered `/oc_buy` on a market the bot refuses at
   `close_at`); and `docs/ARCHITECTURE.md`, the only place the stored/derived split is
   written down, names as stored exactly `schema_states()` and as added exactly the rest.
+- **The `awaiting` sentence is written once, in the file that derives the state.** A pool whose deadline
+  passed while nobody resolved it is the fourth state, and the line beside it is the answer to «и что
+  теперь?», so it is the one sentence on the site a visitor may not get in two versions: the landing
+  promised the money could be returned while the market page promised the stakes could be, and nothing in
+  the tree could notice, because two literals in two files are not a diff. The durable shape is the one
+  every other answer to a derived state already uses — the sentence lives in `chain.js` as `REFUND_NOTE`,
+  beside the `marketState()` and `deadlineLine()` that produce the state it describes.
+  `test_the_awaiting_note_is_written_once_in_the_file_that_derives_the_state` measures that shape and not
+  the wording: exactly one definition in the bundle, and every document that prints the sentence — or
+  loads the script that does — loads the derivation before it, because a page that reads `REFUND_NOTE`
+  without `chain.js` renders `undefined` where a refund should be promised.
 - `tests/test_production_design.py` measures the **rendered** page (Playwright, marked
   `production`, runs in `prod-health-check.yml`) across **nine facets** — landing dark/light, a
   market page, `/tos`, `/u/{id}`, an on-chain market, the 404 document, `/app` on a phone with
@@ -528,9 +663,98 @@
   second scratch origin that sends headers at once and trickles its body for 30 s delivered **all 12
   chunks and `END`** at 30.1 s, which is what `clearTimeout` buys and what `AbortSignal.timeout()`
   would have destroyed; a refused connection still retried and answered the card in 0.27 s, and the
-  app's own `502 application/json` still passed through untouched. Twenty-five mutations were proven
-  to fire across these nine laws and the two live ones, the last of them against `window_for()`
-  itself: the same slice that the first version carried makes `fonts.css` a file the font block owns.
+  app's own `502 application/json` still passed through untouched. Mutations were proven to
+  fire across these nine laws and the two live ones, in wave 33's scratch copies, the last of
+  them against `window_for()` itself: the same slice that the first version carried makes
+  `fonts.css` a file the font block owns. No count is stated for that wave: its scratch record
+  is deleted, and a number no clause list backs is what the mutation-count law now refuses.
+- **The card names the outage it measured, in words the runbook also has to know.** The edge card is the
+  only answer this origin writes by itself, so it is the only place an outage can be named: the origin
+  that could have explained is the thing that is missing.
+  `test_the_edge_card_says_only_a_reason_the_measurement_can_produce` holds five things together —
+  `OUTAGE_REASONS` and the branches of `outageReason()` are one set, because a word the chooser cannot
+  return is a sentence nothing paints and a returned word the card does not know prints `undefined`
+  where a visitor asked for a reason; the word reaches the page both in a `data-reason` attribute and in
+  `x-tippy-outage-reason`, because an operator reading an outage with `curl -I` should not have to open a
+  browser; every card call takes its word from the chooser, so no call site can hand-pick a flattering
+  one; the chooser reads its three inputs and nothing else, since a reason taken from an exception object
+  would be this edge quoting its own internals on a page anyone can request; and each word states the
+  fact only its own branch can know.
+  `test_the_reason_the_card_gives_is_the_reason_the_measured_shape_produced` then **runs** the shipped
+  Function against a local origin answering each shape an outage actually takes — configured, serving,
+  its own JSON 502, a proxy's HTML 502, a refused connection, a connection that says nothing — changing
+  only `UPSTREAM_DEADLINE_MS`, so the silent case costs a second instead of the window the doc promises
+  and the deadline itself stays measured against the unedited file. That is where the defect was:
+  `outageReason({ upstream })` was handed no `expired` flag, so a spent window printed the *refused*
+  sentence and the card blamed a connection that was never attempted for an origin that simply said
+  nothing. `test_the_doc_gives_every_outage_reason_its_own_remedy` keeps `docs/CLOUDFLARE.md` at one row
+  per word the Function can print, no row for a word it cannot, and a remedy in each row, because four
+  reasons point at four different places to fix.
+- **The program that decides whether the live site heals is PowerShell, and
+ `deploy/watchdog.ps1` is the only
+  writer of the tunnel's process table on this host (the `\TippyOriginWatchdog` task, every few
+  minutes), and for thirty-three waves no test executed a line of it. What the text was doing,
+  read out of 5,526 of its own logged passes and 19 probes through the live edge: **4,745 passes
+  (86%) wrote `public=False`** while the site served, because the public health endpoint was
+  judged by one request issued microseconds after `Start-Process cloudflared` and a connector
+  needs seconds to reach its edge; a replica that lost every connection was kept for four more
+  minutes answering 503 because the "old and disconnected" rule required five minutes of age
+  while the median connection lifetime on this host is 20 s; and the flag that was *causing* the
+  churn (`--edge-bind-address`: 22–173 s lifetimes, median 101 s, 49 deaths in 30 min, on an
+  address 82 of 82 established `:443` sockets were already using) was the flag the script
+  insisted every process carry, so it stopped the healthy ones. 25 laws now measure the supervisor:
+  the two restart verdicts are executed as the PowerShell that produces them, against a nine-row
+  truth table whose ages and probe counts are read back out of the same file (`$StartupGraceSeconds`,
+  `$OriginGraceSeconds`, `$ConfirmProbes`), so a mutated window flips a verdict rather than an
+  expectation; the replica pair is measured through `Get-MetricsPorts`/`Get-ReadyUrl`/
+  `Get-ConnectorLog` for distinct ports, distinct logfiles and a URL naming its own port, because
+  the availability comparison that justified the second connector is `6 of 19 (32%)` public with
+  one replica against `10 of 19 (53%)` on that replica's own `/ready`, and the pair re-walked over
+  87 samples answers ready on one replica for `73 of 87 (84%)` and on the other for
+  `45 of 87 (52%)` — beside the single-replica walk the pair reads better, and beside itself the second
+  connector bought this host nothing, because both die on one shared egress, so the page stands
+  because the supervisor replaces the replica that went quiet and not because the count is two;
+  every launcher of `cloudflared.exe` in `deploy/` — a directory glob, three files measured
+  — must pin `http2` and name no source address; no function may stop a process it cannot name by
+  command line, and `Get-Connector` must resolve to the script's own runtime directory; the pass
+  must wait for the tunnel before it judges the public path; `-Check` must answer all eight keys,
+  including `ReplicaPorts` and `ReadyPorts` together, because one boolean is what made three hours
+  of outage read as a mystery (one replica answering 503 while its twin served the page).
+  **The origin is healed only when nothing answers at all**: `Get-EndpointOutcome` is one reader
+  with three values — `ok`, `answered` (a `/ready` 503, or a 200 whose `db` is not `ok`) and
+  `silent` — and only a whole window of `silent` past `$OriginGraceSeconds` reboots `deploy/run.py`,
+  because an `answered` origin is a fault the process is reporting and restarting it over a database
+  outage kills Telegram polling while hiding the report. That is the wedge this host actually
+  produces (`WinError 64` on a pipe, uvicorn alive, every request into a black hole, the tunnel
+  carrying nothing). 1 of the 25 laws runs this host's live processes and carries the Windows
+  guard with its reason printed; the rest are portable, and the executed predicate
+  laws run in CI too because `ubuntu-24.04` carries PowerShell 7.6.10 — so the rules that decide
+  whether the site heals are measured on the machine that has them and on the machine that does
+  not. Twenty mutations were proven to fire, each one its own clause below — the last five
+  measured in this wave's scratch runs, the first fifteen in the waves that wrote those laws —
+  against copies in a scratch tree so the live supervisor never saw a mutated file: a shared
+  logfile, `$ConnectorReplicas = 1`, a `Get-Connector` that stopped reading command lines,
+  `Stop-Process -Name cloudflared`, `--edge-bind-address` back in the arguments,
+  `deploy/tunnel.py` at `--protocol auto`, `deploy/tunnel.py` with no protocol at all, the
+  public probe moved before the wait, one probe instead of three, `-Check` dropping
+  `OriginOutcome`, `-Check` dropping `ReplicaPorts`, `-Check` dropping `ReadyPorts`, a doc
+  probing `20243`, a doc counting three replicas, a doc printing `26%` for 6 of 19, a doc
+  quoting the 20-sample pair walk the 87-sample walk superseded, that figure repeated across
+  a hard line break so a reader that needed a literal space went blind, `AGENTS.md` stating a
+  law count one off the file it describes, `AGENTS.md` stating a guard count the file's own
+  decorators refuse, and `AGENTS.md` no longer stating either count at all. What the laws cannot
+  see: the availability percentages are one host's path to one edge, and re-measuring them means
+  editing the doc — which the fraction law requires to be arithmetically its own answer and the
+  walk law requires every other document to repeat only figures the runbook measures, but neither
+  can tell that the runbook's own walk went stale, because a superseded host is still a host that
+  once answered, and a percentage written without its denominator is not a fraction any reader can
+  check; the executed `-Check` law reads this machine's live processes and nothing else; and the
+  supervisor's *timing* under load is measured by the log lines it writes, not by these tests.
+  `docs/CLOUDFLARE.md` now
+  carries the windows table the constants pair to, the three outcomes, the `-Check` command and
+  its keys, and both causes of the connection churn; the prod workflow's job limit moved 15 → 25
+  minutes the wave a hand-dispatched live check was cancelled at the limit mid-suite, because a
+  probe that reports nothing is the one answer it exists to avoid.
 - A browser navigation never gets a JSON body. `not_found.html` is rendered with `noindex`, **no
   canonical and no share card** (`canonical=False` — a URL that 404s must not name itself as a
   page), for any 404 outside `/api/`; a `RequestValidationError` on a page path is the same dead
@@ -650,7 +874,20 @@
   `#0000ff` (light) / `#224bff` (dark), canvases `#ffffff` / `#111111`. `#0052FF` appears **zero**
   times on base.org — do not reintroduce it, and do not reintroduce Inter or JetBrains Mono, glows,
   or gradient "wallet hero" cards. Tokens live in `web/static/style.css` `:root` / `[data-theme="dark"]`.
-- Money, addresses, odds and percentages use `--font-mono` with `font-variant-numeric: tabular-nums`.
+- Money, addresses, odds and percentages use `--font-mono` with `font-variant-numeric: tabular-nums` —
+  and a value being **typed** is still a figure, not a word: `test_every_money_and_address_field_is_drawn_in_the_mono_face`
+  judges every `<input>` on every page, in both stylesheets, because in the interface face `1 000,00`
+  and `11,00` start at different widths and an address the user checks before signing is proof-read
+  letter by letter. Both directions are measured, so the money face on a field that holds neither money
+  nor an address fails the same law.
+- A history row states its direction **once**: the sign and the colour of the amount, keyed off the same
+  field, and nothing else. No tinted disc behind the arrow — the state colours are reserved for figures,
+  and an icon that takes one turns a refund into a withdrawal at a glance.
+- A language switch repaints. `setLang()` calls `renderAll()` and no single-screen painter beside it, so
+  any screen that writes localized text into a node gets its words from that pass and not from a fetch
+  that happened to run earlier.
+- A row with a `gap` needs no separator glyph, and a framed grid whose cells share a border needs a cell
+  count that fills its tracks — a list of figures is `.rows`, one column, not a grid with a hole in it.
 - Show/hide is `hidden` (see `[hidden] { display: none !important }`), never `el.style.display`.
   …and an element that ships `hidden` is a promise someone clears: `#oc-scan` had its href filled
   and no line ever removed the attribute, so the contract link was invisible in exactly the case it

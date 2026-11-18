@@ -12,14 +12,18 @@ if (scrollProgress) {
   }, { passive: true });
 }
 
+/* A painted number states its own precision: two decimals for money, one for
+ * odds. `maximumFractionDigits` alone let 25 print as "25" beside 24.88 as
+ * "24,88", so a column of amounts or odds had no shared width to align to and
+ * the tabular figures underneath it bought nothing. */
 const fmtUSDC = (x) =>
-  (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+  (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
 // Odds and rates are the only figures the page shows as text, so they take the
 // page's locale: `String(24.88)` painted "24.88%" with a dot into a ru-RU
 // document whose money is written "24,88".
 const fmtPct = (x) =>
-  (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
+  (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + "%";
 // Probability display may round, but configured fees must preserve their stated rate.
 const fmtFeePct = (x) =>
   (x ?? 0).toLocaleString("ru-RU", { maximumSignificantDigits: 15 }) + "%";
@@ -500,8 +504,6 @@ function metaLine(...parts) {
 function deadlineNote(m, note) {
   return marketState(m) === "awaiting" ? (note || "") : deadlineLine(m);
 }
-
-const REFUND_NOTE = "можно вернуть деньги";
 
 /* The markup for the deadline half of a meta line: a ticking span only while
  * there is time left, plain text for what a finished clock leaves behind. */

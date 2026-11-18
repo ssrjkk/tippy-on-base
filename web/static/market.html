@@ -92,9 +92,9 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const fmtUSDC = (x) =>
-      (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+      (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
     const fmtPct = (x) =>
-      (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
+      (x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + "%";
     const esc = (s) =>
       String(s).replace(/[&<>"']/g, (c) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -107,7 +107,6 @@
       resolved: '<span class="chip chip-resolved">завершён</span>',
       cancelled: '<span class="chip chip-cancelled">отменён</span>',
     };
-    const REFUND_NOTE = "ставки можно вернуть";
 
     const betId = location.pathname.split("/").filter(Boolean).pop();
     /* The deep link is added only after the market itself has rendered, so a
@@ -134,7 +133,7 @@
           meta.push('<span id="m-countdown" data-close-at="' + parseInt(m.close_at) + '">' + deadlineLine(m) + "</span>");
         }
         if (winnerIdx !== null) meta.push("<span>исход: " + esc(m.options[winnerIdx].label) + "</span>");
-        $("m-meta").innerHTML = meta.join("<span>·</span>");
+        $("m-meta").innerHTML = meta.join("");
 
         $("m-options").innerHTML = m.options.map((o, i) => {
           const isWinner = winnerIdx !== null && o.index === winnerIdx;

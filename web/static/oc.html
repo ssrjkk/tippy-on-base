@@ -99,9 +99,9 @@
       })[c]);
     const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
     const fmtUSDC = (x) =>
-      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
     const fmtPct = (x) =>
-      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + "%";
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + "%";
 
     const marketId = location.pathname.split("/").filter(Boolean).pop();
     const infoPromise = fetch("/api/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
@@ -137,7 +137,7 @@
         meta.push('<span id="oc-countdown" data-close-at="' + parseInt(m.close_at) + '">' + deadlineLine(m) + "</span>");
       }
       if (winnerIdx !== null) meta.push("<span>исход: " + esc((m.options[winnerIdx] || {}).label || "#" + winnerIdx) + "</span>");
-      $("oc-meta").innerHTML = meta.join("<span>·</span>");
+      $("oc-meta").innerHTML = meta.join("");
 
       $("oc-kind").textContent = "Ончейн-рынок · #" + m.id;
       $("oc-question").textContent = m.question;

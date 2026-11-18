@@ -11,7 +11,7 @@ from typing import Any
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramNetworkError
+from aiogram.exceptions import TelegramNetworkError, TelegramServerError
 from aiogram.types import BotCommand
 
 from . import base, config, i18n
@@ -377,6 +377,20 @@ async def _run_webhook(stop: asyncio.Event | None=None) -> None:
 # Shared with deploy/run.py so the two entrypoints back off identically.
 RETRY_SECONDS = 15
 
+# The Telegram failures that are Telegram's to fix, and the only ones worth
+# retrying: a request that never completed, and a 5xx that Telegram's own servers
+# answered. The second is not a member of the first — aiogram builds
+# `TelegramServerError` from `check_response` on a 5xx status, and neither class
+# contains the other — so a rule that names only `TelegramNetworkError` re-raises
+# it. Measured: `get_me` answered «Bad Gateway» at polling start, that propagated
+# out of the polling supervisor (`raise exc`), and because this process runs the
+# web server too, the site went to the maintenance card over a Telegram hiccup
+# (`data/runtime/origin.err.log` holds one such traceback; `watchdog.log` counts
+# origin=False on 1,830 of 5,563 passes and 707 origin starts in its 270 h.
+# A revoked token or a malformed call stays fatal: retrying cannot fix either, and
+# spinning on them hides the one report that says what broke.
+TRANSIENT_TELEGRAM_ERRORS = (TelegramNetworkError, TelegramServerError)
+
 # Canonical Telegram command menu. deploy/run.py reuses this list so the menu
 # cannot diverge between entrypoints, and web/server.py publishes the same
 # descriptions through /api/info — bot/commands_catalog.py holds the data.
@@ -428,7 +442,7 @@ async def main() -> None:
                     exc = worker.exception()
                     if exc is None:
                         break  # polling or the webhook ended on its own
-                    if isinstance(exc, TelegramNetworkError):
+                    if isinstance(exc, TRANSIENT_TELEGRAM_ERRORS):
                         log.warning('telegram unreachable, retrying in %ds: %s', RETRY_SECONDS, exc)
                         await asyncio.sleep(RETRY_SECONDS)
                         continue

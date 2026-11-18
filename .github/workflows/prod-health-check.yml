@@ -21,7 +21,10 @@ permissions:
 jobs:
   validate-prod:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Measured: the 177 live checks finish in ~6.5 minutes when the edge answers and far
+    # longer when it does not. A run cancelled at the job limit is a live probe that reported
+    # nothing about an outage, which is the one answer this workflow exists to give.
+    timeout-minutes: 25
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
