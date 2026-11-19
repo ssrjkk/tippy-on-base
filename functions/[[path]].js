@@ -182,6 +182,31 @@ export async function onRequest(context) {
   }
 
   const backend = (env.BACKEND_URL || '').replace(/\/+$/, '');
+  
+  // When the origin is not configured or unreachable, try to serve the HTML from
+  // the bundle as a design demo. The page will render without dynamic data, but
+  // the layout, typography and styles will be visible.
+  if (!backend && reads) {
+    const htmlPath = pathname === '/' ? '/index.html' : pathname + '.html';
+    try {
+      const demo = await env.ASSETS.fetch(new URL(htmlPath, request.url));
+      if (demo.status === 200 && (demo.headers.get('content-type') || '').includes('text/html')) {
+        return new Response(demo.body, {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff',
+            'referrer-policy': 'no-referrer',
+            'x-tippy-demo-mode': 'true',
+          },
+        });
+      }
+    } catch {
+      // Fall through to maintenance card
+    }
+  }
+  
   if (!backend) return maintenance(outageReason({ hasBackend: false }));
 
   const headers = new Headers(request.headers);
@@ -240,6 +265,32 @@ export async function onRequest(context) {
       if (expired) break;
     }
   }
+  
+  // When the origin is down, serve the HTML from the bundle as a design demo
+  // instead of the maintenance card. The page will render without dynamic data,
+  // but the layout, typography and styles will be visible.
+  if ((!upstream || isDown(upstream)) && reads) {
+    const htmlPath = pathname === '/' ? '/index.html' : pathname + '.html';
+    try {
+      const demo = await env.ASSETS.fetch(new URL(htmlPath, request.url));
+      if (demo.status === 200 && (demo.headers.get('content-type') || '').includes('text/html')) {
+        clearTimeout(timer);
+        return new Response(demo.body, {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff',
+            'referrer-policy': 'no-referrer',
+            'x-tippy-demo-mode': 'true',
+          },
+        });
+      }
+    } catch {
+      // Fall through to maintenance card
+    }
+  }
+  
   const answer = upstream && !isDown(upstream)
     ? upstream
     : maintenance(outageReason({ upstream, expired }));
