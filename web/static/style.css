@@ -374,11 +374,19 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 /* Two columns: the promise on the left, one real market on the right. A landing
    for a pricing product opens with a price, not with an illustration. */
 .hero {
+  position: relative;
   display: grid; grid-template-columns: minmax(0, 1fr) 420px;
   gap: 24px 72px; align-items: start;
   text-align: left; padding: 88px 24px 56px;
   animation: fadeUp 0.5s var(--ease) both;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
+.hero-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 0;
+}
+.hero > *:not(.hero-canvas) { position: relative; z-index: 1; }
 .hero-copy { min-width: 0; }
 .hero h1 { animation: fadeUp 0.5s var(--ease) 0.05s both; }
 .hero h1 .accent { color: var(--accent-text); }
@@ -395,8 +403,8 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .hero h1 {
   /* Base's display type is heavy and tight, not light and airy: at this size a
      500 reads as a placeholder, and the tracking has to close as the size opens. */
-  font-size: var(--t-hero); font-weight: 600; letter-spacing: -0.045em;
-  line-height: 1.02; margin-bottom: 22px; color: var(--ink);
+  font-size: var(--t-hero); font-weight: 800; letter-spacing: -0.045em;
+  line-height: 1.03; margin-bottom: 22px; color: var(--ink);
 }
 .hero-sub { max-width: 52ch; margin: 0 0 34px; color: var(--muted); font-size: var(--t-h4); line-height: 1.55; animation: fadeUp 0.5s var(--ease) 0.1s both; }
 .hero-cta { display: flex; gap: 12px; justify-content: flex-start; flex-wrap: wrap; animation: fadeUp 0.5s var(--ease) 0.15s both; }
@@ -444,18 +452,17 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 }
 .btn-ghost:hover { border-color: var(--ink); background: var(--surface); }
 
-/* ---------- Stats: one hairline strip, not six boxes ---------- */
+/* ---------- Stats: bento-grid KPI strip ---------- */
 .stats {
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   border-top: 1px solid var(--border);
   border-left: 1px solid var(--border);
   margin: 0;
 }
-/* Four metrics read as 2×2; the default 3-column grid would orphan the last. */
+/* Four metrics read as 2×2; the default 6-column grid would orphan the last. */
 .stats-2 { grid-template-columns: repeat(2, 1fr); }
 .stat-card {
-  background: transparent;
-  border: 0;
+  background: var(--surface);
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   padding: 22px 20px;
@@ -501,6 +508,56 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .hero-metrics .stat-card { padding: 24px 22px; }
 .hero-metrics .stat-card:nth-child(n + 4) { border-bottom: 0; }
 .hero-metrics .stat-value { font-size: var(--t-xl); }
+
+/* ---------- Bento Grid: KPI Strip ---------- */
+/* Hairline KPI strip: 6 cells separated by 1px borders, mono figures, tight spacing. */
+.kpi-strip {
+  display: grid; grid-template-columns: repeat(6, 1fr);
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--border);
+  gap: 1px;
+  margin: 0 24px 32px;
+}
+.kpi-cell {
+  background: var(--surface);
+  padding: 18px 16px;
+}
+.kpi-label {
+  font-size: var(--t-micro);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+}
+.kpi-val {
+  font-family: var(--font-mono);
+  font-size: var(--t-h2);
+  font-weight: 600;
+  margin-top: 5px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Bento Grid: Analytics Row ---------- */
+/* 60/40 split: chart panel + solvency sidebar, hairline separated. */
+.analytics-row {
+  display: grid; grid-template-columns: 1.45fr 1fr;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--border);
+  gap: 1px;
+  margin: 0 24px 32px;
+}
+.bento-panel {
+  background: var(--surface);
+  padding: 24px;
+}
 
 /* ---------- Sections ---------- */
 .section { margin-bottom: 56px; }

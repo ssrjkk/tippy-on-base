@@ -230,7 +230,74 @@
     }
   }
 
+  /* ---------- Hero canvas: geometric grid with accent pulses ---------- */
+  function initHeroCanvas() {
+    var canvas = document.getElementById('heroCanvas');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    function resize() {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      draw();
+    }
+    
+    function draw() {
+      var w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      
+      var style = getComputedStyle(document.documentElement);
+      var borderColor = style.getPropertyValue('--border').trim() || '#efefef';
+      var accentColor = style.getPropertyValue('--accent').trim() || '#0000ff';
+      
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 1;
+      
+      var gridSize = 48;
+      for (var x = 0; x <= w; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, 0);
+        ctx.lineTo(x + 0.5, h);
+        ctx.stroke();
+      }
+      for (var y = 0; y <= h; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(w, y + 0.5);
+        ctx.stroke();
+      }
+      
+      var pulseCount = 3;
+      var time = Date.now() / 2000;
+      for (var i = 0; i < pulseCount; i++) {
+        var px = (Math.sin(time + i * 2.1) * 0.5 + 0.5) * w;
+        var py = (Math.cos(time + i * 1.7) * 0.5 + 0.5) * h;
+        var alpha = 0.08 + Math.sin(time * 2 + i) * 0.04;
+        ctx.fillStyle = accentColor.replace(')', ', ' + alpha + ')').replace('rgb', 'rgba');
+        ctx.beginPath();
+        ctx.arc(px, py, 80, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReducedMotion) {
+      function animate() {
+        draw();
+        requestAnimationFrame(animate);
+      }
+      animate();
+    } else {
+      draw();
+    }
+    
+    window.addEventListener('resize', resize);
+    resize();
+  }
+
   async function boot() {
+    initHeroCanvas();
     reportLoginFailure();
     // The session cookie is HttpOnly, so the server renders whether there is
     // one: probing /api/me without it only answers 401, which every anonymous
