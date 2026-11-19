@@ -54,7 +54,7 @@
   has ever read.
 - `python -m pytest -q -m "not production"` — 11–17 min (measured 643 s alone on the host, 949 s
   with another project's suite sharing it, 1,012 s alone on the run this wave pinned its counts to),
-  1537 tests (199 more, marked `production`, run
+  1540 tests (199 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).

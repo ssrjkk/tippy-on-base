@@ -20,7 +20,7 @@ External funding figures are quoted from the programs' own pages and listed in
   (паримутуэл и LMSR-AMM), платный контент, токены авторов с дивидендами,
   рекуррентные подписки, автономный AI-агент и приём платежей от AI-агентов по x402.
 - **Что уже написано:** 47 команд бота, 53 HTTP-маршрута, 9 контрактов, 18 доменных
-  миксинов леджера, 10 модулей агента, 1537 обычных тестов + 199 боевых. Три языка.
+  миксинов леджера, 10 модулей агента, 1540 обычных тестов + 199 боевых. Три языка.
 - **Что выключено флагами:** ончейн-рынки (ERC-1155) и gasless-кошельки (ERC-4337).
   Код есть, деплой на mainnet — нет.
 - **Что приносит деньги сегодня:** ровно одна строка — комиссия 1% с вывода.
@@ -306,7 +306,7 @@ data through `bot/ai_data.py` and says that it did.
 
 | Measure | Value |
 | --- | --- |
-| Tests | 1537 ordinary + 199 production (rendered-page and live-site gates) |
+| Tests | 1540 ordinary + 199 production (rendered-page and live-site gates) |
 | Languages | ru / en / zh, two independent catalogs, key sets gated equal |
 | Ledger domain mixins | 18 (every base of `Ledger` in `bot/ledger/__init__.py`) |
 | Agent modules | 10 (`git ls-files agent/*.py`) |
@@ -501,7 +501,7 @@ repository today):
 5. An autonomous agent with spend caps, a circuit breaker, stop-loss and EAS
    attestations, which also sells its analysis through the same paywall rail.
 6. Published solvency across six liability categories, an append-only audit trail,
-   and 1537 + 199 tests including structural gates that fail the build when a
+   and 1540 + 199 tests including structural gates that fail the build when a
    documented claim stops being true.
 7. Three languages, with the Mini App as the primary mobile surface.
 
