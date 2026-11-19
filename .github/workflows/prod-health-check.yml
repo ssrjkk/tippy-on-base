@@ -1,18 +1,19 @@
 name: Prod Health Check & Validation
 
 on:
-  push:
-    branches:
-      - main
-  schedule:
-    # Запуск каждые 6 часов для мониторинга прода
-    - cron: '0 */6 * * *'
+  # Disabled: production is offline, run manually when needed
+  # push:
+  #   branches:
+  #     - main
+  # schedule:
+  #   # Запуск каждые 6 часов для мониторинга прода
+  #   - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
       expect_down:
         type: boolean
         required: false
-        default: false
+        default: true
         description: "Known outage — skip the live checks"
 
 permissions:
