@@ -177,8 +177,8 @@ def main() -> int:
         print("ERROR: deployment reverted, tx:", sent.hex())
         return 1
     address = receipt.contractAddress
-    onchain_runtime = w3.eth.get_code(address).hex()[2:]
-    if onchain_runtime != art["runtime"].lstrip("0x").lower():
+    onchain_runtime = Web3.to_hex(w3.eth.get_code(address))[2:].lower()
+    if onchain_runtime != art["runtime"].removeprefix("0x").lower():
         print("ERROR: deployed runtime bytecode MISMATCH vs local compile!")
         return 1
 
@@ -196,7 +196,7 @@ def main() -> int:
     result = {
         "network": f"chain_{chain_id}",
         "address": address,
-        "tx_hash": sent.hex(),
+        "tx_hash": Web3.to_hex(sent),
         "block": receipt.blockNumber,
         "gas_used": receipt.gasUsed,
         "cost_eth": receipt.gasUsed * receipt.effectiveGasPrice / 1e18,

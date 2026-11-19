@@ -151,7 +151,7 @@ def attest_action(data: AttestationData) -> str | None:
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
 
         if receipt["status"] == 1:
-            return tx_hash.hex()
+            return Web3.to_hex(tx_hash)
         return None
 
     except Exception as e:
@@ -176,7 +176,7 @@ def _log_local(data: AttestationData) -> None:
         "market_id": data.market_id,
         "amount_micro": data.amount_micro,
         "confidence": data.confidence,
-        "reasoning_hash": data.reasoning_hash.hex(),
+        "reasoning_hash": Web3.to_hex(data.reasoning_hash),
         "schema_uuid": SCHEMA_UID or "local-only",
     }
     path = config.attestations_file()

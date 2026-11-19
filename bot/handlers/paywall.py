@@ -2,6 +2,7 @@
 
 'Paywall (paid content) handlers + reaction tips + message indexing.'
 import html
+import logging
 import re
 import time
 from decimal import Decimal
@@ -10,6 +11,8 @@ from aiogram import types
 from aiogram.filters import Command, CommandObject
 
 from . import _common as common
+
+log = logging.getLogger("tipbot.paywall")
 
 __all__ = ['PAYWALL_DRAFT_TTL', 'TG_MESSAGE_MAX', '_index_message', '_paywall_channel_cmd', '_paywall_channels_cmd', '_paywall_draft', '_paywall_list_text', '_paywall_subscribe_cmd', 'cmd_paywall', 'on_reaction']
 PAYWALL_DRAFT_TTL = 300
@@ -224,8 +227,8 @@ async def _paywall_subscribe_cmd(message: types.Message, target: str) -> None:
         owner = int(ch['owner_tg'])
         # The seller's own language, not the buyer's — the notification is for them.
         await message.bot.send_message(owner, i18n.t(await common.user_lang(owner), 'paywall_owner_notified', amount=common._fmt(int(ch['price_micro'])), title=html.escape(title)))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("paywall owner notice never reached the seller: %s", e)
 
 async def _paywall_channels_cmd(message: types.Message, lang: str) -> None:
     """/paywall channels — paid channels and my subscriptions. `lang` comes from
@@ -323,16 +326,16 @@ async def on_reaction(update: types.MessageReactionUpdated) -> None:
             try:
                 lang = await common.user_lang(reactor.id)
                 await update.bot.send_message(reactor.id, i18n.t(lang, 'paywall_reaction_balance'))
-            except Exception:
-                pass
+            except Exception as e:
+                log.info("reaction tip balance notice never reached %s: %s", reactor.id, e)
         return
     try:
         author_lang = await common.user_lang(author_id)
         await update.bot.send_message(author_id, i18n.t(author_lang, 'paywall_reaction_received', amount=common._fmt(amount_micro), reactor=html.escape(reactor.username or str(reactor.id))))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("reaction tip was taken from %s and the author notice never arrived: %s", reactor.id, e)
     try:
         reactor_lang = await common.user_lang(reactor.id)
         await update.bot.send_message(reactor.id, i18n.t(reactor_lang, 'paywall_reaction_sent', amount=common._fmt(amount_micro)))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("reaction tip left %s's balance and their own notice never arrived: %s", reactor.id, e)

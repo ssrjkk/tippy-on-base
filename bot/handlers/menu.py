@@ -1,5 +1,6 @@
 """Menu / onboarding / settings handlers."""
 import html
+import logging
 
 from aiogram import F, types
 from aiogram.filters import Command, CommandObject
@@ -13,6 +14,8 @@ from .bets import _bets_text, _market_detail_text
 from .paywall import _paywall_list_text
 from .stats import _history_text, _stats_text, _top_text
 from .wallet import _balance_text, _deposit_text, _donate_text
+
+log = logging.getLogger("tipbot.menu")
 
 
 async def _lang(tg_id: int) -> str:
@@ -302,6 +305,6 @@ async def cmd_broadcast(message: types.Message) -> None:
         try:
             await message.bot.send_message(row['tg_id'], parts[1], parse_mode=None)
             sent += 1
-        except Exception:
-            pass
+        except Exception as e:
+            log.info("broadcast never reached %s: %s", row['tg_id'], e)
     await message.answer(i18n.t(await _lang(message.from_user.id), 'broadcast_sent', n=sent))

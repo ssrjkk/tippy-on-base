@@ -1,5 +1,6 @@
 """Bets / prediction-market handlers."""
 import json
+import logging
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -12,6 +13,8 @@ from bot import i18n
 from bot.fees import win_fee_pct_label
 
 from . import _common as common
+
+log = logging.getLogger("tipbot.bets")
 
 __all__ = ['_bet_card', '_bet_create', '_bet_place', '_bets_text', '_market_detail_text', '_notify_bet_cancelled', '_notify_bet_result', '_parse_deadline', '_rel_deadline', 'cb_bet_amount', 'cb_bet_place', 'cb_market', 'cb_res', 'cmd_bet', 'cmd_bets', 'cmd_cancel', 'cmd_mybets', 'cmd_resolve']
 
@@ -368,8 +371,8 @@ async def _notify_bet_result(message: types.Message, bet_id: int) -> None:
             line = i18n.t(lang, 'bet_notify_lose', id=bet_id, question=common._h(bet['question']), winner=common._h(winner_label), labels=common._h(labels))
         try:
             await message.bot.send_message(tg_id, line)
-        except Exception:
-            pass
+        except Exception as e:
+            log.info("bet #%s result notice never reached %s: %s", bet_id, tg_id, e)
 
 async def _notify_bet_cancelled(message: types.Message, bet_id: int) -> None:
     bet = await common.ledger.get_bet(bet_id)
@@ -385,8 +388,8 @@ async def _notify_bet_cancelled(message: types.Message, bet_id: int) -> None:
         lang = await _lang(tg_id)
         try:
             await message.bot.send_message(tg_id, i18n.t(lang, 'bet_notify_cancel', id=bet_id, question=common._h(bet['question'])))
-        except Exception:
-            pass
+        except Exception as e:
+            log.info("bet #%s cancellation notice never reached %s: %s", bet_id, tg_id, e)
 
 @common.router.message(Command('cancel'))
 async def cmd_cancel(message: types.Message) -> None:

@@ -83,7 +83,6 @@ SITE_TO_MINI = {
     "--success": "--success",
     "--success-bg": "--success-bg",
     "--danger": "--danger",
-    "--danger-bg": "--danger-bg",
     "--warning": "--warning",
     "--nav-bg": "--nav-bg",
     "--on-accent": "--on-accent",
@@ -618,6 +617,145 @@ def test_mono_implies_tabular_digits():
                 )
         assert not offenders, f"{surface}: {offenders}"
         assert not resets, f"{surface}: the font: shorthand wipes the variant after it: {resets}"
+
+
+TRACKED_VOICE_PROPS = ("font-size", "font-family", "font-weight", "letter-spacing",
+                       "color", "font-variant-numeric")
+
+
+def rule_declarations(body: str) -> dict[str, str]:
+    """Every `prop: value` pair of one rule block, whitespace collapsed.
+
+    Different from `declarations()`, which exists for the token blocks and refuses a
+    property it did not read: this one is for ordinary rules, keeps the last word per
+    property and ends a value at `}` as well as at `;`, because the last declaration of
+    a one-line rule is written without its semicolon.
+    """
+    return {name.strip(): " ".join(value.split())
+            for name, value in re.findall(r"([a-z-]+)\s*:\s*([^;{}]+)", body)}
+
+
+def tracked_uppercase_voice(css: str) -> dict[str, dict[str, str]]:
+    """Each class a sheet paints in tracked caps, with the declarations of that rule.
+
+    The premise is the file's own answer, not a list of label classes: a rule counts
+    when it says `text-transform: uppercase` and names a `letter-spacing`. A grouped
+    selector claims the voice for every class in it, which is how the Mini App's
+    `.eyebrow,.input-label,.mini-label` speaks for three, and a `::after` marker claims
+    it for the classes it is drawn on because the marker is painted in their name.
+    """
+    found: dict[str, dict[str, str]] = {}
+    for selector, body in rule_selector_and_body(css):
+        decls = rule_declarations(body)
+        if decls.get("text-transform") != "uppercase" or "letter-spacing" not in decls:
+            continue
+        for cls in re.findall(r"\.([a-z][a-z0-9-]*)", selector):
+            found.setdefault(cls, decls)
+    return found
+
+
+def _letter_spacing(value: str) -> str:
+    """`0.1em` and `.1em` are one tracking written two ways."""
+    match = re.fullmatch(r"(-?[\d.]+)em", value)
+    return f"{float(match.group(1)):.3f}em" if match else value
+
+
+def _site_value_in_mini_words(value: str) -> str:
+    """Rewrite the tokens of a site declaration into the names the Mini App uses."""
+    return re.sub(r"var\((--[a-z0-9-]+)\)",
+                  lambda m: f"var({SITE_TO_MINI.get(m.group(1), m.group(1))})", value)
+
+
+def test_a_tracked_uppercase_voice_always_takes_the_mono_face():
+    """Uppercase with a tracking is this product's annotation voice — a chip, a state
+    tag, a caption under a figure — and every one of them is drawn in the money face.
+    A rule that sets the caps and the tracking but names no family silently inherits
+    the interface face, and the difference is two alphabets of the same word painted
+    two ways on one screen: `.gauge-cap` did exactly that while its three siblings in
+    `style.css` were mono.
+
+    Subject set: every tracked rule of every shipped stylesheet, so a caption invented
+    tomorrow is inside the law the moment it is written. The size is not judged — the
+    voice steps down from `--t-chip` for a label above a thing to `--t-micro` for an
+    inline annotation, and both are the design — the family is.
+    """
+    measured = 0
+    for surface, css in (("style.css", CSS), ("app.html", APP_HTML)):
+        voice = tracked_uppercase_voice(css)
+        measured += len(voice)
+        offenders = sorted(
+            f"{cls} ({decls.get('font-family', 'no font-family at all')})"
+            for cls, decls in voice.items()
+            if decls.get("font-family") != "var(--font-mono)"
+        )
+        assert not offenders, f"{surface}: tracked caps in a face other than the mono one: {offenders}"
+    assert measured >= 16, (
+        f"only {measured} tracked rules read across both stylesheets — a reader that "
+        "went blind would report a product with no annotation voice at all"
+    )
+
+
+def test_a_label_voice_both_stylesheets_paint_is_one_voice():
+    """The Mini App is one document with its own palette, which is why the landing and
+    the app can paint the same `.eyebrow` at two weights and no gate notices until a
+    user moves between them. For a class both surfaces declare in tracked caps, every
+    typographic declaration must be the same voice once the token names are translated —
+    measured as `.eyebrow` and `.stat-label`, and the pair grows by being written.
+
+    What is compared is what the two rules each say: a property one surface names and
+    the other leaves to the cascade is reported too, because the cascade is where a
+    second voice comes from.
+    """
+    site = tracked_uppercase_voice(CSS)
+    mini = tracked_uppercase_voice(APP_HTML)
+    shared = sorted(set(site) & set(mini))
+    assert len(shared) >= 2, (
+        f"the two sheets share {len(shared)} tracked label classes ({shared}) — below two "
+        "this law reads nothing and cannot notice a voice that drifted"
+    )
+
+    for cls in shared:
+        for prop in TRACKED_VOICE_PROPS:
+            want, got = site[cls].get(prop), mini[cls].get(prop)
+            if want is not None:
+                want = _site_value_in_mini_words(want)
+            if prop == "letter-spacing" and want is not None:
+                want = _letter_spacing(want)
+            if prop == "letter-spacing" and got is not None:
+                got = _letter_spacing(got)
+            assert want == got, (
+                f".{cls}: the landing paints {prop}={want}, the Mini App paints {prop}={got}"
+            )
+
+
+def test_the_tracked_voice_reader_reads_the_shapes_a_label_rule_takes():
+    """Both label laws judge a class by what its rule declares, so the reader is held
+    to the shapes those declarations actually take: a grouped selector, a value written
+    without its trailing semicolon, a `.1em` tracking, a `::after` marker, a rule that
+    sets caps without a tracking (a heading, not an annotation) and a tracking without
+    caps (prose, not an annotation)."""
+    sheet = """
+    .a,.b { text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--font-mono) }
+    .c { text-transform: uppercase; letter-spacing: .08em; font-family: var(--ui) }
+    .d { text-transform: uppercase; font-family: var(--font-mono) }
+    .e { letter-spacing: 0.1em; font-family: var(--font-mono) }
+    .f .g::after { text-transform: uppercase; letter-spacing: 0.06em;
+                   font-family: var(--font-mono); color: var(--muted) }
+    /* .h { text-transform: uppercase; letter-spacing: 0.1em } */
+    """
+    voice = tracked_uppercase_voice(sheet)
+    assert set(voice) == {"a", "b", "c", "f", "g"}, (
+        f"the reader answered {sorted(voice)} on markup with a known answer")
+    assert voice["a"] is voice["b"], "a grouped selector must be one voice claimed twice"
+    assert voice["c"]["font-family"] == "var(--ui)", "the last word of a rule must survive"
+    assert voice["f"]["color"] == "var(--muted)", (
+        "a marker split over lines lost its declarations")
+
+    assert _letter_spacing("0.1em") == _letter_spacing(".1em")
+    assert _letter_spacing("0.1em") != _letter_spacing("0.11em")
+    assert _site_value_in_mini_words("var(--muted)") == "var(--text3)"
+    assert _site_value_in_mini_words("var(--font-mono)") == "var(--font-mono)", (
+        "a token with no counterpart keeps its own name rather than becoming nothing")
 
 
 INPUT_TAG_RE = re.compile(r"<input\b[^>]*?/?>", re.S)
@@ -5204,3 +5342,693 @@ def test_the_catch_reader_reads_the_shapes_a_page_takes():
     assert GUARD_RE.search(body) and DOCUMENT_WRITE_RE.search(body) and LOG_RE.search(body)
     assert try_body.strip() == "paint();", "a nested brace ended the try early"
 
+# ---------------------------------------------------------------------------
+# A frame owns the hairlines, and every cell belongs to one
+# ---------------------------------------------------------------------------
+
+HAIRLINE_TOKEN = "--border"
+
+SCRIPT_BLOCK_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.S | re.I)
+STYLE_BLOCK_RE = re.compile(r"<style\b[^>]*>.*?</style>", re.S | re.I)
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+MARKUP_TAG_RE = re.compile(r"<(/?)([a-zA-Z][-\w]*)((?:\"[^\"]*\"|'[^']*'|[^>\"'])*)>")
+
+
+CLASS_ATTR_PAIR_RE = re.compile(r"""class\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+CLASS_TOKEN_SPLIT_RE = re.compile(r"[\s$`{}]+")
+
+
+def class_attribute_tokens(text: str) -> set[str]:
+    """Every class token any `class` attribute in this text paints.
+
+    Tokens are separated by whitespace, so a hyphen joins: `class="lb-row"` is the one class
+    `lb-row`, and a reader that matched the cell `row` inside it (a word boundary sits between
+    the hyphen and the `r`) reported every leaderboard row of the landing as an unframed
+    `.row`. A `${…}` hole is split too, because the template writes the state class after the
+    base one without closing the attribute first.
+    """
+    out: set[str] = set()
+    for match in CLASS_ATTR_PAIR_RE.finditer(text):
+        out.update(token for token in CLASS_TOKEN_SPLIT_RE.split(
+            match.group(1) if match.group(1) is not None else match.group(2)) if token)
+    return out
+
+
+def _paints_class(text: str, cls: str) -> bool:
+    """Whether a `class` attribute in this text paints `cls` as one of its tokens."""
+    return cls in class_attribute_tokens(text)
+
+
+def _classes_on(tag_rest: str) -> set[str]:
+    match = CLASS_ATTR_PAIR_RE.search(tag_rest)
+    if match is None:
+        return set()
+    return set(CLASS_TOKEN_SPLIT_RE.split(
+        match.group(1) if match.group(1) is not None else match.group(2))) - {""}
+
+
+def _token_painted(value: str) -> str | None:
+    """The token a `background` declaration paints, or None when it paints anything else."""
+    match = re.fullmatch(r"var\((--[a-z0-9-]+)\)", value.strip())
+    return match.group(1) if match else None
+
+
+def own_declarations_by_class(css: str) -> dict[str, dict[str, str]]:
+    """Each class the sheet paints by itself, with the declarations of that rule.
+
+    `.markets .market-card` paints a child of a frame rather than a class, so a descendant
+    part contributes nothing here — which is how a card that carries its own border and
+    radius on an open page, and loses both inside the frame, stays out of the cell
+    inventory. Two rules naming one class merge, the later declaration winning key by key.
+    """
+    out: dict[str, dict[str, str]] = {}
+    for selector, body in rule_selector_and_body(css):
+        decls = rule_declarations(body)
+        for part in selector.split(","):
+            own = re.fullmatch(r"\.([a-zA-Z][-\w]*)", part.strip())
+            if own:
+                out.setdefault(own.group(1), {}).update(decls)
+    return out
+
+
+def _own_rule(css: str, cls: str) -> dict[str, str]:
+    """The declarations of the rule that paints `.cls` itself, not its children."""
+    for selector, body in rule_selector_and_body(css):
+        if any(part.strip() == f".{cls}" for part in selector.split(",")):
+            return rule_declarations(body)
+    return {}
+
+
+def frame_classes(css: str) -> dict[str, str]:
+    """Classes the sheet lays out as a frame: a one-pixel gap over the hairline token.
+
+    The divider between two rows is the frame's own background seen through its gap, so
+    being a frame is a property of those two declarations and never of a name — a list that
+    trades `gap: 1px` for `gap: 8px` separates its cells with air and paints no hairline.
+    """
+    return {
+        cls: HAIRLINE_TOKEN
+        for cls, decls in own_declarations_by_class(css).items()
+        if decls.get("gap", "").strip() == "1px"
+        and _token_painted(decls.get("background", "")) == HAIRLINE_TOKEN
+    }
+
+
+def cell_classes(css: str) -> dict[str, str]:
+    """Classes the sheet paints as a cell: padded, on a ground of its own, with no border.
+
+    A rule that draws its own box is a card rather than a row, and a rule lifted out of the
+    flow by `position` is a layer no gap can separate. Both are refused by what the rule
+    declares, not by a remembered name.
+    """
+    out: dict[str, str] = {}
+    for cls, decls in own_declarations_by_class(css).items():
+        ground = _token_painted(decls.get("background", ""))
+        if ground is None or ground == HAIRLINE_TOKEN or "padding" not in decls:
+            continue
+        if "position" in decls or any(key.startswith("border") for key in decls):
+            continue
+        out[cls] = ground
+    return out
+
+
+def markup_outside_code(text: str) -> str:
+    """The document a browser parses, with the code the same file carries taken out.
+
+    A template literal is not markup: the row inside a JS string is painted into a
+    container no reader sees from this file, so its containment is judged by the code half.
+    """
+    return HTML_COMMENT_RE.sub(" ", SCRIPT_BLOCK_RE.sub(" ", STYLE_BLOCK_RE.sub(" ", text)))
+
+
+def code_only(text: str) -> str:
+    """The opposite half of a document: the code it carries, with the markup taken out."""
+    return "".join(SCRIPT_BLOCK_RE.findall(text))
+
+
+def markup_walk(text: str, frames):
+    """Yield each element the markup paints: its classes, its id, its enclosing frames, its path.
+
+    Scripts, styles and comments are taken out first — the walk answers what the browser parses
+    as document, not what a template literal mentions.
+    """
+    stack: list[tuple[set[str], str]] = []
+    for tag in MARKUP_TAG_RE.finditer(markup_outside_code(text)):
+        closing, name, rest = tag.group(1), tag.group(2).lower(), tag.group(3)
+        classes = _classes_on(rest)
+        if closing:
+            for index in range(len(stack) - 1, -1, -1):
+                if stack[index][1] == name:
+                    del stack[index:]
+                    break
+            continue
+        identifier = ID_ATTRIBUTE_RE.search(rest)
+        enclosing = frozenset(cls for seen, _ in stack for cls in (seen & set(frames)))
+        path = ">".join(n for _, n in stack) or "top of the document"
+        yield (classes,
+               (identifier.group(1) or identifier.group(2)) if identifier else None,
+               enclosing, path)
+        if name not in VOID_TAGS and not rest.rstrip().endswith("/"):
+            stack.append((classes, name))
+
+
+def frames_around_ids(text: str, frames) -> dict[str, frozenset[str]]:
+    """Each id the markup paints, with the frame classes on that element or above it."""
+    out: dict[str, frozenset[str]] = {}
+    for classes, element_id, enclosing, _path in markup_walk(text, frames):
+        if element_id:
+            out[element_id] = enclosing | frozenset(classes & set(frames))
+    return out
+
+
+def cells_painted_in_markup(text: str, frames, cells) -> list[tuple[str, bool, str]]:
+    """Every cell the markup itself paints, with whether a frame encloses it and where."""
+    return [(cls, bool(enclosing), path)
+            for classes, _id, enclosing, path in markup_walk(text, frames)
+            for cls in sorted(classes & set(cells))]
+
+
+def opens_a_frame(body: str, frames) -> bool:
+    return any(_paints_class(body, frame) for frame in frames)
+
+
+def writes_a_cell(body: str, cells) -> list[str]:
+    """The cell classes a piece of code paints, beside any other class and in any order."""
+    return sorted(cls for cls in cells if _paints_class(body, cls))
+
+
+NODE_WRITE_RE = re.compile(
+    r"\.(?:innerHTML|outerHTML|textContent|innerText)\s*(?:\+?=)(?!=)\s*|"
+    r"\.(?:append|insertAdjacentHTML)\s*\("
+)
+
+
+def paints_into_a_node(body: str) -> bool:
+    """Whether this function puts its own markup into the live document.
+
+    Such a body is where the composition ends: what surrounds the rows it writes is whatever
+    the page already painted, and no caller can insert a frame into a container this function
+    chose for itself. A function that only returns a string has that caller, and is judged by
+    the call graph instead.
+    """
+    return NODE_WRITE_RE.search(body) is not None
+
+
+ID_HOLDER_RE = re.compile(
+    r"""(?P<call>\$\(\s*['"][^'"]+['"]\s*\)"""
+    r"""|document\.getElementById\(\s*['"][^'"]+['"]\s*\)"""
+    r"""|document\.querySelector\(\s*['"][^'"]+['"]\s*\))"""
+    r"""|(?P<name>[A-Za-z_$][\w$]*)"""
+)
+ID_ATTRIBUTE_RE = re.compile(r"""\bid\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+BOUND_NODE_RE = re.compile(
+    r"(?:const|let|var)\s+(?P<name>[A-Za-z_$][\w$]*)\s*=\s*"
+    r"(?P<node>\$\(\s*['\"][^'\"]+['\"]\s*\)|document\.getElementById\(\s*['\"][^'\"]+['\"]\s*\)"
+    r"|document\.querySelector\(\s*['\"]#[^'\"]+['\"]\s*\))"
+)
+ID_SELECTOR_RE = re.compile(r"""['"]#?([\w-]+)['"]""")
+NODE_WRITE_ASSIGN_RE = re.compile(
+    r"(?P<holder>\$\(\s*['\"][^'\"]+['\"]\s*\)|document\.getElementById\(\s*['\"][^'\"]+['\"]\s*\)"
+    r"|document\.querySelector\(\s*['\"][^'\"]+['\"]\s*\)|[A-Za-z_$][\w$]*)"
+    r"\s*\.(?:innerHTML|outerHTML)\s*="
+)
+
+
+def statement_value(text: str, start: int) -> str:
+    """The expression a node write assigns, read to the `;` that ends *its own* statement.
+
+    Cutting at the first semicolon lands inside a `.map(mk => { … })` callback, which is where
+    half of these writes build their rows: the shipped `renderMarkets` paints its
+    `.market-card` cells two `;` past the `=`. So braces, brackets, parens, strings and
+    template literals are balanced here, and a closer at depth zero ends the read too, because
+    that is the `}` of the block the statement sits in.
+    """
+    depth = 0
+    quote: str | None = None
+    index = start
+    while index < len(text):
+        char = text[index]
+        if quote is not None:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+        elif char in "\"'`":
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if depth == 0:
+                return text[start:index]
+            depth -= 1
+        elif char == ";" and depth == 0:
+            return text[start:index]
+        index += 1
+    return text[start:]
+
+
+LOCAL_DECL_RE = re.compile(
+    r"(?:const|let|var)\s+(?P<name>[A-Za-z_$][\w$]*)\s*=\s*(?P<start>\S)", re.S)
+
+
+def value_reaches_a_cell(value: str, body: str, name: str,
+                         functions: dict[str, str], cells) -> list[str]:
+    """The cell classes this expression paints — itself, or one hop away.
+
+    A write rarely spells its rows inline: `topList.innerHTML = topRows ? …` keeps the
+    `.top-item` markup in the `const topRows` two lines above, and a writer that composes
+    through `rows.map(ocCard)` keeps it in a callee. Both are still the same composition
+    decision made in this expression, so both are read here; without the hops the shipped
+    top-5 list sat outside the law entirely, and the class it paints could have gone loose
+    unnoticed.
+    """
+    painted = writes_a_cell(value, cells)
+    if painted:
+        return painted
+    for other in sorted(functions):
+        if other != name and calls(other).search(value):
+            built = writes_a_cell(functions[other], cells)
+            if built:
+                return built
+    for decl in LOCAL_DECL_RE.finditer(body):
+        if decl.group("name") == name or not re.search(
+                rf"\b{re.escape(decl.group('name'))}\b", value):
+            continue
+        local = statement_value(body, decl.start("start"))
+        built = writes_a_cell(local, cells)
+        if built:
+            return built
+        for other in sorted(functions):
+            if other != name and calls(other).search(local):
+                called = writes_a_cell(functions[other], cells)
+                if called:
+                    return called
+    return []
+
+
+def node_writes(body: str, cells, functions: dict[str, str],
+                name: str) -> list[tuple[str | None, list[str], str]]:
+    """Each node this function writes rows into: its id, the cells, and the value painted.
+
+    Only the writes that paint rows are returned: a body that fills a card with a sentence
+    composes nothing this law owns.
+    """
+    out: list[tuple[str | None, list[str], str]] = []
+    for match in NODE_WRITE_ASSIGN_RE.finditer(body):
+        value = statement_value(body, match.end())
+        painted = value_reaches_a_cell(value, body, name, functions, cells)
+        if painted:
+            out.append((_holder_id(match.group("holder"), body), painted, value))
+    return out
+
+
+def value_opens_a_frame(value: str, name: str, functions: dict[str, str], frames) -> bool:
+    """Whether this write's own expression frames the rows — itself, or through a callee.
+
+    `c.innerHTML = rowFrame(rows)` is framed by a function two tokens away, so the callee
+    half is real; what the check refuses to accept is a *caller* framing the result, because
+    a function that writes into the document has already decided where the rows go.
+    """
+    if opens_a_frame(value, frames):
+        return True
+    return any(other != name and other in functions and calls(other).search(value)
+               and reaches_a_frame(other, functions, frames) for other in functions)
+
+
+def _holder_id(holder: str, body: str) -> str | None:
+    """The element id a write's left-hand side names, or None when the code cannot say.
+
+    `$("historyList").innerHTML =` names it outright; `box.innerHTML =` names it two lines
+    earlier, through the `var box = $('historyList')` the same function body holds — and the
+    landing's history and positions lists are painted the second way, so a reader that only
+    resolved the first would report the page's own rows as unowned.
+    """
+    call = ID_HOLDER_RE.fullmatch(holder.strip())
+    if call is None:
+        return None
+    if call.group("call"):
+        return _node_id(call.group("call"))
+    binding = next((match for match in BOUND_NODE_RE.finditer(body)
+                    if match.group("name") == call.group("name")), None)
+    return _node_id(binding.group("node")) if binding else None
+
+
+def _node_id(selector: str | None) -> str | None:
+    if selector is None:
+        return None
+    match = ID_SELECTOR_RE.search(selector)
+    return match.group(1) if match else None
+
+
+def calls(name: str) -> re.Pattern[str]:
+    """A use of the global `name` — a call, or the builder handed to `.map()` as it is.
+
+    `oc.map(ocCard)` frames rows exactly as `ocCard()` builds them, and a reader that
+    demanded a parenthesis reported that builder as called by nothing. A property of
+    something else (`view.ocCard()`) is not this call, a longer name (`ocCardRow()`) is not
+    this name, and the definition is not a use of it.
+    """
+    return re.compile(rf"(?<![\w$.])(?<!function\s){re.escape(name)}\s*(?=[(,)\]])")
+
+
+def reaches_a_frame(name: str, functions: dict[str, str], frames, seen: set[str] | None = None) -> bool:
+    """Whether this function opens a frame, or calls something that reaches one.
+
+    A sheet is composed at run time — a cell builder hands its markup to a frame builder —
+    so containment is a fact about the call graph, not about the text of either function.
+    A frame painted by a callee counts, and a cycle stops.
+    """
+    seen = {name} if seen is None else seen
+    body = functions[name]
+    if opens_a_frame(body, frames):
+        return True
+    return any(
+        other not in seen
+        and calls(other).search(body)
+        and reaches_a_frame(other, functions, frames, seen | {other})
+        for other in functions
+    )
+
+
+FRAME_SURFACES = [
+    pytest.param(CSS, LIGHT, DARK, id="style_css"),
+    pytest.param(APP_HTML, MINI_LIGHT, MINI_DARK, id="app_html"),
+]
+
+CODE_SURFACES = tuple((name, read(name)) for name in SCRIPTS + PAGES)
+
+
+@pytest.mark.parametrize("css,light,dark", FRAME_SURFACES)
+def test_a_frame_divides_with_the_hairline_and_a_cell_paints_another_ground(css, light, dark):
+    """The recipe, read off both stylesheets rather than from one remembered pair.
+
+    Measured this wave: `style.css` lays out two frames (`.markets`, `.rows`) and paints one
+    cell (`.row`); the Mini App lays out three (`.action-row`, `.list-group`, `.stats`) and
+    paints seven (`.action-btn`, `.lang-item`, `.market-card`, `.stat`, `.top-item`,
+    `.tx-item`, `.wd-row`). Being a frame and being a cell are the declarations above, so
+    what this law adds is the cross-check: no cell in either theme resolves to the colour
+    the frame shows through its gap, and it is judged token by token, not name by name —
+    a cell whose own token aliases onto `--border` paints no divider and would answer any
+    law that only compared the two names.
+    """
+    frames, cells = frame_classes(css), cell_classes(css)
+    assert len(frames) >= 2 and len(cells) >= 1, (
+        f"this sheet lays out {len(frames)} frames and paints {len(cells)} cells — the "
+        "recipe the design composes its lists from is no longer readable off its declarations"
+    )
+    for theme, tokens in (("light", light), ("dark", dark)):
+        hairline = resolve(tokens, HAIRLINE_TOKEN)
+        for cell, ground in sorted(cells.items()):
+            assert resolve(tokens, ground) != hairline, (
+                f".{cell} paints {ground} = {resolve(tokens, ground)} in the {theme} theme, "
+                "the colour the frame separates its rows with: the divider draws nothing"
+            )
+
+
+def test_a_row_painted_in_markup_is_enclosed_by_its_frame():
+    """A cell the document writes itself owes a frame the same document writes.
+
+    The subject set is every page in the bundle, each judged against the stylesheet that
+    styles it — the Mini App against its own `<style>`, the site pages against `style.css`.
+    Measured this wave: 33 cells painted in markup — nine in the Mini App (three
+    `.action-btn`, three `.lang-item`, three `.stat`), twelve on the landing and six each on
+    the dead-end page and `/u/{id}` — and none of them loose. The language list is the
+    shipped case: three `.lang-item` rows inside `<div class="list-group">`. The hairline
+    between them, the inset that makes them read as one list and the radius that closes it
+    all belong to that frame, so dropping its class is three stray lines in a box.
+    """
+    loose: list[tuple[str, str, str]] = []
+    painted = 0
+    for page in PAGES:
+        text = read(page)
+        css = text if page == "app.html" else CSS
+        frames, cells = frame_classes(css), cell_classes(css)
+        for cls, framed, path in cells_painted_in_markup(text, frames, cells):
+            painted += 1
+            if not framed:
+                loose.append((page, cls, path))
+    assert painted >= 24, (
+        f"{painted} cells are painted in the markup of {len(PAGES)} pages while the shipped "
+        "tree paints thirty-three — the walk that counts them stopped seeing the lists it "
+        "judges"
+    )
+    assert not loose, (
+        f"these cells are painted with no frame around them: {loose} — the divider, the inset "
+        "and the closing radius belong to the frame, so each of these is a stray line"
+    )
+
+
+def test_a_mini_app_row_builder_hands_every_cell_it_paints_to_a_frame():
+    """A builder that returns markup is framed by whoever takes it, and that is checkable.
+
+    Measured this wave: seven functions in `app.html` paint a cell class. Four write their
+    markup into a node of their own choosing — those are the code-surface law's business,
+    because no caller stands between them and the screen. The remaining three hand back a
+    string: `availableLine()` and `ocCard()` reach a frame through a callee (`rowFrame()` and
+    `ocBlock()`), and `infoRow()` returns a bare `.wd-row` and is framed by every caller,
+    which is the shape the withdraw sheet was written in when its four rows went out loose.
+    A cell primitive is only correct while nobody takes it without a frame around the result.
+    """
+    frames, cells = frame_classes(APP_HTML), cell_classes(APP_HTML)
+    functions = js_functions(APP_HTML)
+    emitters = {name: body for name, body in functions.items()
+                if writes_a_cell(body, cells) and not paints_into_a_node(body)}
+    assert len(emitters) >= 3, (
+        f"{len(emitters)} functions in the app hand back cell markup while the file ships "
+        "three — fewer means the reader stopped seeing the sheets it exists to judge"
+    )
+    for name, body in sorted(emitters.items()):
+        if reaches_a_frame(name, functions, frames):
+            continue
+        painted = writes_a_cell(body, cells)
+        callers = sorted(other for other, other_body in functions.items()
+                         if other != name and calls(name).search(other_body))
+        assert callers, (
+            f"{name}() paints {painted} and calls nothing that frames them, and no code calls "
+            f"it at all, so those rows reach the screen loose: {body.strip()[:60]}…"
+        )
+        naked = [other for other in callers if not reaches_a_frame(other, functions, frames)]
+        assert not naked, (
+            f"{name}() returns a bare {painted}, and {naked} take it without opening a frame "
+            "around the result — those cells are drawn without the hairline the frame is the "
+            "only thing that paints"
+        )
+
+
+def test_a_row_written_into_a_node_is_framed_by_the_write_or_by_the_page():
+    """A function that paints rows into a container owes the frame from one of two places.
+
+    The site and the Mini App compose the same row two different ways, and both are legal:
+    `site.js` returns bare `.row` divs into the `<div class="rows" id="historyList">` that
+    `index.html` writes, while every Mini App writer opens its own `<div class="list-group">`
+    around the rows it hands to a plain `<div id="marketsList">`. So a row write is framed
+    when its own value opens a frame — directly or through a callee — or when the element the
+    code names carries one, or sits inside one, in every document that carries the code.
+
+    Measured this wave: eight row writes over four code surfaces — four in `app.html`
+    (`renderBets`, `renderHistory`, `renderMarkets`, `renderMore`) framed by their own value,
+    and four (`agent.js::loadAudit` into `#audit`, `app.js::paintX402Answer` into
+    `#x402Answer`, `site.js::renderHistory` into `#historyList`, `site.js::renderPositions`
+    into `#positionsList`) framed by the markup of the page that carries the script. Both
+    halves of the disjunction are therefore live in the tree, and a mutation to either side
+    of either one is caught.
+
+    What the law cannot see is a writer that names no container — `container.innerHTML = rows`
+    with `container` handed in as a parameter. Such a body is still judged, but only by its own
+    value, which is why the message says so; and the pairing of a target id to a *specific*
+    element is per document, so a page that carries the id twice answers with the union.
+    """
+    judged = 0
+    for name, text in CODE_SURFACES:
+        css = text if name == "app.html" else CSS
+        frames, cells = frame_classes(css), cell_classes(css)
+        code = text if name in SCRIPTS else code_only(text)
+        functions = js_functions(code)
+        documents = ([name] if name in PAGES else
+                     [page for page in PAGES
+                      if name in {src.rsplit("/", 1)[-1] for src in page_scripts(page)}])
+        framed_by_id = {doc: frames_around_ids(read(doc), frames) for doc in documents}
+        for fn, body in sorted(functions.items()):
+            for element_id, painted, value in node_writes(body, cells, functions, fn):
+                judged += 1
+                if value_opens_a_frame(value, fn, functions, frames):
+                    continue
+                if element_id is None:
+                    raise AssertionError(
+                        f"{name}::{fn}() writes {painted} into a node it does not name, and "
+                        "neither its own body nor anything it calls opens a frame, so nothing "
+                        "in this tree says those rows are divided"
+                    )
+                carriers = {doc: sorted(framed_by_id[doc][element_id])
+                            for doc in documents if element_id in framed_by_id[doc]}
+                assert carriers, (
+                    f"{name}::{fn}() writes {painted} into #{element_id}, which no document "
+                    f"that carries this code paints — {documents} have no such element"
+                )
+                naked = sorted(doc for doc, found in carriers.items() if not found)
+                assert not naked, (
+                    f"{name}::{fn}() writes bare {painted} into #{element_id} on {naked}, "
+                    f"which neither carries a frame ({sorted(frames)}) nor sits inside one: "
+                    "those rows are drawn without the divider the frame is the only thing "
+                    "that paints"
+                )
+    assert judged >= 6, (
+        f"{judged} row writes were judged while the shipped tree has eight — the reader "
+        "stopped seeing the assignments that compose the lists it exists to judge"
+    )
+
+
+def test_the_frame_and_cell_readers_read_the_shapes_a_surface_takes():
+    """Four readers judge composition, so each is held to the shapes composition takes.
+
+    A reader that quietly returned nothing would certify a tree where every list had lost
+    its frame, which is the failure this section exists to refuse.
+    """
+    assert frame_classes(".a{gap:1px;background:var(--border)}") == {"a": HAIRLINE_TOKEN}
+    assert frame_classes(".a{gap: 1px;background: var(--border)}") == {"a": HAIRLINE_TOKEN}
+    assert frame_classes(".a{gap:8px;background:var(--border)}") == {}, "air is not a divider"
+    assert frame_classes(".a{gap:1px;background:var(--card2)}") == {}, (
+        "a gap over a surface paints no hairline")
+    assert frame_classes(".a b{gap:1px;background:var(--border)}") == {}, (
+        "a descendant selector lays out a frame's children, not the class")
+    assert frame_classes(".a,.b{gap:1px;background:var(--border)}") == {
+        "a": HAIRLINE_TOKEN, "b": HAIRLINE_TOKEN}, "a grouped selector frames both classes"
+
+    assert cell_classes(".c{padding:12px;background:var(--bg)}") == {"c": "--bg"}
+    assert cell_classes(".c{padding:12px;background:var(--bg);border:1px solid var(--border)}") == {}, (
+        "a rule that draws its own box is a card, not a cell")
+    assert cell_classes(".c{padding:12px;background:var(--bg);position:fixed}") == {}, (
+        "a layer out of the flow has no gap to sit in")
+    assert cell_classes(".c{background:var(--bg)}") == {}, "a panel with no inset is not a row"
+    assert cell_classes(".c{padding:8px;background:var(--border)}") == {}, (
+        "a cell painting the hairline erases the divider it lives on")
+    assert cell_classes(".c{padding:12px;background:#1a1a1a}") == {}, (
+        "a raw colour is no token, so the palette law owns it and this one cannot resolve it")
+
+    merged = own_declarations_by_class(".c{padding:12px;background:var(--bg)}"
+                                       "@media (pointer:coarse){.c{border:1px solid var(--border)}}")
+    assert merged["c"]["border"].startswith("1px"), (
+        "two rules for one class are one box, and the merge is the cascade the browser applies")
+
+    markup = ('<div class="rows"><div class="row">a</div><section><p class="row">b</p></section>'
+              '</div><i/><div class="rows-x"><b class="row d">e</b></div>'
+              "<div class=\"list-group\"><span class='row'>f</span></div><div class=\"row\">c</div>")
+    found = cells_painted_in_markup(markup, {"rows", "list-group"}, {"row"})
+    assert [(cls, framed) for cls, framed, _ in found] == [
+        ("row", True), ("row", True), ("row", False), ("row", True), ("row", False)], (
+        "the walk lost an enclosure, read a self-closed tag as an ancestor, or missed a "
+        "second class on a cell")
+    assert found[2][2] == "div", "an unframed cell owes the chain of tags it was painted in"
+    assert cells_painted_in_markup('<script>`<div class="row">x</div>`</script>', {"rows"}, {"row"}) == [], (
+        "a template literal is not markup")
+    assert [cls for cls, _f, _ in cells_painted_in_markup(
+        '<ul class="rows-x"><li class="row">a</li></ul>', {"rows"}, {"row"})] == ["row"], (
+        "a class that only starts like the frame frames nothing, and the cell under it is "
+        "reported loose")
+    assert code_only('<script>var a = 1;</script><p class="row">x</p>') == "<script>var a = 1;</script>"
+
+    functions = {
+        "framedHere": 'return rowFrame(`<div class="wd-row">a</div>`);',
+        "rowFrame": 'return rows ? `<div class="list-group">${rows}</div>` : "";',
+        "cell": 'return `<div class="wd-row">b</div>`;',
+        "caller": "html = rowFrame(cell() + cell());",
+        "mapped": "html = rowFrame(list.map(cell));",
+        "stray": 'html = `<div class="wd-row">c</div>`;',
+        "loose": "return cell();",
+        "deep": "return second();",
+        "second": "return rowFrame(cell());",
+        "receller": "return receller();",
+        "dotCall": "return view.rowFrame(cell());",
+        "widerName": "return rowFrames();",
+        "rowFrames": 'return "<div class=\\"wd-row\\">d</div>";',
+    }
+    frames = {"list-group"}
+    assert reaches_a_frame("framedHere", functions, frames)
+    assert reaches_a_frame("rowFrame", functions, frames)
+    assert reaches_a_frame("caller", functions, frames)
+    assert reaches_a_frame("mapped", functions, frames), "a builder handed to `.map` is called"
+    assert reaches_a_frame("deep", functions, frames), "a frame two calls away is still a frame"
+    assert not reaches_a_frame("cell", functions, frames)
+    assert not reaches_a_frame("stray", functions, frames)
+    assert not reaches_a_frame("loose", functions, frames)
+    assert not reaches_a_frame("receller", functions, frames), "a cycle must not answer yes"
+    assert not reaches_a_frame("dotCall", functions, frames), (
+        "`view.rowFrame()` is a property of something else, not this frame builder")
+    assert not reaches_a_frame("widerName", functions, frames), (
+        "`rowFrames()` is a longer name, not a call of `rowFrame()`")
+
+    assert writes_a_cell('<div class="tx-item active">', {"tx-item"}) == ["tx-item"], (
+        "a cell class beside a state class is still this cell")
+    assert writes_a_cell('<div class="tx-itemize">', {"tx-item"}) == [], (
+        "a longer class name is not this cell")
+    assert writes_a_cell("<div class='wd-row'>", {"wd-row"}) == ["wd-row"], (
+        "a single-quoted class attribute paints the same cell")
+
+    assert _own_rule(".a b{background:var(--card2)}", "a") == {}, (
+        "a descendant selector paints a child, not the class this law asks about")
+    assert _own_rule(".a{background:var(--bg)}.a b{background:var(--card2)}", "a") == (
+        {"background": "var(--bg)"}), "the rule that paints the class must be the one read"
+    assert _own_rule(".c,.a{gap:1px}", "a") == {"gap": "1px"}, "a grouped selector still paints the class"
+    assert _own_rule(".a{color:red}", "b") == {}, "a class the sheet has no rule for is reported"
+
+    assert class_attribute_tokens('<div class="lb-row">') == {"lb-row"}, (
+        "a class token is split at whitespace, not at a hyphen: `lb-row` is one class, and "
+        "reading the cell `row` inside it put every leaderboard row of the landing on trial")
+    assert class_attribute_tokens('<div class=\'row active\'>') == {"row", "active"}, (
+        "single quotes carry the same two classes")
+    hole = class_attribute_tokens('class="chip${v === 1 ? \' active\' : \'\'}"')
+    assert "chip" in hole, "a class a template interrupts is still read as itself"
+    assert not any(token.startswith("chip$") for token in hole), (
+        "the hole is split, not glued onto the base class")
+    assert _paints_class('<div class="lb-row">', "row") is False
+    assert _paints_class('<div class="row lb">', "row") is True
+
+    assert statement_value('x = 1; y = 2', 4) == "1", "a statement ends at its own semicolon"
+    assert statement_value('a.innerHTML = rows.map(function (r) {\n'
+                           '  var i = 1;\n'
+                           '  return "<b class=\\"row\\">" + i + "</b>";\n'
+                           '}).join("");\nnext = 2;', 14) == (
+        'rows.map(function (r) {\n  var i = 1;\n'
+        '  return "<b class=\\"row\\">" + i + "</b>";\n}).join("")'), (
+        "the read crosses the semicolons a `.map` callback is built from, and stops at the one "
+        "that ends the assignment — cutting at the first `;` loses every row of the list")
+    assert statement_value('if (a) { x = "<b>"; }', 13) == '"<b>"', (
+        "a statement inside a block ends at its own semicolon, not at the block's brace")
+
+    writer = ('function renderHistory() {\n'
+              '  const c = document.getElementById(\'historyList\');\n'
+              '  if (!m.length) { c.innerHTML = `<div class="empty">none</div>`; return; }\n'
+              '  c.innerHTML = `<div class="list-group">` + m.map(marketCard).join("");\n'
+              '}\n'
+              'function marketCard(m) { return `<div class="market-card">${m.q}</div>`; }')
+    writer_functions = js_functions(writer)
+    assert paints_into_a_node(writer_functions["renderHistory"]) is True
+    assert paints_into_a_node(writer_functions["marketCard"]) is False, (
+        "a function returning a string paints nothing until someone writes it")
+    writes = node_writes(writer_functions["renderHistory"], {"market-card"}, writer_functions,
+                         "renderHistory")
+    assert [element_id for element_id, _p, _v in writes] == ["historyList"], (
+        f"a write through `const c = document.getElementById('historyList')` must still name "
+        f"the element, and the empty-state line must not join the subject set: {writes}")
+    assert writes[0][1] == ["market-card"], (
+        f"the rows this write paints arrive through `marketCard`: {writes[0]}")
+    assert value_reaches_a_cell('`<div class="empty">none</div>`', writer, "renderHistory",
+                                writer_functions, {"market-card"}) == [], (
+        "a line that says there is nothing to show paints no cell")
+    assert value_reaches_a_cell(writer, writer, "renderHistory", writer_functions,
+                                {"market-card"}) == ["market-card"], (
+        "a body whose rows arrive through a callee is still a row writer")
+    assert value_reaches_a_cell('<div class="stat">${num(v)}</div>', "", "s",
+                                {"num": "return String(v);"}, {"stat"}) == ["stat"]
+    assert value_reaches_a_cell('<div class="s">${row()}</div>', "var row = `<b class=\"top-item\">"
+                                "</b>`;", "x", {"row": "return topItem();"}, {"top-item"}) == (
+        ["top-item"]), "a local one hop away is read, which is how the top-5 list is built"
+
+    framed_page = ('<div class="list-group" id="topList"></div>'
+                   '<section class="stats"><div id="statUsers"></div></section>'
+                   '<div id="loose"></div>')
+    found = frames_around_ids(framed_page, {"list-group", "stats"})
+    assert found["topList"] == frozenset({"list-group"}), "a frame paints the element itself"
+    assert found["statUsers"] == frozenset({"stats"}), "a frame wraps it from the tag above"
+    assert found["loose"] == frozenset(), "an element nothing frames answers with nothing"

@@ -55,6 +55,7 @@ __all__ = [
     "config",
     "creator_tokens",
     "ledger",
+    "paint_or_send",
     "paymaster",
     "qrlib",
     "recurring",
@@ -129,8 +130,8 @@ async def _on_error(event: types.ErrorEvent) -> None:
             if fu is not None:
                 lang = await user_lang(fu.id)
             await bot.send_message(ev.chat.id, i18n.t(lang, "error_generic"))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("the generic error line never reached the user: %s", e)
 
     admin = int(config.ADMIN_TG_ID) if config.ADMIN_TG_ID else 0
     if not admin or bot is None:
@@ -404,3 +405,39 @@ async def _edit_menu(cb: types.CallbackQuery, text: str, reply_markup=None) -> N
             # bot.
             log.warning("menu edit refused (user=%s markup=%s): %s",
                         cb.from_user.id, bool(reply_markup), text[:80])
+
+
+async def paint_or_send(cb: types.CallbackQuery, text: str, *,
+                        reply_markup=None, what: str = "") -> None:
+    """Put a verdict the user already paid for on their screen.
+
+    ``_edit_menu`` repaints a menu: if Telegram refuses, the old menu is still
+    a correct picture of the world. A *receipt* is different — the money has
+    moved and the card the user is looking at says "processing", so a refused
+    edit is not a cosmetic miss: the buttons under that card invite the same
+    tap again. When the edit is refused the text therefore goes out as a new
+    message, and only if that too fails does the wave end in a log line.
+
+    "message is not modified" is the one refusal that needs no second message:
+    the text on screen already *is* the verdict, and sending it again would
+    hand the user the same receipt twice.
+    """
+    message = getattr(cb, "message", None)
+    if message is None:
+        log.error("verdict undeliverable (%s): the callback carried no message — %s",
+                  what or "unknown", text[:80])
+        return
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+        return
+    except Exception as e:
+        if "not modified" in str(e).lower():
+            return
+        log.warning("receipt edit refused (%s, user=%s): %s",
+                    what or "unknown", getattr(cb.from_user, "id", "?"), e)
+    try:
+        await message.answer(text, reply_markup=reply_markup)
+    except Exception as e:
+        log.error("receipt undeliverable (%s, user=%s): %s | text was: %s",
+                  what or "unknown", getattr(cb.from_user, "id", "?"), e, text[:120])
+

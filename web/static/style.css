@@ -38,8 +38,10 @@
 
   --success: #10693f;
   --success-bg: rgba(16, 105, 63, 0.08);
+  /* There is no danger tint beside this colour, and no token for one: base paints
+     a state on the figure that carries it, and nothing in this product fills chrome
+     with an error colour. The palette law reads a token nothing reads. */
   --danger: #b42318;
-  --danger-bg: rgba(180, 35, 24, 0.07);
 
   /* legacy aliases still referenced by page CSS/JS */
   --bg: var(--canvas);
@@ -127,7 +129,6 @@
   --success: #4bd09b;
   --success-bg: rgba(75, 208, 155, 0.14);
   --danger: #ff7a70;
-  --danger-bg: rgba(255, 122, 112, 0.12);
 
   --warning: #d99a2b;
   --warning-bg: rgba(217, 154, 43, 0.14);
@@ -664,7 +665,8 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
   font-size: var(--t-h3); font-weight: 600; text-anchor: middle;
 }
 .gauge-cap {
-  fill: var(--muted); font-size: var(--t-micro); letter-spacing: 0.08em;
+  fill: var(--muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--t-micro); letter-spacing: 0.08em;
   text-transform: uppercase; text-anchor: middle;
 }
 .gauge-detail { margin: 0; font-size: var(--t-small); color: var(--muted); }

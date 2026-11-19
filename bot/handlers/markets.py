@@ -1,5 +1,6 @@
 ﻿"""Prediction markets v2: Polymarket-style LMSR AMM handlers."""
 import json
+import logging
 import time
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -14,6 +15,8 @@ from ..ledger import lmsr_prices
 from ..pct import as_pct
 from . import _common as common
 from .bets import _parse_deadline, _rel_deadline
+
+log = logging.getLogger("tipbot.markets")
 
 __all__ = ['_market_card', '_market_create', '_markets_text', '_notify_market_result', 'cb_market_card', 'cb_market_list', 'cb_mk_buy', 'cb_mk_cancel', 'cb_mk_do', 'cb_mk_resolve', 'cb_mk_sell', 'cb_mk_selldo', 'cmd_market', 'cmd_markets', 'cmd_positions', 'cmd_sell', 'cmd_trade']
 _SELL_PCTS = ('25', '50', '100')
@@ -464,5 +467,5 @@ async def _notify_market_result(message: types.Message, mid: int, payouts: list[
             line = i18n.t(lang, 'market_lose', mid=mid, question=common._h(m['question']), winner=common._h(winner_label))
         try:
             await message.bot.send_message(int(p['tg_id']), line)
-        except Exception:
-            pass
+        except Exception as e:
+            log.info("market payout notice never reached %s: %s", p['tg_id'], e)

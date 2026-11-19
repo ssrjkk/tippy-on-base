@@ -117,8 +117,8 @@ async def _trade_keyboard(mid: int, options: list[str], tg_id: int | None) -> ty
                     if bal > 0:
                         rows.append([types.InlineKeyboardButton(
                             text=common.btn_text(f"▼ sell {options[i][:20]}"), callback_data=f"ocsell:{mid}:{i}")])
-        except Exception:
-            pass  # the card must render even if the balance probe fails
+        except Exception as e:
+            log.warning("onchain sell buttons for #%s have no balances: %s", mid, e)
     return types.InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
@@ -614,8 +614,8 @@ async def _notify_winners(mid: int, winner_idx: int, bot=None) -> None:
                 await bot.send_message(int(r["tg_id"]), i18n.t(
                     wl, 'oc_won_dm', id=mid,
                     label=esc(label), shares=common._fmt(int(r["shares"]))))
-            except Exception:
-                pass  # recipient blocked the bot — never block the resolve path
+            except Exception as e:
+                log.info("winner DM for #%s never reached %s: %s", mid, r["tg_id"], e)
     except Exception as e:
         log.warning('winner notify failed for #%s: %s', mid, e)
 
@@ -634,8 +634,9 @@ async def _notify_holders(mid: int, bot=None) -> None:
                 wl = await common.user_lang(int(r["tg_id"]))
                 await bot.send_message(int(r["tg_id"]), i18n.t(
                     wl, 'oc_cancelled_dm', id=mid, shares=common._fmt(int(r["shares"]))))
-            except Exception:
-                pass  # recipient blocked the bot
+            except Exception as e:
+                log.info("refund notice for cancelled #%s never reached %s: %s",
+                         mid, r["tg_id"], e)
     except Exception as e:
         log.warning('cancel notify failed for #%s: %s', mid, e)
 
@@ -704,10 +705,8 @@ async def cb_oc_resolve(cb: types.CallbackQuery) -> None:
     ok, text = await _do_resolve(mid, winner_idx, lang, bot=res_bot)
     await cb.answer(text, show_alert=True)
     if ok:
-        try:
-            await cb.message.edit_text(f"⛓️ #{mid} — {esc(options[winner_idx])}\n{text}")
-        except Exception:
-            pass  # message may already be edited or deleted
+        await common.paint_or_send(cb, f"⛓️ #{mid} — {esc(options[winner_idx])}\n{text}",
+                                   what=f"onchain resolve #{mid}")
 
 
 async def onchain_watcher(bot: Bot) -> None:
@@ -786,8 +785,8 @@ async def cb_oc_buy(cb: types.CallbackQuery) -> None:
     ]])
     try:
         await cb.message.edit_text(i18n.t(lang, 'oc_pick_amount', mid=mid, label=esc(label)), reply_markup=kb)
-    except Exception:
-        pass  # message may be gone; the trade still goes through on re-tap
+    except Exception as e:
+        log.warning("onchain #%s: the amount chooser would not paint: %s", mid, e)
     await cb.answer()
 
 
@@ -811,26 +810,24 @@ async def cb_oc_buy_do(cb: types.CallbackQuery) -> None:
     await cb.answer()
     try:
         await cb.message.edit_text(i18n.t(lang, 'oc_pending'))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("onchain buy #%s: the processing card would not paint: %s", mid, e)
     ok, text = await _buy_core(cb.from_user.id, mid, outcome, spend, lang)
-    try:
-        if ok:
+    markup = None
+    if ok:
+        text = '✅ ' + text
+        try:
             m = await common.ledger.get_onchain_market(mid)
             if m:
                 options = json.loads(m['options'])
                 prices = await _prices(mid, len(options))
-                kb = await _trade_keyboard(mid, options, cb.from_user.id)
-                await cb.message.edit_text(
-                    ('✅ ' + text + '\n\n' + _card(m, prices, lang)),
-                    reply_markup=kb,
-                )
-            else:
-                await cb.message.edit_text('✅ ' + text)
-        else:
-            await cb.message.edit_text(text)
-    except Exception:
-        pass
+                markup = await _trade_keyboard(mid, options, cb.from_user.id)
+                text += '\n\n' + _card(m, prices, lang)
+        except Exception as e:
+            # The trade is settled: a refreshed card that failed is a missing
+            # picture, never a reason to withhold the receipt.
+            log.warning("onchain buy #%s settled, its refreshed card failed: %s", mid, e)
+    await common.paint_or_send(cb, text, reply_markup=markup, what=f"onchain buy #{mid}")
 
 
 @common.router.callback_query(F.data.startswith('ocsell:'))
@@ -856,8 +853,8 @@ async def cb_oc_sell(cb: types.CallbackQuery) -> None:
     ]])
     try:
         await cb.message.edit_text(i18n.t(lang, 'oc_pick_pct', mid=mid, label=esc(label)), reply_markup=kb)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("onchain #%s: the percentage chooser would not paint: %s", mid, e)
     await cb.answer()
 
 
@@ -878,23 +875,21 @@ async def cb_oc_sell_do(cb: types.CallbackQuery) -> None:
     await cb.answer()
     try:
         await cb.message.edit_text(i18n.t(lang, 'oc_pending'))
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("onchain sell #%s: the processing card would not paint: %s", mid, e)
     ok, text = await _sell_core(cb.from_user.id, mid, outcome, pct, lang)
-    try:
-        if ok:
+    markup = None
+    if ok:
+        text = '✅ ' + text
+        try:
             m = await common.ledger.get_onchain_market(mid)
             if m:
                 options = json.loads(m['options'])
                 prices = await _prices(mid, len(options))
-                kb = await _trade_keyboard(mid, options, cb.from_user.id)
-                await cb.message.edit_text(
-                    ('✅ ' + text + '\n\n' + _card(m, prices, lang)),
-                    reply_markup=kb,
-                )
-            else:
-                await cb.message.edit_text('✅ ' + text)
-        else:
-            await cb.message.edit_text(text)
-    except Exception:
-        pass
+                markup = await _trade_keyboard(mid, options, cb.from_user.id)
+                text += '\n\n' + _card(m, prices, lang)
+        except Exception as e:
+            # The shares are sold and the USDC is back: a refreshed card that
+            # failed is a missing picture, never a reason to withhold the receipt.
+            log.warning("onchain sell #%s settled, its refreshed card failed: %s", mid, e)
+    await common.paint_or_send(cb, text, reply_markup=markup, what=f"onchain sell #{mid}")

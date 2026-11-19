@@ -182,7 +182,9 @@ def _verify_payment(tx_hash: str, expected_micro: int, pay_to: str) -> dict | No
             continue
         try:
             ev = base.usdc.events.Transfer().process_log(entry)
-        except Exception:
+        except Exception as e:
+            log.error("USDC Transfer log of x402 payment tx %s will not decode: %s",
+                      receipt.get("transactionHash", "?"), e)
             continue
         args = ev['args']
         if args['to'].lower() == pay_to:
@@ -490,10 +492,10 @@ async def x402_tip(request: Request) -> JSONResponse:
                         ev = base.usdc.events.Transfer().process_log(entry)
                         if ev['args']['to'].lower() == hot:
                             return JSONResponse(status_code=400, content={'detail': 'tx is a deposit to the hot wallet, not an x402 payment'})
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except Exception as e:
+                        log.warning('x402 deposit probe: a Transfer log of %s will not decode: %s', tx_hash, e)
+        except Exception as e:
+            log.warning('x402 deposit probe for %s failed: %s', tx_hash, e)
         return _payment_rejected_response(amount_micro, resource=resource, pay_addr=pay_addr, invoice_id=invoice_id)
     credited = await ledger.credit_x402(tg_id, tx_hash, amount_micro, verified['sender'], pay_addr)
     if not credited:

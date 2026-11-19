@@ -672,7 +672,8 @@ async def api_agent_status(request: Request) -> dict:
                     continue
                 try:
                     entry = json.loads(line)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    log.warning('agent audit line will not parse and is left out of the published market and bet counts: %s', e)
                     continue
                 # One audit line per cycle, and a line is only written after
                 # create_market succeeded — so lines are markets, not actions.

@@ -14,6 +14,8 @@ from bot.ledger import blocked_destination
 
 from . import _common as common
 
+log = logging.getLogger("tipbot.wallet")
+
 
 async def _notify_aml(bot, tg_id: int, warnings: list[str]) -> None:
     """Send AML flags to the configured admin chat (no-op if unset)."""
@@ -325,8 +327,8 @@ async def _refresh_wallet_list(cb: types.CallbackQuery, tg_id: int, lang: str) -
         await cb.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb) if kb else None
         )
-    except Exception:
-        pass  # message not modified
+    except Exception as e:
+        log.info("wallet list edit refused for %s: %s", tg_id, e)
 
 @common.router.message(Command('import'))
 async def cmd_import(message: types.Message) -> None:
@@ -528,11 +530,13 @@ async def _withdraw_refusal(tg_id: int, lang: str, reason: str,
 
 
 async def _edit_withdraw_prompt(cb: types.CallbackQuery, text: str) -> None:
-    """Replace the confirm prompt with its outcome — no button may survive it."""
-    try:
-        await cb.message.edit_text(text)
-    except Exception:
-        pass  # no permission / message not modified
+    """Replace the confirm prompt with its outcome — the receipt or the refusal.
+
+    A screen still showing the confirm button under either is a button the user is
+    invited to press again, so when the edit is refused the text goes out as a new
+    message instead of vanishing.
+    """
+    await common.paint_or_send(cb, text, what="withdraw prompt")
 
 @common.router.message(Command('tx'))
 async def cmd_tx(message: types.Message) -> None:

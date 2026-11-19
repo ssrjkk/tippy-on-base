@@ -225,8 +225,8 @@ def main() -> int:
     assert fac_addr, "factory deploy failed"
 
     # ---- runtime code check ---------------------------------------------
-    onchain = w3.eth.get_code(fac_addr).hex()[2:].lower()
-    if onchain != fac_art["runtime"].lstrip("0x").lower():
+    onchain = Web3.to_hex(w3.eth.get_code(fac_addr))[2:].lower()
+    if onchain != fac_art["runtime"].removeprefix("0x").lower():
         print("ERROR: Create2Factory runtime bytecode MISMATCH vs local compile!")
         return 1
 

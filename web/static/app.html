@@ -55,8 +55,8 @@
 /* Tokens copied from /style.css — base.org values: one brand blue, neutral greys,
  * hairline borders, no shadows. --accent paints surfaces, --accent-text paints type,
  * because #224bff is a fill colour and is not readable as text on the dark canvas. */
-:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--danger-bg:rgba(180,35,24,.07);--warning:#8a5a00;--warning-bg:rgba(138,90,0,.08);--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius-sm:6px;--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--measure:68ch;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--t-micro:10px;--t-chip:11px;--t-meta:12px;--t-small:13px;--t-ui:14px;--t-lead:15px;--t-body:16px;--t-h4:18px;--t-h2:24px;--t-h1:28px;--t-xl:32px;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
-[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--danger-bg:rgba(255,122,112,.12);--warning:#d99a2b;--warning-bg:rgba(217,154,43,.14);--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
+:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--warning:#8a5a00;--warning-bg:rgba(138,90,0,.08);--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius-sm:6px;--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--measure:68ch;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--t-chip:11px;--t-meta:12px;--t-small:13px;--t-ui:14px;--t-lead:15px;--t-body:16px;--t-h4:18px;--t-h3:20px;--t-h2:24px;--t-h1:28px;--t-xl:32px;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
+[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--warning:#d99a2b;--warning-bg:rgba(217,154,43,.14);--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
 html,body{height:100%;font-family:var(--font-ui);font-size:var(--t-lead);line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
 /* The heading floor, the same law the site's reset states: a heading never takes
 its size from the browser's own sheet, where h3 is 1.17em — 18.72px, a value on no
@@ -113,20 +113,38 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 /* Tab Bar */
 .tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:var(--safe-b)}
 .tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 8px;font-size:var(--t-chip);color:var(--text4);transition:color .2s var(--ease);position:relative}
-.tab-item.active{color:var(--accent-text)}
+.tab-item.active{color:var(--text);font-weight:500}
 .tab-item .icon{width:20px;height:20px}
-.tab-item::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:20px;height:2px;border-radius:var(--pill);background:var(--accent-text);opacity:0;transition:opacity .2s var(--ease)}
-.tab-item.active::after{opacity:1}
 
-/* Cards */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
-.card-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
-.card-title{font-size:var(--t-chip);color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.08em}
+/* Cards and the micro-label above them. `--card2` is the site's `--surface`: a
+   panel on this screen is a band of the page, not a box floated on it, which is
+   how every panel on base.org reads. */
+.card{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px}
+.card-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.card-header .eyebrow{margin-bottom:0}
+/* The Base micro-label — the mono face, uppercase, tracked, the quietest grey the
+   contrast law allows. It replaces `.card-title` and `.section-title`, which were
+   one voice spelled two ways at two letter-spacings. It is now also the only voice
+   over a labelled thing anywhere in the app: the landing names a field with the
+   same eleven pixels of tracked mono and the same 8px beneath it, while
+   `.input-label` drew that label in the interface face at 12px — one job, two
+   grammars, inside one form. */
+.eyebrow,.input-label,.mini-label{display:block;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--t-chip);font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:0 0 8px}
 .big-number{font-size:var(--t-xl);font-weight:500;letter-spacing:-.03em;line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .big-number .currency{font-size:var(--t-ui);color:var(--text3);font-weight:500;margin-left:6px;letter-spacing:0}
+/* The balance is the number this screen exists to show, so it takes the canvas
+   and the whole width instead of a box: an eyebrow above a figure is how the
+   landing states a number that carries a page. */
+.balance{padding:4px 0 6px}
+/* Rows that belong to one read live inside one frame: the group paints the
+   hairlines and the rows paint no border of their own, so a list reads as one
+   object with rules between its parts rather than a stack of boxes. Same recipe
+   as the landing's `.markets` and `.rows` — `gap: 1px` over a border-coloured
+   ground, which is the only place a 1px space is a legal space. */
+.list-group{display:flex;flex-direction:column;gap:1px;background: var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
 
 /* Buttons */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--pill);font-weight:500;font-size:var(--t-ui);padding:12px 20px;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease),opacity .2s var(--ease);white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:var(--pill);font-weight:500;font-size:var(--t-lead);padding:12px 22px;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease),opacity .2s var(--ease);white-space:nowrap}
 .btn:active{opacity:.8}
 .btn-primary{background:var(--accent);color:var(--on-accent)}
 .btn-primary:hover,.btn-primary:active{background:var(--accent2)}
@@ -136,15 +154,20 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .btn-full{width:100%}
 .btn .icon{width:15px;height:15px}
 
-/* Action Row */
-.action-row{display:flex;gap:8px;margin:14px 0}
-.action-btn{flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:var(--t-meta);font-weight:500;color:var(--text);transition:border-color .2s var(--ease),background-color .2s var(--ease)}
-.action-btn:hover,.action-btn:active{border-color:var(--accent-text)}
+/* The three money actions are one control, not three boxes: the tiles share a
+   single rounded frame and hairlines divide the segments, because they are three
+   answers to the same question — what to do with this balance. */
+.action-row{display:flex;gap:1px;background: var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin:16px 0 0}
+.action-btn{flex:1;min-width:0;background:var(--card2);padding:14px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:var(--t-meta);font-weight:500;color:var(--text);transition:background-color .2s var(--ease)}
+.action-btn:hover,.action-btn:active{background:var(--card3)}
 .action-btn .icon{width:20px;height:20px;color:var(--accent-text)}
 
 /* Amount Chips */
-.chips{display:flex;gap:8px;margin:8px 0}
-.chip{background:var(--card2);border:1px solid var(--border);border-radius:var(--pill);padding:8px 16px;font-size:var(--t-small);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text);cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease),color .2s var(--ease);min-width:48px;text-align:center}
+.chips{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+/* The amount choice is an outlined pill on the sheet, not a filled tile: the
+   landing's `.amount-chip` is the same object, and a row of filled chips would
+   compete with the one button that actually moves the money. */
+.chip{background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--pill);padding:8px 16px;font-size:var(--t-small);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text);cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease),color .2s var(--ease);min-width:48px;text-align:center}
 /* Same law as the site's `.amount-chip.active`: --blue-soft is translucent, so
    the label sits on a blend of the tint and the sheet, and --accent-text there
    measures 4.27:1 — under the 4.5 the same page demands of every other 13 px
@@ -160,32 +183,48 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 
 /* Input */
-.input{width:100%;background:var(--card2);border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 16px;font-size:var(--t-body);color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+/* The field takes the smaller corner of the radius scale and the ground of the
+   layer it sits on, told apart from it by the strong hairline: a 16px radius on a
+   44px input is a lozenge, and a field painted in its band's own fill is a field
+   whose edges nothing but the border states. */
+.input{width:100%;background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:12px 14px;font-size:var(--t-body);color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
 .input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--blue-soft)}
 .input::placeholder{color:var(--text4)}
-.input-group{margin-bottom:12px}
-.input-label{font-size:var(--t-meta);color:var(--text3);margin-bottom:6px;display:block;font-weight:500}
-.hint{max-width:var(--measure);font-size:var(--t-meta);color:var(--text3);line-height:1.5}
+.input-group{margin-bottom:16px}
+/* A line that says why a sum was refused is a sentence, not a unit: the landing
+   sets `.hint` at the small reading size, and 12px here is what a figure's
+   suffix costs. */
+.hint{max-width:var(--measure);font-size:var(--t-small);color:var(--text3);line-height:1.5}
 
 /* Market / Bet Card */
-.market-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease);display:block;width:100%;text-align:left}
-.market-card:hover,.market-card:active{border-color:var(--border-strong);background:var(--card2)}
+/* A market row is a cell of the list, not a card of its own: the frame and the
+   hairlines come from `.list-group`, the row supplies padding and a hover. */
+.market-card{background:var(--bg);padding:16px;cursor:pointer;transition:background-color .2s var(--ease);display:block;width:100%;text-align:left}
+.market-card:hover,.market-card:active{background:var(--card2)}
 /* One head for every market card: the chip never trades width with the question. */
-.card-head{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
-.card-head .q{flex:1 1 auto;min-width:0;max-width:var(--measure);font-size:var(--t-lead);font-weight:500;line-height:1.4;letter-spacing:-.01em}
-.market-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:var(--t-chip);color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.03em;margin-top:8px}
-.prob-bars{display:flex;flex-direction:column;gap:8px}
+.card-head{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.card-head .q{flex:1 1 auto;min-width:0;max-width:var(--measure);font-size:var(--t-body);font-weight:500;line-height:1.4;letter-spacing:-.015em;overflow-wrap:anywhere}
+.market-meta{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:var(--t-chip);color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.02em;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.prob-bars{display:flex;flex-direction:column;gap:12px}
 .prob-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
 .prob-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
-.prob-bar-label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:var(--t-meta);color:var(--text2);margin-bottom:6px}
-.prob-bar-label .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+/* The option's own voice: the label in the interface face at the reading size,
+   the price in the money face at the quiet grey — the landing's `.option-top`,
+   so one kind of row says the same two things the same way on both surfaces. */
+.prob-bar-label{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:var(--t-ui);color:var(--text);font-weight:500;margin-bottom:6px;overflow-wrap:anywhere}
+.prob-bar-label .num{font-size:var(--t-small);font-weight:400;color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .prob-bar-label .win{color:var(--accent-text);font-weight:600}
 
 /* Status chips */
-.tag{display:inline-flex;align-items:center;flex:none;border-radius:var(--pill);padding:2px 8px;font-size:var(--t-micro);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;gap:6px;flex:none;border-radius:var(--pill);padding:3px 9px;font-size:var(--t-chip);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
 /* Same law as the site's `.chip-open`: over a translucent tint --accent-text is
    4.27:1, and this label is 10 px — the furthest thing from a large-text pass. */
 .tag-open{background:var(--blue-soft);color:var(--text)}
+/* The dot is the part that survives greyscale: a state carried by tint alone is
+   a state a colour-blind reader cannot take, and it is the same mark the
+   landing's `.chip-open` carries. Only "open" gets one, because only "open" is
+   a live thing. */
+.tag-open::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
 .tag-resolved{background:var(--success-bg);color:var(--success)}
 /* The same fourth state as the site's `.chip-awaiting`: a market whose
    deadline passed and nobody resolved is not open. */
@@ -193,8 +232,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .tag-cancelled{background:var(--card3);color:var(--text3)}
 
 /* Transaction History */
-.tx-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
-.tx-item:last-child{border-bottom:none}
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg)}
 .tx-icon{width:30px;height:30px;border-radius:var(--pill);border:1px solid var(--border);background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
 .tx-icon .icon{width:14px;height:14px}
 /* Direction is painted once: the arrow says in or out, the sign and the colour
@@ -214,13 +252,24 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .tx-amount.neg{color:var(--danger)}
 /* Not a button: it names a command the user types in the bot, so it must not
    look tappable here. */
-.tx-more{padding:12px 0 2px;font-size:var(--t-meta);font-weight:400;color:var(--text3)}
+.tx-more{padding:10px 2px 0;font-size:var(--t-meta);font-weight:400;color:var(--text3)}
 
 /* Deposit Section */
-.deposit-box{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;gap:12px;margin-top:8px}
-.deposit-addr{font-size:var(--t-meta);color:var(--text2);word-break:break-all;flex:1;user-select:all;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:var(--t-small);color:var(--text3);padding:6px 0}
-.wd-row b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
+.deposit-box{display:flex;align-items:center;gap:12px;margin-top:8px}
+/* The address is a plate: the money face, the quiet grey, a filled well with a
+   hairline, exactly the landing's `.wallet-addr`. A 42-character hex printed flat
+   on the card is the one thing a user needs to read twice. The rule behind the
+   fill is one step away from whatever it sits on: the sheet is the canvas, so this
+   plate is the surface, and `.sw-addr`, which sits inside a surface card, is the
+   canvas. A plate the colour of its container is only a border. */
+.deposit-addr{font-size:var(--t-meta);color:var(--text3);word-break:break-all;flex:1;min-width:0;user-select:all;font-family:var(--font-mono);font-variant-numeric:tabular-nums;background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px}
+/* A row of a read is a cell, not a floating pair of words: the landing's `.row`
+   is a full-height cell of one frame — the frame paints the hairline, the cell
+   paints the padding, the key is the quiet grey and the figure is the mono weight
+   set right against it. Four `padding:6px 0` lines stacked in a sheet used to read
+   as four separate thoughts where the sheet has one thing to say. */
+.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;font-size:var(--t-ui);color:var(--text3);background:var(--bg);padding:12px 14px}
+.wd-row b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500;text-align:right;overflow-wrap:anywhere}
 /* QR readers need a light quiet zone in both themes, so this one box stays white. */
 .deposit-qr{width:80px;height:80px;border-radius:var(--radius);border:1px solid var(--border);background:var(--qr-plate);padding:4px;flex-shrink:0}
 .deposit-qr img{width:100%;height:100%;display:block}
@@ -228,7 +277,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 /* Modal / Bottom Sheet */
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--scrim);z-index:200;display:none;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .25s var(--ease)}
 .modal-overlay.show{display:flex;opacity:1}
-.modal-sheet{background:var(--card);border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:14px 16px calc(20px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.modal-sheet{background:var(--bg);border-top:1px solid var(--border-strong);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:14px 16px calc(20px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
 .modal-overlay.show .modal-sheet{transform:translateY(0)}
 .modal-handle{width:32px;height:3px;background:var(--border-strong);border-radius:var(--pill);margin:0 auto 16px}
 .modal-title{font-size:var(--t-h4);font-weight:600;letter-spacing:-.02em;margin-bottom:14px}
@@ -247,18 +296,23 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .detail-back .icon{width:16px;height:16px}
 .detail-title{font-size:var(--t-lead);font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
 .detail-body{padding:16px}
-.detail-question{max-width:var(--measure);font-size:var(--t-h4);font-weight:600;line-height:1.35;letter-spacing:-.02em;margin-bottom:14px}
+.detail-question{max-width:var(--measure);font-size:var(--t-h2);font-weight:500;line-height:1.3;letter-spacing:-.025em;margin-bottom:14px;overflow-wrap:anywhere}
 .detail-options{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
-.detail-opt{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:block;width:100%;text-align:left}
-.detail-opt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
-.detail-opt-name{font-weight:500;font-size:var(--t-ui)}
+.detail-opt{background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:16px;display:block;width:100%;text-align:left}
+.detail-opt-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
+.detail-opt-name{font-weight:500;font-size:var(--t-ui);min-width:0;overflow-wrap:anywhere}
 .detail-opt-name.win{color:var(--accent-text);font-weight:600}
-/* The accent says "this option won"; a colour every option wears says nothing. */
-.detail-opt-pct{font-size:var(--t-h4);font-weight:500;color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+/* The accent says "this option won"; a colour every option wears says nothing.
+   The price is the number the row is about, so it takes the step the landing
+   gives a figure that carries a screen. */
+.detail-opt-pct{font-size:var(--t-h3);font-weight:500;color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .detail-opt-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
 .detail-opt-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
 .detail-opt.pickable{cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease)}
-.detail-opt.pickable:active{border-color:var(--accent)}
+/* The affordance is the border, as it is on the landing's `.opt-btn`: a pressed
+   tile that fills itself grey reads as disabled, which is the one state this
+   control never has. */
+.detail-opt.pickable:hover,.detail-opt.pickable:active{border-color:var(--text)}
 .detail-opt.selected{border-color:var(--accent);background:var(--blue-soft)}
 .buy-panel{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--border);padding:12px 0 6px}
 .buy-panel .input{margin-bottom:10px}
@@ -267,65 +321,69 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .create-options{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .create-opt-row{display:flex;gap:8px;align-items:center}
 .create-opt-row .input{flex:1}
-.create-opt-rm{width:32px;height:32px;border-radius:var(--pill);background:var(--danger-bg);display:flex;align-items:center;justify-content:center;color:var(--danger);cursor:pointer;flex-shrink:0}
+/* This button deletes a row the user has not finished writing, not money. A red
+   disc says "irreversible" in the one language this interface reserves for a
+   figure that moved, and every other surface keeps --danger on amounts. */
+.create-opt-rm{width:32px;height:32px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text3);cursor:pointer;flex-shrink:0;transition:border-color .2s var(--ease),color .2s var(--ease)}
+.create-opt-rm:hover,.create-opt-rm:active{border-color:var(--text);color:var(--text)}
 .create-opt-rm .icon{width:14px;height:14px}
-.create-add{background:none;border:1px dashed var(--border-strong);border-radius:var(--radius);padding:10px;color:var(--text3);font-size:var(--t-small);font-weight:500;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .2s var(--ease),color .2s var(--ease)}
+.create-add{background:none;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:10px;color:var(--text3);font-size:var(--t-small);font-weight:500;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .2s var(--ease),color .2s var(--ease)}
 .create-add:hover,.create-add:active{border-color:var(--accent-text);color:var(--accent-text)}
 .create-add .icon{width:13px;height:13px}
 
-/* Language items */
-.lang-item{display:flex;align-items:center;gap:10px;padding:12px 12px;border-radius:var(--radius);cursor:pointer;border:1px solid var(--border);background:var(--card);transition:background-color .2s var(--ease),border-color .2s var(--ease);width:100%}
+/* Language items — cells of one frame, like every other choice list */
+.lang-item{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg);cursor:pointer;transition:background-color .2s var(--ease);width:100%}
 .lang-item:active{background:var(--card2)}
-.lang-item.active{background:var(--blue-soft);border-color:var(--accent)}
+.lang-item.active{background:var(--blue-soft)}
 .lang-name{font-size:var(--t-ui);font-weight:500}
 .lang-check{margin-left:auto;color:var(--accent-text);display:none}
 .lang-item.active .lang-check{display:block}
 .lang-check .icon{width:16px;height:16px}
 
-/* Top users */
-.top-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
-.top-item:last-child{border-bottom:none}
-.top-rank{width:22px;font-size:var(--t-small);font-weight:500;color:var(--text4);text-align:center;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+/* Top users — the landing's leaderboard: rank, name, amount, one hairline
+   between rows and none around them. */
+.top-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg)}
+.top-rank{width:26px;font-size:var(--t-small);font-weight:500;color:var(--text4);text-align:center;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .top-rank.lead{color:var(--accent-text)}
-.top-name{flex:1;font-size:var(--t-ui);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.top-vol{font-size:var(--t-small);color:var(--text2);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.top-name{flex:1;min-width:0;font-size:var(--t-ui);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-vol{font-size:var(--t-small);font-weight:500;color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 
-/* Stats */
-.stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0}
-.stat-item{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 8px;text-align:center}
-.stat-val{font-size:var(--t-h4);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.stat-label{font-size:var(--t-micro);color:var(--text3);margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
-
-/* Section title */
-.section-title{font-size:var(--t-chip);color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.09em;margin:18px 0 8px}
+/* Stats: one hairline strip, not three boxes — the landing's own answer to a row
+   of figures that belong to the same read. */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background: var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.stat{background:var(--bg);padding:16px 14px;text-align:left;min-width:0}
+.stat-val{font-size:var(--t-h3);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow-wrap:anywhere}
+.stat-label{font-size:var(--t-chip);font-weight:500;color:var(--text3);margin-top:6px;letter-spacing:.09em;text-transform:uppercase;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 
 /* Empty state */
-.empty{text-align:center;padding:30px 16px;color:var(--text3);font-size:var(--t-small);font-weight:400;border:1px dashed var(--border);border-radius:var(--radius)}
+.empty{text-align:center;padding:28px 20px;color:var(--text3);background:var(--card2);font-size:var(--t-ui);font-weight:400;border:1px dashed var(--border-strong);border-radius:var(--radius-lg)}
 
 /* Page-local layout helpers (they replace per-element style="" attributes) */
 [hidden]{display:none!important}
 .card-compact{padding:12px}
 .sheet-gap{margin-bottom:14px}
 .gap-top{margin-top:12px}
+.gap-top-lg{margin-top:24px}
 .gap-top-sm{margin-top:8px}
 .sheet-note{font-size:var(--t-small);color:var(--text2);margin:0 0 12px}
 .hint-block{margin:0 0 12px}
-.mini-label{font-size:var(--t-chip);color:var(--text3);margin:0 0 4px}
-.mini-label.late{margin:10px 0 0}
+.mini-label.late{margin:12px 0 8px}
 .deposit-col{flex:1;min-width:0}
 .sw-state{font-size:var(--t-small);color:var(--text2);margin-bottom:8px}
 .sw-state .ok{color:var(--success)}
 .sw-state .warn{color:var(--warning)}
-.sw-addr{font-size:var(--t-meta);color:var(--text);word-break:break-all}
+/* The wallet address is the one string on this card a user reads character by
+   character before sending, so it gets the same well as the deposit address. */
+.sw-addr{font-size:var(--t-meta);color:var(--text3);word-break:break-all;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px}
 .sw-bal{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:10px;font-size:var(--t-small);color:var(--text3)}
 .sw-bal .mono{font-size:var(--t-h4);color:var(--text);letter-spacing:-.02em}
 .sw-card .hint{margin-top:8px}
-.ai-chat{max-height:200px;overflow-y:auto;margin-bottom:10px;font-size:var(--t-small);color:var(--text2)}
+.ai-chat{max-height:200px;overflow-y:auto;margin-bottom:10px;font-size:var(--t-ui);color:var(--text2)}
 .ai-row{display:flex;gap:8px}
 .ai-row .input{flex:1}
 .ai-item{margin-bottom:6px}
-/* The assistant is the one card that renders as an empty box until someone types, so it says what it answers. */
-.ai-hint{color:var(--text3);font-size:var(--t-small);margin-bottom:6px}
+/* The assistant is the one card that renders as an empty box until someone types,
+   so it says what it answers — in the one hint voice every other sheet uses. */
 .ai-item .who{font-weight:500;color:var(--accent-text)}
 .ai-item.ans .who{color:var(--success)}
 .ai-item.pending{color:var(--text4)}
@@ -403,10 +461,8 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
   <main class="content" id="contentArea">
     <!-- TAB 0: Wallet -->
     <div class="tab-page active" id="tab0">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title" data-i18n="balance">Balance</h2>
-        </div>
+      <div class="balance">
+        <h2 class="eyebrow" data-i18n="balance">Balance</h2>
         <div class="big-number"><span id="bigBalance">--</span><span class="currency">USDC</span></div>
       </div>
 
@@ -427,7 +483,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 
       <div class="card sw-card" id="smartWalletCard" hidden>
         <div class="card-header">
-          <h2 class="card-title" data-i18n="smart_wallet">Smart Wallet</h2>
+          <h2 class="eyebrow" data-i18n="smart_wallet">Smart Wallet</h2>
           <button class="chip-btn" data-act="copyAddr" data-target="swAddress" id="swCopy">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-copy"/></svg>
             <span data-i18n="copy">Copy</span>
@@ -439,7 +495,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
         <div class="hint" id="swDepositHint">—</div>
       </div>
 
-      <div class="section-title" data-i18n="history">History</div>
+      <h2 class="eyebrow gap-top-lg" data-i18n="history">History</h2>
       <div id="historyList"></div>
     </div>
 
@@ -463,8 +519,8 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 
     <!-- TAB 3: More -->
     <div class="tab-page" id="tab3">
-      <div class="section-title" data-i18n="lang">Language</div>
-      <div id="langList">
+      <h2 class="eyebrow gap-top-lg" data-i18n="lang">Language</h2>
+      <div class="list-group" id="langList">
         <button class="lang-item" data-act="setLang" data-lang="ru">
           <span class="lang-name">Русский</span>
           <span class="lang-check"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span>
@@ -479,9 +535,9 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
         </button>
       </div>
 
-      <div class="section-title" data-i18n="ai">AI Assistant</div>
+      <h2 class="eyebrow gap-top-lg" data-i18n="ai">AI Assistant</h2>
       <div class="card card-compact">
-        <div class="ai-chat" id="aiChat"><p class="ai-hint" data-i18n="ai_hint">Спроси про рынок, чаевые или кошелёк.</p></div>
+        <div class="ai-chat" id="aiChat"><p class="hint" data-i18n="ai_hint">Спроси про рынок, чаевые или кошелёк.</p></div>
         <div class="ai-row">
           <input class="input" id="aiInput" data-i18n-ph="ai_placeholder" placeholder="Ask about markets...">
           <button class="btn btn-primary btn-sm" data-act="askAI" data-i18n-label="send">
@@ -490,23 +546,23 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
         </div>
       </div>
 
-      <div class="section-title" data-i18n="about">About</div>
+      <h2 class="eyebrow gap-top-lg" data-i18n="about">About</h2>
       <div class="card" id="aboutCard"></div>
 
-      <div class="section-title" data-i18n="top">Top</div>
+      <h2 class="eyebrow gap-top-lg" data-i18n="top">Top</h2>
       <div id="topList"></div>
 
-      <div class="section-title" data-i18n="stats">Stats</div>
-      <div class="stats-grid">
-        <div class="stat-item">
+      <h2 class="eyebrow gap-top-lg" data-i18n="stats">Stats</h2>
+      <div class="stats">
+        <div class="stat">
           <div class="stat-val" id="statUsers">--</div>
           <div class="stat-label" data-i18n="stat_users">Users</div>
         </div>
-        <div class="stat-item">
+        <div class="stat">
           <div class="stat-val" id="statVolume">--</div>
           <div class="stat-label" data-i18n="stat_volume">Volume</div>
         </div>
-        <div class="stat-item">
+        <div class="stat">
           <div class="stat-val" id="statTips">--</div>
           <div class="stat-label" data-i18n="stat_tips">Tips</div>
         </div>
@@ -646,11 +702,17 @@ function maxSpendable() {
   return amount;
 }
 
+// A frame is only ever as good as the cells inside it: a `.list-group` with none
+// is one rounded rule, so the group is built from the rows that answered.
+function rowFrame(rows) {
+  return rows ? `<div class="list-group">${rows}</div>` : '';
+}
+
 // One row, one meaning, on every panel that spends: what this account holds.
 function availableLine() {
   const micro = balanceMicro();
   const figure = micro === null ? '--' : usdc(micro / 1e6) + ' USDC';
-  return `<div class="wd-row"><span>${t('available')}</span><b>${figure}</b></div>`;
+  return rowFrame(`<div class="wd-row"><span>${t('available')}</span><b>${figure}</b></div>`);
 }
 
 // A chip is an offer to tap, so a sum the balance cannot cover is removed rather
@@ -1084,7 +1146,7 @@ function renderHistory() {
   // Label, sign and the counterparty come from the server (bot/tx_view):
   // tx_log amounts are always positive, so guessing here shows a withdrawal
   // as income. created_at is epoch seconds, not milliseconds.
-  c.innerHTML = h.map(tx => {
+  c.innerHTML = `<div class="list-group">` + h.map(tx => {
     const dir = tx.incoming ? 'in' : 'out';
     const sub = [tx.ref, tx.note].filter(Boolean).join(' — ');
     return `<div class="tx-item">
@@ -1095,7 +1157,7 @@ function renderHistory() {
       </div>
       <div class="tx-amount ${tx.incoming ? 'pos' : 'neg'}">${tx.incoming ? '+' : '−'}${usdc(tx.amount_usdc)}</div>
     </div>`;
-  }).join('') + (STATE.history_truncated
+  }).join('') + `</div>` + (STATE.history_truncated
     // The server says whether it stopped short: a 10-row history and a truncated
     // 10-row history are indistinguishable from the client otherwise.
     ? `<div class="tx-more">${t('history_more')}</div>` : '');
@@ -1104,21 +1166,24 @@ function renderHistory() {
 function renderMarkets() {
   const c = document.getElementById('marketsList');
   const m = STATE.markets || [];
-  if (!m.length) { c.innerHTML = `<div class="empty">${t('no_markets')}</div>`; return; }
-  c.innerHTML = m.map(mk => {
+  // An empty ledger read says nothing about the on-chain pools below it: both are
+  // answers of `/api/mini/state`, and hiding one because the other has no rows is
+  // a market the user can see on the site and not in the app.
+  if (!m.length) { c.innerHTML = `<div class="empty">${t('no_markets')}</div>` + ocBlock(); return; }
+  c.innerHTML = `<div class="list-group">` + m.map(mk => {
     const opts = mk.options || [];
     return `<button class="market-card" data-act="openMarketDetail" data-id="${mk.id}">
       <div class="card-head"><span class="q">${esc(mk.question)}</span>${statusTag(mk)}</div>
       ${probBars(opts, 'price_pct', winnerOf(mk))}
       <div class="market-meta"><span>${t('traders')}: ${mk.traders || 0}</span>${deadlineSpan(mk, t('awaiting_note'))}</div>
     </button>`;
-  }).join('') + ocBlock();
+  }).join('') + `</div>` + ocBlock();
 }
 
 function ocBlock() {
   const oc = STATE.onchain_markets || [];
   if (!oc.length) return '';
-  return `<div class="section-title">${t('onchain')}</div>` + oc.map(ocCard).join('');
+  return `<h2 class="eyebrow gap-top-lg">${t('onchain')}</h2>` + `<div class="list-group">` + oc.map(ocCard).join('') + `</div>`;
 }
 
 function ocCard(m) {
@@ -1185,14 +1250,14 @@ function renderBets() {
   const c = document.getElementById('betsList');
   const b = STATE.bets || [];
   if (!b.length) { c.innerHTML = `<div class="empty">${t('no_bets')}</div>`; return; }
-  c.innerHTML = b.map(bet => {
+  c.innerHTML = `<div class="list-group">` + b.map(bet => {
     const opts = bet.options || [];
     return `<button class="market-card" data-act="openBetDetail" data-id="${bet.id}">
       <div class="card-head"><span class="q">${esc(bet.question)}</span>${statusTag(bet)}</div>
       ${probBars(opts, 'chance_pct', winnerOf(bet))}
       <div class="market-meta"><span>${t('pot')}: ${usdc(bet.pot_usdc || bet.pot)} USDC</span>${deadlineSpan(bet, t('awaiting_note'))}</div>
     </button>`;
-  }).join('');
+  }).join('') + `</div>`;
 }
 
 function renderMore() {
@@ -1207,11 +1272,14 @@ function renderMore() {
   // '@id9000007' is not a handle. `total_usdc` is the field the payload
   // carries — reading a name that does not exist here rendered 0,00 for every
   // leader since the block was written.
-  document.getElementById('topList').innerHTML = top.slice(0, 5).map((u, i) => `<div class="top-item">
+  const topRows = top.slice(0, 5).map((u, i) => `<div class="top-item">
       <div class="top-rank${i === 0 ? ' lead' : ''}">${i + 1}</div>
       <div class="top-name">${esc(u.handle || u.username || '?')}</div>
       <div class="top-vol">${usdc(u.total_usdc)} USDC</div>
-    </div>`).join('') || `<div class="empty">${t('no_top')}</div>`;
+    </div>`).join('');
+  // A wrapped-empty group would paint a bare frame, so the note replaces it.
+  document.getElementById('topList').innerHTML = topRows
+    ? `<div class="list-group">${topRows}</div>` : `<div class="empty">${t('no_top')}</div>`;
 
   document.getElementById('statUsers').textContent = num(STATE.stats?.users);
   document.getElementById('statVolume').textContent = num(STATE.stats?.volume);
@@ -1362,13 +1430,13 @@ function openDepositSheet() {
         <button class="btn btn-sm btn-secondary gap-top-sm" data-act="copyAddr" data-addr="${esc(addr)}">${t('copy')}</button>
       </div>
     </div>
-    <div class="input-group">
-      ${infoRow(t('dep_network'), INFO.chain_name)}
-      ${INFO.usdc_address ? infoRow(t('dep_asset'), 'USDC') : ''}
-      ${infoRow(t('dep_confirmations'), LIMITS.deposit_confirmations)}
-      ${contractRow()}
-      ${explorerLink()}
+    <div class="gap-top-sm">
+      ${rowFrame(infoRow(t('dep_network'), INFO.chain_name)
+        + (INFO.usdc_address ? infoRow(t('dep_asset'), 'USDC') : '')
+        + infoRow(t('dep_confirmations'), LIMITS.deposit_confirmations))}
     </div>
+    ${contractRow()}
+    ${explorerLink()}
     ${INFO.usdc_address ? `<p class="hint hint-block">${t('dep_shared')}</p>` : ''}
   `);
 }
@@ -1429,16 +1497,16 @@ async function stageWithdraw() {
 
 function showWithdrawConfirm(d) {
   const tok = esc(d.token);
+  // The four figures of one settlement are one read, so they are four cells of one
+  // frame, and each goes through the row builder no row is written outside.
+  const rows = [[t('amount'), d.amount], [t('wd_fee'), d.fee],
+                [t('wd_total'), d.total], [t('wd_after'), d.balance_after]]
+    .map(([label, value]) => infoRow(label, `${esc(String(value))} USDC`)).join('');
   openModal(`
     <div class="modal-title">${t('wd_confirm_title')}</div>
-    <div class="input-group">
-      <div class="wd-row"><span>${t('amount')}</span><b>${esc(d.amount)} USDC</b></div>
-      <div class="wd-row"><span>${t('wd_fee')}</span><b>${esc(d.fee)} USDC</b></div>
-      <div class="wd-row"><span>${t('wd_total')}</span><b>${esc(d.total)} USDC</b></div>
-      <div class="wd-row"><span>${t('wd_after')}</span><b>${esc(d.balance_after)} USDC</b></div>
-      <div class="mini-label late">${t('address')}</div>
-      <div class="deposit-addr">${esc(d.address)}</div>
-    </div>
+    ${rowFrame(rows)}
+    <div class="mini-label late">${t('address')}</div>
+    <div class="deposit-addr">${esc(d.address)}</div>
     <p class="hint hint-block">${t('wd_check')}</p>
     <button class="btn btn-primary btn-full" data-act="confirmWithdraw" data-token="${tok}" data-yes="1">${t('wd_confirm_btn')}</button>
     <button class="btn btn-secondary btn-full gap-top-sm" data-act="confirmWithdraw" data-token="${tok}" data-yes="0">${t('wd_cancel_btn')}</button>
@@ -1702,7 +1770,7 @@ async function askAI() {
   if (!q) return;
   input.value = '';
   const chat = document.getElementById('aiChat');
-  chat.querySelector('.ai-hint')?.remove();
+  chat.querySelector('.hint')?.remove();
   chat.insertAdjacentHTML('beforeend',
     `<div class="ai-item"><span class="who">${esc(t('ai_you'))}:</span> ${esc(q)}</div><div class="ai-item pending">…</div>`);
   const pending = chat.lastElementChild;

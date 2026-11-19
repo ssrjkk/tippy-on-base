@@ -342,7 +342,12 @@ def settle_eip3009(auth: dict, signature: str, pay_to: str) -> dict:
             ev = w3.eth.contract(
                 address=Web3.to_checksum_address(config.USDC_ADDRESS), abi=TRANSFER_EVENT_ABI
             ).events.Transfer().process_log(lg)
-        except Exception:
+        except Exception as e:
+            # A Transfer this settlement receipt carries that will not decode is
+            # money the invoice says it moved and cannot show — the raise below
+            # would then claim "no USDC moved" about a receipt that may hold some.
+            log.error("USDC Transfer log of settlement tx %s will not decode: %s",
+                      receipt.get("transactionHash", "?"), e)
             continue
         if str(ev["args"]["to"]).lower() == receive:
             settled += int(ev["args"]["value"])
@@ -429,7 +434,7 @@ def find_settlement_by_nonce(payer: str, nonce: bytes, pay_to: str,
             "toBlock": latest,
             "address": Web3.to_checksum_address(config.USDC_ADDRESS),
             "topics": [
-                w3.solidity_keccak(["string"], ["AuthorizationUsed(address,bytes32)"]).hex(),
+                usdc.events.AuthorizationUsed.topic,
                 payer_topic,
                 nonce_topic,
             ],
@@ -444,7 +449,9 @@ def find_settlement_by_nonce(payer: str, nonce: bytes, pay_to: str,
                     continue
                 try:
                     ev = usdc.events.Transfer().process_log(tl)
-                except Exception:
+                except Exception as e:
+                    log.error("USDC Transfer log of tx %s scanned for reconciliation "
+                              "will not decode: %s", tl.get("transactionHash", "?"), e)
                     continue
                 if str(ev["args"]["to"]).lower() == pay_to.lower():
                     settled += int(ev["args"]["value"])

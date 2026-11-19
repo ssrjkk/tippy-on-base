@@ -119,7 +119,12 @@ class BroadcastUncertainError(Exception):
 # Address "0x0000...0000" = mint events; "0x0000...0001" = burn (weird EdgeCase)
 EDGE_1 = Web3.to_checksum_address("0x0000000000000000000000000000000000000001")
 
-_transfer_topic = w3.keccak(text="Transfer(address,address,uint256)").hex()
+# The Transfer topic straight off the contract's own ABI: JSON-RPC DATA is
+# "0x"-prefixed by definition, and hexbytes 2.0 writes `.hex()` without the
+# prefix — a topic built by hand from `.hex()` reaches the node as a bare
+# 64-digit string and the node answers an error, not an empty list, so every
+# deposit scan fails rather than finding nothing.
+_transfer_topic = usdc.events.Transfer.topic
 
 
 def hot_wallet() -> ChecksumAddress:
@@ -252,7 +257,13 @@ def _scan_deposits(from_block: int, to_block: int) -> list[dict]:
     for entry in logs:
         try:
             event = usdc.events.Transfer().process_log(entry)
-        except Exception:
+        except Exception as e:
+            # A log this node said is a Transfer and that will not decode is a
+            # deposit that will never be credited. Silent here means the user's
+            # money sits in the hot wallet with no row anywhere saying so.
+            log.error("USDC Transfer log of tx %s in block %s will not decode — "
+                      "deposit not credited: %s",
+                      entry.get("transactionHash", "?"), entry.get("blockNumber", "?"), e)
             continue
         args = event["args"]
         if args["from"].lower() == EDGE_1.lower():
@@ -751,8 +762,8 @@ async def kick_expired_channel_subscriptions(bot) -> int:
         try:
             lang = (ledger.get_settings(tg_id)).get('lang', i18n.DEFAULT_LANG)
             await bot.send_message(tg_id, i18n.t(lang, 'paywall_sub_expired'))
-        except Exception:
-            pass
+        except Exception as e:
+            log.info("subscription-expiry notice never reached %s: %s", tg_id, e)
     return kicked
 
 

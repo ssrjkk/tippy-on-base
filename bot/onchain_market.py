@@ -438,18 +438,36 @@ def _sell_sync(market_id: int, outcome: int, shares: int, min_proceeds_micro: in
 
 
 def _usdc_received(receipt, user_addr: str) -> int:
-    """Micro-USDC paid to `user_addr` by a mined tx, read from its Transfer logs."""
+    """Micro-USDC paid to `user_addr` by a mined tx, read from its Transfer logs.
+
+    The integer this returns is the figure the user is told they received
+    (`oc_redeemed`/`oc_refunded` name it), so a log dropped by a bare
+    `except Exception: pass` is a payout reported short with nothing anywhere
+    saying so. USDC emits other events from the same address, so which log is
+    money is decided by the topic the contract's own ABI declares for Transfer
+    — a named condition, not a decoding accident. A log carrying *that* topic
+    which still refuses to decode is an anomaly: it is recorded, because the
+    sum that follows it is a guess.
+    """
     from . import base
 
+    transfer = base.usdc.events.Transfer
+    topic = transfer.topic.lower()
     payout = 0
-    for log in receipt.get("logs", []):
-        if log.get("address", "").lower() == config.USDC_ADDRESS.lower():
-            try:
-                ev = base.usdc.events.Transfer().process_log(log)
-                if ev["args"]["to"].lower() == user_addr.lower():
-                    payout += int(ev["args"]["value"])
-            except Exception:
-                pass
+    for index, entry in enumerate(receipt.get("logs", [])):
+        if str(entry.get("address", "")).lower() != config.USDC_ADDRESS.lower():
+            continue
+        topics = entry.get("topics") or []
+        if not topics or _tx_hex(topics[0]).lower() != topic:
+            continue
+        try:
+            ev = transfer().process_log(entry)
+        except Exception as e:
+            log.error("USDC Transfer log #%s of tx %s will not decode: %s",
+                      index, entry.get("transactionHash", "?"), e)
+            continue
+        if str(ev["args"]["to"]).lower() == user_addr.lower():
+            payout += int(ev["args"]["value"])
     return payout
 
 
