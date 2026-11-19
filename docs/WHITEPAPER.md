@@ -591,7 +591,7 @@ Lines of code: every file `git ls-files` reports with one of `.py .sol .js .css
 — so the vendored `contracts/lib/` (a `.gitkeep` in git) never enters, and neither
 does a scratch file `.gitignore` keeps out of the clone. Measured this way the tree
 is **82,520** lines: tests 39,878 · bot 20,752 · web 11,523 · scripts 2,906 ·
-contracts 2,649 · agent 1,670 · alembic 1,462 · deploy 1,373 · functions 251 ·
+contracts 2,649 · agent 1,670 · alembic 1,462 · deploy 1,373 · functions 302 ·
 script 56 (the one Foundry deploy script at the repository root).
 
 Live configuration is published by the origin itself: `GET /api/info` (chain,
