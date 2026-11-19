@@ -1005,4 +1005,49 @@
       observer.observe(el);
     });
   })();
+
+  // Counter animation: elements with `.counter` and `data-target` animate from 0
+  // to their target value when they scroll into view. Inspired by base.org's
+  // animated statistics.
+  (function initCounterAnimation() {
+    function animateCounter(element) {
+      var target = parseInt(element.getAttribute('data-target'), 10);
+      if (isNaN(target)) return;
+      var duration = 2000;
+      var startTime = performance.now();
+      
+      function update(currentTime) {
+        var elapsed = currentTime - startTime;
+        var progress = Math.min(elapsed / duration, 1);
+        var current = Math.floor(progress * target);
+        element.textContent = current;
+        if (progress < 1) {
+          requestAnimationFrame(update);
+        } else {
+          element.textContent = target;
+        }
+      }
+      requestAnimationFrame(update);
+    }
+    
+    if (!('IntersectionObserver' in window)) {
+      document.querySelectorAll('.counter').forEach(function (el) {
+        animateCounter(el);
+      });
+      return;
+    }
+    
+    var counterObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          animateCounter(entry.target);
+          counterObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    
+    document.querySelectorAll('.counter').forEach(function (el) {
+      counterObserver.observe(el);
+    });
+  })();
 })();

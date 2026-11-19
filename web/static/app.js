@@ -546,7 +546,7 @@ function marketCard(m, i) {
   }).join("");
 
   return `
-    <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
+    <div class="market-card hover-lift" style="animation-delay:${Math.min(i * 70, 420)}ms">
       <div class="market-head">
         <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
         <span class="market-meta">${metaLine(deadline, statusBadge(m))}</span>
@@ -612,7 +612,7 @@ function predictionCard(m, i) {
   }).join("");
 
   return `
-    <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
+    <div class="market-card hover-lift" style="animation-delay:${Math.min(i * 70, 420)}ms">
       <div class="market-head">
         <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
         <span class="market-meta">${metaLine(deadline, statusBadge(m))}</span>
@@ -1272,7 +1272,7 @@ async function loadOnchainMarkets() {
         </div>`;
       }).join("");
       return `
-        <div class="market-card" style="animation-delay:${Math.min(i * 70, 420)}ms">
+        <div class="market-card hover-lift" style="animation-delay:${Math.min(i * 70, 420)}ms">
           <div class="market-head">
             <span class="market-question">#${m.id} ${escapeHtml(m.question)}</span>
             <span class="market-meta">${metaLine(deadline, badge)}</span>
