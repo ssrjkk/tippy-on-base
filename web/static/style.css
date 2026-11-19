@@ -221,6 +221,66 @@ h6 { font-size: var(--t-small); }
   from { opacity: 0; transform: translateX(16px); }
   to { opacity: 1; transform: none; }
 }
+/* Scroll-reveal: elements start hidden and animate in when they enter the viewport.
+   Inspired by base.org's scroll-triggered entrances — the page feels alive as you
+   scroll, with each section fading up into view. */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+/* Staggered children: when a parent has `.reveal-stagger`, each child animates in
+   sequence with an increasing delay. This creates a cascading effect for lists and
+   grids, like the market cards or stat rows. */
+.reveal-stagger > * {
+  opacity: 0;
+  transform: translateX(-16px);
+  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
+}
+.reveal-stagger.is-visible > *:nth-child(1) { transition-delay: 0.05s; }
+.reveal-stagger.is-visible > *:nth-child(2) { transition-delay: 0.1s; }
+.reveal-stagger.is-visible > *:nth-child(3) { transition-delay: 0.15s; }
+.reveal-stagger.is-visible > *:nth-child(4) { transition-delay: 0.2s; }
+.reveal-stagger.is-visible > *:nth-child(5) { transition-delay: 0.25s; }
+.reveal-stagger.is-visible > *:nth-child(6) { transition-delay: 0.3s; }
+.reveal-stagger.is-visible > *:nth-child(7) { transition-delay: 0.35s; }
+.reveal-stagger.is-visible > *:nth-child(8) { transition-delay: 0.4s; }
+.reveal-stagger.is-visible > *:nth-child(9) { transition-delay: 0.45s; }
+.reveal-stagger.is-visible > *:nth-child(10) { transition-delay: 0.5s; }
+.reveal-stagger.is-visible > * {
+  opacity: 1;
+  transform: none;
+}
+/* Hover lift: cards and interactive elements subtly rise on hover, like base.org's
+   feature cards. The shadow deepens to reinforce the lift. */
+.hover-lift {
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+/* Pulse for live indicators and loading states. */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pulse { animation: pulse 2s ease-in-out infinite; }
+
+/* ---------- Motion preferences ---------- */
+/* Respect users who prefer reduced motion: disable all animations and transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal, .reveal-stagger > * { opacity: 1; transform: none; }
+}
 
 /* ---------- Base Mark (logo) ---------- */
 .base-mark {
@@ -401,6 +461,12 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
   padding: 22px 20px;
   text-align: left;
   animation: fadeUp 0.4s var(--ease) both;
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease), background-color 0.25s var(--ease);
+}
+.stat-card:hover {
+  background: var(--surface);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 .stat-card:nth-child(2) { animation-delay: 0.04s; }
 .stat-card:nth-child(3) { animation-delay: 0.08s; }
@@ -468,11 +534,11 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
   background: var(--canvas);
   border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px;
-  transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+  transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
   animation: fadeUp 0.4s var(--ease) backwards;
 }
 .markets .market-card { border: 0; border-radius: 0; }
-.market-card:hover { background: var(--surface); }
+.market-card:hover { background: var(--surface); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04); }
 .market-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .market-question { font-size: var(--t-body); font-weight: 500; color: var(--ink); letter-spacing: -0.01em;
   overflow-wrap: anywhere; }
@@ -930,6 +996,11 @@ code {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 22px;
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.connect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 .connect-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 .tg-widget { display: flex; justify-content: center; align-items: center; min-height: 48px; margin-top: 12px; }

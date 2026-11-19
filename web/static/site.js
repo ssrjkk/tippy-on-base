@@ -914,4 +914,28 @@
   } else {
     boot();
   }
+
+  // Scroll-reveal: elements with `.reveal` or `.reveal-stagger` animate in when
+  // they enter the viewport. Inspired by base.org's scroll-triggered entrances.
+  // The observer is set up immediately so it works regardless of sign-in state.
+  (function initScrollReveal() {
+    if (!('IntersectionObserver' in window)) {
+      // Fallback: show everything immediately if IntersectionObserver is not supported.
+      document.querySelectorAll('.reveal, .reveal-stagger').forEach(function (el) {
+        el.classList.add('is-visible');
+      });
+      return;
+    }
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(function (el) {
+      observer.observe(el);
+    });
+  })();
 })();

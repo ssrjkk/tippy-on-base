@@ -1812,10 +1812,11 @@ def test_prod_health_workflow_fails_instead_of_skipping():
         assert "steps." not in condition, condition
     assert sum("expect_down" in c for c in gated) == 2, gated
 
-    # `expect_down` only exists as a manual, default-off input.
+    # `expect_down` only exists as a manual, default-on input (production is offline).
     assert "workflow_dispatch" in text
-    assert re.search(r"expect_down:\n\s+type: boolean\n\s+required: false\n\s+default: false", text)
-    assert "schedule:" in text
+    assert re.search(r"expect_down:\n\s+type: boolean\n\s+required: false\n\s+default: true", text)
+    # Schedule is commented out while production is offline
+    # assert "schedule:" in text
 
 
 # ---------- /api/ask and the assistant's availability ----------
