@@ -1,0 +1,47 @@
+........................................................................ [  4%]
+........................................................................ [  9%]
+........................................................................ [ 14%]
+........................................................................ [ 18%]
+........................................................................ [ 23%]
+........................................................................ [ 28%]
+........................................................................ [ 32%]
+...............................F........................................ [ 37%]
+........................................................................ [ 42%]
+........................................................................ [ 46%]
+........................................................................ [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 60%]
+........................................................................ [ 65%]
+........................................................................ [ 70%]
+........................................................................ [ 74%]
+........................................................................ [ 79%]
+........................................................................ [ 84%]
+........................................................................ [ 88%]
+........................................................................ [ 93%]
+........................................................................ [ 98%]
+............................                                             [100%]
+================================== FAILURES ===================================
+________ test_the_whitepapers_lines_of_code_are_the_lines_the_tree_has ________
+
+    def test_the_whitepapers_lines_of_code_are_the_lines_the_tree_has():
+        """`git ls-files`, the seven source suffixes, `len(splitlines())`, one number per
+        top-level directory — and the directory set is the tree's answer, not the doc's."""
+        sentence = re.search(r"the\s+tree\s+is\s+\*\*([\d,]+)\*\*\s+lines(?P<body>[^.]*\.)", _whitepaper())
+        assert sentence, "the WHITEPAPER no longer states its lines of code where this law reads them"
+        body = sentence.group("body")
+        stated = {name: int(value.replace(",", "")) for name, value in _NUMBERED_PACKAGE.findall(body)}
+        assert stated, f"no `package 12,345` pair in {body!r} — the sentence has nothing to check"
+        measured = _lines_of_code_by_package()
+        assert set(stated) == set(measured), (
+            f"the sentence names {sorted(set(stated) - set(measured))} the tree does not have, "
+            f"and hides {sorted(set(measured) - set(stated))} it does"
+        )
+        wrong = {name: (stated[name], measured[name]) for name in stated if stated[name] != measured[name]}
+>       assert not wrong, f"{wrong} read (doc, measured) — rerun the Appendix A command and restate them"
+E       AssertionError: {'web': (11743, 11788)} read (doc, measured) — rerun the Appendix A command and restate them
+E       assert not {'web': (11743, 11788)}
+
+tests\test_docs.py:1410: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_docs.py::test_the_whitepapers_lines_of_code_are_the_lines_the_tree_has
+1 failed, 1539 passed, 199 deselected in 1204.15s (0:20:04)

@@ -1,0 +1,33 @@
+F.s...                                                                   [100%]
+================================== FAILURES ===================================
+___ test_every_documented_mutation_count_is_the_number_of_clauses_it_names ____
+
+    def test_every_documented_mutation_count_is_the_number_of_clauses_it_names():
+        claims = _documented_mutation_counts()
+        assert len(claims) >= 2, (
+            f"only {len(claims)} documents state a mutation count — the reader found "
+            "«N mutations were proven to fire» in fewer places than the tree writes it, so this "
+            "law would be certifying a scan that went blind"
+        )
+    
+        unnamed = [(name, stated) for name, stated, clauses in claims if not clauses]
+        assert not unnamed, (
+            f"{unnamed} — a document states how many mutations were proven to fire and names no "
+            "list beside it. The number then belongs to a scratch run that no longer exists: nobody "
+            "reading the file can re-count it, and the next wave has no choice but to trust it."
+        )
+    
+        wrong = [(name, stated, len(clauses)) for name, stated, clauses in claims if stated != len(clauses)]
+>       assert not wrong, (
+            "a stated count is not the number of clauses it enumerates — either one clause bundled "
+            "several mutations (which a reader cannot re-count) or the list lost an item:\n"
+            + "\n".join(f"  {name}: says {stated}, names {count}" for name, stated, count in wrong)
+        )
+E       AssertionError: a stated count is not the number of clauses it enumerates — either one clause bundled several mutations (which a reader cannot re-count) or the list lost an item:
+E           AGENTS.md: says 6, names 5
+E       assert not [('AGENTS.md', 6, 5)]
+
+tests\test_docs.py:2096: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_docs.py::test_every_documented_mutation_count_is_the_number_of_clauses_it_names
+1 failed, 4 passed, 1 skipped in 15.44s

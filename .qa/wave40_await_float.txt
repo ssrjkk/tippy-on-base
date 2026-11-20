@@ -1,0 +1,34 @@
+bot\chain\network.py:225  [float-арифметика над деньгами]  деление на float 1000000000.0
+bot\chain\transactions.py:26  [float-арифметика над деньгами]  деление на float 1000000000.0
+bot\ledger\_base.py:39  [корутинa в булевой позиции]  self.row.get('status')
+bot\ledger\_base.py:45  [корутинa в булевой позиции]  self.row.get('status')
+bot\ledger\_base.py:39  [корутинa в булевой позиции]  self.row.get('status')
+web\server.py:806  [float() над денежным полем]  float(config.MAX_TIP_USDC)
+web\server.py:807  [float() над денежным полем]  float(config.MAX_BET_USDC)
+web\server.py:808  [float() над денежным полем]  float(config.MARKET_MAX_TRADE_USDC)
+web\server.py:810  [float() над денежным полем]  float(config.MIN_WITHDRAW_USDC)
+web\server.py:812  [float() над денежным полем]  float(config.MARKET_MIN_SUBSIDY_USDC)
+web\server.py:813  [float() над денежным полем]  float(config.MARKET_MAX_SUBSIDY_USDC)
+web\x402.py:105  [float() над денежным полем]  float(config.X402_MIN_USDC)
+web\x402.py:106  [float() над денежным полем]  float(config.MAX_TIP_USDC)
+scripts\deploy_create2_factory.py:185  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_create2_factory.py:204  [float-арифметика над деньгами]  деление на float 1000000000.0
+scripts\deploy_create2_factory.py:204  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_create2_factory.py:209  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_outcome_market.py:156  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_outcome_market.py:202  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_outcome_market.py:162  [float-арифметика над деньгами]  деление на float 1000000000.0
+scripts\deploy_outcome_market.py:163  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_outcome_market.py:166  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_smart_wallet.py:209  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_smart_wallet.py:115  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_smart_wallet.py:133  [float-арифметика над деньгами]  деление на float 1000000000.0
+scripts\deploy_smart_wallet.py:133  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\deploy_smart_wallet.py:138  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\smoke_full_cycle.py:169  [float-арифметика над деньгами]  деление на float 1e+18
+scripts\smoke_onchain.py:27  [float-арифметика над деньгами]  деление на float 1000000.0
+scripts\smoke_onchain.py:35  [float-арифметика над деньгами]  деление на float 1000000.0
+scripts\smoke_onchain.py:85  [float-арифметика над деньгами]  деление на float 1000000.0
+scripts\smoke_smart_buy.py:79  [float-арифметика над деньгами]  деление на float 1e+18
+---
+корутин: 18 | находок: 32

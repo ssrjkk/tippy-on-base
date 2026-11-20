@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111" />
+  <link rel="stylesheet" href="/fonts.css" />
+  <title>Ончейн-рынок — Tippy</title>
+  <meta name="description" content="Рынок на Base: доли ERC-1155, расчёты в USDC внутри контракта. Живые шансы и торговля через Telegram-бота." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+        <span class="brand-name"><b>Tippy</b></span>
+      </a>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="/#onchain-markets">Все ончейн-рынки</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <article class="page" id="oc">
+      <span class="eyebrow" id="oc-kind">Ончейн-рынок</span>
+      <h1 class="page-title" id="oc-question">Загрузка…</h1>
+      <div id="oc-body">
+        <div class="page-meta" id="oc-meta"></div>
+
+        <div class="market-card">
+          <div id="oc-options"></div>
+          <div class="market-footer">
+            <span class="pot" id="oc-pool"></span>
+            <span class="pot" id="oc-creator"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://t.me/__BOT_USERNAME__" data-tg-link>Торговать в Telegram</a>
+        <a class="btn btn-ghost" id="oc-scan" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
+        <button class="btn btn-ghost" id="oc-share" type="button">Скопировать ссылку</button>
+      </div>
+
+      <section class="page-block">
+        <span class="eyebrow">Механика</span>
+        <p class="hint">
+          Исходные доли — токены ERC-1155 в контракте OutcomeMarket, расчёты идут в
+          USDC на-цепи. Цены держит LMSR-кривая: чем больше доли куплены, тем выше
+          их цена, и покупка следующего юнита всегда дороже. В боте:
+          <code>/oc_create</code>, <code>/oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt;</code>,
+          <code>/oc_sell</code>, <code>/oc_redeem &lt;id&gt;</code>.
+        </p>
+      </section>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+        <div>
+          <b>Tippy</b>
+          <span class="footer-tag">USDC-экономика в Telegram и вебе</span>
+        </div>
+      </div>
+      <div class="footer-meta">
+        <span class="chain-chip"><span data-net="chain">Base</span></span>
+        <span class="chain-chip"><span data-net="usdc">USDC</span></span>
+      </div>
+    </div>
+    <div class="author-links">
+      <span>Автор:</span>
+      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">@b2wmain</a>
+      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a>
+      <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
+      <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p class="footer-legal"><a href="/tos">Условия использования</a></p>
+    <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
+      <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+      Built on Base · открытая кодовая база
+    </a>
+  </footer>
+
+  <script src="/chain.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) =>
+      String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      })[c]);
+    const handle = (name, id) => name ? (name.includes(".") ? name : "@" + name) : "id" + id;
+    const fmtUSDC = (x) =>
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+    const fmtPct = (x) =>
+      Number(x ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + "%";
+
+    const marketId = location.pathname.split("/").filter(Boolean).pop();
+    const infoPromise = fetch("/api/info").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+    infoPromise.then(applyNetInfo);
+
+    (async () => {
+      let m;
+      try {
+        const r = await fetch("/api/onchain/market/" + encodeURIComponent(marketId));
+        if (!r.ok) throw new Error();
+        m = await r.json();
+      } catch (e) {
+        console.error("/oc/" + marketId + " read", e);
+        /* The heading names the market the reader asked for even when the read
+         * fails, and the generic bot link below it still works: replacing the
+         * article would take the h1 — and the document outline — with it. */
+        $("oc-question").textContent = "Ончейн-рынок #" + marketId;
+        $("oc-body").innerHTML = '<div class="empty">Ончейн-рынок #' + esc(marketId) +
+          ' не найден — возможно, контракты ещё не развёрнуты в этой сети. Список рынков: <a class="m-link" href="/#onchain-markets">на главной</a>.</div>';
+        return;
+      }
+
+      // The contract answers with flags, and a disputed market is neither
+      // settled nor tradable, so it keeps its own word. The other states come
+      // from chain.js, where a market past its deadline has stopped being
+      // "open" — as it does on every other surface of this site.
+      const state = marketState(m);
+      const CHIP = {
+        open: '<span class="chip chip-open">открыт</span>',
+        awaiting: '<span class="chip chip-awaiting">ждёт решения</span>',
+        resolved: '<span class="chip chip-resolved">' + (m.disputed ? "оспорен" : "завершён") + "</span>",
+        cancelled: '<span class="chip chip-cancelled">отменён</span>',
+      };
+
+      const winnerIdx = m.resolved && !m.cancelled && m.winner != null ? m.winner : null;
+      const meta = [CHIP[state]];
+      if (state === "open" && m.close_at) {
+        meta.push('<span id="oc-countdown" data-close-at="' + parseInt(m.close_at) + '">' + deadlineLine(m) + "</span>");
+      }
+      if (winnerIdx !== null) meta.push("<span>исход: " + esc((m.options[winnerIdx] || {}).label || "#" + winnerIdx) + "</span>");
+      $("oc-meta").innerHTML = meta.join("");
+
+      $("oc-kind").textContent = "Ончейн-рынок · #" + m.id;
+      $("oc-question").textContent = m.question;
+
+      $("oc-options").innerHTML = m.options.map((o, i) => {
+        const isWinner = winnerIdx !== null && o.index === winnerIdx;
+        const pct = Number(o.price_pct || 0);
+        return `
+        <div class="option${isWinner ? " option-winner" : ""}">
+          <div class="option-top">
+            <span class="option-label">${esc(o.label)}</span>
+            <span class="option-val">${fmtPct(pct)}</span>
+          </div>
+          <div class="bar"><div class="bar-fill" aria-hidden="true" style="width:${barWidth(pct)}%;animation-delay:${Math.min(i * 130, 600)}ms"></div></div>
+        </div>`;
+      }).join("");
+
+      const pool = fmtUSDC((m.escrow_micro || 0) / 1e6);
+      $("oc-pool").innerHTML = "В контракте: <b>" + pool + " USDC</b>";
+      $("oc-creator").innerHTML = 'Автор: <a class="m-link" href="/u/' + encodeURIComponent(m.creator.id) + '">' +
+        esc(handle(m.creator.username, m.creator.id)) + "</a>";
+
+      /* No explorer means no link: pointing at basescan.org from a testnet
+       * deploy opens a page that does not know this contract. */
+      const info = await infoPromise;
+      const scan = $("oc-scan");
+      if (!m.market_address || !info.explorer) {
+        scan.remove();
+      } else {
+        scan.href = info.explorer + "/address/" + encodeURIComponent(m.market_address);
+        // The markup ships hidden so a page whose contract is unknown shows no
+        // broken link — and nothing else ever clears the attribute, so setting
+        // the href alone left the button invisible in the one case it exists for.
+        scan.hidden = false;
+      }
+
+      $("oc-share").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(location.href);
+          $("oc-share").textContent = "Ссылка скопирована";
+          setTimeout(() => { $("oc-share").textContent = "Скопировать ссылку"; }, 2000);
+        } catch (e) { /* clipboard denied: the address bar still has the link */ }
+      });
+
+      if (state === "open" && m.close_at) {
+        const tick = setInterval(() => {
+          const el = $("oc-countdown");
+          const text = deadlineLine(m);
+          if (!text) {
+            /* The clock ran out while the reader was here. The chip changes
+             * with it, or this page would call the market «открыт» forever. */
+            clearInterval(tick);
+            const chip = document.querySelector("#oc-meta .chip");
+            if (chip) chip.outerHTML = CHIP.awaiting;
+            el.remove();
+            return;
+          }
+          el.textContent = text;
+          el.classList.toggle("countdown-urgent", m.close_at * 1000 - Date.now() < 3600 * 1000);
+        }, 10000);
+      }
+    })();
+  </script>
+</body>
+</html>

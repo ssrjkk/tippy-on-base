@@ -1,0 +1,1572 @@
+"""Web dashboard: public stats, markets, leaderboard, wallet transparency.
+
+Run:  python -m web.server
+Made by @ssrjkk — github.com/ssrjkk
+"""
+import asyncio
+import base64
+import ipaddress
+import json
+import logging
+import mimetypes
+import os
+import re
+import secrets
+import sys
+import time
+from html import escape as _esc
+from html import unescape as _unesc
+from pathlib import Path
+from urllib.parse import unquote
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import (
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from bot import base, config, fees, i18n
+from bot import qr as qrlib
+from bot.base import hot_balance, hot_wallet, vault_balance
+from bot.commands_catalog import BOT_COMMAND_SPECS
+from bot.ledger import IdempotencyDuplicate, lmsr_buy_shares, lmsr_cost, lmsr_prices
+from bot.ledger import async_ledger as ledger
+from bot.pct import as_pct, share
+from bot.tx_view import rows_view
+from web.auth import COOKIE_NAME, attach_login_state, login_failed, parse_session
+from web.auth import router as auth_router
+from web.frame import router as frame_router
+from web.hook import router as tg_webhook
+from web.mini import SHARE_IMAGE, public_base_url
+from web.mini import router as mini_router
+from web.refusals import lang_of, refuse
+from web.x402 import x402_info, x402_paywall, x402_tip
+
+_ENABLE_OPENAPI: bool = os.environ.get('ENABLE_OPENAPI', '0') == '1'
+
+# Validate critical secrets at import time — NOT just __main__. Every uvicorn
+# / launch.py deployment imports this module, so validate() here prevents the
+# silent "session key derived from BOT_TOKEN" fallback (attackers forge cookies
+# for any tg_id including ADMIN).
+from bot.config import validate as _validate_config
+
+_validate_config()
+log = logging.getLogger("web.server")
+app = FastAPI(title='Tippy API', version='1.1.0',
+    description='Public API of **Tippy** — a community economy in USDC on Base.\n\nFeatures: instant tips, Polymarket-style prediction markets (LMSR AMM), paywalled content, and **x402 HTTP payments for AI agents** (`POST /api/x402/tip`, `POST /api/x402/paywall`).\n\n* All amounts are USDC; `_usdc` fields are human-readable floats, `_micro` fields are integer micro-units (1e6 = 1 USDC).\n* `/api/solvency` is the Proof of Reserves: bot liabilities vs on-chain USDC (TipBotVault contract when deployed, else hot wallet).\n* Rate-limited per IP to protect the RPC quota.',
+    contact={'name': 'ssrjkk', 'url': 'https://github.com/ssrjkk/Tippy-on-base'},
+    license_info={'name': 'MIT', 'url': 'https://github.com/ssrjkk/Tippy-on-base/blob/main/LICENSE'},
+    openapi_tags=[{'name': 'stats', 'description': 'Volume, users, fees, health'}, {'name': 'markets', 'description': 'Parimutuel polls and LMSR prediction markets'}, {'name': 'users', 'description': 'Leaderboards and public profiles'}, {'name': 'treasury', 'description': 'Proof of Reserves and wallet transparency'}, {'name': 'x402', 'description': 'HTTP 402 payment handshake for AI agents'}],
+    docs_url='/docs' if _ENABLE_OPENAPI else None,
+    redoc_url='/redoc' if _ENABLE_OPENAPI else None,
+    openapi_url='/openapi.json' if _ENABLE_OPENAPI else None,
+)
+app.include_router(tg_webhook)
+app.include_router(frame_router)
+app.include_router(auth_router)
+app.include_router(mini_router)
+
+
+# A template is the source of a page, not a page. These three are the
+# documents a visitor can end up naming directly (`/index.html` is what a
+# bookmark or a crawler guesses for `/`), and each has one address that
+# renders it. The id-carrying templates have no home without an id, so they
+# are refused and the dead-end page answers instead.
+TEMPLATE_PAGES = {'/index.html': '/', '/app.html': '/app', '/agent.html': '/agent',
+                '/legal.html': '/tos'}
+# A Markdown file in the bundle is the source of a page, and the URL for it
+# is that page: `/tos.md` used to answer the terms a second time with no
+# canonical back. Both maps are compared against the directory by
+# test_the_bundle_directory_does_not_publish_its_own_plumbing, because a file
+# added to web/static is a URL the day it is committed and a map nobody
+# checks is a map that drifts.
+MARKDOWN_PAGES = {'/tos.md': '/tos'}
+
+
+def _not_found(request: Request) -> Response:
+    """The dead end as a document: a title, a theme, a way back, 404.
+
+    `StaticFiles` raises the 404 for anything it cannot name, so this used to
+    be the only page a mistyped link or an expired bookmark produced, and it
+    said `{"detail": "Not Found"}`. The rule is the path, not `Accept`: behind
+    the Pages function the request this origin sees is the function's, and its
+    headers say nothing about who sent the browser. Everything under `/api/`
+    keeps the machine answer, because there the reader parses JSON and paints
+    its own line.
+
+    No canonical, no share card: a URL that 404s must not tell a crawler what it
+    is the canonical page of, and `noindex` is what keeps this page out of
+    search instead of leaving a second copy of the site's chrome to rank.
+    """
+    return _static_page('not_found.html', request, path=request.url.path,
+                        robots='noindex', status_code=404, canonical=False)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _routing_404_handler(request: Request, exc: StarletteHTTPException):
+    """Routing's own answers, kept machine-readable where a client reads them.
+
+    FastAPI registers a handler for `HTTPException` (its subclass of this one),
+    so an API refusal raised through `refuse()` never lands here — only what
+    routing and the static mount raise: an unknown path, a wrong method, a
+    range the file cannot serve.
+    """
+    if exc.status_code == 404 and not request.url.path.startswith('/api/'):
+        return _not_found(request)
+    return JSONResponse({'detail': exc.detail}, status_code=exc.status_code,
+                        headers=getattr(exc, 'headers', None))
+
+
+@app.exception_handler(IdempotencyDuplicate)
+async def _idempotency_duplicate_handler(request: Request, exc: IdempotencyDuplicate):
+    """One answer for every money route: replay the original, or say why we cannot.
+
+    The reservation is written inside the money transaction, so a duplicate never
+    re-spends — what it gets back depends only on what the first attempt managed
+    to record: `completed` has the body (200, the client's retry succeeded),
+    `applied` moved the money but lost the body (409, check the balance),
+    `pending` is still in flight (409, do not retry).
+    """
+    replay = exc.replay
+    if replay is not None:
+        return JSONResponse(replay)
+    # The two open states answer differently on purpose, and the visitor
+    # reads the difference in their own words: `applied` means the money
+    # moved, so a retry is a second spend; `pending` means it has not
+    # finished, so the only safe advice is to wait and look. The machine
+    # sentence stays in the log, where the action and key identify it.
+    status = exc.row.get('status')
+    key = 'api_idem_applied' if status == 'applied' else 'api_idem_pending'
+    return JSONResponse({'detail': i18n.t(lang_of(request), key)}, status_code=409)
+
+STATIC = Path(__file__).resolve().parent / 'static'
+MICRO = 10 ** config.USDC_DECIMALS
+# Only labels we can state as fact for a chain id we recognise; anything else
+# falls back to the raw id rather than guessing "Base".
+CHAIN_NAMES = {8453: 'Base', 84532: 'Base Sepolia'}
+WEB_RATE_LIMIT: int = int(os.environ.get('WEB_RATE_LIMIT', '60'))
+WEB_RATE_WINDOW: int = int(os.environ.get('WEB_RATE_WINDOW', '60'))
+WEB_RATE_MAX_CLIENTS: int = int(os.environ.get('WEB_RATE_MAX_CLIENTS', '10000'))
+AUTH_RATE_LIMIT: int = int(os.environ.get('AUTH_RATE_LIMIT', '10'))
+AUTH_RATE_WINDOW: int = int(os.environ.get('AUTH_RATE_WINDOW', '300'))
+_rl_state: dict[str, list[float]] = {}
+_auth_rl_state: dict[str, list[float]] = {}
+_RL_DISABLED: bool = os.environ.get('TESTING', '') == '1'
+_rl_last_sweep: float = 0.0
+_auth_rl_last_sweep: float = 0.0
+_ask_cooldown: dict[str, float] = {}
+# Per-IP ask cooldown only. The daily answer budget is NOT kept here: it used
+# to be a module counter, which each of the three processes (uvicorn, the bot,
+# the agent) spent on its own and reset on every deploy. It lives in
+# ai_usage_day now — see bot/ai.py:charge_answer().
+# /api/stats runs 8 full-table aggregates against the shared DB connection —
+# cache the result briefly so dashboards/pagers don't re-run them per hit.
+_stats_cache: dict | None = None
+_stats_ts: float = 0.0
+_STATS_TTL = 10  # seconds
+
+
+def _peer_trusted(peers: frozenset, peer: str) -> bool:
+    """True when `peer` is one of the trusted proxy peers.
+
+    Entries may be a bare IP, a CIDR network (compose private networks are
+    172.x), or an exact hostname match. Non-numeric strings fall back to
+    string equality so an operator can list a DNS name too.
+    """
+    if not peer or peer == 'unknown':
+        return False
+    if peer in peers:
+        return True
+    try:
+        addr = ipaddress.ip_address(peer.split('%')[0])
+    except ValueError:
+        return False
+    for p in peers:
+        if '/' in p:
+            try:
+                if addr in ipaddress.ip_network(p, strict=False):
+                    return True
+            except ValueError:
+                continue
+    return False
+
+
+def _client_ip(request: Request) -> str:
+    """Rate-limiter identity for a request. By default the TCP peer IP, which
+    the client cannot spoof. Only when BOTH the direct peer is a trusted proxy
+    (config.TRUSTED_PROXY_PEERS) AND config.TRUST_PROXY_XFF=1 do we honour the
+    RIGHTMOST X-Forwarded-For entry (the real client). The leftmost entries are
+    client-supplied and spoofable, so they are never trusted — and a client
+    forging the header straight at the app socket is still bucketed by its
+    real peer IP because uvicorn doesn't rewrite request.client for untrusted
+    peers (proxy_headers=False)."""
+    peer = request.client.host if request.client else 'unknown'
+    if config.TRUST_PROXY_XFF and _peer_trusted(config.TRUSTED_PROXY_PEERS, peer):
+        xff = request.headers.get('X-Forwarded-For')
+        if xff:
+            parts = [p.strip() for p in xff.split(',') if p.strip()]
+            if parts:
+                return parts[-1]
+    return peer
+
+
+# Headers a tunnel or reverse proxy adds on the way in. cloudflared connects
+# from 127.0.0.1, so public traffic has a loopback peer too — a loopback peer
+# alone therefore does not mean the request originated on this host.
+_PROXY_HEADERS = ('cf-connecting-ip', 'cf-ray', 'x-forwarded-for', 'x-real-ip', 'forwarded')
+
+
+def _direct_loopback(request: Request) -> bool:
+    """True only for a request that reached the app socket from this host with
+    no proxy in front of it (a local scrape/curl). A tunneled request has a
+    loopback peer as well, so the peer check is not sufficient on its own."""
+    if not (request.client and request.client.host in ('127.0.0.1', '::1')):
+        return False
+    return not any(request.headers.get(h) for h in _PROXY_HEADERS)
+
+
+_CSP_SCRIPT_WHITELIST = "https://esm.sh https://cdn.jsdelivr.net https://telegram.org"
+# The Telegram Login Widget draws its button inside an iframe from
+# oauth.telegram.org. frame-src is not set, so such a request falls back to
+# default-src 'self' and is blocked — the login button would stay empty.
+_CSP_FRAME_WHITELIST = "'self' https://oauth.telegram.org"
+
+
+def _nonce_inject(html: str, nonce: str) -> str:
+    """Add a CSP nonce attribute to every inline <script>/<style> tag so the
+    strict 'nonce-…' directive can replace 'unsafe-inline' on HTML pages.
+
+    Tags that already carry a nonce are left alone; external <script src=…>
+    tags are NOT touched (their origins are source-whitelisted instead).
+    """
+    tag_re = re.compile(r'<\s*(script|style)\b([^>]*)>', re.IGNORECASE)
+
+    def _repl(m: re.Match) -> str:
+        tag_name, attrs = m.group(1), m.group(2)
+        if 'nonce=' in attrs or re.search(r'\bsrc\s*=', attrs):
+            return m.group(0)
+        return f'<{tag_name} nonce="{nonce}"{attrs}>'
+
+    return tag_re.sub(_repl, html)
+
+
+@app.middleware('http')
+async def rate_limit(request: Request, call_next):
+    global _rl_last_sweep, _auth_rl_last_sweep
+    path = request.url.path
+    # The bundle directory doubles as the web root, so every file that lands in
+    # web/static is published by StaticFiles: `/_headers` came back 200 as
+    # application/octet-stream, and a template or Markdown file answered the
+    # site's own source as a second copy of the page it renders. `/_` is the
+    # platform's config and is refused here; the source files are refused in the
+    # mount, so their answers still pass the header and CSP layer below.
+    if path.startswith('/_'):
+        return JSONResponse(status_code=404, content={'detail': 'Not found'})
+    if not _RL_DISABLED and (path.startswith('/api/') or path in ('/qr', '/metrics', '/tos', config.WEBHOOK_PATH)):
+        client = _client_ip(request)
+        now = time.time()
+        # Stricter limit on auth endpoints to slow brute-force login attempts.
+        if path.startswith('/api/auth/') or path == '/api/mini/auth':
+            cutoff = now - AUTH_RATE_WINDOW
+            window = _auth_rl_state.setdefault(client, [])
+            _auth_rl_state[client] = [t for t in window if t > cutoff]
+            if len(_auth_rl_state[client]) >= AUTH_RATE_LIMIT:
+                if path == '/api/auth/telegram':
+                    # The widget navigates the browser into this limiter, so a body
+                    # here is the same replaced site the refusals used to print: the
+                    # landing gets the fourth reason code and says it in its own words.
+                    return login_failed('slow')
+                return JSONResponse(
+                    status_code=429,
+                    content={'detail': i18n.t(lang_of(request), 'api_login_too_fast')},
+                    headers={
+                        'Retry-After': str(AUTH_RATE_WINDOW),
+                        'X-Content-Type-Options': 'nosniff',
+                        'Referrer-Policy': 'no-referrer',
+                    },
+                )
+            _auth_rl_state[client].append(now)
+            if len(_auth_rl_state) > WEB_RATE_MAX_CLIENTS and now - _auth_rl_last_sweep > AUTH_RATE_WINDOW:
+                for ip, hits in list(_auth_rl_state.items()):
+                    if not any(t > cutoff for t in hits):
+                        del _auth_rl_state[ip]
+                _auth_rl_last_sweep = now
+        # General rate limit for all /api/* and other protected paths.
+        cutoff = now - WEB_RATE_WINDOW
+        window = _rl_state.setdefault(client, [])
+        _rl_state[client] = [t for t in window if t > cutoff]
+        if len(_rl_state[client]) >= WEB_RATE_LIMIT:
+            return JSONResponse(
+                status_code=429,
+                content={'detail': i18n.t(lang_of(request), 'api_rate_limited')},
+                headers={
+                    'Retry-After': str(WEB_RATE_WINDOW),
+                    'X-Content-Type-Options': 'nosniff',
+                    'Referrer-Policy': 'no-referrer',
+                },
+            )
+        _rl_state[client].append(now)
+        # Full-state eviction is O(distinct clients); run it at most once per
+        # window instead of on every request once the cap is breached.
+        if len(_rl_state) > WEB_RATE_MAX_CLIENTS and now - _rl_last_sweep > WEB_RATE_WINDOW:
+            for ip, hits in list(_rl_state.items()):
+                if not any(t > cutoff for t in hits):
+                    del _rl_state[ip]
+            _rl_last_sweep = now
+    response = await call_next(request)
+    # No X-Frame-Options here on purpose: the Mini App runs inside Telegram's
+    # iframe and must stay framable. These four are safe everywhere.
+    nonce = base64.b64encode(secrets.token_bytes(16)).decode()
+    ctype = response.headers.get('content-type', '')
+    body = None
+    if ctype.startswith('text/html'):
+        try:
+            chunks = [c async for c in response.body_iterator]
+            body = b''.join(chunks)
+        except Exception:
+            body = None
+        if body:
+            try:
+                body = _nonce_inject(body.decode('utf-8', 'replace'), nonce).encode('utf-8')
+            except Exception:
+                body = None
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('Referrer-Policy', 'no-referrer')
+    response.headers.setdefault('Cache-Control', 'no-store, no-cache, must-revalidate')
+    response.headers.setdefault('Content-Security-Policy',
+        f"default-src 'self'; script-src 'self' 'nonce-{nonce}' {_CSP_SCRIPT_WHITELIST}; "
+        f"style-src 'self' 'unsafe-inline'; "
+        f"font-src 'self'; "
+        f"img-src 'self' data: https:; "
+        f"connect-src 'self'; frame-src {_CSP_FRAME_WHITELIST}; "
+        "frame-ancestors 'self' https://web.telegram.org")
+    try:
+        await ledger.rollback()
+    except Exception:
+        log.warning("ledger.rollback() failed after request to %s", path, exc_info=True)
+    if body is not None:
+        # The rebuilt body (nonce-injected, re-encoded) differs in length from
+        # the original, so the copied Content-Length is stale: uvicorn would
+        # raise "Response content longer than Content-Length" and truncate the
+        # page to zero bytes. Pin the header to the actual rebuilt size.
+        headers = dict(response.headers)
+        headers['content-length'] = str(len(body))
+        return StreamingResponse(iter([body]), status_code=response.status_code,
+                                 headers=headers, media_type=ctype or 'text/html')
+    return response
+
+def _usdc(micro: int) -> float:
+    from decimal import Decimal
+    return float(Decimal(micro) / Decimal(MICRO))
+
+def _require_admin(request: Request) -> None:
+    """403 unless the request carries a session cookie for the owner."""
+    admin_id = int(config.ADMIN_TG_ID) if config.ADMIN_TG_ID else 0
+    session_id = parse_session(request.cookies.get(COOKIE_NAME))
+    if not admin_id or session_id != admin_id:
+        raise HTTPException(status_code=403, detail='admin only')
+
+async def _safe_hot_balance() -> float | None:
+    try:
+        from decimal import ROUND_HALF_UP, Decimal
+        raw = await hot_balance()
+        return float(Decimal(str(raw)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    except Exception:
+        log.warning("hot_balance() RPC failed", exc_info=True)
+        return None
+
+async def _safe_vault_balance() -> float | None:
+    try:
+        from decimal import ROUND_HALF_UP, Decimal
+        bal = await vault_balance()
+        if bal is None:
+            return None
+        return float(Decimal(str(bal)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    except Exception:
+        log.warning("vault_balance() RPC failed", exc_info=True)
+        return None
+
+@app.get('/api/stats', tags=['stats'])
+async def api_stats() -> dict:
+    # TESTING mode bypasses the TTL so tests that write then read see fresh
+    # aggregates (same TESTING escape hatch the rate limiter uses).
+    if not _RL_DISABLED:
+        global _stats_cache, _stats_ts
+        now = time.time()
+        if _stats_cache is not None and now - _stats_ts < _STATS_TTL:
+            return _stats_cache
+    s = await ledger.global_stats()
+    view = {**s, 'volume_usdc': _usdc(s['volume_micro']), 'volume_30d_usdc': _usdc(s['volume_30d_micro']), 'tips_usdc': _usdc(s['tips_micro']), 'deposits_usdc': _usdc(s['deposits_micro']), 'bets_usdc': _usdc(s['bets_micro']), 'fees_usdc': _usdc(s['fees_micro'])}
+    if not _RL_DISABLED:
+        _stats_cache = view
+        _stats_ts = time.time()
+    return view
+
+@app.get('/api/volume_history', tags=['stats'])
+async def api_volume_history(days: int=14) -> list[dict]:
+    days = min(max(int(days), 1), 30)
+    return [{**r, 'volume_usdc': _usdc(r['volume_micro'])} for r in await ledger.volume_history(days)]
+
+@app.get('/api/markets', tags=['markets'])
+async def api_markets(status: str='open') -> list[dict]:
+    from bot import tip_targets
+    bets = await ledger.bets_by_status(status, 20)
+    bet_ids = [int(b['id']) for b in bets]
+    views = await ledger.bulk_market_views(bet_ids)
+    nameless = [int(v['creator']['id']) for v in views if not v['creator'].get('username')]
+    basenames = await tip_targets.display_names_for(nameless)
+    for view in views:
+        bn = basenames.get(int(view['creator']['id']))
+        if bn and not view['creator'].get('username'):
+            view['creator']['username'] = bn
+        view['pot_usdc'] = _usdc(view['pot'])
+        for o in view['options']:
+            o['pool_usdc'] = _usdc(o['pool'])
+    return views
+
+@app.get('/api/market/{bet_id}', tags=['markets'])
+async def api_market(bet_id: int) -> dict:
+    from bot import tip_targets
+    view = await ledger.market_view(bet_id)
+    if not view:
+        raise refuse(None, 404, 'api_bet_missing')
+    if not view['creator'].get('username'):
+        try:
+            bn = await tip_targets.display_name_for(view['creator']['id'])
+        except Exception:
+            bn = None
+        if bn:
+            view['creator']['username'] = bn
+    view['pot_usdc'] = _usdc(view['pot'])
+    for o in view['options']:
+        o['pool_usdc'] = _usdc(o['pool'])
+    return view
+
+@app.get('/api/predictions', tags=['markets'])
+async def api_predictions(status: str='open') -> list[dict]:
+    """LMSR AMM prediction markets with live odds (Polymarket-style)."""
+    if status != 'open':
+        return []
+    markets = await ledger.open_markets(20)
+    views = await ledger.bulk_amm_market_views([int(m['id']) for m in markets])
+    out = []
+    for m in markets:
+        view = views.get(int(m['id']))
+        if view:
+            view['liquidity_usdc'] = _usdc(view['liquidity_micro'])
+            view['volume_usdc'] = _usdc(view['volume_micro'])
+            for o in view['options']:
+                o.pop('shares', None)
+            out.append(view)
+    return out
+
+@app.get('/api/prediction/{market_id}', tags=['markets'])
+async def api_prediction(market_id: int) -> dict:
+    view = await ledger.amm_market_view(market_id)
+    if not view:
+        raise refuse(None, 404, 'api_prediction_missing')
+    view['liquidity_usdc'] = _usdc(view['liquidity_micro'])
+    view['volume_usdc'] = _usdc(view['volume_micro'])
+    return view
+
+@app.get('/api/prediction/{market_id}/quote', tags=['markets'])
+async def api_prediction_quote(market_id: int, option: int, amount: str) -> dict:
+    """What buying `option` for `amount` USDC would cost right now.
+
+    The landing's trade panel asks instead of recomputing. LMSR here is a
+    40-digit Decimal cost function with a binary search floored to whole
+    micro-shares (`lmsr_buy_shares`); JavaScript in float64 cannot reproduce
+    that bit for bit, and a panel that promises 1.209 shares for a trade that
+    settles at 1.208 is worse than no panel. So the numbers a visitor sees are
+    the numbers `buy_shares` will book.
+
+    Read-only: nothing is reserved, debited or locked, and the quote is priced
+    against the curve as it is at this instant — a trade a minute later moves.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        spend_micro = int(Decimal(amount) * MICRO)
+    except InvalidOperation:
+        raise refuse(None, 400, 'api_amount_number')
+    if spend_micro <= 0:
+        raise refuse(None, 400, 'api_amount_positive')
+    cap_micro = int(config.MARKET_MAX_TRADE_USDC * MICRO)
+    if spend_micro > cap_micro:
+        raise refuse(None, 400, 'api_cap_trade', cap=_usdc(cap_micro))
+
+    m = await ledger.get_market(market_id)
+    if not m:
+        raise refuse(None, 404, 'api_prediction_missing')
+    if m['status'] != 'open':
+        raise refuse(None, 409, 'api_market_closed')
+    options = json.loads(m['options'])
+    if option < 0 or option >= len(options):
+        raise refuse(None, 400, 'api_no_such_option')
+    b_micro = int(m['b_micro'])
+    q = await ledger.market_quantities(market_id)
+    # Dust trades are rejected by the write path for the same reason, so the
+    # panel must not quote a share count of zero and call it a trade. The word
+    # has to be the floor's own: «Сумма должна быть больше нуля» for an amount
+    # that is positive tells the reader the parser broke, not the boundary.
+    if spend_micro < config.MARKET_MIN_TRADE_MICRO:
+        raise refuse(None, 400, 'api_amount_dust', min=_usdc(config.MARKET_MIN_TRADE_MICRO))
+    shares = lmsr_buy_shares(q, b_micro, option, spend_micro)
+    if shares <= 0:
+        raise refuse(None, 400, 'api_amount_one_share')
+    after = [*q[:option], q[option] + shares, *q[option + 1:]]
+    price_before = lmsr_prices(q, b_micro)[option]
+    price_after = lmsr_prices(after, b_micro)[option]
+    # The cost actually booked is the curve's own delta, not the typed amount:
+    # shares are floored, so the tail of the quote stays in the escrow.
+    cost_micro = int(lmsr_cost(after, b_micro) - lmsr_cost(q, b_micro))
+    cost_micro = min(cost_micro, spend_micro)
+    # Percentages take the rounder `amm_market_view` gives the same market's
+    # cards: a panel showing 24,88 next to a card showing 24,89 is two odds for
+    # one curve, and the reader has no way to know which one the ledger holds.
+    from bot import onchain_market as om
+
+    return {
+        'market_id': market_id,
+        'option': option,
+        'label': options[option],
+        'amount_usdc': _usdc(spend_micro),
+        'cost_usdc': _usdc(cost_micro),
+        'shares': shares,
+        'shares_usdc': _usdc(shares),
+        'avg_price_usdc': float((Decimal(cost_micro) / Decimal(shares)).quantize(Decimal('0.000001'))),
+        'price_before_pct': om.price_pct(price_before),
+        'price_after_pct': om.price_pct(price_after),
+        'payout_usdc': _usdc(shares),
+        'profit_usdc': _usdc(shares - cost_micro),
+        'roi_pct': share(shares - cost_micro, cost_micro),
+        'max_trade_usdc': _usdc(cap_micro),
+        'min_trade_usdc': _usdc(config.MARKET_MIN_TRADE_MICRO),
+    }
+
+@app.get('/api/leaderboard', tags=['users'])
+async def api_leaderboard() -> list[dict]:
+    from bot import tip_targets
+    rows = await ledger.leaderboard(10)
+    # No Telegram username — surface the user's primary Basename. One call for
+    # the whole list: this used to resolve per row, and read a `tg_id` the row
+    # did not have, so the except swallowed a KeyError and no leader ever got a
+    # name back.
+    nameless = [int(r['tg_id']) for r in rows if not r['username']]
+    basenames = await tip_targets.display_names_for(nameless)
+    out = []
+    for r in rows:
+        row = {**r, 'total_usdc': _usdc(r['total_micro'])}
+        # `username` stays the name the page shows: Telegram username, else
+        # Basename, else the id.
+        row['username'] = r['username'] or basenames.get(int(r['tg_id'])) or f"id{r['tg_id']}"
+        del row['tg_id']
+        out.append(row)
+    return out
+
+@app.get('/api/user/{tg_id}', tags=['users'])
+async def api_user(tg_id: int, request: Request) -> dict:
+    # No 404 oracle: an unknown tg_id returns the same empty public shape as a
+    # brand-new user (all-zero aggregates), so the endpoint cannot be used to
+    # enumerate which ids exist.
+    admin_id = int(config.ADMIN_TG_ID or 0)
+    session_id = parse_session(request.cookies.get(COOKIE_NAME))
+    is_owner = session_id in (tg_id, admin_id)
+    exists = await ledger.user_exists(tg_id)
+    if not exists:
+        return {
+            'username': None, 'tg_username': None,
+            'tips_sent_usdc': 0.0, 'tips_received_usdc': 0.0,
+            'bets_won_usdc': 0.0, 'bets_placed_usdc': 0.0,
+            'creator_fees_usdc': 0.0,
+            'deposit_address': str(hot_wallet()),
+            'is_owner': False,
+        }
+    v = await ledger.user_view(tg_id)
+    # Public profile endpoint: expose only non-sensitive stats. The requested
+    # user's own full data (balances, positions, tx history) is returned ONLY
+    # to that same user or the owner; a stranger enumerating tg_ids gets the
+    # public aggregate only (no per-tx amounts, no live balance, no positions).
+    if is_owner:
+        positions = [
+            {
+                **p,
+                'stake_usdc': _usdc(p['stake_micro']),
+                # The cabinet shows what resolve_bet will credit, not the gross
+                # pot share — a preview that rounds differently is a promise the
+                # ledger breaks.
+                'net_usdc': _usdc(p['net_micro']),
+            }
+            for p in await ledger.user_positions(tg_id)
+        ]
+        lang = (await ledger.get_settings(tg_id)).get('lang', 'ru')
+        history = await rows_view(await ledger.history(tg_id, 12), lang, ledger)
+        return {
+            **v,
+            'balance_usdc': _usdc(v['balance_micro']),
+            'tips_sent_usdc': _usdc(v['tips_sent_micro']),
+            'tips_received_usdc': _usdc(v['tips_received_micro']),
+            'bets_won_usdc': _usdc(v['bets_won_micro']),
+            'bets_placed_usdc': _usdc(v['bets_placed_micro']),
+            'creator_fees_usdc': _usdc(v['creator_fees_micro']),
+            'positions': positions,
+            'history': history,
+            'deposit_address': str(hot_wallet()),
+            'is_owner': True,
+        }
+    # Public view: totals only (no live balance, positions, or per-tx history).
+    username = v.get('username')
+    if not username:
+        try:
+            from bot import tip_targets
+            bn = await tip_targets.display_name_for(tg_id)
+        except Exception:
+            bn = None
+        if bn:
+            username = bn
+    return {
+        'username': username,
+        'tg_username': v.get('username'),
+        'tips_sent_usdc': _usdc(v['tips_sent_micro']),
+        'tips_received_usdc': _usdc(v['tips_received_micro']),
+        'bets_won_usdc': _usdc(v['bets_won_micro']),
+        'bets_placed_usdc': _usdc(v['bets_placed_micro']),
+        'creator_fees_usdc': _usdc(v['creator_fees_micro']),
+        'deposit_address': str(hot_wallet()),
+        'is_owner': False,
+    }
+
+@app.get('/api/agent/status', tags=['agent'])
+async def api_agent_status(request: Request) -> dict:
+    """Agent PnL dashboard — owner-only. Exposes agent reasoning/markets, so it
+    must not be public (could be front-run via its public markets)."""
+    _require_admin(request)
+
+    from agent.caps import get_status
+    from agent.config import audit_file
+    tg_id = int(config.AGENT_TG_ID) if hasattr(config, 'AGENT_TG_ID') else 0
+    if not tg_id:
+        return {'error': 'AGENT_TG_ID not configured'}
+    if not await ledger.user_exists(tg_id):
+        return {'error': 'Agent user not found'}
+    v = await ledger.user_view(tg_id)
+    caps_status = get_status()
+    trail = audit_file()
+    market_count = 0
+    bet_count = 0
+    if trail.exists():
+        with trail.open("r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError as e:
+                    log.warning('agent audit line will not parse and is left out of the published market and bet counts: %s', e)
+                    continue
+                # One audit line per cycle, and a line is only written after
+                # create_market succeeded — so lines are markets, not actions.
+                market_count += 1
+                if entry.get('bet_placed'):
+                    bet_count += 1
+    return {
+        'balance_usdc': _usdc(v['balance_micro']),
+        'markets_created': market_count,
+        'bets_placed': bet_count,
+        'caps': caps_status,
+    }
+
+@app.get('/api/agent/audit', tags=['agent'])
+async def api_agent_audit(request: Request) -> list[dict]:
+    """Agent audit trail — last 50 actions from local JSONL log (owner-only)."""
+    _require_admin(request)
+
+    from agent.config import audit_file
+
+    trail = audit_file()
+    if not trail.exists():
+        return []
+    entries = []
+    with trail.open("rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        chunk = 8192
+        lines: list[str] = []
+        pos = size
+        while pos > 0 and len(lines) < 60:
+            read_size = min(chunk, pos)
+            pos -= read_size
+            f.seek(pos)
+            buf = f.read(read_size).decode("utf-8", errors="replace")
+            if pos == 0:
+                lines = buf.splitlines() + lines
+            else:
+                parts = buf.splitlines()
+                lines = parts[1:] + lines
+                if not buf.startswith("\n"):
+                    lines = parts[:1] + lines
+    for line in lines[-50:]:
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        # The trail writes the model's confidence as a ratio (0..1). The bot
+        # multiplies it into a percent, and a dashboard that multiplied it in
+        # JS would decide the same face in a second language with a second
+        # rule — so the percentage is published here, under the name the page
+        # paints: every `_pct` field this origin answers is a percentage.
+        if isinstance(entry, dict) and isinstance(entry.get("confidence"), (int, float)):
+            entry["confidence_pct"] = as_pct(entry["confidence"])
+        entries.append(entry)
+    return entries
+
+@app.get('/api/onchain/markets', tags=['markets'])
+async def api_onchain_markets() -> list[dict]:
+    """On-chain OutcomeMarket markets (Polymarket-style) with live LMSR prices.
+
+    Returns [] when the contract is not configured. Prices are read straight
+    from the contract on Base; labels/questions come from the bot registry.
+    """
+    from bot import onchain_market as om
+    return await om.market_views(12)
+
+@app.get('/api/onchain/market/{market_id}', tags=['markets'])
+async def api_onchain_market(market_id: int) -> dict:
+    """One on-chain market: registry labels + live on-chain state/prices."""
+
+    from bot import onchain_market as om
+    m = await ledger.get_onchain_market(market_id)
+    if not m:
+        raise refuse(None, 404, 'api_oc_not_found')
+    options = json.loads(m['options'])
+    prices = await om.market_prices(market_id, len(options))
+    info = await om.get_market_info(market_id)
+    return {
+        'id': market_id,
+        'question': m['question'],
+        'close_at': m['close_at'],
+        'creator': {'id': m['creator'], 'username': await ledger.username_of(int(m['creator']))},
+        'b': info.get('b'),
+        'escrow_micro': info.get('escrow_micro'),
+        'resolved': info.get('resolved'),
+        'disputed': info.get('disputed'),
+        'cancelled': info.get('cancelled'),
+        'winner': info.get('winning_outcome'),
+        'market_address': config.OUTCOME_MARKET_ADDRESS,
+        'options': [
+            {'index': i, 'label': o, 'price_pct': om.price_pct(prices[i])}
+            for i, o in enumerate(options)
+        ],
+    }
+
+def _ai_has_llm() -> bool:
+    """Whether a provider is configured. Reads config and the environment only
+    — no DB, no request — because /api/info is public and answers per page view."""
+    from bot import ai
+
+    return ai.has_llm()
+
+
+@app.get('/api/info', tags=['stats'])
+def api_info() -> dict:
+    """Bot identity plus the limits, fees and command menu the bot registers.
+
+    The web app renders its input constraints and its command table from here
+    rather than hardcoding them, so what a user reads on the site is what
+    `web/mini.py` rejects against and what `set_my_commands` installs. The
+    network label and explorer come from the same config the bot signs with, so
+    a Sepolia deployment cannot advertise itself as mainnet.
+    """
+    return {
+        'bot_username': config.BOT_USERNAME,
+        'chain_id': config.EXPECTED_CHAIN_ID,
+        'chain_name': chain_label(),
+        'explorer': config.BASESCAN_URL,
+        'usdc_address': config.USDC_ADDRESS,
+        'commands': [{'command': c, 'description': d, 'group': g}
+                     for c, d, g in BOT_COMMAND_SPECS],
+        'fees': {
+            'withdraw_pct': float(config.WITHDRAW_FEE_PCT * 100),
+            'win_pct': float(config.WIN_FEE_PCT * 100),
+        },
+        'limits': {
+            'max_tip_usdc': float(config.MAX_TIP_USDC),
+            'max_bet_usdc': float(config.MAX_BET_USDC),
+            'max_trade_usdc': float(config.MARKET_MAX_TRADE_USDC),
+            'min_trade_usdc': _usdc(config.MARKET_MIN_TRADE_MICRO),
+            'min_withdraw_usdc': float(config.MIN_WITHDRAW_USDC),
+            'max_withdraws_per_day': config.MAX_WITHDRAWS_PER_DAY,
+            'min_subsidy_usdc': float(config.MARKET_MIN_SUBSIDY_USDC),
+            'max_subsidy_usdc': float(config.MARKET_MAX_SUBSIDY_USDC),
+            # How many blocks a deposit waits before it is credited. The
+            # Mini App's deposit sheet prints this figure beside its QR, so
+            # it is published from the sweep's own knob (bot/base.py).
+            'deposit_confirmations': config.DEPOSIT_CONFIRM_BLOCKS,
+            # The two deadline bounds `/api/mini/create` applies: what a creator
+            # who names no deadline gets, and the ceiling it refuses above. Both
+            # create fields state them, so a sheet never offers a clock the route
+            # will not honour.
+            'default_deadline_hours': config.MARKET_DEFAULT_HOURS,
+            'max_deadline_hours': config.MARKET_MAX_DEADLINE_HOURS,
+        },
+        'smart_wallet_enabled': bool(
+            config.SMART_WALLET_ENABLED
+            and config.SMART_WALLET_FACTORY_ADDRESS
+            and config.SMART_WALLET_PAYMASTER_ADDRESS
+        ),
+        'onchain_markets_enabled': bool(config.OUTCOME_MARKET_ADDRESS),
+        # 'llm' when a provider is configured, 'data' when /ask answers from the
+        # ledger. The Mini App labels its answer bubbles with it, so it stops
+        # offering a panel that can only fail.
+        'ai_mode': 'llm' if _ai_has_llm() else 'data',
+        # The x402 handshake the landing demonstrates: whether this origin takes
+        # agent payments at all, and the bounds its own parser enforces.
+        'x402': x402_info(),
+    }
+
+@app.get('/api/ai/status', tags=['stats'])
+async def api_ai_status(request: Request) -> dict:
+    """Provider chain and today's answer budget — owner-only: it names the
+    environment variables the keys live in and quotes provider error bodies."""
+    _require_admin(request)
+
+    from bot import ai
+
+    return ai.status()
+
+@app.get('/api/health', tags=['stats'])
+async def api_health() -> dict:
+    """Liveness + deposit-scanner health + DB connectivity."""
+    head = None
+    try:
+        head = await asyncio.to_thread(lambda: base.w3.eth.block_number)
+    except Exception:
+        pass
+    last = await ledger.last_block()
+    db_ok = True
+    try:
+        await ledger.ping()
+    except Exception:
+        db_ok = False
+    status = 'ok' if db_ok else 'degraded'
+    return {
+        'status': status,
+        'hot_wallet': str(hot_wallet()),
+        'chain_head': head,
+        'last_scanned_block': last,
+        'deposit_lag': head - last if head is not None else None,
+        'db': 'ok' if db_ok else 'down',
+    }
+
+@app.post('/api/x402/tip', tags=['x402'])
+async def api_x402_tip(request: Request) -> Response:
+    """x402 payment handshake: agents pay USDC tips to Telegram users over HTTP.
+
+    First call (no `x-402-payment` header) -> 402 with the invoice headers.
+    After paying on-chain, repeat with `x-402-payment: <tx_hash>` -> 200 and
+    the tip lands on the recipient's balance. Replay of the same tx -> 409.
+    """
+    return await x402_tip(request)
+
+@app.post('/api/x402/paywall', tags=['x402'])
+async def api_x402_paywall(request: Request) -> Response:
+    """x402 payment handshake for paywall content.
+
+    POST /api/x402/paywall?item=<id>&amount=<usdc> — without the payment
+    header you get a 402 invoice; after paying, repeat with
+    `x-402-payment: <tx_hash>` and the content is returned in the 200 body.
+    Replay of the same tx -> 409.
+    """
+    return await x402_paywall(request)
+
+@app.get('/api/solvency', tags=['treasury'])
+async def api_solvency() -> dict:
+    """Transparency: every claim on the treasury, against what is really held.
+
+    `liabilities_usdc` is `total_liabilities()` — six categories: user balances,
+    open market escrow, open bet pools, community treasuries, unswept x402 credit
+    and unclaimed pending deposits. `pending_deposits_usdc` is one of the six,
+    printed separately, not a seventh thing to add. Reserves come from the
+    TipBotVault contract when it is deployed (on-chain, readable by anyone);
+    otherwise from the hot wallet.
+
+    One number gets one name: the payload used to carry the same figure as
+    `owed_usdc` as well, and nothing but a test read that second key.
+    `coverage_pct` is the ring's own figure — the clamped share of liabilities
+    the address covers, stated at the one decimal the painted face owes, so the
+    page paints what the API says instead of dividing and rounding again.
+    """
+    from decimal import ROUND_HALF_UP, Decimal
+
+    liabilities = await ledger.total_liabilities()
+    pending = await ledger.pending_deposit_total()
+    owed = _usdc(liabilities)
+    bal = await _safe_hot_balance()
+    vault_bal = await _safe_vault_balance()
+    vault_addr = config.VAULT_ADDRESS
+    reserves = vault_bal if vault_addr else bal
+    if reserves is not None:
+        reserve_diff = float((Decimal(str(reserves)) - Decimal(str(owed))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        solvent = Decimal(str(reserves)) >= Decimal(str(owed))
+        # The ring's number, published as the face it is painted at: the page
+        # used to divide and multiply here and let `toLocaleString` decide the
+        # decimal a second time, so the arc and the label were two claims about
+        # one fraction, rounded by two rules. A clamped ratio has no business
+        # above 100 — an over-covered treasury still reads as fully covered.
+        owed_d, held_d = Decimal(str(owed)), Decimal(str(reserves))
+        coverage_pct = 100.0 if owed_d <= 0 else as_pct(min(max(held_d / owed_d, Decimal(0)), Decimal(1)))
+    else:
+        reserve_diff = None
+        solvent = None
+        coverage_pct = None
+    return {'hot_wallet': str(hot_wallet()), 'vault_address': vault_addr, 'vault_balance_usdc': vault_bal, 'reserves_source': 'vault' if vault_addr else 'hot_wallet', 'hot_wallet_balance_usdc': bal, 'liabilities_usdc': owed, 'pending_deposits_usdc': _usdc(pending), 'reserve_usdc': reserve_diff, 'solvent': solvent, 'coverage_pct': coverage_pct}
+
+@app.get('/qr', tags=['treasury'])
+async def api_qr(data: str, size: int=220) -> Response:
+    """Render a QR PNG locally (no external service). Used by /u pages."""
+    if not data or len(data) > 1024:
+        raise HTTPException(status_code=400, detail='data must be 1..1024 chars')
+    if size < 64 or size > 1024:
+        raise HTTPException(status_code=400, detail='size must be 64..1024')
+    try:
+        return Response(content=await qrlib.qr_bytes(data, size=size), media_type='image/png', headers={'Cache-Control': 'public, max-age=86400'})
+    except Exception:
+        log.warning("qr_bytes failed for data=%r size=%s", data[:64], size, exc_info=True)
+        raise HTTPException(status_code=400, detail='QR generation failed') from None
+
+
+class AskRequest(BaseModel):
+    question: str = Field(max_length=2000)
+    # The Mini App already knows which language it is showing; the no-model
+    # answers are built server-side, so it has to say which to build. Optional:
+    # a client that omits it gets the default language, not an error.
+    lang: str | None = Field(default=None, max_length=8)
+
+
+@app.post('/api/ask', tags=['markets'])
+async def api_ask(body: AskRequest, request: Request) -> dict:
+    """Same assistant as Telegram's /ask — tool-calling, so answers about
+    specific markets are grounded in real current odds, not guessed. Shares
+    the global per-IP rate limiter above; no separate throttle here.
+
+    `mode` says what answered: 'llm' or 'data' (the ledger, without a model).
+    A client labels the bubble with it, because a data answer is a lookup and
+    the user should not read it as prose written by an AI.
+    """
+    from bot import ai, ai_data, i18n
+    # The Mini App says which language it is showing, and the chat renders
+    # both the no-model answer and a refusal out of this request — so the
+    # refusals below speak that one too, not the developer's English.
+    request.state.lang = i18n.norm(body.lang)
+    question = (body.question or '').strip()
+    if not question:
+        raise refuse(request, 400, 'api_question_empty')
+    if len(question) > config.AI_MAX_QUESTION_LEN:
+        raise refuse(request, 400, 'api_ask_too_long', limit=config.AI_MAX_QUESTION_LEN)
+    now = time.time()
+    # Cooldown keyed per client IP (same identity the rate limiter uses): a
+    # single 'global' key would let one user 429 everyone else. Bounded by
+    # WEB_RATE_MAX_CLIENTS so the dict cannot grow forever.
+    _ip = _client_ip(request)
+    last = _ask_cooldown.get(_ip, 0.0)
+    if now - last < config.AI_COOLDOWN_SECONDS:
+        raise refuse(request, 429, 'api_ask_cooldown')
+    if len(_ask_cooldown) > WEB_RATE_MAX_CLIENTS:
+        for ip, ts in list(_ask_cooldown.items()):
+            if now - ts >= config.AI_COOLDOWN_SECONDS:
+                del _ask_cooldown[ip]
+    _ask_cooldown[_ip] = now
+    mode = 'llm'
+    try:
+        answer = await ai.ask_about_markets(question)
+    except RuntimeError as e:
+        # No provider configured, all of them failed, or the daily token
+        # budget is spent — none of which is the user's problem. The daily
+        # budget lives in the DB (ai_usage_day) so the bot process, the web
+        # process and the agent share one limit.
+        log.debug('ask: no model answered (%s), serving ledger data', e)
+        mode = 'data'
+        answer = await ai_data.answer(question, i18n.norm(body.lang))
+    if len(answer) > config.AI_MAX_ANSWER_CHARS:
+        answer = answer[:config.AI_MAX_ANSWER_CHARS - 1] + '…'
+    return {'answer': answer, 'mode': mode}
+
+@app.get('/api/wallet', tags=['treasury'])
+async def api_wallet() -> dict:
+    return {'address': str(hot_wallet()), 'balance_usdc': await _safe_hot_balance()}
+
+def chain_label() -> str:
+    """Name of the chain the bot signs on, for anything user-facing."""
+    return CHAIN_NAMES.get(config.EXPECTED_CHAIN_ID, f'chain {config.EXPECTED_CHAIN_ID}')
+
+def _signed_in(request: Request | None) -> bool:
+    """True when the request carries a session cookie that parses."""
+    return request is not None and parse_session(request.cookies.get(COOKIE_NAME)) is not None
+
+_TITLE_RE = re.compile(r'<title>(.*?)</title>', re.DOTALL)
+_DESC_RE = re.compile(r'<meta name="description" content="(.*?)"')
+OG_LOCALE = {'ru': 'ru_RU', 'en': 'en_US', 'zh': 'zh_CN'}
+
+
+def _public_base() -> str:
+    """Absolute origin the site is published under, for canonicals, share cards
+    and the sitemap.
+
+    The same value ``/app``'s ``fc:miniapp`` and ``og:image`` are built from, so
+    a card and the URL it is a card for cannot disagree. Config-derived on
+    purpose: ``X-Forwarded-Host`` is a header the visitor brings, and reading it
+    here would let one request put a foreign host into every canonical and every
+    ``<loc>`` a crawler is served.
+    """
+    return public_base_url().rstrip('/')
+
+
+def _usdc_label(micro: int) -> str:
+    from decimal import Decimal
+    return fees.usdc_label(Decimal(int(micro)) / Decimal(MICRO))
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    """The 422 stays where a client reads it, and becomes a page where a person does.
+
+    `/m/{id}` and `/u/{tg_id}` take an integer, and a link with anything else in
+    it — a copied id with a space, a bookmark cut short — answered a validation tree
+    that echoed the visitor's own text back at them. Under `/api/` that body is the
+    right answer, so it is handed to FastAPI's own handler unchanged rather than
+    reimplemented here: two answers for one status is how a client contract drifts.
+    """
+    if request.url.path.startswith('/api/'):
+        return await request_validation_exception_handler(request, exc)
+    return _not_found(request)
+
+
+def _document_meta(html: str, *, path: str, title: str | None = None,
+                   description: str | None = None, robots: str | None = None,
+                   json_ld: str | None = None, canonical: bool = True) -> str:
+    """Write the document's identity into its ``<head>``: canonical, share card
+    and the crawl directive.
+
+    The copy lives once in the template — ``<title>`` and the description meta —
+    and ``og:``/``twitter:`` are derived from it here. They used to be typed next
+    to it by hand: the three shareable pages each carried one static ``og:title``
+    for every row, so all markets looked identical when forwarded, and
+    ``user.html`` put «Профиль в Tippy» on the card while the tab said «Профиль —
+    Tippy». Passing ``title`` or ``description`` replaces the template copy with
+    the row the page is about, which is what makes ``/m/12`` and ``/m/13`` two
+    different documents.
+    """
+    title_tag = _TITLE_RE.search(html)
+    desc_tag = _DESC_RE.search(html)
+    doc_title = title if title is not None else (_unesc(title_tag.group(1)) if title_tag else '')
+    doc_desc = description if description is not None else (_unesc(desc_tag.group(1)) if desc_tag else '')
+    if title_tag is not None and title is not None:
+        html = _TITLE_RE.sub(lambda _m: f'<title>{_esc(doc_title)}</title>', html, count=1)
+    if desc_tag is not None and description is not None:
+        html = _DESC_RE.sub(
+            lambda _m: f'<meta name="description" content="{_esc(doc_desc, quote=True)}"',
+            html, count=1)
+
+    base = _public_base()
+    url = _esc(base + path, quote=True)
+    image = _esc(base + SHARE_IMAGE, quote=True)
+    # The card speaks the language the document is written in, not the one the
+    # site is mostly in: /tos is English, and a ru_RU card around it is the same
+    # lie the <html lang> used to tell.
+    lang_tag = re.search(r'<html lang="([a-z]+)"', html)
+    locale = OG_LOCALE.get(lang_tag.group(1) if lang_tag else 'ru', 'en_US')
+    parts = [f'<link rel="canonical" href="{url}" />']
+    if robots:
+        parts.append(f'<meta name="robots" content="{_esc(robots, quote=True)}" />')
+    parts.append('<meta property="og:type" content="website" />')
+    parts.append('<meta property="og:site_name" content="Tippy" />')
+    parts.append(f'<meta property="og:locale" content="{locale}" />')
+    parts.append(f'<meta property="og:url" content="{url}" />')
+    parts.append(f'<meta property="og:title" content="{_esc(doc_title, quote=True)}" />')
+    if doc_desc:
+        parts.append(f'<meta property="og:description" content="{_esc(doc_desc, quote=True)}" />')
+    parts.append(f'<meta property="og:image" content="{image}" />')
+    parts.append('<meta name="twitter:card" content="summary_large_image" />')
+    parts.append(f'<meta name="twitter:title" content="{_esc(doc_title, quote=True)}" />')
+    if doc_desc:
+        parts.append(f'<meta name="twitter:description" content="{_esc(doc_desc, quote=True)}" />')
+    parts.append(f'<meta name="twitter:image" content="{image}" />')
+    if not canonical:
+        # The identity block names a document that is not a page — a 404 has
+        # no canonical to claim and no card worth forwarding. The crawl
+        # directive stays, because that is the sentence telling a robot so.
+        parts = [p for p in parts
+                 if 'rel="canonical"' not in p and 'property="og:' not in p
+                 and 'name="twitter:' not in p]
+    if json_ld:
+        parts.append(f'<script type="application/ld+json">{json_ld}</script>')
+    head, sep, rest = html.partition('</head>')
+    if not sep:
+        return html
+    return head + '\n  ' + '\n  '.join(parts) + sep + rest
+
+
+def _landing_json_ld() -> str:
+    """Structured data for the landing: the site and the bot it is reached
+    through.
+
+    Only claims the page itself makes. Schema that overstates the product is a
+    manual-action risk, not a ranking trick, so this stays a name, two URLs and
+    the one handle the page links to.
+    """
+    base = _public_base()
+    graph = {
+        '@context': 'https://schema.org',
+        '@graph': [
+            {
+                '@type': 'WebSite',
+                '@id': f'{base}/#website',
+                'url': f'{base}/',
+                'name': 'Tippy',
+                'inLanguage': 'ru',
+            },
+            {
+                '@type': 'Organization',
+                '@id': f'{base}/#organization',
+                'name': 'Tippy',
+                'url': f'{base}/',
+                'logo': f'{base}{SHARE_IMAGE}',
+                'sameAs': [f'https://t.me/{config.BOT_USERNAME}'],
+            },
+        ],
+    }
+    return json.dumps(graph, ensure_ascii=False).replace('<', '\\u003c')
+
+
+def _static_page(page: str, request: Request | None = None, *, path: str,
+                 title: str | None = None, description: str | None = None,
+                 robots: str | None = None, json_ld: str | None = None,
+                 status_code: int = 200, canonical: bool = True,
+                 replacements: dict[str, str] | None = None) -> Response:
+    """Serve a static page with the running config and the document's own
+    identity rendered into it.
+
+    ``t.me/TIPBOT_USERNAME`` shipped in the HTML is a link that 404s for anyone
+    whose scripts have not replaced it yet, so the real name is substituted
+    here. Network and USDC labels stay on /api/info — only the running config
+    knows those.
+
+    ``__SIGNED_IN__`` is the session cookie seen from the server. The scripts
+    cannot read it (HttpOnly) and probing ``/api/me`` with it missing answers
+    401, which every anonymous landing-page visitor used to see in the console.
+
+    ``path`` is the page's own path: a canonical has to name the URL the visitor
+    asked for, and ``/m/12`` and ``/m/13`` render from the same file.
+
+    ``replacements`` is the same contract for a page whose body is not in the
+    file — ``legal.html`` carries the chrome and ``/tos`` pours the rendered
+    Markdown into it. A document assembled here instead would answer the visitor
+    with a page no design contract reads: the file is what the contrast,
+    heading, font and placeholder gates measure, so every page has to be one.
+    """
+    html = (STATIC / page).read_text(encoding='utf-8')
+    for marker, value in (replacements or {}).items():
+        html = html.replace(marker, value)
+    html = html.replace('__BOT_USERNAME__', config.BOT_USERNAME)
+    html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
+    html = _document_meta(html, path=path, title=title, description=description,
+                          robots=robots, json_ld=json_ld, canonical=canonical)
+    return Response(content=html.encode('utf-8'), media_type='text/html',
+                    status_code=status_code)
+
+@app.get('/u/{tg_id}')
+async def user_page(tg_id: int, request: Request) -> Response:
+    """Public donation page for one Telegram id.
+
+    An id the ledger has never seen answers 200 with the empty profile, because
+    that is ``/api/user/{tg_id}``'s documented rule kept at the page level too:
+    the same shape for a stranger and for a newcomer, so neither route is an
+    enumeration oracle. It costs the site nothing in search — a profile with no
+    activity is not in the sitemap and no page links to it.
+    """
+    view = await ledger.user_view(tg_id) if await ledger.user_exists(tg_id) else None
+    name = str(view['username']) if view and view['username'] else ''
+    received = int(view['tips_received_micro']) if view else 0
+    # The same shape the page itself printed before: a Basename stays as it is,
+    # a Telegram handle gets its @, an id with no name is named by its id.
+    who = name if '.' in name else (f'@{name}' if name else f'id{tg_id}')
+    return _static_page(
+        'user.html', request, path=f'/u/{tg_id}',
+        title=f'{who} — Tippy' if view else 'Профиль в Tippy',
+        description=(
+            f'Донат-страница {who}: как поддержать этого пользователя чаевыми в USDC '
+            f'на Base прямо в Telegram. Через Tippy он уже получил {_usdc_label(received)} USDC.'
+            if received else None))
+
+@app.get('/m/{bet_id}')
+async def market_page(bet_id: int, request: Request) -> Response:
+    """Shareable page for one parimutuel market, titled by that market.
+
+    A row the ledger does not have is a 404, the way ``/api/market/{bet_id}``
+    has always answered one. This page used to render the same 200 shell for any
+    integer, so every id a crawler guessed looked like a real market and the
+    sitemap could not be trusted to name only pages that exist.
+    """
+    view = await ledger.market_view(bet_id)
+    if not view:
+        return _static_page('market.html', request, path=f'/m/{bet_id}',
+                            title='Ставка не найдена — Tippy',
+                            description='Такой ставки в реестре Tippy нет.',
+                            robots='noindex', status_code=404)
+    status_word = ''
+    if view['status'] == 'open':
+        status_word = 'Приём ставок открыт. '
+    elif view['status'] == 'resolved' and view['winner'] is not None:
+        by_index = {int(o['index']): o for o in view['options']}
+        win = by_index.get(int(view['winner']))
+        if win:
+            status_word = f'Исход зафиксирован: {win["label"]}. '
+    elif view['status'] == 'cancelled':
+        status_word = 'Ставки возвращены. '
+    description = (
+        f'Парамутюэль-ставка в USDC на Base: исходов {len(view["options"])}, '
+        f'в пулах {_usdc_label(view["pot"])} USDC, участников {view["total_backers"]}. '
+        f'{status_word}Комиссия с выигрыша {fees.win_fee_pct_label()}%.')
+    return _static_page('market.html', request, path=f'/m/{bet_id}',
+                        title=f'{view["question"]} — Tippy',
+                        description=description)
+
+@app.get('/m/oc/{market_id}')
+async def onchain_market_page(market_id: int, request: Request) -> Response:
+    """Shareable page for an ON-CHAIN market (OutcomeMarket ERC-1155)."""
+    m = await ledger.get_onchain_market(market_id)
+    if not m:
+        return _static_page('oc.html', request, path=f'/m/oc/{market_id}',
+                            title='Ончейн-рынок не найден — Tippy',
+                            description='Такого ончейн-рынка в реестре Tippy нет.',
+                            robots='noindex', status_code=404)
+    try:
+        options = json.loads(m['options'])
+    except (TypeError, json.JSONDecodeError):
+        options = []
+    creator = await ledger.username_of(int(m['creator']))
+    who = f'@{creator}' if creator else 'другой пользователь'
+    description = (
+        f'Рынок на Base: долей ERC-1155 {len(options)}, расчёты в USDC внутри контракта. '
+        f'Создал {who}.')
+    return _static_page('oc.html', request, path=f'/m/oc/{market_id}',
+                        title=f'{m["question"]} — ончейн-рынок в Tippy',
+                        description=description)
+
+@app.get('/me', include_in_schema=False)
+async def me_page() -> RedirectResponse:
+    """Legacy cabinet URL — the workspace on the landing page replaced it."""
+    return RedirectResponse('/#workspace-section', status_code=303)
+
+@app.get('/', include_in_schema=False)
+async def root(request: Request):
+    """The landing page, which is also the full workspace.
+
+    Public data (stats, markets, leaderboard, proof of reserves) renders
+    whether or not you are signed in; the cabinet below it unlocks with the
+    same session cookie the Mini App gets. The Base App Mini App lives at /app.
+
+    The login-state cookie is issued here, not only on /login: the Telegram
+    Login Widget renders inline on this page, and its callback is rejected
+    without that state.
+    """
+    return attach_login_state(request, _static_page(
+        'index.html', request, path='/', json_ld=_landing_json_ld()))
+
+@app.get('/app', include_in_schema=False)
+async def mini_app(request: Request):
+    """The Mini App page, with Base-App embed meta tags rendered against the
+    public URL (the Base App crawls these tags to render the launch card)."""
+    html = (STATIC / 'app.html').read_text(encoding='utf-8')
+    base_url = public_base_url()
+    html = html.replace('__PUBLIC_URL__', base_url)
+    html = html.replace('__CHAIN_NAME__', chain_label())
+    html = html.replace('__DEFAULT_DEADLINE_HOURS__', str(config.MARKET_DEFAULT_HOURS))
+    # The withdraw sheet quotes the running terms, not the defaults it used to
+    # spell out: an operator's env change has to reach the screen that spends.
+    html = html.replace('__WITHDRAW_FEE_PCT__', fees.withdraw_fee_pct_label())
+    html = html.replace('__MIN_WITHDRAW_USDC__', fees.usdc_label(config.MIN_WITHDRAW_USDC))
+    html = html.replace('__MAX_WITHDRAWS_PER_DAY__', str(config.MAX_WITHDRAWS_PER_DAY))
+    html = html.replace('__SIGNED_IN__', '1' if _signed_in(request) else '0')
+    return Response(content=html.encode('utf-8'), media_type='text/html')
+
+@app.get('/agent', include_in_schema=False)
+async def agent_page() -> Response:
+    """Operator dashboard. README documents this URL, and the mounted
+    StaticFiles only resolves paths that name the file, so ``/agent.html``
+    alone would leave ``/agent`` a 404.
+
+    ``noindex``: it is a tool, not a page. Left indexable it competed with the
+    landing for the product's own name and put a dashboard an anonymous visitor
+    cannot use into search results.
+    """
+    return _static_page('agent.html', path='/agent', robots='noindex')
+
+@app.get('/robots.txt', include_in_schema=False)
+async def robots_txt() -> Response:
+    """What a crawler may read.
+
+    The origin had no robots.txt at all, so the Pages Function answered it from
+    the asset bundle — a bundle with no such file in it, where Pages replies to a
+    missing path with the landing page: ``200`` and ``text/html`` where a robot
+    expected rules. Private surfaces are excluded by directive rather than by
+    hoping nothing links to them: ``/app`` needs a Telegram session, ``/metrics``
+    and ``/qr`` are operational, ``/api/`` is the same data the pages publish.
+    """
+    body = '\n'.join([
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /api/',
+        'Disallow: /app',
+        'Disallow: /me',
+        'Disallow: /metrics',
+        'Disallow: /qr',
+        '',
+        f'Sitemap: {_public_base()}/sitemap.xml',
+        '',
+    ])
+    return Response(content=body.encode('utf-8'), media_type='text/plain; charset=utf-8')
+
+@app.get('/sitemap.xml', include_in_schema=False)
+async def sitemap_xml() -> Response:
+    """Every page the ledger actually has, and no page it does not.
+
+    Rows, not guesses: ``/m/{bet_id}`` now answers 404 for an id that was never a
+    market, so an invented URL here would be one the crawler is told to fetch and
+    then refused. Closed markets stay out — their page describes a pool that no
+    longer moves — and profiles come from the leaderboard, the only list of users
+    the site itself links to.
+    """
+    urls = ['/', '/tos']
+    urls += [f'/m/{int(b["id"])}' for b in await ledger.bets_by_status('open', 500)]
+    urls += [f'/m/oc/{int(m["id"])}' for m in await ledger.list_onchain_markets(500)]
+    urls += [f'/u/{int(r["tg_id"])}' for r in await ledger.leaderboard(50)]
+    base = _public_base()
+    locs = ''.join(f'<url><loc>{_esc(base + u, quote=True)}</loc></url>'
+                   for u in dict.fromkeys(urls))
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           f'{locs}</urlset>')
+    return Response(content=xml.encode('utf-8'), media_type='application/xml; charset=utf-8')
+
+@app.post('/api/webhook-miniaction', include_in_schema=False)
+async def miniapp_webhook(request: Request):
+    """Base App mini app webhook (notification clicks, app events).
+
+    No money moves through this endpoint — it exists so the manifest can
+    declare a webhookUrl. Events are logged for the operator; the response
+    is always 200 so the platform does not retry indefinitely.
+    """
+    # Static-file fallback would return a 404 HTML page for a body-less GET
+    # on this path, so read the body defensively and cap its size: nothing
+    # here needs more than a few KB, and an unbounded read lets anyone park
+    # an arbitrary large body on the server for free.
+    try:
+        body = await request.body()
+        if len(body) > 32_768:
+            return Response(status_code=200)
+        payload = json.loads(body) if body else None
+    except Exception:
+        payload = None
+    log.info('miniapp webhook event: %s', payload)
+    return Response(status_code=200)
+
+@app.get('/.well-known/farcaster.json', include_in_schema=False)
+async def farcaster_manifest():
+    """Base App / Farcaster mini app manifest.
+
+    The operator signs the accountAssociation payload in the Base Build
+    portal (or with their Farcaster custody key) and saves the full JSON as
+    `deploy/farcaster_manifest.json` — see docs/DEPLOY.md, "Base App mini
+    app". Missing file -> 404 (the mini app is simply not discoverable yet).
+    """
+    from fastapi.responses import JSONResponse
+    manifest = ROOT / 'deploy' / 'farcaster_manifest.json'
+    if not manifest.exists():
+        return JSONResponse(status_code=404, content={'detail': 'farcaster manifest not configured'})
+    return Response(content=manifest.read_bytes(), media_type='application/json')
+
+def _legal_html(md: str) -> str:
+    """Render the Markdown constructs the legal files actually use.
+
+    ``/tos`` used to answer ``text/plain``. A plain-text document carries no
+    viewport meta, so a phone invents a 980px layout and shows a pinched dump
+    of ``##`` and ``**`` markers. The input is a file from this repo, not user
+    text, and it is escaped line by line before any markup is added.
+    """
+    def inline(text: str) -> str:
+        text = _esc(text, quote=False)
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+        return re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
+
+    out: list[str] = []
+    bullets: list[str] = []
+    title_taken = False
+
+    def flush() -> None:
+        if bullets:
+            out.append('<ul>' + ''.join(f'<li>{inline(b)}</li>' for b in bullets) + '</ul>')
+            bullets.clear()
+
+    for line in md.splitlines():
+        s = line.strip()
+        if not s:
+            flush()
+            continue
+        if s == '---':
+            flush()
+            out.append('<hr />')
+            continue
+        heading = re.match(r'(#{1,6})\s+(.*)', s)
+        if heading:
+            flush()
+            level = len(heading.group(1))
+            if level == 1 and not title_taken:
+                # The first `#` is the document's title, not a section: `legal.html`
+                # prints it as the one `<h1>`, and the route reads it for `<title>`
+                # and the share card. A second `#` stays in the body and the outline
+                # gate on the served page refuses it.
+                title_taken = True
+                continue
+            out.append(f'<h{level}>{inline(heading.group(2))}</h{level}>')
+            continue
+        if s.startswith('- '):
+            bullets.append(s[2:])
+            continue
+        flush()
+        out.append(f'<p>{inline(s)}</p>')
+    flush()
+    return ''.join(out)
+
+
+@app.get('/tos', tags=['legal'])
+async def tos() -> Response:
+    """Terms of Service, rendered out of ``web/static/tos.md`` into ``legal.html``.
+
+    The chrome used to be an f-string in here, which put the one Python-built
+    document outside every gate: `tests/test_design_system.py` and the class
+    parity check read `web/static/*`, so its `theme-color`, its headings and its
+    classes were measured by nothing — and it linked no webfont, so the terms a
+    user reads before depositing were set in Helvetica while every other page of
+    the site set them in the contract's face. `legal.html` is a page now, and the
+    terms arrive through the same marker substitution every other page uses.
+    """
+    tos_file = STATIC / 'tos.md'
+    if not tos_file.exists():
+        return PlainTextResponse('Terms of Service not found.', status_code=404)
+    md = tos_file.read_text(encoding='utf-8')
+    first_heading = re.search(r'^#\s+(.*)', md, re.MULTILINE)
+    title = first_heading.group(1) if first_heading else 'Terms of Service'
+    # The document declares which language it is written in. A screen reader
+    # reads the page in the language of `lang` and Google processes it as that
+    # language, so the English legal file wrapped in lang="ru" was read wrong by
+    # both — the footer link that opens it is Russian either way.
+    lang = 'ru' if re.search(r'[а-яё]', md, re.I) else 'en'
+    return _static_page('legal.html', path='/tos', title=title, replacements={
+        '__LEGAL_LANG__': lang,
+        '__LEGAL_H1__': _esc(title),
+        '__LEGAL_BODY__': _legal_html(md),
+        '__CHAIN_NAME__': chain_label(),
+    })
+
+@app.get('/metrics', tags=['monitoring'])
+async def metrics(request: Request) -> Response:
+    from fastapi.responses import PlainTextResponse
+
+    from .metrics import collect_metrics
+
+    # Metrics are operational data: closed by default. Set METRICS_TOKEN or
+    # explicitly opt into loopback-only access with METRICS_ALLOW_LOOPBACK=1.
+    # The opt-in covers direct local requests only: cloudflared also dials the
+    # app from 127.0.0.1, so without the proxy-header check /metrics was open
+    # to anyone fetching it through the Pages Function.
+    if _direct_loopback(request) and os.environ.get('METRICS_ALLOW_LOOPBACK') == '1':
+        return PlainTextResponse(await collect_metrics())
+    if not config.METRICS_TOKEN:
+        return PlainTextResponse("metrics disabled: set METRICS_TOKEN", status_code=401)
+    import hmac as _hmac
+    auth = request.headers.get("Authorization", "")
+    if not _hmac.compare_digest(auth.encode(), f"Bearer {config.METRICS_TOKEN}".encode()):
+        return PlainTextResponse("unauthorized", status_code=401)
+    return PlainTextResponse(await collect_metrics())
+
+# The mime table Starlette consults answers .js as application/javascript on
+# Windows and text/javascript on Linux, so which one a browser is served
+# depends on the machine that happens to run the process. Pinning it keeps a
+# developer's box and CI sending the same bytes, and keeps the script tag
+# executing the same way on both.
+#
+# `.woff2` is the same bug in the other direction: no Windows registry entry
+# names it and `mimetypes.guess_type` answers None, so every font left here as
+# `application/octet-stream` — the type the middleware already refuses for its
+# own plumbing. On Linux the answer depends on whether the box happens to ship a
+# system mime.types that knows the extension, so the same bundle reports two
+# different types for one file.
+mimetypes.add_type('text/javascript', '.js')
+mimetypes.add_type('font/woff2', '.woff2')
+
+# The two windows `web/static/_headers` promises the edge bundle, written here so
+# the origin answers the same file with the same policy. Without them every asset
+# left this process at the middleware's `no-store`, so someone who opens the VPS
+# directly — during an incident, on a preview, before Pages is pointed at it —
+# refetched 61 KB of CSS, the seven scripts and the eleven faces on every page
+# view. A suffix absent from this table keeps `no-store`, which is what a document
+# owes: it carries the session, the nonce and the balance.
+CACHE_CODE = 'public, max-age=300, stale-while-revalidate=86400'
+CACHE_MEDIA = 'public, max-age=86400, stale-while-revalidate=604800'
+ASSET_CACHE = {
+    '.css': CACHE_CODE,
+    '.js': CACHE_CODE,
+    '.woff2': CACHE_MEDIA,
+    '.png': CACHE_MEDIA,
+}
+
+
+class BundleFiles(StaticFiles):
+    """The bundle directory is the web root — so its source is refused.
+
+    `/_headers` answered 200 as octet-stream — refused by the middleware, which
+    sees the path first — and every template and Markdown source in the
+    directory was a URL too: `/index.html` served the
+    landing with `__SIGNED_IN__` unsubstituted and no canonical, so a crawler
+    had two addresses to choose between for one page, and `/user.html` was a
+    shell whose id comes from a path it does not have.
+
+    Refusing them here rather than in the middleware is what lets the answer
+    travel back through the header and CSP layer instead of dodging it: a
+    redirect carries no body, a dead end carries a page.
+    """
+
+    async def get_response(self, path: str, scope):
+        url_path = '/' + unquote(path).lstrip('/')
+        if url_path.endswith(('.html', '.md')):
+            pages = TEMPLATE_PAGES if url_path.endswith('.html') else MARKDOWN_PAGES
+            home = pages.get(url_path)
+            if home:
+                return RedirectResponse(home, status_code=301)
+            return _not_found(Request(scope))
+        response = await super().get_response(path, scope)
+        directive = ASSET_CACHE.get(os.path.splitext(url_path)[1].lower())
+        if directive and response.status_code == 200:
+            response.headers['Cache-Control'] = directive
+        return response
+
+
+app.mount('/', BundleFiles(directory=str(STATIC), html=True), name='static')
+if __name__ == '__main__':
+    import uvicorn
+    config.validate()
+    uvicorn.run(app, host=config.WEB_HOST, port=config.WEB_PORT)

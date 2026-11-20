@@ -1,0 +1,29 @@
+.........F.............................................................. [ 50%]
+.......................................................................  [100%]
+================================== FAILURES ===================================
+_____________ test_no_token_is_defined_and_never_read[style_css] ______________
+
+css = '/* ================================================================\n   Tippy — Base design system\n   Tokens taken f...\n\n@media print {\n  .ws, .connect, .tabs, .review { break-inside: avoid; }\n  .cmd-grid { break-inside: auto; }\n}\n'
+light = {'--blue': '#0000ff', '--blue-hover': '#0000cc', '--blue-text': '#0000ff', '--blue-soft': 'rgba(0, 0, 255, 0.07)', ...}
+dark = {'--blue': '#224bff', '--blue-hover': '#4266ff', '--blue-text': '#7575ff', '--blue-soft': 'rgba(34, 75, 255, 0.14)', ...}
+dark_span = (5167, 6407)
+readers = ('agent.html', 'app.html', 'index.html', 'legal.html', 'market.html', 'not_found.html', ...)
+
+    @pytest.mark.parametrize("css,light,dark,dark_span,readers", TOKEN_SURFACES)
+    def test_no_token_is_defined_and_never_read(css, light, dark, dark_span, readers):
+        """A token nobody reads is a colour waiting to be edited into disagreement
+        with itself, and it is the same drift in the Mini App's own palette: it
+        carried a `--warning` for a state it never painted."""
+        referenced = set(re.findall(r"var\((--[a-z0-9-]+)\)", css))
+        for name in readers:
+            referenced |= set(re.findall(r"var\((--[a-z0-9-]+)\)", read(name)))
+        dead = sorted(set(light) - referenced)
+>       assert not dead, f"defined but never read: {dead}"
+E       AssertionError: defined but never read: ['--surface-2']
+E       assert not ['--surface-2']
+
+tests\test_design_system.py:391: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_design_system.py::test_no_token_is_defined_and_never_read[style_css]
+1 failed, 142 passed in 184.96s (0:03:04)
+EXIT=1

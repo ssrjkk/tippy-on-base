@@ -1,0 +1,58 @@
+........................................................................ [ 50%]
+................F.......................................F..............  [100%]
+================================== FAILURES ===================================
+_____ test_the_weights_the_ui_asks_for_are_the_weights_the_faces_can_draw _____
+
+    def test_the_weights_the_ui_asks_for_are_the_weights_the_faces_can_draw():
+        """A weight outside every declared range is painted as synthetic bold: the
+        browser thickens a face that was never drawn that way, and money figures become
+        the one place on the page where the type looks manufactured.
+    
+        The ranges are read from `fonts.css`, so asking the UI for a weight the served
+        face cannot draw fails here instead of arriving as a glyph no designer drew."""
+        faces = font_faces()
+        offenders = []
+        for token in ("--font-mono", "--font-ui"):
+            for surface, css in (("style.css", CSS), ("app.html", APP_HTML)):
+                board = LIGHT if surface == "style.css" else MINI_LIGHT
+                ranges = [span for family in quoted_families(resolve(board, token))
+                          for span in faces.get(family, [])]
+                if not ranges:
+                    continue  # the stack is made of system faces: nothing declares a range
+                missing = sorted(weight for weight in weights_with_stack(css, token)
+                                 if not any(low <= weight <= high for low, high in ranges))
+                if missing:
+                    offenders.append((surface, token, missing, sorted(set(ranges))))
+>       assert not offenders, f"these weights are synthesised, not drawn: {offenders}"
+E       AssertionError: these weights are synthesised, not drawn: [('style.css', '--font-mono', [700], [(400, 600)])]
+E       assert not [('style.css', '--font-mono', [700], [(400, 600)])]
+
+tests\test_design_system.py:3100: AssertionError
+________________ test_a_framed_tile_grid_paints_no_empty_cell _________________
+
+    def test_a_framed_tile_grid_paints_no_empty_cell():
+        """The profile table was five **painted** tiles in a three-column hairline
+        grid — six in markup, the sixth `hidden` until a signed-in visitor arrived —
+        so every profile on every wide screen closed its own frame with one empty
+        cell whose borders stopped where the missing tile began.
+    
+        A cell count that is not a multiple of the column count is only a defect when
+        the cells share a border, so the premise of the law and the count it judges
+        are both read from the shipped files: the track count from the stylesheet that
+        paints the grid, the cells from the markup that fills it — and a markup child
+        carrying `hidden` is no cell, because nothing draws it. `user.html` now states
+        its figures in `.rows`, a list that declares no columns of equal tracks and so
+        promises the reader no count to be a multiple of."""
+        measured = framed_tile_grids()
+>       assert len(measured) >= 3, (
+            f"only {len(measured)} framed tile grids were read — the reader has gone blind"
+        )
+E       AssertionError: only 2 framed tile grids were read — the reader has gone blind
+E       assert 2 >= 3
+E        +  where 2 = len([{'page': 'agent.html', 'classes': ['stats', 'stats-2'], 'tracks': 2, 'cells': 4}, {'page': 'index.html', 'classes': ['steps'], 'tracks': 3, 'cells': 3}])
+
+tests\test_design_system.py:5110: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_design_system.py::test_the_weights_the_ui_asks_for_are_the_weights_the_faces_can_draw
+FAILED tests/test_design_system.py::test_a_framed_tile_grid_paints_no_empty_cell
+2 failed, 141 passed in 178.92s (0:02:58)

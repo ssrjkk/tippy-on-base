@@ -1,0 +1,1875 @@
+<!DOCTYPE html>
+<html lang="en" data-signed-in="__SIGNED_IN__">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/fonts.css">
+<title>Tippy</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E">
+<meta name="fc:miniapp" content='{"version":"1","imageUrl":"__PUBLIC_URL__/miniapp-hero.png","button":{"title":"Открыть Tippy","action":{"type":"launch_miniapp","url":"__PUBLIC_URL__/app"}}}'>
+<meta property="og:title" content="Tippy — чаевые и рынки в USDC на Base">
+<meta property="og:description" content="Чаевые, ончейн-рынки и AI-агент в USDC. Открой прямо в Base App.">
+<meta property="og:image" content="__PUBLIC_URL__/miniapp-hero.png">
+<script type="module">
+  /* Module scripts are deferred, so this runs after the app's classic script has
+     already finished booting — the "Add to Base App" button has to be revealed
+     here, not from init(), which cannot see the SDK yet. */
+  import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk';
+  window.__fcSdk = sdk;
+  try { await sdk.actions.ready(); } catch(e) {}
+  try {
+    const ctx = await sdk.context;
+    if (ctx && !ctx.client?.added) document.getElementById('addMiniApp')?.removeAttribute('hidden');
+  } catch(e) {}
+</script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/chain.js"></script>
+<script>
+/* Theme and the Telegram handshake have to land before first paint: without
+   telegram-web-app.js there is no WebApp.initData, so /api/mini/auth never runs
+   and the app opens anonymous inside Telegram. */
+(function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+  var saved = localStorage.getItem('theme');
+  var dark;
+  if (saved) dark = saved === 'dark';
+  else if (tg && tg.colorScheme) dark = tg.colorScheme === 'dark';
+  else dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+  /* Language before first paint too. The saved setting arrives with /state, but
+     the shell renders first, and rendering it in English for a Russian-speaking
+     user is a visible flash of the wrong language. A choice made in the app
+     wins over the client language. */
+  var lc = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code) || '';
+  var seed = localStorage.getItem('lang') || (/^zh/i.test(lc) ? 'zh' : /^ru/i.test(lc) ? 'ru' : 'en');
+  window.__seedLang = seed;
+  document.documentElement.lang = seed;
+})();
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* Tokens copied from /style.css — base.org values: one brand blue, neutral greys,
+ * hairline borders, no shadows. --accent paints surfaces, --accent-text paints type,
+ * because #224bff is a fill colour and is not readable as text on the dark canvas. */
+:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.22);--bg:#ffffff;--card:#ffffff;--card2:#f8f8f8;--card3:#efefef;--border:#efefef;--border-strong:#dadada;--text:#111111;--text2:#3a3a3a;--text3:#666666;--text4:#707070;--success:#10693f;--success-bg:rgba(16,105,63,.08);--danger:#b42318;--warning:#8a5a00;--warning-bg:rgba(138,90,0,.08);--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius-sm:6px;--radius:8px;--radius-lg:12px;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--measure:68ch;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--t-chip:11px;--t-meta:12px;--t-small:13px;--t-ui:14px;--t-lead:15px;--t-body:16px;--t-h4:18px;--t-h3:20px;--t-h2:24px;--t-h1:28px;--t-xl:32px;--ease:cubic-bezier(.2,.6,.2,1);--safe-b:env(safe-area-inset-bottom,0px)}
+[data-theme="dark"]{--accent:#224bff;--accent2:#3d61ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.16);--blue-line:rgba(117,117,255,.32);--bg:#111111;--card:#1a1a1a;--card2:#1a1a1a;--card3:#262626;--border:#2d2d2d;--border-strong:#3a3a3a;--text:#ededed;--text2:#c8c8c8;--text3:#9a9a9a;--text4:#8b8b8b;--success:#4bd09b;--success-bg:rgba(75,208,155,.14);--danger:#ff7a70;--warning:#d99a2b;--warning-bg:rgba(217,154,43,.14);--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
+html,body{height:100%;font-family:var(--font-ui);font-size:var(--t-lead);line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
+/* The heading floor, the same law the site's reset states: a heading never takes
+its size from the browser's own sheet, where h3 is 1.17em — 18.72px, a value on no
+token, and a different number wherever the root font is not exactly 16px. Sizes,
+weight and tracking only: line-height stays the body's, because every heading here
+already sits in a box measured for it. */
+h1,h2,h3,h4,h5,h6{font-family:var(--font-ui);font-weight:500;letter-spacing:-.025em;color:var(--text)}
+h1{font-size:var(--t-h1)}
+h2{font-size:var(--t-h2)}
+h3{font-size:var(--t-h4)}
+h4{font-size:var(--t-lead)}
+h5{font-size:var(--t-ui)}
+h6{font-size:var(--t-small)}
+a{color:var(--accent-text);text-decoration:none}
+button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit;outline:none}
+input,textarea{font-family:inherit;outline:none;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:var(--blue-line)}
+::-webkit-scrollbar{width:0;height:0}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+.icon{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+#app{max-width:480px;margin:0 auto;height:100%;position:relative;display:flex;flex-direction:column;overflow:hidden}
+
+/* Header */
+.header{position:sticky;top:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);min-height:54px}
+.header-logo{display:flex;align-items:center;gap:8px;font-size:var(--t-h4);font-weight:600;letter-spacing:-.02em}
+.header-logo .base-mark{width:22px;height:22px;border-radius:var(--radius-sm);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.header-logo .base-mark svg{width:14px;height:14px}
+/* The glyph is an SVG <text>, so its size is the 24-unit box, not a CSS
+ * font-size; what it does need from the stylesheet is the palette and the
+ * interface family — with neither the letter paints in the browser's default
+ * serif, which the computed-style sweep measured on 12 nodes. */
+.header-logo .base-mark svg text{fill:var(--on-accent);font-family:var(--font-ui);font-weight:700}
+.header-logo .dot{color:var(--accent-text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.theme-toggle{width:34px;height:34px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text3);transition:color .2s var(--ease),border-color .2s var(--ease)}
+.theme-toggle:hover,.theme-toggle:active{border-color:var(--text);color:var(--text)}
+[data-theme="dark"] .theme-toggle .icon-sun{display:inline}
+[data-theme="dark"] .theme-toggle .icon-moon{display:none}
+.theme-toggle .icon-sun{display:none}
+.theme-toggle .icon-moon{display:inline}
+.balance-chip{border:1px solid var(--border-strong);border-radius:var(--pill);padding:6px 12px;font-size:var(--t-small);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:8px;transition:border-color .2s var(--ease)}
+.balance-chip:hover{border-color:var(--text)}
+.balance-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex-shrink:0}
+
+/* Content */
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:calc(72px + var(--safe-b));-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.content::-webkit-scrollbar{display:none}
+.tab-page{display:none;padding:16px;animation:fadeUp .25s var(--ease)}
+.tab-page.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* Tab Bar */
+.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:var(--safe-b)}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 8px;font-size:var(--t-chip);color:var(--text4);transition:color .2s var(--ease);position:relative}
+.tab-item.active{color:var(--text);font-weight:500}
+.tab-item .icon{width:20px;height:20px}
+
+/* Cards and the micro-label above them. `--card2` is the site's `--surface`: a
+   panel on this screen is a band of the page, not a box floated on it, which is
+   how every panel on base.org reads. */
+.card{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px}
+.card-header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.card-header .eyebrow{margin-bottom:0}
+/* The Base micro-label — the mono face, uppercase, tracked, the quietest grey the
+   contrast law allows. It replaces `.card-title` and `.section-title`, which were
+   one voice spelled two ways at two letter-spacings. It is now also the only voice
+   over a labelled thing anywhere in the app: the landing names a field with the
+   same eleven pixels of tracked mono and the same 8px beneath it, while
+   `.input-label` drew that label in the interface face at 12px — one job, two
+   grammars, inside one form. */
+.eyebrow,.input-label,.mini-label{display:block;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--t-chip);font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:0 0 8px}
+.big-number{font-size:var(--t-xl);font-weight:500;letter-spacing:-.03em;line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.big-number .currency{font-size:var(--t-ui);color:var(--text3);font-weight:500;margin-left:6px;letter-spacing:0}
+/* The balance is the number this screen exists to show, so it takes the canvas
+   and the whole width instead of a box: an eyebrow above a figure is how the
+   landing states a number that carries a page. */
+.balance{padding:4px 0 6px}
+/* Rows that belong to one read live inside one frame: the group paints the
+   hairlines and the rows paint no border of their own, so a list reads as one
+   object with rules between its parts rather than a stack of boxes. Same recipe
+   as the landing's `.markets` and `.rows` — `gap: 1px` over a border-coloured
+   ground, which is the only place a 1px space is a legal space. */
+.list-group{display:flex;flex-direction:column;gap:1px;background: var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:var(--pill);font-weight:500;font-size:var(--t-lead);padding:12px 22px;border:1px solid transparent;transition:background-color .2s var(--ease),border-color .2s var(--ease),opacity .2s var(--ease);white-space:nowrap}
+.btn:active{opacity:.8}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-primary:hover,.btn-primary:active{background:var(--accent2)}
+.btn-secondary{background:transparent;color:var(--text);border-color:var(--border-strong)}
+.btn-secondary:hover{border-color:var(--text);background:var(--card2)}
+.btn-sm{padding:10px 14px;font-size:var(--t-small)}
+.btn-full{width:100%}
+.btn .icon{width:15px;height:15px}
+
+/* The three money actions are one control, not three boxes: the tiles share a
+   single rounded frame and hairlines divide the segments, because they are three
+   answers to the same question — what to do with this balance. */
+.action-row{display:flex;gap:1px;background: var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin:16px 0 0}
+.action-btn{flex:1;min-width:0;background:var(--card2);padding:14px 6px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:var(--t-meta);font-weight:500;color:var(--text);transition:background-color .2s var(--ease)}
+.action-btn:hover,.action-btn:active{background:var(--card3)}
+.action-btn .icon{width:20px;height:20px;color:var(--accent-text)}
+
+/* Amount Chips */
+.chips{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+/* The amount choice is an outlined pill on the sheet, not a filled tile: the
+   landing's `.amount-chip` is the same object, and a row of filled chips would
+   compete with the one button that actually moves the money. */
+.chip{background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--pill);padding:8px 16px;font-size:var(--t-small);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--text);cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease),color .2s var(--ease);min-width:48px;text-align:center}
+/* Same law as the site's `.amount-chip.active`: --blue-soft is translucent, so
+   the label sits on a blend of the tint and the sheet, and --accent-text there
+   measures 4.27:1 — under the 4.5 the same page demands of every other 13 px
+   number. The border and the fill say "active"; the money stays neutral. */
+.chip:active,.chip.active{border-color:var(--accent);background:var(--blue-soft);color:var(--text)}
+.chip-btn{border:1px solid var(--border-strong);border-radius:var(--pill);padding:6px 12px;font-size:var(--t-meta);font-weight:500;color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s var(--ease)}
+.chip-btn:hover,.chip-btn:active{border-color:var(--text)}
+.chip-btn .icon{width:13px;height:13px}
+/* The mono face is reserved for money, addresses, odds and percentages; a
+   username or a handle is none of those, so a chip that carries a name resets
+   to the UI stack. The site's `.m-link` usernames do the same. */
+.chip.chip-name{font-family:var(--font-ui);font-variant-numeric:normal}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* Input */
+/* The field takes the smaller corner of the radius scale and the ground of the
+   layer it sits on, told apart from it by the strong hairline: a 16px radius on a
+   44px input is a lozenge, and a field painted in its band's own fill is a field
+   whose edges nothing but the border states. */
+.input{width:100%;background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:12px 14px;font-size:var(--t-body);color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--blue-soft)}
+.input::placeholder{color:var(--text4)}
+.input-group{margin-bottom:16px}
+/* A line that says why a sum was refused is a sentence, not a unit: the landing
+   sets `.hint` at the small reading size, and 12px here is what a figure's
+   suffix costs. */
+.hint{max-width:var(--measure);font-size:var(--t-small);color:var(--text3);line-height:1.5}
+
+/* Market / Bet Card */
+/* A market row is a cell of the list, not a card of its own: the frame and the
+   hairlines come from `.list-group`, the row supplies padding and a hover. */
+.market-card{background:var(--bg);padding:16px;cursor:pointer;transition:background-color .2s var(--ease);display:block;width:100%;text-align:left}
+.market-card:hover,.market-card:active{background:var(--card2)}
+/* One head for every market card: the chip never trades width with the question. */
+.card-head{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.card-head .q{flex:1 1 auto;min-width:0;max-width:var(--measure);font-size:var(--t-body);font-weight:500;line-height:1.4;letter-spacing:-.015em;overflow-wrap:anywhere}
+.market-meta{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:var(--t-chip);color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.02em;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.prob-bars{display:flex;flex-direction:column;gap:12px}
+.prob-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
+.prob-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
+/* The option's own voice: the label in the interface face at the reading size,
+   the price in the money face at the quiet grey — the landing's `.option-top`,
+   so one kind of row says the same two things the same way on both surfaces. */
+.prob-bar-label{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:var(--t-ui);color:var(--text);font-weight:500;margin-bottom:6px;overflow-wrap:anywhere}
+.prob-bar-label .num{font-size:var(--t-small);font-weight:400;color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.prob-bar-label .win{color:var(--accent-text);font-weight:600}
+
+/* Status chips */
+.tag{display:inline-flex;align-items:center;gap:6px;flex:none;border-radius:var(--pill);padding:3px 9px;font-size:var(--t-chip);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+/* Same law as the site's `.chip-open`: over a translucent tint --accent-text is
+   4.27:1, and this label is 10 px — the furthest thing from a large-text pass. */
+.tag-open{background:var(--blue-soft);color:var(--text)}
+/* The dot is the part that survives greyscale: a state carried by tint alone is
+   a state a colour-blind reader cannot take, and it is the same mark the
+   landing's `.chip-open` carries. Only "open" gets one, because only "open" is
+   a live thing. */
+.tag-open::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
+.tag-resolved{background:var(--success-bg);color:var(--success)}
+/* The same fourth state as the site's `.chip-awaiting`: a market whose
+   deadline passed and nobody resolved is not open. */
+.tag-awaiting{background:var(--warning-bg);color:var(--warning)}
+.tag-cancelled{background:var(--card3);color:var(--text3)}
+
+/* Transaction History */
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg)}
+.tx-icon{width:30px;height:30px;border-radius:var(--pill);border:1px solid var(--border);background:var(--card2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
+.tx-icon .icon{width:14px;height:14px}
+/* Direction is painted once: the arrow says in or out, the sign and the colour
+   of the amount say the same, so a green or red disc here would be the third
+   place one fact wears a state colour — and no other surface in the product
+   tints a money icon (style.css keeps --success/--danger on the figure only). */
+.tx-details{flex:1;min-width:0}
+.tx-title{font-size:var(--t-small);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The timestamp is a figure, so it takes the money face; the counterparty under
+   it is a name, and the money face on a name draws @bob as a checksum
+   (style.css:505). Each class declares its own weight, because the same span
+   once read 500 inside the title and 400 on its own line. */
+.tx-time{font-size:var(--t-chip);font-weight:400;color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.tx-who{font-size:var(--t-chip);font-weight:400;color:var(--text3)}
+.tx-amount{font-size:var(--t-ui);font-weight:500;white-space:nowrap;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.tx-amount.pos{color:var(--success)}
+.tx-amount.neg{color:var(--danger)}
+/* Not a button: it names a command the user types in the bot, so it must not
+   look tappable here. */
+.tx-more{padding:10px 2px 0;font-size:var(--t-meta);font-weight:400;color:var(--text3)}
+
+/* Deposit Section */
+.deposit-box{display:flex;align-items:center;gap:12px;margin-top:8px}
+/* The address is a plate: the money face, the quiet grey, a filled well with a
+   hairline, exactly the landing's `.wallet-addr`. A 42-character hex printed flat
+   on the card is the one thing a user needs to read twice. The rule behind the
+   fill is one step away from whatever it sits on: the sheet is the canvas, so this
+   plate is the surface, and `.sw-addr`, which sits inside a surface card, is the
+   canvas. A plate the colour of its container is only a border. */
+.deposit-addr{font-size:var(--t-meta);color:var(--text3);word-break:break-all;flex:1;min-width:0;user-select:all;font-family:var(--font-mono);font-variant-numeric:tabular-nums;background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px}
+/* A row of a read is a cell, not a floating pair of words: the landing's `.row`
+   is a full-height cell of one frame — the frame paints the hairline, the cell
+   paints the padding, the key is the quiet grey and the figure is the mono weight
+   set right against it. Four `padding:6px 0` lines stacked in a sheet used to read
+   as four separate thoughts where the sheet has one thing to say. */
+.wd-row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;font-size:var(--t-ui);color:var(--text3);background:var(--bg);padding:12px 14px}
+.wd-row b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500;text-align:right;overflow-wrap:anywhere}
+/* QR readers need a light quiet zone in both themes, so this one box stays white. */
+.deposit-qr{width:80px;height:80px;border-radius:var(--radius);border:1px solid var(--border);background:var(--qr-plate);padding:4px;flex-shrink:0}
+.deposit-qr img{width:100%;height:100%;display:block}
+
+/* Modal / Bottom Sheet */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--scrim);z-index:200;display:none;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .25s var(--ease)}
+.modal-overlay.show{display:flex;opacity:1}
+.modal-sheet{background:var(--bg);border-top:1px solid var(--border-strong);border-radius:var(--radius-lg) var(--radius-lg) 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:14px 16px calc(20px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.modal-overlay.show .modal-sheet{transform:translateY(0)}
+.modal-handle{width:32px;height:3px;background:var(--border-strong);border-radius:var(--pill);margin:0 auto 16px}
+.modal-title{font-size:var(--t-h4);font-weight:600;letter-spacing:-.02em;margin-bottom:14px}
+
+/* Toast */
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--card);border:1px solid var(--border-strong);border-radius:var(--pill);padding:10px 18px;font-size:var(--t-small);font-weight:500;z-index:300;transition:transform .3s cubic-bezier(.32,.72,0,1);pointer-events:none;max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:var(--success);color:var(--success)}
+.toast.error{border-color:var(--danger);color:var(--danger)}
+
+/* Detail View */
+.detail-view{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:150;overflow-y:auto;max-width:480px;margin:0 auto}
+.detail-header{position:sticky;top:0;z-index:10;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);min-height:52px}
+.detail-back{width:32px;height:32px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text);flex-shrink:0;cursor:pointer;transition:border-color .2s var(--ease)}
+.detail-back:hover,.detail-back:active{border-color:var(--text)}
+.detail-back .icon{width:16px;height:16px}
+.detail-title{font-size:var(--t-lead);font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
+.detail-body{padding:16px}
+.detail-question{max-width:var(--measure);font-size:var(--t-h2);font-weight:500;line-height:1.3;letter-spacing:-.025em;margin-bottom:14px;overflow-wrap:anywhere}
+.detail-options{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.detail-opt{background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-lg);padding:16px;display:block;width:100%;text-align:left}
+.detail-opt-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px}
+.detail-opt-name{font-weight:500;font-size:var(--t-ui);min-width:0;overflow-wrap:anywhere}
+.detail-opt-name.win{color:var(--accent-text);font-weight:600}
+/* The accent says "this option won"; a colour every option wears says nothing.
+   The price is the number the row is about, so it takes the step the landing
+   gives a figure that carries a screen. */
+.detail-opt-pct{font-size:var(--t-h3);font-weight:500;color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.detail-opt-bar{height:4px;border-radius:var(--pill);background:var(--card3);overflow:hidden}
+.detail-opt-bar-fill{height:100%;border-radius:var(--pill);background:var(--accent);transition:width .4s var(--ease)}
+.detail-opt.pickable{cursor:pointer;transition:border-color .2s var(--ease),background-color .2s var(--ease)}
+/* The affordance is the border, as it is on the landing's `.opt-btn`: a pressed
+   tile that fills itself grey reads as disabled, which is the one state this
+   control never has. */
+.detail-opt.pickable:hover,.detail-opt.pickable:active{border-color:var(--text)}
+.detail-opt.selected{border-color:var(--accent);background:var(--blue-soft)}
+.buy-panel{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--border);padding:12px 0 6px}
+.buy-panel .input{margin-bottom:10px}
+
+/* Create Form */
+.create-options{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.create-opt-row{display:flex;gap:8px;align-items:center}
+.create-opt-row .input{flex:1}
+/* This button deletes a row the user has not finished writing, not money. A red
+   disc says "irreversible" in the one language this interface reserves for a
+   figure that moved, and every other surface keeps --danger on amounts. */
+.create-opt-rm{width:32px;height:32px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text3);cursor:pointer;flex-shrink:0;transition:border-color .2s var(--ease),color .2s var(--ease)}
+.create-opt-rm:hover,.create-opt-rm:active{border-color:var(--text);color:var(--text)}
+.create-opt-rm .icon{width:14px;height:14px}
+.create-add{background:none;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:10px;color:var(--text3);font-size:var(--t-small);font-weight:500;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:border-color .2s var(--ease),color .2s var(--ease)}
+.create-add:hover,.create-add:active{border-color:var(--accent-text);color:var(--accent-text)}
+.create-add .icon{width:13px;height:13px}
+
+/* Language items — cells of one frame, like every other choice list */
+.lang-item{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg);cursor:pointer;transition:background-color .2s var(--ease);width:100%}
+.lang-item:active{background:var(--card2)}
+.lang-item.active{background:var(--blue-soft)}
+.lang-name{font-size:var(--t-ui);font-weight:500}
+.lang-check{margin-left:auto;color:var(--accent-text);display:none}
+.lang-item.active .lang-check{display:block}
+.lang-check .icon{width:16px;height:16px}
+
+/* Top users — the landing's leaderboard: rank, name, amount, one hairline
+   between rows and none around them. */
+.top-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg)}
+.top-rank{width:26px;font-size:var(--t-small);font-weight:500;color:var(--text4);text-align:center;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.top-rank.lead{color:var(--accent-text)}
+.top-name{flex:1;min-width:0;font-size:var(--t-ui);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-vol{font-size:var(--t-small);font-weight:500;color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* Stats: one hairline strip, not three boxes — the landing's own answer to a row
+   of figures that belong to the same read. */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background: var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.stat{background:var(--bg);padding:16px 14px;text-align:left;min-width:0}
+.stat-val{font-size:var(--t-h3);font-weight:500;font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow-wrap:anywhere}
+.stat-label{font-size:var(--t-chip);font-weight:500;color:var(--text3);margin-top:6px;letter-spacing:.09em;text-transform:uppercase;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* Empty state */
+.empty{text-align:center;padding:28px 20px;color:var(--text3);background:var(--card2);font-size:var(--t-ui);font-weight:400;border:1px dashed var(--border-strong);border-radius:var(--radius-lg)}
+
+/* Page-local layout helpers (they replace per-element style="" attributes) */
+[hidden]{display:none!important}
+.card-compact{padding:12px}
+.sheet-gap{margin-bottom:14px}
+.gap-top{margin-top:12px}
+.gap-top-lg{margin-top:24px}
+.gap-top-sm{margin-top:8px}
+.sheet-note{font-size:var(--t-small);color:var(--text2);margin:0 0 12px}
+.hint-block{margin:0 0 12px}
+.mini-label.late{margin:12px 0 8px}
+.deposit-col{flex:1;min-width:0}
+.sw-state{font-size:var(--t-small);color:var(--text2);margin-bottom:8px}
+.sw-state .ok{color:var(--success)}
+.sw-state .warn{color:var(--warning)}
+/* The wallet address is the one string on this card a user reads character by
+   character before sending, so it gets the same well as the deposit address. */
+.sw-addr{font-size:var(--t-meta);color:var(--text3);word-break:break-all;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px}
+.sw-bal{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:10px;font-size:var(--t-small);color:var(--text3)}
+.sw-bal .mono{font-size:var(--t-h4);color:var(--text);letter-spacing:-.02em}
+.sw-card .hint{margin-top:8px}
+.ai-chat{max-height:200px;overflow-y:auto;margin-bottom:10px;font-size:var(--t-ui);color:var(--text2)}
+.ai-row{display:flex;gap:8px}
+.ai-row .input{flex:1}
+.ai-item{margin-bottom:6px}
+/* The assistant is the one card that renders as an empty box until someone types,
+   so it says what it answers — in the one hint voice every other sheet uses. */
+.ai-item .who{font-weight:500;color:var(--accent-text)}
+.ai-item.ans .who{color:var(--success)}
+.ai-item.pending{color:var(--text4)}
+.ai-item.err{color:var(--danger)}
+.pot-line{font-size:var(--t-small);color:var(--text3);margin-bottom:8px}
+.pot-line b{color:var(--text);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
+.won-line{font-size:var(--t-small);font-weight:600;color:var(--accent-text);margin-bottom:8px}
+.shares{margin-top:6px;font-size:var(--t-meta);color:var(--accent-text)}
+.deadline{font-size:var(--t-small);color:var(--text3);margin-bottom:10px}
+.action-card{margin-top:12px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.action-card .icon{width:16px;height:16px;color:var(--accent-text);flex-shrink:0}
+.about{font-size:var(--t-ui);line-height:1.6;color:var(--text2)}
+.about b{color:var(--text);font-weight:600}
+.about .by{margin-top:6px;color:var(--text3);font-size:var(--t-small)}
+
+/* Thumb targets. The Mini App is a phone surface but it also opens in the
+   desktop Base App, so the 44px floor is keyed to the pointer, not the width. */
+@media (pointer: coarse){
+  .theme-toggle{width:44px;height:44px}
+  .balance-chip,.chip,.action-card{min-height:44px}
+  .detail-back,.create-opt-rm{width:44px;height:44px}
+  .lang-item{min-height:48px}
+  /* .btn and .input were the two families the floor missed: "Create market" and
+     "Create bet" landed at 42px and the AI row at 40px, on the surface where the
+     thumb actually taps. min-height only, so the compact rows keep their density. */
+  .btn{min-height:44px}
+  .input{min-height:44px}
+  /* The dashed "add option" row and the pill that carries a maximum or a copy
+     action are both buttons outside the .btn family, so neither met the floor
+     until it was named for them: 28 px of padding and text on their own. */
+  .create-add{min-height:44px}
+  .chip-btn{min-height:44px}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<!-- Line icons, drawn once here and referenced with <use> so the JS templates stay short. -->
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2.5"/><path d="M3 11h18"/><path d="M16.6 15.6h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4.5 4.5v15h15"/><path d="M8 15l3.4-4.2 2.9 2.4L18.5 8"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M9 9h.01M15 15h.01M12 12h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="2.4"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 3 10.6l7.3 2.6 2.6 7.3L21 3Z"/><path d="M10.3 13.2 21 3"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12.5" rx="2.5"/><path d="M3 10.5h18"/><path d="M7 14.8h4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16.5V4"/><path d="M6.5 9.5 12 4l5.5 5.5"/><path d="M4 20h16"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v12.5"/><path d="M6.5 11.5 12 17l5.5-5.5"/><path d="M4 20h16"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 4h8.5A1.5 1.5 0 0 1 15 5.5V6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5.5 12h13"/></symbol>
+</svg>
+<div id="app">
+  <!-- Header -->
+  <header class="header">
+    <h1 class="header-logo"><span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span><span>Tippy<span class="dot">.</span></span></h1>
+    <div class="header-right">
+      <button class="theme-toggle" data-act="toggleTheme" data-i18n-label="theme_toggle">
+        <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+        <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+      </button>
+      <button class="balance-chip" id="balanceChip" data-act="switchTab" data-tab="0">
+        <span class="dot"></span>
+        <span id="balanceDisplay">--</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Content -->
+  <main class="content" id="contentArea">
+    <!-- TAB 0: Wallet -->
+    <div class="tab-page active" id="tab0">
+      <div class="balance">
+        <h2 class="eyebrow" data-i18n="balance">Balance</h2>
+        <div class="big-number"><span id="bigBalance">--</span><span class="currency">USDC</span></div>
+      </div>
+
+      <div class="action-row">
+        <button class="action-btn" data-act="openTipSheet">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-send"/></svg>
+          <span data-i18n="send">Send</span>
+        </button>
+        <button class="action-btn" data-act="openDepositSheet">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-card"/></svg>
+          <span data-i18n="deposit">Deposit</span>
+        </button>
+        <button class="action-btn" data-act="openWithdrawSheet">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-up"/></svg>
+          <span data-i18n="withdraw">Withdraw</span>
+        </button>
+      </div>
+
+      <div class="card sw-card" id="smartWalletCard" hidden>
+        <div class="card-header">
+          <h2 class="eyebrow" data-i18n="smart_wallet">Smart Wallet</h2>
+          <button class="chip-btn" data-act="copyAddr" data-target="swAddress" id="swCopy">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-copy"/></svg>
+            <span data-i18n="copy">Copy</span>
+          </button>
+        </div>
+        <div class="sw-state"><span id="swDeployed">—</span></div>
+        <div class="mono sw-addr" id="swAddress" data-addr="">—</div>
+        <div class="sw-bal"><span><span data-i18n="balance">Balance</span> (USDC)</span><span class="mono" id="swBalance">--</span></div>
+        <div class="hint" id="swDepositHint">—</div>
+      </div>
+
+      <h2 class="eyebrow gap-top-lg" data-i18n="history">History</h2>
+      <div id="historyList"></div>
+    </div>
+
+    <!-- TAB 1: Markets -->
+    <div class="tab-page" id="tab1">
+      <button class="btn btn-primary btn-full sheet-gap" data-act="openCreateMarket">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span data-i18n="create_market">Create market</span>
+      </button>
+      <div id="marketsList"></div>
+    </div>
+
+    <!-- TAB 2: Bets -->
+    <div class="tab-page" id="tab2">
+      <button class="btn btn-primary btn-full sheet-gap" data-act="openCreateBet">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span data-i18n="create_bet">Create bet</span>
+      </button>
+      <div id="betsList"></div>
+    </div>
+
+    <!-- TAB 3: More -->
+    <div class="tab-page" id="tab3">
+      <h2 class="eyebrow gap-top-lg" data-i18n="lang">Language</h2>
+      <div class="list-group" id="langList">
+        <button class="lang-item" data-act="setLang" data-lang="ru">
+          <span class="lang-name">Русский</span>
+          <span class="lang-check"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </button>
+        <button class="lang-item" data-act="setLang" data-lang="en">
+          <span class="lang-name">English</span>
+          <span class="lang-check"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </button>
+        <button class="lang-item" data-act="setLang" data-lang="zh">
+          <span class="lang-name">中文</span>
+          <span class="lang-check"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span>
+        </button>
+      </div>
+
+      <h2 class="eyebrow gap-top-lg" data-i18n="ai">AI Assistant</h2>
+      <div class="card card-compact">
+        <div class="ai-chat" id="aiChat"><p class="hint" data-i18n="ai_hint">Спроси про рынок, чаевые или кошелёк.</p></div>
+        <div class="ai-row">
+          <input class="input" id="aiInput" data-i18n-ph="ai_placeholder" placeholder="Ask about markets...">
+          <button class="btn btn-primary btn-sm" data-act="askAI" data-i18n-label="send">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-right"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <h2 class="eyebrow gap-top-lg" data-i18n="about">About</h2>
+      <div class="card" id="aboutCard"></div>
+
+      <h2 class="eyebrow gap-top-lg" data-i18n="top">Top</h2>
+      <div id="topList"></div>
+
+      <h2 class="eyebrow gap-top-lg" data-i18n="stats">Stats</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-val" id="statUsers">--</div>
+          <div class="stat-label" data-i18n="stat_users">Users</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="statVolume">--</div>
+          <div class="stat-label" data-i18n="stat_volume">Volume</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="statTips">--</div>
+          <div class="stat-label" data-i18n="stat_tips">Tips</div>
+        </div>
+      </div>
+
+      <a href="https://t.me/TippyOnBaseBot" target="_blank" rel="noopener" class="btn btn-secondary btn-full gap-top">@TippyOnBaseBot</a>
+
+      <button class="btn btn-primary btn-full gap-top" id="addMiniApp" data-act="addMiniApp" hidden>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span data-i18n="add_app">Add to Base App</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- Tab Bar -->
+  <nav class="tab-bar" data-i18n-label="nav_tabs">
+    <button class="tab-item active" data-act="switchTab" data-tab="0" aria-current="true">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wallet"/></svg>
+      <span data-i18n="wallet">Wallet</span>
+    </button>
+    <button class="tab-item" data-act="switchTab" data-tab="1">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chart"/></svg>
+      <span data-i18n="markets">Markets</span>
+    </button>
+    <button class="tab-item" data-act="switchTab" data-tab="2">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dice"/></svg>
+      <span data-i18n="bets">Bets</span>
+    </button>
+    <button class="tab-item" data-act="switchTab" data-tab="3">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-more"/></svg>
+      <span data-i18n="more">More</span>
+    </button>
+  </nav>
+</div>
+
+<!-- Modal Overlay -->
+<div class="modal-overlay" id="modalOverlay" data-act="closeModal">
+  <div class="modal-sheet" id="modalSheet" role="dialog" aria-modal="true">
+    <div class="modal-handle"></div>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Detail View -->
+<section class="detail-view" id="detailView" data-i18n-label="market_detail" hidden></section>
+
+<script>
+const I18N = {
+  ru: { wallet: "Кошелёк", balance: "Баланс", theme_toggle: "Переключить тему", nav_tabs: "Разделы приложения", market_detail: "Карточка рынка", deposit: "Пополнить", withdraw: "Вывести", markets: "Рынки", bets: "Ставки", more: "Ещё", send: "Отправить", buy: "Купить", create: "Создать", history: "История", top: "Топ", about: "О боте", lang: "Язык", question: "Вопрос", options: "Варианты", opt_1: "Вариант 1", opt_2: "Вариант 2", opt_3: "Вариант 3", opt_4: "Вариант 4", amount: "Сумма", username: "Никнейм", address: "Адрес", qr_alt: "QR-код адреса пополнения", copied: "Скопировано!", copy: "Копировать", fill_fields: "Заполни все поля", no_markets: "Рынков пока нет", no_bets: "Ставок пока нет", no_history: "История пуста", deposit_title: "Пополнение USDC", dep_network: "Сеть", dep_asset: "Актив", dep_confirmations: "Подтверждения", dep_contract: "Контракт USDC", dep_explorer: "Открыть в обозревателе", dep_shared: "Это общий депозитный адрес сервиса: не отправляй сюда ETH и другие токены — зачисляется только USDC на __CHAIN_NAME__", deposit_note: "Отправь USDC на этот адрес (сеть __CHAIN_NAME__)", linked: "Кошелёк привязан, депозиты автоматические", send_tip: "Отправить чаевые", create_market: "Создать рынок", create_bet: "Создать ставку", hours: "Дедлайн, часы (по умолчанию __DEFAULT_DEADLINE_HOURS__)", hours_cap: "Максимум {max} ч.", onchain: "Cally · ончейн-рынки", onchain_hint: "Торгуй в чате бота: /oc_buy {id} <вариант> <сумма>", your_shares: "Твои доли", you_won: "Ты выиграл! Забери выигрыш из контракта", oc_redeem_hint: "Забери выигрыш: /oc_redeem {id}", onchain_load_fail: "Рынок не загрузился", smart_wallet: "Смарт-кошелёк", smart_deployed: "Ончейн SmartAccount (без газа, спонсируется)", smart_not_deployed: "SmartAccount не развёрнут — пополните USDC для активации", smart_deposit_hint: "Пополните USDC на __CHAIN_NAME__ по этому адресу для безгазовой торговли", smart_enabled: "Безгазовая торговля ВКЛ", tip_cap: "Максимум за один перевод — {max} USDC", trade_bounds: "От {min} до {max} USDC за одну сделку", available: "Доступно", max: "Макс.", wd_hint: "__WITHDRAW_FEE_PCT__% комиссия, минимум __MIN_WITHDRAW_USDC__ USDC, не более __MAX_WITHDRAWS_PER_DAY__ в день", wd_confirm_title: "Подтверди вывод", wd_fee: "Комиссия", wd_total: "Будет списано", wd_after: "Баланс после", wd_check: "Проверь адрес — перевод необратим. Ничего не списано, пока ты не подтвердишь.", wd_confirm_btn: "Подтвердить", wd_cancel_btn: "Отменить", wd_queued: "Вывод поставлен в очередь — USDC придёт на адрес через минуту", wd_cancelled: "Вывод отменён — деньги остались на балансе", ai: "AI-ассистент", ai_placeholder: "Спроси о рынках…", ai_you: "Вы", ai_ai: "ИИ", ai_data_who: "Данные бота", ai_no_answer: "Ответ не найден", ai_hint: "Спроси про рынок, чаевые или кошелёк.", stats: "Статистика", stat_users: "Пользователи", stat_volume: "Объём", stat_tips: "Чаевые", about_text: "Чаевые, рынки предсказаний и ставки в USDC на Base.", tos: "Условия использования", pot: "Пот", traders: "Трейдеры", deadline: "Завершение", awaiting_note: "Ставки можно вернуть в боте", st_open: "открыт", st_awaiting: "ждёт решения", st_resolved: "завершён", st_cancelled: "отменён", add_option: "Добавить вариант", remove: "Удалить", kind_market: "Рынок", kind_bet: "Ставка", add_app: "Добавить в Base App", add_app_error: "Не удалось добавить", buy_ok: "Куплено за {amt} USDC", bet_ok: "Ставка принята: {amt} USDC", market_created: "Рынок создан", bet_created: "Ставка создана", network_error: "Сеть недоступна", pending_parameters: "Предыдущая операция не подтверждена. Повторите исходные параметры; новые не отправлены.", response_incomplete: "Ответ операции получен не полностью. Повторите исходный запрос.", load_error: "Не удалось загрузить", error_generic: "Ошибка", dup_request: "Такой запрос уже отправлен", connect_wallet: "Сначала подключи кошелёк", open_in_app: "Открой в Telegram или Base App — так видно твой баланс", auth_stale: "Сессия истекла — закрой и снова открой приложение из чата", back: "Назад", no_top: "Топ пуст", tip_recent: "Кому ты кидал", history_more: "Показаны последние операции — вся история в боте: /history" },
+  en: { wallet: "Wallet", balance: "Balance", theme_toggle: "Switch theme", nav_tabs: "App sections", market_detail: "Market detail", deposit: "Deposit", withdraw: "Withdraw", markets: "Markets", bets: "Bets", more: "More", send: "Send", buy: "Buy", create: "Create", history: "History", top: "Top", about: "About", lang: "Language", question: "Question", options: "Options", opt_1: "Option 1", opt_2: "Option 2", opt_3: "Option 3", opt_4: "Option 4", amount: "Amount", username: "Username", address: "Address", qr_alt: "Deposit address QR code", copied: "Copied!", copy: "Copy", fill_fields: "Fill all fields", no_markets: "No markets yet", no_bets: "No bets yet", no_history: "No history", deposit_title: "Deposit USDC", dep_network: "Network", dep_asset: "Asset", dep_confirmations: "Confirmations", dep_contract: "USDC contract", dep_explorer: "Open in explorer", dep_shared: "This is the service's shared deposit address: send only USDC on __CHAIN_NAME__ — ETH and other tokens cannot be credited", deposit_note: "Send USDC to this address (__CHAIN_NAME__ network)", linked: "Wallet linked, deposits are automatic", send_tip: "Send tip", create_market: "Create market", create_bet: "Create bet", hours: "Deadline, hours (default __DEFAULT_DEADLINE_HOURS__)", hours_cap: "Up to {max} h.", onchain: "Cally · on-chain", onchain_hint: "Trade in the bot chat: /oc_buy {id} <option> <amount>", your_shares: "Your shares", you_won: "You won! Claim from the contract", oc_redeem_hint: "Claim your winnings: /oc_redeem {id}", onchain_load_fail: "Failed to load market", smart_wallet: "Smart Wallet", smart_deployed: "On-chain SmartAccount (gasless, sponsored)", smart_not_deployed: "SmartAccount not deployed — deposit USDC to activate", smart_deposit_hint: "Deposit USDC on __CHAIN_NAME__ to this address to trade gasless", smart_enabled: "Gasless trading is ON", tip_cap: "Up to {max} USDC per tip", trade_bounds: "From {min} to {max} USDC per trade", available: "Available", max: "Max", wd_hint: "__WITHDRAW_FEE_PCT__% fee, min __MIN_WITHDRAW_USDC__ USDC, up to __MAX_WITHDRAWS_PER_DAY__ per day", wd_confirm_title: "Confirm the withdrawal", wd_fee: "Fee", wd_total: "Debited", wd_after: "Balance after", wd_check: "Check the address — the transfer is irreversible. Nothing is debited until you confirm.", wd_confirm_btn: "Confirm", wd_cancel_btn: "Cancel", wd_queued: "Withdrawal queued — USDC lands on your address in a minute", wd_cancelled: "Withdrawal cancelled — the funds stayed on your balance", ai: "AI Assistant", ai_placeholder: "Ask about markets...", ai_you: "You", ai_ai: "AI", ai_data_who: "Bot data", ai_no_answer: "No answer", ai_hint: "Ask about a market, a tip or your wallet.", stats: "Stats", stat_users: "Users", stat_volume: "Volume", stat_tips: "Tips", about_text: "Tips, prediction markets and pool bets in USDC on Base.", tos: "Terms of Service", pot: "Pot", traders: "Traders", deadline: "Closes", awaiting_note: "Stakes can be refunded in the bot", st_open: "open", st_awaiting: "awaiting resolution", st_resolved: "resolved", st_cancelled: "cancelled", add_option: "Add option", remove: "Remove", kind_market: "Market", kind_bet: "Bet", add_app: "Add to Base App", add_app_error: "Could not add the app", buy_ok: "Bought for {amt} USDC", bet_ok: "Bet placed: {amt} USDC", market_created: "Market created", bet_created: "Bet created", network_error: "Network error", pending_parameters: "The previous operation is unconfirmed. Retry its original parameters; new ones were not sent.", response_incomplete: "The operation response is incomplete. Retry the original request.", load_error: "Failed to load", error_generic: "Error", dup_request: "That request has already been sent", connect_wallet: "Connect the wallet first", open_in_app: "Open in Telegram or Base App to see your balance", auth_stale: "Session expired — close the app and reopen it from the chat", back: "Back", no_top: "No leaders yet", tip_recent: "People you tip", history_more: "Showing the latest entries — the full history is in the bot: /history" },
+  zh: { wallet: "钱包", balance: "余额", theme_toggle: "切换主题", nav_tabs: "应用分区", market_detail: "卡片市场", deposit: "充值", withdraw: "提现", markets: "市场", bets: "投注", more: "更多", send: "发送", buy: "买入", create: "创建", history: "历史", top: "排行", about: "关于", lang: "语言", question: "问题", options: "选项", opt_1: "选项1", opt_2: "选项2", opt_3: "选项3", opt_4: "选项4", amount: "金额", username: "用户名", address: "地址", qr_alt: "充值地址二维码", copied: "已复制！", copy: "复制", fill_fields: "请填写所有字段", no_markets: "暂无市场", no_bets: "暂无投注", no_history: "暂无记录", deposit_title: "充值 USDC", dep_network: "网络", dep_asset: "资产", dep_confirmations: "确认数", dep_contract: "USDC 合约", dep_explorer: "在区块浏览器中查看", dep_shared: "这是服务方的共享充值地址：请只发送 __CHAIN_NAME__ 网络的 USDC，ETH 和其他代币无法入账", deposit_note: "将 USDC 发送到此地址（__CHAIN_NAME__ 网络）", linked: "钱包已绑定，充值自动到账", send_tip: "发送打赏", create_market: "创建市场", create_bet: "创建投注", hours: "截止时间（小时，默认 __DEFAULT_DEADLINE_HOURS__）", hours_cap: "最长 {max} 小时。", onchain: "Cally · 链上", onchain_hint: "在机器人聊天中交易：/oc_buy {id} <选项> <金额>", your_shares: "你的份额", you_won: "你赢了！从合约领取", oc_redeem_hint: "领取收益：/oc_redeem {id}", onchain_load_fail: "市场加载失败", smart_wallet: "智能钱包", smart_deployed: "链上智能账户 (免 gas、赞助)", smart_not_deployed: "智能账户未部署，存入 USDC 即可激活", smart_deposit_hint: "在 __CHAIN_NAME__ 向此地址存入 USDC 即可免 gas 交易", smart_enabled: "免 gas 交易已开启", tip_cap: "单笔打赏上限 {max} USDC", trade_bounds: "单笔交易 {min}–{max} USDC", available: "可用余额", max: "最大", wd_hint: "手续费 __WITHDRAW_FEE_PCT__%，最低 __MIN_WITHDRAW_USDC__ USDC，每天最多 __MAX_WITHDRAWS_PER_DAY__ 次", wd_confirm_title: "确认提现", wd_fee: "手续费", wd_total: "扣除", wd_after: "之后余额", wd_check: "请核对地址——转账不可撤销。确认前不会扣除任何资金。", wd_confirm_btn: "确认", wd_cancel_btn: "取消", wd_queued: "提现已加入队列——USDC 将在一分钟内到账", wd_cancelled: "提现已取消——资金仍在你的余额中", ai: "AI 助手", ai_placeholder: "询问市场…", ai_you: "你", ai_ai: "AI", ai_data_who: "机器人数据", ai_no_answer: "未找到答案", ai_hint: "可以问市场、打赏或你的钱包。", stats: "统计", stat_users: "用户", stat_volume: "交易量", stat_tips: "打赏", about_text: "在 Base 上用 USDC 打赏、预测市场和奖池投注。", tos: "服务条款", pot: "奖池", traders: "交易者", deadline: "截止", awaiting_note: "投注可在机器人内退回", st_open: "进行中", st_awaiting: "等待结算", st_resolved: "已结算", st_cancelled: "已取消", add_option: "添加选项", remove: "删除", kind_market: "市场", kind_bet: "投注", add_app: "添加到 Base App", add_app_error: "添加失败", buy_ok: "已买入 {amt} USDC", bet_ok: "投注成功：{amt} USDC", market_created: "市场已创建", bet_created: "投注已创建", network_error: "网络不可用", pending_parameters: "上一次操作尚未确认。请使用原始参数重试；新参数未发送。", response_incomplete: "操作响应不完整。请重试原始请求。", load_error: "加载失败", error_generic: "错误", dup_request: "该请求已发送", connect_wallet: "请先连接钱包", open_in_app: "在 Telegram 或 Base App 中打开即可查看余额", auth_stale: "会话已过期——请关闭应用后从聊天中重新打开", back: "返回", no_top: "暂无排行", tip_recent: "你常打赏的人", history_more: "仅显示最近的记录——完整历史请在机器人里查看：/history" }
+};
+
+let STATE = { lang: window.__seedLang || 'en', balance_usdc: 0, deposit_address: '', markets: [], bets: [], onchain_markets: [], history: [], history_truncated: false, top: [], recent_tips: [], stats: null, smart: null, username: '', tg_id: null, linked_address: '', authStale: false };
+let currentTab = 0;
+let toastTimer = null;
+
+// The bounds the ledger refuses with, published by the same /api/info the site
+// reads. A sheet that typed its own bound kept offering a sum the route then
+// rejected, and when the operator moved the number the screen still printed it.
+// The fee block and the chain block come out of the same answer: a deposit sheet
+// that names a network has to name the one this origin credits, and a withdrawal
+// that offers a maximum has to price the fee the ledger adds on top of it.
+let INFO = {};
+let LIMITS = {};
+let FEES = {};
+
+async function loadLimits() {
+  try {
+    const r = await fetch('/api/info', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    INFO = await r.json();
+    LIMITS = INFO.limits || {};
+    FEES = INFO.fees || {};
+  } catch(e) { /* no bounds stated beats a bounds invented */ }
+}
+
+// `[[attr, limits key]]` → the attributes the published numbers allow.
+function boundAttr(pairs) {
+  return pairs.map(([attr, key]) => LIMITS[key] == null ? '' : ` ${attr}="${LIMITS[key]}"`).join('');
+}
+
+// A sentence about a bound is painted only when the origin published it: a
+// missing line says nothing, a typed number is a second copy of a config knob.
+function boundHint(template, pairs, fill = usdc) {
+  if (!template) return '';
+  if (!pairs.every(([mark]) => template.includes(mark))) return '';
+  if (pairs.some(([, key]) => LIMITS[key] == null)) return '';
+  const filled = pairs.reduce((text, [mark, key]) => text.split(mark).join(fill(LIMITS[key])), template);
+  return `<p class="hint hint-block">${esc(filled)}</p>`;
+}
+
+// The sums a money panel offers a thumb, and the one its field opens on. One
+// ladder for both panels that paint quick amounts: two ladders would be two
+// answers to "what can I tap", and only the one filtered by the balance knows
+// the difference between a 25 USDC offer and 3 USDC on the account.
+const QUICK_LADDER = [1, 5, 10, 25];
+const QUICK_DEFAULT = 5;
+
+function balanceKnown() { return STATE.tg_id !== null && STATE.tg_id !== undefined; }
+
+// `null` is the answer when no identity was resolved. 0 is a figure, and a sheet
+// that paints 0.00 says the money is gone rather than that it cannot tell whose
+// it is — the same rule the wallet header holds in renderBalance().
+function balanceMicro() {
+  return balanceKnown() ? Math.round(Number(STATE.balance_usdc || 0) * 1e6) : null;
+}
+
+// The withdrawal fee as this origin publishes it: a percent, applied to the
+// amount and then added on top of it — web/mini.py stages `amount + fee` — which
+// is why "available" and "spendable" are two numbers and are named apart.
+function feePct() { return FEES.withdraw_pct == null ? null : Number(FEES.withdraw_pct); }
+
+// The ledger's own rule: ceil, with one micro as the floor (bot/base.py).
+// Multiplying before dividing keeps an exact product exact in binary floating
+// point, which `micro * (pct / 100)` does not: 3000000 * 0.01 is
+// 30000.000000000004, and ceil there charges a micro the server never took.
+function feeMicro(micro) {
+  const pct = feePct();
+  if (pct === null || micro <= 0) return null;
+  return Math.max(Math.ceil(micro * pct / 100), 1);
+}
+
+// The largest withdrawal whose total still fits the balance. The closed form can
+// land a micro off in either direction, so it is walked back and forth until the
+// fee's own test agrees with it.
+function maxSpendable() {
+  const micro = balanceMicro();
+  const pct = feePct();
+  if (micro === null || pct === null) return null;
+  let amount = Math.floor(micro * 100 / (100 + pct));
+  while (amount > 0 && amount + feeMicro(amount) > micro) amount -= 1;
+  while (amount + feeMicro(amount + 1) <= micro) amount += 1;
+  return amount;
+}
+
+// A frame is only ever as good as the cells inside it: a `.list-group` with none
+// is one rounded rule, so the group is built from the rows that answered.
+function rowFrame(rows) {
+  return rows ? `<div class="list-group">${rows}</div>` : '';
+}
+
+// One row, one meaning, on every panel that spends: what this account holds.
+function availableLine() {
+  const micro = balanceMicro();
+  const figure = micro === null ? '--' : usdc(micro / 1e6) + ' USDC';
+  return rowFrame(`<div class="wd-row"><span>${t('available')}</span><b>${figure}</b></div>`);
+}
+
+// A chip is an offer to tap, so a sum the balance cannot cover is removed rather
+// than left there to be refused, and the field opens on the ladder's standing
+// default when it still fits and otherwise on the largest amount that does. With
+// no known balance nothing is filtered: `availableLine()` already says the figure
+// is unknown, and a panel that hid every chip would say it worse.
+function quickAmounts(target) {
+  const micro = balanceMicro();
+  const fits = micro === null ? QUICK_LADDER : QUICK_LADDER.filter(v => Math.round(v * 1e6) <= micro);
+  const value = fits.includes(QUICK_DEFAULT) ? QUICK_DEFAULT : (fits.length ? fits[fits.length - 1] : null);
+  return {
+    value,
+    chips: fits.map(v => `<button class="chip${v === value ? ' active' : ''}" data-act="pickChip" data-target="${target}" data-val="${v}">${usdc(v)}</button>`).join(''),
+  };
+}
+
+// The amount a Max control types: a cent floor, never a round. Rounding 3465300
+// micro up offers 3.47 against a spendable 3.4653, and the fee on top of 3.47 is
+// more than the account holds.
+function fillMax(targetId) {
+  const el = document.getElementById(targetId);
+  const micro = maxSpendable();
+  if (micro === null) return;
+  el.value = (Math.floor(micro / 1e4) / 100).toFixed(2);
+  el.focus();
+}
+
+// A row that quotes a published figure says nothing when the origin published
+// nothing — the rule `boundHint` states for a sentence, for the read-only rows a
+// deposit sheet paints beside its QR.
+function infoRow(label, value) {
+  if (value == null || value === '') return '';
+  return `<div class="wd-row"><span>${label}</span><b>${esc(String(value))}</b></div>`;
+}
+
+// The token contract is an address a user checks before sending money to it, so
+// it keeps the block the deposit sheet already uses for an address rather than a
+// table row that would break a 42-character string mid-glyph.
+function contractRow() {
+  if (!INFO.usdc_address) return '';
+  return `<div class="mini-label late">${t('dep_contract')}</div>`
+    + `<div class="deposit-addr" id="depContract">${esc(INFO.usdc_address)}</div>`;
+}
+
+// Where a visitor can watch the deposit land, built out of the same answer that
+// names the chain: an explorer typed into markup is a link that survives the
+// operator pointing the wallet somewhere else.
+function explorerLink() {
+  if (!INFO.explorer || !INFO.usdc_address) return '';
+  return `<a class="btn btn-sm btn-secondary gap-top-sm" href="${esc(INFO.explorer)}/token/${esc(INFO.usdc_address)}" target="_blank" rel="noopener">${t('dep_explorer')}</a>`;
+}
+
+// ─── i18n ───
+function t(key) { return (I18N[STATE.lang] && I18N[STATE.lang][key]) || I18N.en[key] || key; }
+function icon(name, cls) { return `<svg class="${cls || 'icon'}" viewBox="0 0 24 24" aria-hidden="true"><use href="#${name}"/></svg>`; }
+function applyI18n() {
+  document.documentElement.lang = STATE.lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nLabel)); });
+}
+
+// ─── Toast ───
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type;
+  clearTimeout(toastTimer);
+  requestAnimationFrame(() => { el.classList.add('show'); });
+  toastTimer = setTimeout(() => { el.classList.remove('show'); }, 2500);
+}
+
+// ─── Tab switching ───
+function switchTab(i) {
+  currentTab = i;
+  document.querySelectorAll('.tab-page').forEach((p, idx) => p.classList.toggle('active', idx === i));
+  document.querySelectorAll('.tab-item').forEach((el, idx) => {
+    el.classList.toggle('active', idx === i);
+    if (idx === i) el.setAttribute('aria-current', 'true');
+    else el.removeAttribute('aria-current');
+  });
+  document.getElementById('contentArea').scrollTop = 0;
+  hideDetail();
+}
+
+// ─── Modal ───
+/* The sheet is the whole way every action in this app happens, so it behaves
+   like a dialog: it names itself after its own title, takes focus on the way
+   in and gives it back on the way out, and closes on Escape and on Telegram's
+   hardware/gesture back button. Before this the only way out was to find the
+   scrim with a thumb. */
+let sheetReturnFocus = null;
+
+/* Telegram draws its own back chevron in the app header. It has to unwind the
+   layer the user is looking at — hiding it while a sheet is open leaves the
+   only exit as the scrim, and pressing the client's back closes the Mini App
+   with the sheet still up. HeaderButton is SDK 7, BackButton before it. */
+function syncBackButton() {
+  const tg = window.Telegram?.WebApp;
+  const bb = tg && (tg.HeaderButton || tg.BackButton);
+  if (!bb || typeof bb.show !== 'function') return;
+  const open = document.getElementById('modalOverlay').classList.contains('show')
+    || !document.getElementById('detailView').hidden;
+  if (open) bb.show(); else bb.hide();
+}
+
+/* The keyboard ring of one full-screen layer, in one list, because the opener
+   has to move focus into it and the trap below has to keep it there: two rules
+   that disagree about what is focusable would make the first Tab land somewhere
+   the visitor cannot see. A link counts — a layer whose only control is a link
+   is still a layer someone has to be able to reach. */
+function focusablesIn(root) {
+  return [...root.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
+}
+
+function topLayer() {
+  if (document.getElementById('modalOverlay').classList.contains('show')) {
+    return document.getElementById('modalSheet');
+  }
+  const dv = document.getElementById('detailView');
+  return dv.hidden ? null : dv;
+}
+
+/* Both layers above the app cover it to the last pixel, and a control under a
+   scrim is still in the tab order and still in the accessibility tree until
+   something says otherwise. Measured: of ten Tab presses in the market detail
+   two left it — onto the document body and onto the header's theme toggle
+   behind the panel, a button a keyboard visitor can activate and cannot see.
+   `inert` is the browser's own removal, and it is what the sheet's
+   `aria-modal="true"` already promised; a hand-painted scrim promises and
+   delivers nothing. */
+function syncLayerStack() {
+  const sheet = document.getElementById('modalOverlay').classList.contains('show');
+  const detail = !document.getElementById('detailView').hidden;
+  document.getElementById('app').inert = sheet || detail;
+  document.getElementById('detailView').inert = sheet;
+  syncBackButton();
+}
+
+function openModal(html) {
+  const content = document.getElementById('modalContent');
+  content.innerHTML = html;
+  const sheet = document.getElementById('modalSheet');
+  const title = content.querySelector('.modal-title');
+  if (title) sheet.setAttribute('aria-label', title.textContent.trim());
+  sheetReturnFocus = document.activeElement;
+  document.getElementById('modalOverlay').classList.add('show');
+  const first = focusablesIn(sheet)[0];
+  if (first) first.focus();
+  syncLayerStack();
+}
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modalOverlay') && e.type === 'click') return;
+  closeModalForce();
+}
+function closeModalForce() {
+  const back = sheetReturnFocus;
+  sheetReturnFocus = null;
+  document.getElementById('modalOverlay').classList.remove('show');
+  // The layer comes out of `inert` before the focus goes back, because
+  // focus() on an inert element is silently refused.
+  syncLayerStack();
+  if (back && document.contains(back)) back.focus();
+}
+/* Topmost layer first: with a sheet open over a market detail, Escape drops the
+   sheet and leaves the detail, which is what the stack looks like visually. */
+function dismissTopLayer() {
+  if (document.getElementById('modalOverlay').classList.contains('show')) { closeModalForce(); return true; }
+  const dv = document.getElementById('detailView');
+  if (!dv.hidden) { hideDetail(); return true; }
+  return false;
+}
+/* `aria-modal="true"` on the sheet is a promise to a screen reader that nothing
+   else is reachable, and a view painted over the whole screen says the same
+   thing visually. Tab kept neither promise: from the last control the key
+   walked out from under the scrim into the tab bar behind it, where a keyboard
+   visitor can activate a button they cannot see. Measured before this existed,
+   of ten Tab presses the stops that stayed inside were 0 in the deposit sheet,
+   2 in the withdraw sheet and 6 in the tip sheet; the ones that left landed on
+   the header's theme toggle, the balance chip and the four tab buttons. */
+function keepFocusInLayer(e) {
+  const layer = topLayer();
+  if (!layer) return;
+  const items = focusablesIn(layer);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  const outside = !layer.contains(active);
+  if (e.shiftKey && (active === first || outside)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (active === last || outside)) { e.preventDefault(); first.focus(); }
+}
+
+// ─── Detail View ───
+let detailReturnFocus = null;
+function showDetail(html) {
+  const dv = document.getElementById('detailView');
+  dv.innerHTML = html;
+  dv.hidden = false;
+  detailReturnFocus = document.activeElement;
+  const first = focusablesIn(dv)[0];
+  if (first) first.focus();
+  syncLayerStack();
+}
+function hideDetail() {
+  const back = detailReturnFocus;
+  detailReturnFocus = null;
+  document.getElementById('detailView').hidden = true;
+  syncLayerStack();
+  if (back && document.contains(back)) back.focus();
+}
+
+// ─── Auth + Load ───
+async function init() {
+  const tg = window.Telegram?.WebApp;
+  if (tg?.onEvent) tg.onEvent('backButtonClicked', dismissTopLayer);
+  const initData = tg ? (tg.initData || '') : '';
+  if (initData) {
+    try {
+      const r = await fetch('/api/mini/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ initData })
+      });
+      // 403 here means the blob the webview is holding is too old to mint a
+      // session. Saying "open in Telegram" to someone who IS in Telegram is a
+      // dead end, so remember the real reason and report that instead.
+      if (r.status === 403) STATE.authStale = true;
+    } catch(e) { console.error('auth error', e); }
+  }
+  await Promise.all([loadState(), loadLimits()]);
+}
+
+async function addMiniApp() {
+  const sdk = window.__fcSdk;
+  if (sdk) {
+    try { await sdk.actions.addMiniApp(); } catch(e) { toast(t('add_app_error'), 'error'); }
+  }
+}
+
+async function loadState() {
+  // Nothing can authorise this call before the state has ever loaded: the
+  // session cookie is HttpOnly (the server tells us if it exists) and outside
+  // Telegram/Base App there is no initData to exchange for one. Render the
+  // empty shell instead of firing a request that only answers 401.
+  const tg = window.Telegram?.WebApp;
+  if (STATE.tg_id === null && !(tg && tg.initData)
+      && document.documentElement.dataset.signedIn !== '1') {
+    renderAll();
+    toast(t('open_in_app'), 'error');
+    return;
+  }
+  try {
+    const r = await fetch('/api/mini/state', { credentials: 'same-origin' });
+    if (r.ok) {
+      const d = await r.json();
+      Object.assign(STATE, d);
+      renderAll();
+      loadSmartWallet();
+      loadStats();
+    } else if (r.status === 401) {
+      // Opened outside Telegram/Base App there is no initData to sign, so no
+      // session ever exists. Render the tabs empty rather than leaving blank
+      // sections behind a generic error toast. If the initData WAS sent and the
+      // server refused it, the honest message is "reopen the app", not "open it".
+      renderAll();
+      toast(STATE.authStale ? t('auth_stale') : t('open_in_app'), 'error');
+    } else {
+      toast(t('load_error'), 'error');
+    }
+  } catch(e) {
+    console.error('state error', e);
+    toast(t('network_error'), 'error');
+  }
+}
+
+function renderAll() {
+  applyI18n();
+  renderBalance();
+  renderHistory();
+  renderMarkets();
+  renderBets();
+  renderMore();
+  renderSmartWallet();
+  setBuyLabel();
+  updateLangHighlight();
+}
+
+function renderBalance() {
+  // No session means no known balance: rendering 0.00 reads as "this account is
+  // empty" rather than "we cannot tell who you are yet".
+  const known = STATE.tg_id !== null && STATE.tg_id !== undefined;
+  const bal = known ? usdc(STATE.balance_usdc) : '--';
+  document.getElementById('balanceDisplay').textContent = bal + ' USDC';
+  document.getElementById('bigBalance').textContent = bal;
+}
+
+async function loadSmartWallet() {
+  try {
+    const r = await fetch('/api/mini/smartwallet', { credentials: 'same-origin' });
+    STATE.smart = r.ok ? await r.json().catch(() => null) : null;
+  } catch(e) {
+    STATE.smart = null;
+  }
+  renderSmartWallet();
+}
+
+// Painting is split from fetching because a language switch changes the words and
+// nothing else: the fetch is the state, this is the answer, and renderAll() calls
+// it so the status line never stays in the language the user just left.
+function renderSmartWallet() {
+  const card = document.getElementById('smartWalletCard');
+  if (!card) return;
+  const d = STATE.smart;
+  if (!d || !d.enabled) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const addrEl = document.getElementById('swAddress');
+  addrEl.textContent = d.address;
+  addrEl.dataset.addr = d.address;
+  document.getElementById('swBalance').textContent = usdc(d.balance_usdc);
+  const deployedEl = document.getElementById('swDeployed');
+  deployedEl.textContent = d.deployed ? t('smart_deployed') : t('smart_not_deployed');
+  deployedEl.classList.toggle('ok', d.deployed);
+  deployedEl.classList.toggle('warn', !d.deployed);
+  document.getElementById('swDepositHint').textContent = d.deployed ? t('smart_enabled') : t('smart_deposit_hint');
+}
+
+/* The «Ещё» tab has always had a Stats block, and it has always shown three
+   dashes: /api/mini/state never carried global counters, and the client read
+   STATE.stats anyway. /api/stats is public, TTL-cached server-side and already
+   answers the landing page, so the app asks it instead of growing a second
+   aggregate into the authenticated state payload. */
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const d = await r.json();
+    STATE.stats = { users: d.users, volume: d.volume_usdc, tips: d.tips_usdc };
+    renderMore();
+  } catch(e) { /* the three numbers stay '--' — the rest of the tab is real */ }
+}
+
+/* Amounts read with the interface separators, not a raw toFixed, and each
+ * mechanism states one fixed precision: two decimals for money, one for odds. */
+function usdc(v) { return Number(v || 0).toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function num(v) { return v == null || v === '' ? '--' : Number(v).toLocaleString(locale(), { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+// Odds are amounts too: a toFixed paints "57.7%" with a dot into a Russian
+// interface whose money is written "57,78". One decimal is the real precision,
+// and it is stated even when the odds land on 25 — a column of "25%" beside
+// "24,9%" has no shared width and the tabular figures under it buy nothing.
+function pctLabel(v) { return Number(v || 0).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'; }
+
+function timeLabel(epochSec) {
+  if (!epochSec) return '';
+  return new Date(epochSec * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function statusTag(m) {
+  const state = marketState(m);
+  if (state === "cancelled") return `<span class="tag tag-cancelled">${t('st_cancelled')}</span>`;
+  if (state === "resolved") return `<span class="tag tag-resolved">${t('st_resolved')}</span>`;
+  if (state === "awaiting") return `<span class="tag tag-awaiting">${t('st_awaiting')}</span>`;
+  return `<span class="tag tag-open">${t('st_open')}</span>`;
+}
+
+function winnerOf(m) {
+  return marketState(m) === "resolved" ? m.winner : null;
+}
+
+/* A deadline means something only while the clock still runs, and once it has
+ * run out the state names itself. What replaces the line is a claim about
+ * custody, not about the clock: a ledger pool hands its stakes back through the
+ * bot, and an on-chain one is settled by the contract, so the caller passes the
+ * sentence its own custody can perform — a card that promises a refund it
+ * cannot make is worse than a card that says nothing. */
+function deadlineText(m) {
+  return marketState(m) === "open" && m.close_at ? timeLabel(m.close_at) : '';
+}
+
+function deadlineNote(m, note) {
+  return marketState(m) === "awaiting" ? (note || '') : '';
+}
+
+function deadlineSpan(m, note) {
+  const held = deadlineNote(m, note);
+  if (held) return `<span>${esc(held)}</span>`;
+  const close = deadlineText(m);
+  return close ? `<span>${t('deadline')}: ${close}</span>` : '';
+}
+
+function deadlineBlock(m, note) {
+  const held = deadlineNote(m, note);
+  if (held) return `<div class="deadline">${esc(held)}</div>`;
+  const close = deadlineText(m);
+  return close ? `<div class="deadline">${t('deadline')}: ${close}</div>` : '';
+}
+
+/* Whether this market still takes money is the same question as what state it
+ * is in, and it has one answer: after the deadline a pool is handed back, not
+ * bought, so a sheet that offered a buy would be offering a refusal. */
+function tradable(m) {
+  return marketState(m) === "open";
+}
+
+/* One option row for every market family, whichever engine holds the pool: the
+ * same face for the percentage, the same bar under it, the accent on the winning
+ * option only. The fill is the painted number as geometry — a floor that thickens
+ * a 0,4% row into a visible one draws a quantity no label claims. */
+function probBars(opts, pctKey, winnerIdx) {
+  const rows = (opts || []).map(o => {
+    const pct = Number(o[pctKey] || 0);
+    const win = winnerIdx != null && o.index === winnerIdx;
+    return `<div>
+      <div class="prob-bar-label"><span${win ? ' class="win"' : ''}>${esc(o.label || o.name || '—')}</span><span class="num${win ? ' win' : ''}">${pctLabel(pct)}</span></div>
+      <div class="prob-bar"><div class="prob-bar-fill" aria-hidden="true" style="width:${barWidth(pct)}%"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="prob-bars">${rows}</div>`;
+}
+
+function renderHistory() {
+  const c = document.getElementById('historyList');
+  const h = STATE.history || [];
+  if (!h.length) { c.innerHTML = `<div class="empty">${t('no_history')}</div>`; return; }
+  // Label, sign and the counterparty come from the server (bot/tx_view):
+  // tx_log amounts are always positive, so guessing here shows a withdrawal
+  // as income. created_at is epoch seconds, not milliseconds.
+  c.innerHTML = `<div class="list-group">` + h.map(tx => {
+    const dir = tx.incoming ? 'in' : 'out';
+    const sub = [tx.ref, tx.note].filter(Boolean).join(' — ');
+    return `<div class="tx-item">
+      <span class="tx-icon">${icon(dir === 'in' ? 'i-down' : 'i-up')}</span>
+      <div class="tx-details">
+        <div class="tx-title">${esc(tx.label || tx.kind || '')}${sub ? ' <span class="tx-who">' + esc(sub) + '</span>' : ''}</div>
+        <div class="tx-time">${timeLabel(Number(tx.created_at || 0))}</div>
+      </div>
+      <div class="tx-amount ${tx.incoming ? 'pos' : 'neg'}">${tx.incoming ? '+' : '−'}${usdc(tx.amount_usdc)}</div>
+    </div>`;
+  }).join('') + `</div>` + (STATE.history_truncated
+    // The server says whether it stopped short: a 10-row history and a truncated
+    // 10-row history are indistinguishable from the client otherwise.
+    ? `<div class="tx-more">${t('history_more')}</div>` : '');
+}
+
+function renderMarkets() {
+  const c = document.getElementById('marketsList');
+  const m = STATE.markets || [];
+  // An empty ledger read says nothing about the on-chain pools below it: both are
+  // answers of `/api/mini/state`, and hiding one because the other has no rows is
+  // a market the user can see on the site and not in the app.
+  if (!m.length) { c.innerHTML = `<div class="empty">${t('no_markets')}</div>` + ocBlock(); return; }
+  c.innerHTML = `<div class="list-group">` + m.map(mk => {
+    const opts = mk.options || [];
+    return `<button class="market-card" data-act="openMarketDetail" data-id="${mk.id}">
+      <div class="card-head"><span class="q">${esc(mk.question)}</span>${statusTag(mk)}</div>
+      ${probBars(opts, 'price_pct', winnerOf(mk))}
+      <div class="market-meta"><span>${t('traders')}: ${mk.traders || 0}</span>${deadlineSpan(mk, t('awaiting_note'))}</div>
+    </button>`;
+  }).join('') + `</div>` + ocBlock();
+}
+
+function ocBlock() {
+  const oc = STATE.onchain_markets || [];
+  if (!oc.length) return '';
+  return `<h2 class="eyebrow gap-top-lg">${t('onchain')}</h2>` + `<div class="list-group">` + oc.map(ocCard).join('') + `</div>`;
+}
+
+function ocCard(m) {
+  return `<button class="market-card" data-act="openOcDetail" data-id="${m.id}">
+    <div class="card-head"><span class="q">#${m.id} ${esc(m.question)}</span>${statusTag(m)}</div>
+    ${probBars(m.options || [], 'price_pct', winnerOf(m))}
+    <div class="market-meta"><span>ERC-1155 · USDC</span>${deadlineSpan(m)}</div>
+  </button>`;
+}
+
+function ocTradeHint(id) {
+  return t('onchain_hint').replace('{id}', id);
+}
+
+function locale() {
+  return { ru: 'ru-RU', en: 'en-US', zh: 'zh-CN' }[STATE.lang] || navigator.language || 'en-US';
+}
+
+function formatShares(micro) {
+  return (Number(micro || 0) / 1e6).toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function detailShell(title, body, tag) {
+  return `<div class="detail-header">
+      <button class="detail-back" data-act="hideDetail" aria-label="${esc(t('back'))}">${icon('i-left')}</button>
+      <div class="detail-title">${title}</div>${tag || ''}
+    </div>
+    <div class="detail-body">${body}</div>`;
+}
+
+function actionCard(iconName, msg) {
+  return `<button class="card action-card" data-act="toast" data-msg="${esc(msg)}">${icon(iconName)}<span>${esc(msg)}</span></button>`;
+}
+
+async function openOcDetail(id) {
+  showDetail(detailShell('#' + id, `<div class="empty">…</div>`));
+  try {
+    const r = await fetch('/api/mini/onchain/' + id, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error();
+    const mk = await r.json();
+    const opts = mk.options || [];
+    const winner = winnerOf(mk);
+    const rows = optRows(opts, 'price_pct', winner, false, o =>
+      (o.shares > 0 ? `<div class="shares">${t('your_shares')}: ${formatShares(o.shares)}</div>` : ''));
+    const heldWinner = winner != null && opts.some(o => o.index === winner && o.shares > 0);
+    let actions = '';
+    if (heldWinner) actions = `<div class="won-line">${t('you_won')}</div>` + actionCard('i-check', t('oc_redeem_hint').replace('{id}', id));
+    /* The trade hint is a promise about a bot command, and /oc_buy refuses a
+     * market whose deadline has passed — so it goes with the state, not with the
+     * two flags that say nobody has decided the outcome yet. */
+    else if (tradable(mk)) actions = actionCard('i-send', ocTradeHint(id));
+    showDetail(detailShell('#' + mk.id, `
+      <div class="detail-question">${esc(mk.question)}</div>
+      ${deadlineBlock(mk)}
+      <div class="detail-options">${rows}</div>
+      ${actions}`, statusTag(mk)));
+  } catch (e) {
+    hideDetail();
+    toast(t('onchain_load_fail'), 'error');
+  }
+}
+
+function renderBets() {
+  const c = document.getElementById('betsList');
+  const b = STATE.bets || [];
+  if (!b.length) { c.innerHTML = `<div class="empty">${t('no_bets')}</div>`; return; }
+  c.innerHTML = `<div class="list-group">` + b.map(bet => {
+    const opts = bet.options || [];
+    return `<button class="market-card" data-act="openBetDetail" data-id="${bet.id}">
+      <div class="card-head"><span class="q">${esc(bet.question)}</span>${statusTag(bet)}</div>
+      ${probBars(opts, 'chance_pct', winnerOf(bet))}
+      <div class="market-meta"><span>${t('pot')}: ${usdc(bet.pot_usdc || bet.pot)} USDC</span>${deadlineSpan(bet, t('awaiting_note'))}</div>
+    </button>`;
+  }).join('') + `</div>`;
+}
+
+function renderMore() {
+  document.getElementById('aboutCard').innerHTML = `<div class="about">
+    <b>Tippy</b> — ${t('about_text')}
+    <div class="by"><a href="https://github.com/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a> · <a href="/tos" target="_blank" rel="noopener">${t('tos')}</a></div>
+  </div>`;
+
+  const top = STATE.top || [];
+  // The row the user reads is a handle only when it really is a Telegram
+  // username: the server also answers with `id123` and `name.base.eth`, and
+  // '@id9000007' is not a handle. `total_usdc` is the field the payload
+  // carries — reading a name that does not exist here rendered 0,00 for every
+  // leader since the block was written.
+  const topRows = top.slice(0, 5).map((u, i) => `<div class="top-item">
+      <div class="top-rank${i === 0 ? ' lead' : ''}">${i + 1}</div>
+      <div class="top-name">${esc(u.handle || u.username || '?')}</div>
+      <div class="top-vol">${usdc(u.total_usdc)} USDC</div>
+    </div>`).join('');
+  // A wrapped-empty group would paint a bare frame, so the note replaces it.
+  document.getElementById('topList').innerHTML = topRows
+    ? `<div class="list-group">${topRows}</div>` : `<div class="empty">${t('no_top')}</div>`;
+
+  document.getElementById('statUsers').textContent = num(STATE.stats?.users);
+  document.getElementById('statVolume').textContent = num(STATE.stats?.volume);
+  document.getElementById('statTips').textContent = num(STATE.stats?.tips);
+}
+
+function updateLangHighlight() {
+  document.querySelectorAll('.lang-item').forEach(el => {
+    el.classList.toggle('active', (el.dataset.lang || '') === STATE.lang);
+  });
+}
+
+// Quotes are escaped too: several call sites interpolate esc() INSIDE an
+// attribute (data-val="…", aria-label="…"), where textContent->innerHTML
+// leaves a quote untouched and would end the attribute early.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+}
+
+// FastAPI puts the rejection reason in `detail`; a non-error response carries
+// `error`. Without both, every refusal toast says just "Error".
+function errMsg(d, status) {
+  if (status === 409) return t('dup_request');
+  // A dead session is the one refusal the app answers in its own words: the
+  // server cannot know the language before the login that just failed, and the
+  // action is always the same — reopen the app from the chat.
+  if (status === 401 || status === 403) return t('auth_stale');
+  return (d && (d.error || d.detail)) || t('error_generic');
+}
+
+// An unknown outcome must replay the same request, not changed inputs under the old key.
+const _idemKeys = {};
+function idemKey(action, path, payload) {
+  const serialized = JSON.stringify([path, payload]);
+  let pending = _idemKeys[action];
+  if (pending && pending.payload !== serialized) {
+    const error = new Error(t('pending_parameters'));
+    error.code = 'IDEMPOTENCY_PAYLOAD_CHANGED';
+    throw error;
+  }
+  if (!pending) pending = _idemKeys[action] = {
+    key: crypto.randomUUID(), payload: serialized, uncertain: false, promise: null
+  };
+  return pending.key;
+}
+function resetIdem(action) { delete _idemKeys[action]; }
+function moneyError(error) {
+  if (error.code === 'IDEMPOTENCY_PAYLOAD_CHANGED') return t('pending_parameters');
+  if (error.code === 'INCOMPLETE_API_RESPONSE') return t('response_incomplete');
+  return error.httpStatus ? error.message : t('network_error');
+}
+async function moneyResponse(path, payload, key) {
+  const response = await fetch(path, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+    body: JSON.stringify(payload)
+  });
+  let data = null;
+  try { data = await response.json(); } catch (e) {
+    if (response.ok) {
+      const error = new Error(t('response_incomplete'));
+      error.code = 'INCOMPLETE_API_RESPONSE';
+      throw error;
+    }
+  }
+  if (!response.ok) {
+    const error = new Error(errMsg(data, response.status));
+    error.httpStatus = response.status;
+    throw error;
+  }
+  return { data: data || {}, status: response.status };
+}
+function moneyPost(path, payload, action) {
+  let key;
+  try { key = idemKey(action, path, payload); }
+  catch (error) { return Promise.reject(error); }
+  const pending = _idemKeys[action];
+  if (pending.promise) return pending.promise;
+  const request = moneyResponse(path, payload, key).catch(error => {
+    if (_idemKeys[action] === pending) {
+      const refused = error.httpStatus >= 400 && error.httpStatus < 500 && error.httpStatus !== 409;
+      if (refused && !pending.uncertain) resetIdem(action);
+      else pending.uncertain = true;
+    }
+    throw error;
+  }).finally(() => { pending.promise = null; });
+  pending.promise = request;
+  return request;
+}
+
+// ─── Tip ───
+function openTipSheet() {
+  // Typing a handle from memory is the slow path; the people a user already
+  // tips are returned by /api/mini/state and offered as chips.
+  const recent = (STATE.recent_tips || []).slice(0, 6);
+  const recentHtml = recent.length ? `
+      <div class="input-label">${t('tip_recent')}</div>
+      <div class="chips">${recent.map(r => `<button class="chip chip-name" data-act="pickTipTo" data-val="${esc(r.to)}">${esc(r.label)}</button>`).join('')}</div>` : '';
+  const amt = quickAmounts('tipAmt');
+  openModal(`
+    <div class="modal-title">${t('send_tip')}</div>
+    ${availableLine()}
+    <div class="input-group">
+      <label class="input-label">${t('username')}</label>
+      <input class="input" id="tipTo" placeholder="@username" autocomplete="off">${recentHtml}
+    </div>
+    <div class="input-group">
+      <label class="input-label">${t('amount')}, USDC</label>
+      <div class="chips" id="tipChips">${amt.chips}</div>
+      <input class="input mono" id="tipAmt" type="number" step="0.01" min="0.01" value="${amt.value === null ? '' : amt.value}" placeholder="0.00"${boundAttr([['max', 'max_tip_usdc']])} inputmode="decimal">
+      ${boundHint(t('tip_cap'), [['{max}', 'max_tip_usdc']])}
+    </div>
+    <button class="btn btn-primary btn-full" data-act="doTip">${t('send')}</button>
+  `);
+}
+
+async function doTip() {
+  const to = document.getElementById('tipTo').value.trim().replace('@','');
+  const amount = parseFloat(document.getElementById('tipAmt').value);
+  if (!to || !amount || amount <= 0) { toast(t('fill_fields'), 'error'); return; }
+  try {
+    const r = await moneyPost('/api/mini/tip', { to, amount }, 'tip');
+    const d = r.data;
+    if (d.ok) {
+      resetIdem('tip');
+      STATE.balance_usdc = d.new_balance;
+      renderBalance();
+      closeModalForce();
+      toast('+' + usdc(amount) + ' USDC → @' + to);
+      loadState();
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(moneyError(e), 'error'); }
+}
+
+// ─── Deposit ───
+function openDepositSheet() {
+  const addr = STATE.deposit_address || STATE.linked_address || t('connect_wallet');
+  openModal(`
+    <div class="modal-title">${t('deposit_title')}</div>
+    <p class="sheet-note">${STATE.linked_address ? t('linked') : t('deposit_note')}</p>
+    <div class="deposit-box">
+      <div class="deposit-qr"><img src="/qr?data=${encodeURIComponent(addr)}" alt="${esc(t('qr_alt'))}" width="220" height="220"></div>
+      <div class="deposit-col">
+        <div class="mini-label">${t('address')}</div>
+        <div class="deposit-addr" id="depAddr">${esc(addr)}</div>
+        <button class="btn btn-sm btn-secondary gap-top-sm" data-act="copyAddr" data-addr="${esc(addr)}">${t('copy')}</button>
+      </div>
+    </div>
+    <div class="gap-top-sm">
+      ${rowFrame(infoRow(t('dep_network'), INFO.chain_name)
+        + (INFO.usdc_address ? infoRow(t('dep_asset'), 'USDC') : '')
+        + infoRow(t('dep_confirmations'), LIMITS.deposit_confirmations))}
+    </div>
+    ${contractRow()}
+    ${explorerLink()}
+    ${INFO.usdc_address ? `<p class="hint hint-block">${t('dep_shared')}</p>` : ''}
+  `);
+}
+
+function copyAddr(addr) {
+  navigator.clipboard.writeText(addr).then(() => toast(t('copied'))).catch(() => {});
+}
+
+// ─── Withdraw (two-step: stage, then confirm) ───
+function openWithdrawSheet() {
+  // The fee rides on top of the amount, so the largest sum the account covers is
+  // below its balance. The control that states that figure is the one that types
+  // it, and it appears only when what it types also clears the withdrawal floor:
+  // a Max button offering 0.40 against a 1 USDC minimum is a refusal with a
+  // label on it.
+  const spendable = maxSpendable();
+  const floorMicro = LIMITS.min_withdraw_usdc == null
+    ? null : Math.round(Number(LIMITS.min_withdraw_usdc) * 1e6);
+  const canMax = spendable !== null && spendable > 0
+    && (floorMicro === null || spendable >= floorMicro);
+  openModal(`
+    <div class="modal-title">${t('withdraw')}</div>
+    ${availableLine()}
+    <div class="input-group">
+      <label class="input-label">${t('address')}</label>
+      <input class="input mono" id="wdAddr" placeholder="0x..." autocomplete="off" spellcheck="false">
+    </div>
+    <div class="input-group">
+      <label class="input-label">${t('amount')}, USDC</label>
+      <input class="input mono" id="wdAmt" type="number" step="0.01" placeholder="0.00" inputmode="decimal"${boundAttr([['min', 'min_withdraw_usdc']])}>
+      ${canMax ? `<button class="chip-btn" data-act="fillMax" data-target="wdAmt">${t('max')}</button>` : ''}
+    </div>
+    <p class="hint hint-block">${t('wd_hint')}</p>
+    <button class="btn btn-primary btn-full" data-act="stageWithdraw">${t('withdraw')}</button>
+  `);
+}
+
+let _wdBusy = false;
+
+async function stageWithdraw() {
+  if (_wdBusy) return;
+  const addr = document.getElementById('wdAddr').value.trim();
+  const raw = document.getElementById('wdAmt').value.trim();
+  if (!addr || !raw || !(parseFloat(raw) > 0)) { toast(t('fill_fields'), 'error'); return; }
+  _wdBusy = true;
+  try {
+    const r = await fetch('/api/mini/withdraw', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: addr, amount: raw })
+    });
+    const d = await r.json();
+    if (d.ok && d.staged) showWithdrawConfirm(d);
+    else toast(errMsg(d, r.status), 'error');
+  } catch(e) { toast(t('network_error'), 'error'); }
+  finally { _wdBusy = false; }
+}
+
+function showWithdrawConfirm(d) {
+  const tok = esc(d.token);
+  // The four figures of one settlement are one read, so they are four cells of one
+  // frame, and each goes through the row builder no row is written outside.
+  const rows = [[t('amount'), d.amount], [t('wd_fee'), d.fee],
+                [t('wd_total'), d.total], [t('wd_after'), d.balance_after]]
+    .map(([label, value]) => infoRow(label, `${esc(String(value))} USDC`)).join('');
+  openModal(`
+    <div class="modal-title">${t('wd_confirm_title')}</div>
+    ${rowFrame(rows)}
+    <div class="mini-label late">${t('address')}</div>
+    <div class="deposit-addr">${esc(d.address)}</div>
+    <p class="hint hint-block">${t('wd_check')}</p>
+    <button class="btn btn-primary btn-full" data-act="confirmWithdraw" data-token="${tok}" data-yes="1">${t('wd_confirm_btn')}</button>
+    <button class="btn btn-secondary btn-full gap-top-sm" data-act="confirmWithdraw" data-token="${tok}" data-yes="0">${t('wd_cancel_btn')}</button>
+  `);
+}
+
+async function confirmWithdraw(token, yes) {
+  if (_wdBusy) return;
+  _wdBusy = true;
+  try {
+    const r = await fetch('/api/mini/withdraw/confirm', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, confirm: !!yes })
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      STATE.balance_usdc = d.new_balance;
+      renderBalance();
+      closeModalForce();
+      toast(t('wd_queued'), 'success');
+      loadState();
+    } else if (r.ok) {
+      closeModalForce();
+      toast(t('wd_cancelled'));
+    } else {
+      toast(errMsg(d, r.status), 'error');
+    }
+  } catch(e) { toast(t('network_error'), 'error'); }
+  finally { _wdBusy = false; }
+}
+
+// ─── Market / Bet Detail ───
+/* One buy panel per screen: tapping an option selects it and the single CTA names
+ * that option, so a four-option market does not repeat the same button four times. */
+let BUY = null;
+
+function optionLabel(o, i) { return o.label || o.name || String(i + 1); }
+
+/* One option row for both money engines and for both kinds of sheet: pickable
+ * when the sheet is buying, plain when it is only showing, and the same face for
+ * the label, the percentage and the bar either way. A row that could not be
+ * bought used to still carry data-act="pickOpt", which is a control that answers
+ * nothing, and a dead control is the defect this file has gates against. */
+function optRows(opts, pctKey, winnerIdx, pickable, extra) {
+  return (opts || []).map((o, i) => {
+    const pct = Number(o[pctKey] || 0);
+    const win = winnerIdx != null && o.index === winnerIdx;
+    const parts = `<div class="detail-opt-head">
+        <div class="detail-opt-name${win ? ' win' : ''}">${esc(optionLabel(o, i))}</div>
+        <div class="detail-opt-pct">${pctLabel(pct)}</div>
+      </div>
+      <div class="detail-opt-bar"><div class="detail-opt-bar-fill" aria-hidden="true" style="width:${barWidth(pct)}%"></div></div>`;
+    return pickable
+      ? `<button class="detail-opt pickable${i === 0 ? ' selected' : ''}" data-act="pickOpt" data-i="${i}">${parts}</button>`
+      : `<div class="detail-opt">${parts}${extra ? extra(o) : ''}</div>`;
+  }).join('');
+}
+
+function buyPanel() {
+  const amt = quickAmounts('tradeAmt');
+  // A pool bet and an LMSR trade are refused by different caps, and both panels
+  // are this one markup — the ceiling is read from the kind being bought.
+  const cap = BUY && BUY.kind === 'bet' ? 'max_bet_usdc' : 'max_trade_usdc';
+  return `<div class="buy-panel">
+    ${availableLine()}
+    <div class="chips">${amt.chips}</div>
+    <input class="input mono" id="tradeAmt" type="number" step="0.01" value="${amt.value === null ? '' : amt.value}" placeholder="0.00" inputmode="decimal" aria-label="${esc(t('amount'))}"${boundAttr([['min', 'min_trade_usdc'], ['max', cap]])}>
+    ${boundHint(t('trade_bounds'), [['{min}', 'min_trade_usdc'], ['{max}', cap]])}
+    <button class="btn btn-primary btn-full" id="buyBtn" data-act="buy"></button>
+  </div>`;
+}
+
+function setBuyLabel() {
+  const btn = document.getElementById('buyBtn');
+  if (btn && BUY) btn.textContent = `${t('buy')} ${optionLabel(BUY.opts[BUY.opt] || {}, BUY.opt)}`;
+}
+
+function pickOpt(el) {
+  if (!BUY) return;
+  BUY.opt = parseInt(el.dataset.i, 10) || 0;
+  el.parentElement.querySelectorAll('.detail-opt').forEach(o => o.classList.toggle('selected', o === el));
+  setBuyLabel();
+}
+
+function openMarketDetail(id) {
+  const mk = (STATE.markets || []).find(m => m.id == id);
+  if (!mk) return;
+  const opts = mk.options || [];
+  BUY = tradable(mk) ? { kind: 'mkt', id: mk.id, opts, opt: 0 } : null;
+  showDetail(detailShell(t('kind_market'), `
+      <div class="detail-question">${esc(mk.question)}</div>
+      <div class="market-meta sheet-gap"><span>${t('traders')}: ${mk.traders || 0}</span>${deadlineSpan(mk, t('awaiting_note'))}</div>
+      <div class="detail-options">${optRows(opts, 'price_pct', winnerOf(mk), BUY !== null)}</div>
+      ${BUY ? buyPanel() : ''}`, statusTag(mk)));
+  setBuyLabel();
+}
+
+function openBetDetail(id) {
+  const bet = (STATE.bets || []).find(b => b.id == id);
+  if (!bet) return;
+  const opts = bet.options || [];
+  BUY = tradable(bet) ? { kind: 'bet', id: bet.id, opts, opt: 0 } : null;
+  showDetail(detailShell(t('kind_bet'), `
+      <div class="detail-question">${esc(bet.question)}</div>
+      <div class="pot-line">${t('pot')}: <b>${usdc(bet.pot_usdc || bet.pot)} USDC</b></div>
+      ${deadlineBlock(bet, t('awaiting_note'))}
+      <div class="detail-options">${optRows(opts, 'chance_pct', winnerOf(bet), BUY !== null)}</div>
+      ${BUY ? buyPanel() : ''}`, statusTag(bet)));
+  setBuyLabel();
+}
+
+async function doBuy() {
+  if (!BUY) return;
+  const amt = parseFloat(document.getElementById('tradeAmt').value);
+  if (!amt || amt <= 0) { toast(t('fill_fields'), 'error'); return; }
+  const isMarket = BUY.kind === 'mkt';
+  const action = isMarket ? 'trade' : 'betplace';
+  const body = { option: BUY.opt, amount: amt };
+  body[isMarket ? 'market_id' : 'bet_id'] = BUY.id;
+  try {
+    const r = await moneyPost(isMarket ? '/api/mini/trade' : '/api/mini/betplace', body, action);
+    const d = r.data;
+    if (d.ok) {
+      resetIdem(action);
+      STATE.balance_usdc = d.new_balance;
+      renderBalance();
+      toast(t(isMarket ? 'buy_ok' : 'bet_ok').replace('{amt}', usdc(amt)));
+      hideDetail();
+      loadState();
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(moneyError(e), 'error'); }
+}
+
+// ─── Create Market ───
+function openCreateMarket() {
+  openModal(`
+    <div class="modal-title">${t('create_market')}</div>
+    <div class="input-group">
+      <label class="input-label">${t('question')}</label>
+      <input class="input" id="mkQuestion" placeholder="${t('question')}" autocomplete="off">
+    </div>
+    <div class="input-group">
+      <label class="input-label">${t('options')}</label>
+      <div class="create-options" id="mkOpts">
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_1')}" data-i18n-ph="opt_1"></div>
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_2')}" data-i18n-ph="opt_2"></div>
+      </div>
+      <button class="create-add" data-act="addCreateOpt" data-container="mkOpts">${icon('i-plus')} ${t('add_option')}</button>
+    </div>
+    <div class="input-group">
+      <label class="input-label">${t('hours')}</label>
+      <input class="input" id="mkHours" type="number" min="1"${boundAttr([['max', 'max_deadline_hours']])}>
+      ${boundHint(t('hours_cap'), [['{max}', 'max_deadline_hours']], num)}
+    </div>
+    <button class="btn btn-primary btn-full" data-act="doCreateMarket">${t('create')}</button>
+  `);
+}
+
+function openCreateBet() {
+  openModal(`
+    <div class="modal-title">${t('create_bet')}</div>
+    <div class="input-group">
+      <label class="input-label">${t('question')}</label>
+      <input class="input" id="btQuestion" placeholder="${t('question')}" autocomplete="off">
+    </div>
+    <div class="input-group">
+      <label class="input-label">${t('options')}</label>
+      <div class="create-options" id="btOpts">
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_1')}" data-i18n-ph="opt_1"></div>
+        <div class="create-opt-row"><input class="input" placeholder="${t('opt_2')}" data-i18n-ph="opt_2"></div>
+      </div>
+      <button class="create-add" data-act="addCreateOpt" data-container="btOpts">${icon('i-plus')} ${t('add_option')}</button>
+    </div>
+    <div class="input-group">
+      <label class="input-label">${t('hours')}</label>
+      <input class="input" id="btHours" type="number" min="1"${boundAttr([['max', 'max_deadline_hours']])}>
+      ${boundHint(t('hours_cap'), [['{max}', 'max_deadline_hours']], num)}
+    </div>
+    <button class="btn btn-primary btn-full" data-act="doCreateBet">${t('create')}</button>
+  `);
+}
+
+function addCreateOpt(containerId) {
+  const c = document.getElementById(containerId);
+  if (c.children.length >= 4) return;
+  const key = `opt_${c.children.length + 1}`;
+  const row = document.createElement('div');
+  row.className = 'create-opt-row';
+  row.innerHTML = `<input class="input" placeholder="${esc(t(key))}" data-i18n-ph="${key}"><button class="create-opt-rm" data-act="rmCreateOpt" aria-label="${esc(t('remove'))}">${icon('i-minus')}</button>`;
+  c.appendChild(row);
+}
+
+function rmCreateOpt(btn) {
+  const row = btn.closest('.create-opt-row');
+  if (!row) return;
+  const container = row.parentElement;
+  if (container.children.length <= 2) return;
+  row.remove();
+}
+
+function getCreateOpts(containerId) {
+  return Array.from(document.querySelectorAll('#' + containerId + ' .input')).map(i => i.value.trim()).filter(Boolean);
+}
+
+async function doCreateMarket() {
+  const q = document.getElementById('mkQuestion').value.trim();
+  const options = getCreateOpts('mkOpts');
+  const hours = document.getElementById('mkHours').value ? parseInt(document.getElementById('mkHours').value) : undefined;
+  if (!q || options.length < 2) { toast(t('fill_fields'), 'error'); return; }
+  try {
+    const r = await moneyPost('/api/mini/create', { kind: 'market', question: q, options, hours }, 'create_market');
+    const d = r.data;
+    if (d.ok) {
+      resetIdem('create_market');
+      closeModalForce();
+      toast(t('market_created'));
+      loadState();
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(moneyError(e), 'error'); }
+}
+
+async function doCreateBet() {
+  const q = document.getElementById('btQuestion').value.trim();
+  const options = getCreateOpts('btOpts');
+  const hours = document.getElementById('btHours').value ? parseInt(document.getElementById('btHours').value) : undefined;
+  if (!q || options.length < 2) { toast(t('fill_fields'), 'error'); return; }
+  try {
+    const r = await moneyPost('/api/mini/create', { kind: 'bet', question: q, options, hours }, 'create_bet');
+    const d = r.data;
+    if (d.ok) {
+      resetIdem('create_bet');
+      closeModalForce();
+      toast(t('bet_created'));
+      loadState();
+    } else { toast(errMsg(d, r.status), 'error'); }
+  } catch(e) { toast(moneyError(e), 'error'); }
+}
+
+// ─── Language ───
+async function setLang(lang) {
+  STATE.lang = lang;
+  localStorage.setItem('lang', lang);
+  // renderAll, not applyI18n: the lists are built from t() inside their own
+  // render functions, so a narrower repaint left every history row, market row
+  // and bet row in the previous language until the app was reopened.
+  renderAll();
+  try {
+    await fetch('/api/mini/lang', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang })
+    });
+  } catch(e) {}
+}
+
+// ─── AI Chat ───
+async function askAI() {
+  const input = document.getElementById('aiInput');
+  const q = (input.value || '').trim();
+  if (!q) return;
+  input.value = '';
+  const chat = document.getElementById('aiChat');
+  chat.querySelector('.hint')?.remove();
+  chat.insertAdjacentHTML('beforeend',
+    `<div class="ai-item"><span class="who">${esc(t('ai_you'))}:</span> ${esc(q)}</div><div class="ai-item pending">…</div>`);
+  const pending = chat.lastElementChild;
+  chat.scrollTop = chat.scrollHeight;
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, lang: STATE.lang })
+    });
+    const d = await r.json();
+    pending.remove();
+    if (r.ok) {
+      // 'data' means no model answered and the ledger did — the bubble says so
+      // instead of letting a lookup look like AI prose.
+      const who = d.mode === 'data' ? t('ai_data_who') : t('ai_ai');
+      chat.insertAdjacentHTML('beforeend',
+        `<div class="ai-item ans"><span class="who">${esc(who)}:</span> ${esc(d.answer || t('ai_no_answer'))}</div>`);
+    } else {
+      chat.insertAdjacentHTML('beforeend', `<div class="ai-item err">${esc(errMsg(d, r.status))}</div>`);
+    }
+  } catch(e) {
+    console.error('/ask', e);
+    pending.remove();
+    chat.insertAdjacentHTML('beforeend', `<div class="ai-item err">${esc(t('network_error'))}</div>`);
+  }
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// ─── Chip picker ───
+function pickChip(el, inputId, val) {
+  el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(inputId).value = val;
+}
+
+function pickTipTo(el) {
+  el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tipTo').value = el.dataset.val;
+}
+
+// ─── Theme ───
+/* The pre-paint bootstrap in <head> already resolved the saved theme; this only
+   flips it and persists the choice. */
+function toggleTheme() {
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('theme', 'light'); }
+  else { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('theme', 'dark'); }
+}
+
+// ─── Delegated events (CSP: no inline handlers allowed) ───
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === 'toggleTheme') { toggleTheme(); return; }
+  if (act === 'switchTab') { switchTab(parseInt(el.dataset.tab, 10)); return; }
+  if (act === 'openTipSheet') { openTipSheet(); return; }
+  if (act === 'openDepositSheet') { openDepositSheet(); return; }
+  if (act === 'openWithdrawSheet') { openWithdrawSheet(); return; }
+  if (act === 'copyAddr') {
+    if (el.dataset.addr) { copyAddr(el.dataset.addr); return; }
+    const target = el.dataset.target ? document.getElementById(el.dataset.target) : null;
+    if (target && target.dataset.addr) { copyAddr(target.dataset.addr); }
+    return;
+  }
+  if (act === 'openCreateMarket') { openCreateMarket(); return; }
+  if (act === 'openCreateBet') { openCreateBet(); return; }
+  if (act === 'setLang') { setLang(el.dataset.lang); return; }
+  if (act === 'askAI') { askAI(); return; }
+  if (act === 'addMiniApp') { addMiniApp(); return; }
+  if (act === 'closeModal') { if (e.target === el) closeModal(e); return; }
+  if (act === 'openMarketDetail') { openMarketDetail(el.dataset.id); return; }
+  if (act === 'openOcDetail') { openOcDetail(parseInt(el.dataset.id, 10)); return; }
+  if (act === 'openBetDetail') { openBetDetail(el.dataset.id); return; }
+  if (act === 'hideDetail') { hideDetail(); return; }
+  if (act === 'toast') { toast(el.dataset.msg); return; }
+  if (act === 'pickChip') { pickChip(el, el.dataset.target, parseInt(el.dataset.val, 10)); return; }
+  if (act === 'fillMax') { fillMax(el.dataset.target); return; }
+  if (act === 'pickTipTo') { pickTipTo(el); return; }
+  if (act === 'doTip') { doTip(); return; }
+  if (act === 'stageWithdraw') { stageWithdraw(); return; }
+  if (act === 'confirmWithdraw') { confirmWithdraw(el.dataset.token, el.dataset.yes === '1'); return; }
+  if (act === 'pickOpt') { pickOpt(el); return; }
+  if (act === 'buy') { doBuy(); return; }
+  if (act === 'addCreateOpt') { addCreateOpt(el.dataset.container); return; }
+  if (act === 'doCreateMarket') { doCreateMarket(); return; }
+  if (act === 'doCreateBet') { doCreateBet(); return; }
+  if (act === 'rmCreateOpt') { rmCreateOpt(el); return; }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target && e.target.id === 'aiInput') askAI();
+  if (e.key === 'Escape') dismissTopLayer();
+  if (e.key === 'Tab') keepFocusInLayer(e);
+});
+
+// ─── Start ───
+init();
+</script>
+</body>
+</html>

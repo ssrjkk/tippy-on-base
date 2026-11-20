@@ -1,0 +1,1126 @@
+........................................................................ [  4%]
+........................................................................ [  9%]
+........................................................................ [ 14%]
+........................................................................ [ 18%]
+........................................................................ [ 23%]
+........................................................................ [ 28%]
+........................................................................ [ 32%]
+.........................F.............................................. [ 37%]
+........................................................................ [ 42%]
+.................................F...................................... [ 46%]
+........................................................................ [ 51%]
+............FFFFFF.FF................................................... [ 56%]
+........................................................................ [ 60%]
+...FEEE................................................................. [ 65%]
+........................................................................ [ 70%]
+........................................................................ [ 74%]
+........................................................................ [ 79%]
+........................................................................ [ 84%]
+........................................................................ [ 89%]
+........................................................................ [ 93%]
+........................................................................ [ 98%]
+.........................                                                [100%]
+=================================== ERRORS ====================================
+____________ ERROR at setup of test_paywall_owner_cannot_self_buy _____________
+
+fixturedef = <FixtureDef argname='ledger' scope='function' baseid='tests'>
+request = <SubRequest 'ledger' for <Function test_paywall_owner_cannot_self_buy>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        if (
+            fixturedef.argname == "event_loop_policy"
+            and fixturedef.func.__module__ != __name__
+        ):
+            warnings.warn(
+                PytestDeprecationWarning(_EVENT_LOOP_POLICY_FIXTURE_DEPRECATION_WARNING),
+            )
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+                return (yield)
+            if not _is_coroutine_or_asyncgen(fixturedef.func):
+>               return (yield)
+                        ^^^^^
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytest_asyncio\plugin.py:926: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:250: in ledger
+    fresh = ledger_mod.Ledger(TEST_DB_URL)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_core.py:32: in __init__
+    self._conn = ReconnectingConn(database)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_conn.py:22: in __init__
+    self._conn = psycopg.connect(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'psycopg.Connection'>
+conninfo = 'user=tipbot password=tipbot dbname=tipbot_test host=localhost port=5432 connect_timeout=15 hostaddr=127.0.0.1'
+autocommit = False, prepare_threshold = 5, context = None
+row_factory = <function dict_row at 0x000002152905A480>, cursor_factory = None
+kwargs = {'connect_timeout': 15}
+
+    @classmethod
+    def connect(
+        cls,
+        conninfo: str = "",
+        *,
+        autocommit: bool = False,
+        prepare_threshold: int | None = 5,
+        context: AdaptContext | None = None,
+        row_factory: RowFactory[Row] | None = None,
+        cursor_factory: type[Cursor[Row]] | None = None,
+        **kwargs: ConnParam,
+    ) -> Self:
+        """
+        Connect to a database server and return a new `Connection` instance.
+        """
+    
+        params = cls._get_connection_params(conninfo, **kwargs)
+        timeout = timeout_from_conninfo(params)
+        rv = None
+        attempts = conninfo_attempts(params)
+        conn_errors: list[tuple[e.Error, str]] = []
+        for attempt in attempts:
+            tdescr = (attempt.get("host"), attempt.get("port"), attempt.get("hostaddr"))
+            descr = "host: %r, port: %r, hostaddr: %r" % tdescr
+            logger.debug("connection attempt: %s", descr)
+            try:
+                conninfo = make_conninfo("", **attempt)
+                gen = cls._connect_gen(conninfo)
+                rv = waiting.wait_conn(gen, interval=_WAIT_INTERVAL, timeout=timeout)
+            except e._WaitTimeout:
+                tex = e.ConnectionTimeout("connection timeout expired")
+                logger.debug("connection failed: %s: %s", descr, str(tex))
+                conn_errors.append((tex, descr))
+            except e.Error as ex:
+                logger.debug("connection failed: %s: %s", descr, str(ex))
+                conn_errors.append((ex, descr))
+            except e._NO_TRACEBACK as ex:
+                raise ex.with_traceback(None)
+            else:
+                logger.debug("connection succeeded: %s", descr)
+                break
+    
+        if not rv:
+            last_ex = conn_errors[-1][0]
+            if len(conn_errors) == 1:
+                raise last_ex.with_traceback(None)
+    
+            # Create a new exception with the same type as the last one, containing
+            # all attempt errors while preserving backward compatibility.
+            lines = [str(last_ex)]
+            lines.append("Multiple connection attempts failed. All failures were:")
+            lines.extend((f"- {descr}: {error}" for error, descr in conn_errors))
+            new_ex = type(last_ex)("\n".join(lines), pgconn=last_ex.pgconn)
+>           raise new_ex.with_traceback(None)
+E           psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+E           DETAIL:  ������, ��� ������ ��� ���� ������� ��� �������������.
+E           Multiple connection attempts failed. All failures were:
+E           - host: 'localhost', port: '5432', hostaddr: '::1': connection timeout expired
+E           - host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+E           DETAIL:  ������, ��� ������ ��� ���� ������� ��� �������������.
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\psycopg\connection.py:134: OperationalError
+_________ ERROR at setup of test_paywall_x402_purchase_credits_owner __________
+
+fixturedef = <FixtureDef argname='ledger' scope='function' baseid='tests'>
+request = <SubRequest 'ledger' for <Function test_paywall_x402_purchase_credits_owner>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        if (
+            fixturedef.argname == "event_loop_policy"
+            and fixturedef.func.__module__ != __name__
+        ):
+            warnings.warn(
+                PytestDeprecationWarning(_EVENT_LOOP_POLICY_FIXTURE_DEPRECATION_WARNING),
+            )
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+                return (yield)
+            if not _is_coroutine_or_asyncgen(fixturedef.func):
+>               return (yield)
+                        ^^^^^
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytest_asyncio\plugin.py:926: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:250: in ledger
+    fresh = ledger_mod.Ledger(TEST_DB_URL)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_core.py:32: in __init__
+    self._conn = ReconnectingConn(database)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_conn.py:22: in __init__
+    self._conn = psycopg.connect(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'psycopg.Connection'>
+conninfo = 'user=tipbot password=tipbot dbname=tipbot_test host=localhost port=5432 connect_timeout=15 hostaddr=127.0.0.1'
+autocommit = False, prepare_threshold = 5, context = None
+row_factory = <function dict_row at 0x000002152905A480>, cursor_factory = None
+kwargs = {'connect_timeout': 15}
+
+    @classmethod
+    def connect(
+        cls,
+        conninfo: str = "",
+        *,
+        autocommit: bool = False,
+        prepare_threshold: int | None = 5,
+        context: AdaptContext | None = None,
+        row_factory: RowFactory[Row] | None = None,
+        cursor_factory: type[Cursor[Row]] | None = None,
+        **kwargs: ConnParam,
+    ) -> Self:
+        """
+        Connect to a database server and return a new `Connection` instance.
+        """
+    
+        params = cls._get_connection_params(conninfo, **kwargs)
+        timeout = timeout_from_conninfo(params)
+        rv = None
+        attempts = conninfo_attempts(params)
+        conn_errors: list[tuple[e.Error, str]] = []
+        for attempt in attempts:
+            tdescr = (attempt.get("host"), attempt.get("port"), attempt.get("hostaddr"))
+            descr = "host: %r, port: %r, hostaddr: %r" % tdescr
+            logger.debug("connection attempt: %s", descr)
+            try:
+                conninfo = make_conninfo("", **attempt)
+                gen = cls._connect_gen(conninfo)
+                rv = waiting.wait_conn(gen, interval=_WAIT_INTERVAL, timeout=timeout)
+            except e._WaitTimeout:
+                tex = e.ConnectionTimeout("connection timeout expired")
+                logger.debug("connection failed: %s: %s", descr, str(tex))
+                conn_errors.append((tex, descr))
+            except e.Error as ex:
+                logger.debug("connection failed: %s: %s", descr, str(ex))
+                conn_errors.append((ex, descr))
+            except e._NO_TRACEBACK as ex:
+                raise ex.with_traceback(None)
+            else:
+                logger.debug("connection succeeded: %s", descr)
+                break
+    
+        if not rv:
+            last_ex = conn_errors[-1][0]
+            if len(conn_errors) == 1:
+                raise last_ex.with_traceback(None)
+    
+            # Create a new exception with the same type as the last one, containing
+            # all attempt errors while preserving backward compatibility.
+            lines = [str(last_ex)]
+            lines.append("Multiple connection attempts failed. All failures were:")
+            lines.extend((f"- {descr}: {error}" for error, descr in conn_errors))
+            new_ex = type(last_ex)("\n".join(lines), pgconn=last_ex.pgconn)
+>           raise new_ex.with_traceback(None)
+E           psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+E           Multiple connection attempts failed. All failures were:
+E           - host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+E           - host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\psycopg\connection.py:134: OperationalError
+_____________ ERROR at setup of test_paywall_shows_up_in_history ______________
+
+fixturedef = <FixtureDef argname='ledger' scope='function' baseid='tests'>
+request = <SubRequest 'ledger' for <Function test_paywall_shows_up_in_history>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        if (
+            fixturedef.argname == "event_loop_policy"
+            and fixturedef.func.__module__ != __name__
+        ):
+            warnings.warn(
+                PytestDeprecationWarning(_EVENT_LOOP_POLICY_FIXTURE_DEPRECATION_WARNING),
+            )
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+                return (yield)
+            if not _is_coroutine_or_asyncgen(fixturedef.func):
+>               return (yield)
+                        ^^^^^
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytest_asyncio\plugin.py:926: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\conftest.py:250: in ledger
+    fresh = ledger_mod.Ledger(TEST_DB_URL)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_core.py:32: in __init__
+    self._conn = ReconnectingConn(database)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_conn.py:22: in __init__
+    self._conn = psycopg.connect(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'psycopg.Connection'>
+conninfo = 'user=tipbot password=tipbot dbname=tipbot_test host=localhost port=5432 connect_timeout=15 hostaddr=127.0.0.1'
+autocommit = False, prepare_threshold = 5, context = None
+row_factory = <function dict_row at 0x000002152905A480>, cursor_factory = None
+kwargs = {'connect_timeout': 15}
+
+    @classmethod
+    def connect(
+        cls,
+        conninfo: str = "",
+        *,
+        autocommit: bool = False,
+        prepare_threshold: int | None = 5,
+        context: AdaptContext | None = None,
+        row_factory: RowFactory[Row] | None = None,
+        cursor_factory: type[Cursor[Row]] | None = None,
+        **kwargs: ConnParam,
+    ) -> Self:
+        """
+        Connect to a database server and return a new `Connection` instance.
+        """
+    
+        params = cls._get_connection_params(conninfo, **kwargs)
+        timeout = timeout_from_conninfo(params)
+        rv = None
+        attempts = conninfo_attempts(params)
+        conn_errors: list[tuple[e.Error, str]] = []
+        for attempt in attempts:
+            tdescr = (attempt.get("host"), attempt.get("port"), attempt.get("hostaddr"))
+            descr = "host: %r, port: %r, hostaddr: %r" % tdescr
+            logger.debug("connection attempt: %s", descr)
+            try:
+                conninfo = make_conninfo("", **attempt)
+                gen = cls._connect_gen(conninfo)
+                rv = waiting.wait_conn(gen, interval=_WAIT_INTERVAL, timeout=timeout)
+            except e._WaitTimeout:
+                tex = e.ConnectionTimeout("connection timeout expired")
+                logger.debug("connection failed: %s: %s", descr, str(tex))
+                conn_errors.append((tex, descr))
+            except e.Error as ex:
+                logger.debug("connection failed: %s: %s", descr, str(ex))
+                conn_errors.append((ex, descr))
+            except e._NO_TRACEBACK as ex:
+                raise ex.with_traceback(None)
+            else:
+                logger.debug("connection succeeded: %s", descr)
+                break
+    
+        if not rv:
+            last_ex = conn_errors[-1][0]
+            if len(conn_errors) == 1:
+                raise last_ex.with_traceback(None)
+    
+            # Create a new exception with the same type as the last one, containing
+            # all attempt errors while preserving backward compatibility.
+            lines = [str(last_ex)]
+            lines.append("Multiple connection attempts failed. All failures were:")
+            lines.extend((f"- {descr}: {error}" for error, descr in conn_errors))
+            new_ex = type(last_ex)("\n".join(lines), pgconn=last_ex.pgconn)
+>           raise new_ex.with_traceback(None)
+E           psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+E           Multiple connection attempts failed. All failures were:
+E           - host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+E           - host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: �����:  ���� ������ "tipbot_test" �� ����������
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\psycopg\connection.py:134: OperationalError
+================================== FAILURES ===================================
+___________ test_no_docs_screenshot_outlives_the_source_it_pictures ___________
+
+    def test_no_docs_screenshot_outlives_the_source_it_pictures():
+        """A README image is the design a buyer sees before they open the site, and it stayed
+        current only as long as someone remembered to re-shoot it. The stamp is a fingerprint of
+        what the picture can show — the palette tokens and headings of the landing and the Mini
+        App, the label grid of the two keyboards the bot really builds — recomputed here from the
+        tree, so the edit that changes the design is the edit that fails the build."""
+        module = _shot_script()
+        stale, missing_digest = [], []
+        for name, (_size, info) in sorted(_pictures().items()):
+            surface = info.get(module.STAMP_SURFACE)
+            if not surface:
+                continue  # the law above reports it
+            wanted = module.fingerprint(surface)
+            stamped = info.get(module.STAMP_FINGERPRINT)
+            if not stamped:
+                missing_digest.append(name)
+            elif stamped != wanted:
+                stale.append(f"{name} ({surface}): stamped {stamped}, the tree says {wanted}")
+    
+        how = "python -X utf8 scripts/make_docs_screenshots.py"
+        assert not missing_digest, f"{missing_digest} carry a surface and no {module.STAMP_FINGERPRINT} chunk"
+>       assert not stale, (
+            f"{stale} picture a source that has moved. Re-shoot with `{how}` (menu only: "
+            f"`{how} --only menu`; web: `{how} --origin http://127.0.0.1:8000 --user-id <tg_id>`)."
+        )
+E       AssertionError: ['dashboard.png (mini): stamped 2db8b3af71e0013a, the tree says 62c9ca276393b527', 'website-mobile.png (landing): stamped 10a23a13e30f848d, the tree says e8a9d539c52fc174', 'website.png (landing): stamped 10a23a13e30f848d, the tree says e8a9d539c52fc174'] picture a source that has moved. Re-shoot with `python -X utf8 scripts/make_docs_screenshots.py` (menu only: `python -X utf8 scripts/make_docs_screenshots.py --only menu`; web: `python -X utf8 scripts/make_docs_screenshots.py --origin http://127.0.0.1:8000 --user-id <tg_id>`).
+E       assert not ['dashboard.png (mini): stamped 2db8b3af71e0013a, the tree says 62c9ca276393b527', 'website-mobile.png (landing): stam...8d, the tree says e8a9d539c52fc174', 'website.png (landing): stamped 10a23a13e30f848d, the tree says e8a9d539c52fc174']
+
+tests\test_docs.py:1218: AssertionError
+______________ test_every_menu_screen_leaves_a_way_back[wallet] _______________
+
+ledger = <bot.ledger.Ledger object at 0x0000021537D1E720>, data = 'wallet'
+
+    @pytest.mark.parametrize("data", MENU_SCREEN_CALLBACKS)
+    def test_every_menu_screen_leaves_a_way_back(ledger, data):
+        """`_edit_menu(cb, text)` with no keyboard deletes the buttons from the
+        message it replaces, and ten of the fourteen menu buttons did exactly that:
+        one tap on «Баланс» and the menu was gone until the user retyped /menu.
+        Every screen therefore has to answer with a keyboard that routes to 'menu'."""
+        ledger.credit(ALICE, 10_000_000, "deposit")
+        cb = Callback(data, ALICE)
+>       run(on_menu(cb))
+
+tests\test_handlers.py:1244: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_handlers.py:182: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+bot\handlers\menu.py:225: in on_menu
+    text, rows = await wallet_screen(user.id, lang)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:314: in wallet_screen
+    await _ensure_wallet(tg_id)
+bot\handlers\wallet.py:380: in _ensure_wallet
+    row, _err = await common.ledger.create_wallet_slot(tg_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_admin.py:230: in create_wallet_slot
+    address, key, seed = _wallets.new_wallet()
+                         ^^^^^^^^^^^^^^^^^^^^^
+bot\wallets.py:57: in new_wallet
+    acct, mnemonic = Account.create_with_mnemonic()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+____________________ test_wallet_creates_and_shows_address ____________________
+
+ledger = <bot.ledger.Ledger object at 0x00000215387B1610>
+
+    def test_wallet_creates_and_shows_address(ledger):
+        m = Message("/wallet", from_id=ALICE)
+>       run(cmd_wallet(m))
+
+tests\test_handlers.py:2619: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_handlers.py:182: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:220: in cmd_wallet
+    text, kb = await wallet_screen(message.from_user.id, lang)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:314: in wallet_screen
+    await _ensure_wallet(tg_id)
+bot\handlers\wallet.py:380: in _ensure_wallet
+    row, _err = await common.ledger.create_wallet_slot(tg_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_admin.py:230: in create_wallet_slot
+    address, key, seed = _wallets.new_wallet()
+                         ^^^^^^^^^^^^^^^^^^^^^
+bot\wallets.py:57: in new_wallet
+    acct, mnemonic = Account.create_with_mnemonic()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+___________ test_wallet_list_slots_and_create_button_are_localized ____________
+
+ledger = <bot.ledger.Ledger object at 0x00000215378CAA80>
+
+    def test_wallet_list_slots_and_create_button_are_localized(ledger):
+        """/wallet and the post-switch refresh each built this screen from their own
+        copy of the same twenty lines, and both copies hardcoded «Слот» and
+        «Создать» — so the two screens could (and did) drift, and neither followed
+        the user's language."""
+        from bot.handlers.wallet import _wallet_list_view
+    
+        ledger.set_setting(ALICE, "lang", "en")
+        wallets = ledger.get_wallets(ALICE)
+        assert not wallets
+>       run(cmd_wallet(Message("/wallet", from_id=ALICE)))
+
+tests\test_handlers.py:2635: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_handlers.py:182: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:220: in cmd_wallet
+    text, kb = await wallet_screen(message.from_user.id, lang)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:314: in wallet_screen
+    await _ensure_wallet(tg_id)
+bot\handlers\wallet.py:380: in _ensure_wallet
+    row, _err = await common.ledger.create_wallet_slot(tg_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_admin.py:230: in create_wallet_slot
+    address, key, seed = _wallets.new_wallet()
+                         ^^^^^^^^^^^^^^^^^^^^^
+bot\wallets.py:57: in new_wallet
+    acct, mnemonic = Account.create_with_mnemonic()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+___________________ test_wallet_export_returns_key_and_seed ___________________
+
+ledger = <bot.ledger.Ledger object at 0x00000215374BE120>
+
+    def test_wallet_export_returns_key_and_seed(ledger):
+        m = Message("/wallet export", from_id=ALICE)
+>       run(cmd_wallet(m))
+
+tests\test_handlers.py:2654: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_handlers.py:182: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:203: in cmd_wallet
+    row = await _ensure_wallet(message.from_user.id)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:380: in _ensure_wallet
+    row, _err = await common.ledger.create_wallet_slot(tg_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_admin.py:230: in create_wallet_slot
+    address, key, seed = _wallets.new_wallet()
+                         ^^^^^^^^^^^^^^^^^^^^^
+bot\wallets.py:57: in new_wallet
+    acct, mnemonic = Account.create_with_mnemonic()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+________________________ test_wallet_encrypted_at_rest ________________________
+
+ledger = <bot.ledger.Ledger object at 0x00000215361A1910>
+
+    def test_wallet_encrypted_at_rest(ledger):
+>       run(cmd_wallet(Message("/wallet", from_id=ALICE)))
+
+tests\test_handlers.py:2661: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_handlers.py:182: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:220: in cmd_wallet
+    text, kb = await wallet_screen(message.from_user.id, lang)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:314: in wallet_screen
+    await _ensure_wallet(tg_id)
+bot\handlers\wallet.py:380: in _ensure_wallet
+    row, _err = await common.ledger.create_wallet_slot(tg_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_admin.py:230: in create_wallet_slot
+    address, key, seed = _wallets.new_wallet()
+                         ^^^^^^^^^^^^^^^^^^^^^
+bot\wallets.py:57: in new_wallet
+    acct, mnemonic = Account.create_with_mnemonic()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+________________________ test_wallet_export_is_stable _________________________
+
+ledger = <bot.ledger.Ledger object at 0x0000021537A71A90>
+
+    def test_wallet_export_is_stable(ledger):
+>       run(cmd_wallet(Message("/wallet", from_id=ALICE)))
+
+tests\test_handlers.py:2671: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_handlers.py:182: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:220: in cmd_wallet
+    text, kb = await wallet_screen(message.from_user.id, lang)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:314: in wallet_screen
+    await _ensure_wallet(tg_id)
+bot\handlers\wallet.py:380: in _ensure_wallet
+    row, _err = await common.ledger.create_wallet_slot(tg_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_admin.py:230: in create_wallet_slot
+    address, key, seed = _wallets.new_wallet()
+                         ^^^^^^^^^^^^^^^^^^^^^
+bot\wallets.py:57: in new_wallet
+    acct, mnemonic = Account.create_with_mnemonic()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+__________________ test_import_seed_attaches_existing_wallet __________________
+
+ledger = <bot.ledger.Ledger object at 0x00000215379F75C0>
+
+    def test_import_seed_attaches_existing_wallet(ledger):
+        from eth_account import Account
+    
+        Account.enable_unaudited_hdwallet_features()
+>       acct, mnemonic = Account.create_with_mnemonic()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_handlers.py:2681: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+______________________ test_import_rejects_taken_wallet _______________________
+
+ledger = <bot.ledger.Ledger object at 0x0000021535E246E0>
+
+    def test_import_rejects_taken_wallet(ledger):
+        from eth_account import Account
+    
+        Account.enable_unaudited_hdwallet_features()
+>       acct, mnemonic = Account.create_with_mnemonic()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_handlers.py:2702: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+________________ test_import_rejects_switching_existing_wallet ________________
+
+ledger = <bot.ledger.Ledger object at 0x000002153736FA10>
+
+    def test_import_rejects_switching_existing_wallet(ledger):
+        from eth_account import Account
+    
+        Account.enable_unaudited_hdwallet_features()
+>       run(cmd_wallet(Message("/wallet", from_id=ALICE)))
+
+tests\test_handlers.py:2714: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_handlers.py:182: in run
+    return asyncio.run(coro)
+           ^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:220: in cmd_wallet
+    text, kb = await wallet_screen(message.from_user.id, lang)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\handlers\wallet.py:314: in wallet_screen
+    await _ensure_wallet(tg_id)
+bot\handlers\wallet.py:380: in _ensure_wallet
+    row, _err = await common.ledger.create_wallet_slot(tg_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\asyncio\threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\concurrent\futures\thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bot\ledger\_admin.py:230: in create_wallet_slot
+    address, key, seed = _wallets.new_wallet()
+                         ^^^^^^^^^^^^^^^^^^^^^
+bot\wallets.py:57: in new_wallet
+    acct, mnemonic = Account.create_with_mnemonic()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:445: in create_with_mnemonic
+    return self.from_mnemonic(mnemonic, passphrase, account_path), mnemonic
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_utils\decorators.py:30: in _wrapper
+    return self.method(objtype, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\account.py:388: in from_mnemonic
+    seed = seed_from_mnemonic(mnemonic, passphrase)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\__init__.py:24: in seed_from_mnemonic
+    lang = Mnemonic.detect_language(words)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'eth_account.hdaccount.mnemonic.Mnemonic'>, raw_mnemonic = ''
+
+    @classmethod
+    def detect_language(cls, raw_mnemonic: str) -> Language:
+        mnemonic = unicode_decompose_string(raw_mnemonic)
+    
+        words = set(mnemonic.split(" "))
+        matching_languages = {
+            lang
+            for lang in Mnemonic.list_languages()
+            if len(words.intersection(cls(Language(lang)).wordlist)) == len(words)
+        }
+    
+        # No language had all words match it, so the language can't be fully determined
+        if len(matching_languages) < 1:
+>           raise ValidationError(f"Language not detected for word(s): {raw_mnemonic}")
+E           eth_utils.exceptions.ValidationError: Language not detected for word(s):
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\eth_account\hdaccount\mnemonic.py:146: ValidationError
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+__________________ test_paywall_buy_insufficient_and_missing __________________
+
+ledger = <bot.ledger.Ledger object at 0x00000215380BE030>
+
+    def test_paywall_buy_insufficient_and_missing(ledger):
+>       fund(ledger, ALICE, 100_000)
+
+tests\test_ledger.py:1580: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_ledger.py:27: in fund
+    ledger.credit(tg_id, micro, "deposit")
+bot\ledger\_pay.py:13: in credit
+    self.ensure_user(tg_id, None, commit=commit)
+bot\ledger\_users.py:13: in ensure_user
+    self._conn.execute(
+bot\ledger\_conn.py:65: in execute
+    return self._conn.execute(query, params, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <psycopg.Connection [BAD] at 0x215383a2b40>
+query = 'INSERT INTO users (tg_id, username) VALUES (%s, %s) ON CONFLICT (tg_id) DO NOTHING'
+params = (1001, None), prepare = None, binary = False
+
+    def execute(
+        self,
+        query: Query,
+        params: Params | None = None,
+        *,
+        prepare: bool | None = None,
+        binary: bool = False,
+    ) -> Cursor[Row]:
+        """Execute a query and return a cursor to read its results."""
+        try:
+            cur = self.cursor()
+            if binary:
+                cur.format = BINARY
+    
+            if isinstance(query, Template):
+                if params is not None:
+                    raise TypeError(
+                        "'execute()' with string template query doesn't support parameters"
+                    )
+                return cur.execute(query, prepare=prepare)
+            else:
+                return cur.execute(query, params, prepare=prepare)
+        except e._NO_TRACEBACK as ex:
+>           raise ex.with_traceback(None)
+E           psycopg.errors.AdminShutdown: закрытие подключения по команде администратора
+
+C:\Users\ssrjk\AppData\Local\Programs\Python\Python312\Lib\site-packages\psycopg\connection.py:304: AdminShutdown
+---------------------------- Captured stderr setup ----------------------------
+[alembic] migrating postgresql+psycopg://tipbot:***@localhost:5432/tipbot_test
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+=========================== short test summary info ===========================
+FAILED tests/test_docs.py::test_no_docs_screenshot_outlives_the_source_it_pictures
+FAILED tests/test_handlers.py::test_every_menu_screen_leaves_a_way_back[wallet]
+FAILED tests/test_handlers.py::test_wallet_creates_and_shows_address - eth_ut...
+FAILED tests/test_handlers.py::test_wallet_list_slots_and_create_button_are_localized
+FAILED tests/test_handlers.py::test_wallet_export_returns_key_and_seed - eth_...
+FAILED tests/test_handlers.py::test_wallet_encrypted_at_rest - eth_utils.exce...
+FAILED tests/test_handlers.py::test_wallet_export_is_stable - eth_utils.excep...
+FAILED tests/test_handlers.py::test_import_seed_attaches_existing_wallet - et...
+FAILED tests/test_handlers.py::test_import_rejects_taken_wallet - eth_utils.e...
+FAILED tests/test_handlers.py::test_import_rejects_switching_existing_wallet
+FAILED tests/test_ledger.py::test_paywall_buy_insufficient_and_missing - psyc...
+ERROR tests/test_ledger.py::test_paywall_owner_cannot_self_buy - psycopg.Oper...
+ERROR tests/test_ledger.py::test_paywall_x402_purchase_credits_owner - psycop...
+ERROR tests/test_ledger.py::test_paywall_shows_up_in_history - psycopg.Operat...
+11 failed, 1523 passed, 199 deselected, 3 errors in 818.17s (0:13:38)

@@ -1,0 +1,30 @@
+cd /d/tippy_on_base
+python -X utf8 - <<'PY' > .qa/wave40_agents_check.txt 2>&1
+import pathlib
+t = pathlib.Path("AGENTS.md").read_text(encoding="utf-8")
+keys = [
+ ("Заголовок", "# Agent Guidelines"),
+ ("Раздел Ledger facts", "## Ledger facts"),
+ ("Раздел Interface", "## Interface"),
+ ("Закон про превью edge", "The edge may answer from the bundle"),
+ ("Имя теста про превью", "test_the_edge_previews_the_bundle_only_for_a_browser_reading_a_page"),
+ ("Закон про алерт-чат", "The one alert chat is the owner"),
+ ("Имя теста про алерт-чат", "test_the_alert_chat_falls_back_to_the_owner_rather_than_dropping_the_alert"),
+ ("1547 tests", "1547 tests"),
+ ("244 more, marked", "244 more, marked"),
+ ("2,696 s", "2,696 s"),
+ ("statement_timeout", "statement_timeout"),
+ ("HEALTH_DB_TIMEOUT", "HEALTH_DB_TIMEOUT"),
+ ("wave 40", "wave 40"),
+ ("wave 39", "wave 39"),
+ ("1544 tests", "1544 tests"),
+]
+for k, v in keys:
+    print(f"  {t.count(v)} x {k}")
+print("байт:", len(t.encode("utf-8")), "строк:", t.count("\n") + 1)
+lines = t.splitlines()
+for i, ln in enumerate(lines, 1):
+    if "The edge may answer" in ln or "## Ledger facts" in ln or "The one alert chat" in ln:
+        print(f"  строка {i}: {ln.strip()[:70]}")
+PY
+cat .qa/wave40_agents_check.txt

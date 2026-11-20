@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>On-Chain ERC-1155 Market — Tippy on Base</title>
+  <style>
+
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f7f7f8;
+      --surface: #ffffff;
+      --surface-2: #f2f2f4;
+      --surface-hover: #eaecef;
+      --border: #e4e4e7;
+      --border-strong: #c8c8ce;
+      --text: #111111;
+      --text-muted: #52525b;
+      --text-dim: #71717a;
+      --brand: #0000ff;
+      --brand-hover: #0000cc;
+      --brand-fg: #ffffff;
+      --brand-tint: rgba(0, 0, 255, 0.07);
+      --brand-border: rgba(0, 0, 255, 0.35);
+      --yes: #047857;
+      --yes-bg: rgba(4, 120, 87, 0.09);
+      --yes-border: rgba(4, 120, 87, 0.35);
+      --no: #be123c;
+      --no-bg: rgba(190, 18, 60, 0.09);
+      --no-border: rgba(190, 18, 60, 0.35);
+      --warn: #b45309;
+      --warn-bg: rgba(180, 83, 9, 0.10);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --ease: cubic-bezier(0.2, 0, 0, 1);
+    }
+    [data-theme="dark"] {
+      --bg: #111111;
+      --bg-subtle: #161618;
+      --surface: #111111;
+      --surface-2: #1a1a1e;
+      --surface-hover: #222228;
+      --border: #26262c;
+      --border-strong: #3c3c46;
+      --text: #ffffff;
+      --text-muted: #a1a1aa;
+      --text-dim: #71717a;
+      --brand: #224bff;
+      --brand-hover: #4266ff;
+      --brand-fg: #ffffff;
+      --brand-tint: rgba(34, 75, 255, 0.14);
+      --brand-border: rgba(34, 75, 255, 0.50);
+      --yes: #34d399;
+      --yes-bg: rgba(52, 211, 153, 0.12);
+      --yes-border: rgba(52, 211, 153, 0.38);
+      --no: #fb7185;
+      --no-bg: rgba(251, 113, 133, 0.12);
+      --no-border: rgba(251, 113, 133, 0.38);
+      --warn: #fbbf24;
+      --warn-bg: rgba(251, 191, 36, 0.14);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input, select { font-family: inherit; color: inherit; }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .num { font-variant-numeric: tabular-nums; }
+    .label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-muted);
+    }
+    .container { max-width: 1320px; margin: 0 auto; padding: 0 20px; }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      display: inline-block; flex-shrink: 0;
+      background: var(--yes);
+    }
+    .dot.brand { background: var(--brand); }
+    .dot.warn { background: var(--warn); }
+    .dot.no { background: var(--no); }
+    .base-square {
+      width: 18px; height: 18px; background: var(--brand);
+      display: inline-block; flex-shrink: 0;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 9px; border: 1px solid var(--border);
+      background: var(--surface-2);
+      font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .badge.brand { background: var(--brand-tint); border-color: var(--brand-border); color: var(--brand); }
+    .badge.yes { background: var(--yes-bg); border-color: var(--yes-border); color: var(--yes); }
+    .badge.no { background: var(--no-bg); border-color: var(--no-border); color: var(--no); }
+    .badge.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 40px; padding: 0 16px;
+      border: 1px solid var(--border-strong); background: var(--surface);
+      color: var(--text); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease);
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--brand); }
+    .btn:active:not(:disabled) { opacity: 0.86; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--brand); border-color: var(--brand); color: var(--brand-fg); }
+    .btn-primary:hover:not(:disabled) { background: var(--brand-hover); border-color: var(--brand-hover); color: var(--brand-fg); }
+    .btn-sm { min-height: 32px; padding: 0 11px; font-size: 11px; }
+    .btn-pill { border-radius: 999px; }
+    .btn-yes { background: var(--yes-bg); border-color: var(--yes-border); color: var(--yes); }
+    .btn-yes:hover:not(:disabled) { background: var(--yes); color: #ffffff; border-color: var(--yes); }
+    .btn-no { background: var(--no-bg); border-color: var(--no-border); color: var(--no); }
+    .btn-no:hover:not(:disabled) { background: var(--no); color: #ffffff; border-color: var(--no); }
+    .input {
+      width: 100%; min-height: 42px; padding: 8px 12px;
+      background: var(--bg); border: 1px solid var(--border-strong);
+      color: var(--text); font-size: 13px;
+      transition: border-color 120ms var(--ease);
+    }
+    .input:focus { outline: none; border-color: var(--brand); }
+    .tabs { display: inline-flex; border: 1px solid var(--border); background: var(--surface-2); }
+    .tab {
+      background: transparent; border: none; border-right: 1px solid var(--border);
+      padding: 7px 13px; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+      cursor: pointer; transition: background 120ms var(--ease), color 120ms var(--ease);
+    }
+    .tab:last-child { border-right: none; }
+    .tab:hover { color: var(--text); background: var(--surface-hover); }
+    .tab.active { background: var(--brand); color: var(--brand-fg); }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(16px);
+      background: var(--text); color: var(--bg);
+      padding: 10px 18px; border: 1px solid var(--brand);
+      font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+      letter-spacing: 0.04em; z-index: 400; opacity: 0; pointer-events: none;
+      transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .nav { border-bottom: 1px solid var(--border); padding: 12px 0; background: var(--bg); }
+    .nav-inner { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .oc-grid {
+      display: grid; grid-template-columns: 1.35fr 0.85fr;
+      border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      background: var(--border); gap: 1px;
+    }
+    .panel { background: var(--surface); padding: 28px; }
+    .out-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 13px 16px; border: 1px solid var(--border); background: var(--bg);
+      margin-bottom: 8px; cursor: pointer; font-weight: 700;
+    }
+    .out-row.active { border-color: var(--brand); background: var(--brand-tint); }
+    @media (max-width: 860px) { .oc-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="toast" id="toast">Copied</div>
+  <header class="nav">
+    <div class="container nav-inner">
+      <a href="/" style="display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-0.03em;">
+        <span class="base-square"></span><span>TIPPY CALLY</span><span class="badge yes">ERC-1155 ON-CHAIN</span>
+      </a>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="btn btn-sm mono" id="langBtn">RU</button>
+        <button type="button" class="btn btn-sm mono" id="themeBtn">DARK</button>
+        <a href="/" class="btn btn-sm" data-en="← Dashboard" data-ru="← Терминал">← Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="oc-grid">
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <span class="badge brand" id="ocIdBadge">OUTCOMEMARKET.SOL #—</span>
+          <span class="badge yes" id="ocStateBadge">OPEN ON BASE</span>
+        </div>
+        <h1 style="font-size:clamp(22px, 3vw, 32px);font-weight:800;letter-spacing:-0.035em;line-height:1.12;margin-bottom:18px;" id="ocQ">Loading on-chain market...</h1>
+        <div class="label" style="margin-bottom:10px;">ERC-1155 OUTCOME TOKENS</div>
+        <div id="ocOpts"></div>
+      </div>
+
+      <div class="panel" style="display:flex;flex-direction:column;justify-content:space-between;gap:16px;">
+        <div>
+          <div class="label" style="margin-bottom:10px;" data-en="ON-CHAIN STATE &amp; COMMANDS" data-ru="ОНЧЕЙН-СОСТОЯНИЕ И КОМАНДЫ">ON-CHAIN STATE &amp; COMMANDS</div>
+          <div class="mono" style="border:1px solid var(--border);background:var(--surface-2);padding:12px;font-size:12px;display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Contract Escrow</span><strong id="ocEscrow">$— USDC</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">LMSR Parameter b</span><strong id="ocB">—</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Settlement Token</span><strong>Native USDC (Base)</strong></div>
+          </div>
+          <div class="label" style="margin-bottom:6px;">TRADE AMOUNT (USDC)</div>
+          <input type="number" id="ocAmt" class="input mono" value="25" min="1" max="1000">
+          <div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);background:var(--bg-subtle);display:flex;justify-content:space-between;align-items:center;">
+            <code class="mono" style="font-size:12px;color:var(--brand);" id="ocCmd">/oc_buy ...</code>
+            <button type="button" class="badge brand" id="ocCopy" style="cursor:pointer;">COPY</button>
+          </div>
+        </div>
+        <a href="https://t.me/tippy_on_base_bot" target="_blank" class="btn btn-primary" style="width:100%;" data-en="Trade ERC-1155 in Bot ↗" data-ru="Торговать ERC-1155 в боте ↗">Trade ERC-1155 in Bot ↗</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      let lang = 'en', selIdx = 0, m = null;
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      const id = parts[parts.length - 1] || '1';
+      const fmt = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const toast = (msg) => { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); };
+
+      document.getElementById('themeBtn').addEventListener('click', function () {
+        const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        this.textContent = next === 'dark' ? 'LIGHT' : 'DARK';
+      });
+      document.getElementById('langBtn').addEventListener('click', function () {
+        lang = lang === 'en' ? 'ru' : 'en';
+        this.textContent = lang === 'en' ? 'RU' : 'EN';
+        document.querySelectorAll('[data-en]').forEach((el) => { const v = el.getAttribute('data-' + lang); if (v) el.textContent = v; });
+      });
+
+      function updateCmd() {
+        if (!m) return;
+        const amt = document.getElementById('ocAmt').value || '25';
+        document.getElementById('ocCmd').textContent = m.resolved ? ('/oc_redeem ' + m.id) : ('/oc_buy ' + m.id + ' ' + selIdx + ' ' + amt);
+      }
+      document.getElementById('ocAmt').addEventListener('input', updateCmd);
+      document.getElementById('ocCopy').addEventListener('click', () => {
+        const c = document.getElementById('ocCmd').textContent;
+        navigator.clipboard?.writeText(c);
+        toast('Copied: ' + c);
+      });
+
+      async function load() {
+        try { const r = await fetch('/api/onchain/market/' + id); if (r.ok) m = await r.json(); } catch (_) {}
+        if (!m) {
+          m = { id, question: 'OutcomeMarket #' + id + ' (Preview)', escrow_micro: 3450000000, b: 144269504, resolved: false, cancelled: false, disputed: false, options: [{ index: 0, label: 'YES', price_pct: 58.2 }, { index: 1, label: 'NO', price_pct: 41.8 }] };
+        }
+        document.getElementById('ocIdBadge').textContent = 'OUTCOMEMARKET.SOL #' + m.id;
+        const st = m.cancelled ? 'CANCELLED' : m.resolved ? 'RESOLVED' : m.disputed ? 'DISPUTED' : 'OPEN ON BASE';
+        document.getElementById('ocStateBadge').textContent = st;
+        document.getElementById('ocQ').textContent = m.question;
+        document.getElementById('ocEscrow').textContent = fmt((m.escrow_micro || 0) / 1e6) + ' USDC';
+        document.getElementById('ocB').textContent = m.b ? String(m.b) : 'LMSR';
+        document.getElementById('ocOpts').innerHTML = (m.options || []).map((o, i) => (
+          '<div class="out-row ' + (i === 0 ? 'active' : '') + '" data-oi="' + o.index + '"><span><strong>#' + o.index + '</strong> ' + esc(o.label) + '</span><span class="mono" style="color:var(--brand);">' + Number(o.price_pct).toFixed(2) + '%</span></div>'
+        )).join('');
+        document.querySelectorAll('#ocOpts .out-row').forEach((row) => {
+          row.addEventListener('click', () => {
+            selIdx = Number(row.getAttribute('data-oi'));
+            document.querySelectorAll('#ocOpts .out-row').forEach((x) => x.classList.remove('active'));
+            row.classList.add('active');
+            updateCmd();
+          });
+        });
+        updateCmd();
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+мутаций проверено: 6, сработали: 6
+СРАБОТАЛ  M1 повтор разрешён сразу (проверка состояния убрана)
+           tests/test_solvency.py::test_a_verdict_that_persists_speaks_once_then_on_the_slow_clock
+СРАБОТАЛ  M2 окно повтора сгорает до отправки
+           tests/test_solvency.py::test_a_send_that_fails_does_not_consume_the_repeat_window
+СРАБОТАЛ  M3 восстановление молчит
+           tests/test_solvency.py::test_a_recovered_ledger_says_so_once
+СРАБОТАЛ  M4 слепой канареечный лог удалён
+           tests/test_solvency.py::test_a_blind_canary_logs_that_it_is_alive_and_blind
+СРАБОТАЛ  M5 окно повтора равно полу
+           tests/test_solvency.py::test_the_repeat_window_is_longer_than_the_floor
+СРАБОТАЛ  M6 часовой пояс вердикта: состояние не запоминается
+           tests/test_solvency.py::test_a_verdict_that_persists_speaks_once_then_on_the_slow_clock
+bot/solvency.py восстановлен байт в байт: True

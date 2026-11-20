@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ru" data-signed-in="__SIGNED_IN__">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111" />
+  <link rel="stylesheet" href="/fonts.css" />
+  <title>Tippy — чаевые и рынки в USDC на Base</title>
+  <meta name="description" content="Кошелёк USDC на Base в Telegram: чаевые, парамутюэль-ставки, LMSR-рынки предсказаний, ончейн-доли ERC-1155 и публичный proof-of-reserves." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
+</head>
+<body>
+  <div class="scroll-progress" id="scrollProgress"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+        <span class="brand-name"><b>Tippy</b></span>
+      </a>
+      <div class="nav-actions">
+        <button class="nav-search" type="button" id="searchOpen" aria-label="Найти рынок">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.2"/><path d="m15.7 15.7 3.6 3.6"/></svg>
+          <span class="nav-search-key" id="searchKey">Ctrl K</span>
+        </button>
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <span id="authArea"><a class="btn btn-ghost btn-sm" href="#workspace-section">Войти</a></span>
+        <a class="btn btn-ghost btn-sm nav-tg" href="https://t.me/__BOT_USERNAME__" data-tg-link>Открыть в Telegram →</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <a class="hero-badge" data-net-explorer>
+          <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+          <span data-net="chain">Base</span> · USDC
+        </a>
+        <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
+        <p class="hero-sub">
+          Чаевые в один тап, ставки-пулы по парамутюэльной схеме, рынки предсказаний
+          на LMSR-маркмейкере и ончейн-доли ERC-1155. Без газа на переводы между
+          пользователями, с публичной сверкой резервов.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#workspace-section">Открыть кабинет</a>
+          <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__" data-tg-link>Начать в Telegram</a>
+        </div>
+      </div>
+      <!-- The product is a price on a question, so the hero shows one: real odds
+           off /api/predictions, not a mock-up. Hidden until the data arrives. -->
+      <aside class="hero-spot" id="heroSpot" aria-label="Текущий рынок" hidden>
+        <span class="eyebrow">Самый ликвидный рынок</span>
+        <div id="hero-spot-body"></div>
+      </aside>
+    </section>
+
+    <!-- A pricing product opens with prices. The same /api/stats the cabinet
+         reads, drawn as a hairline strip straight under the hero: this is where a
+         visitor decides whether anything real happens here. -->
+    <section class="hero-metrics reveal" id="metrics" aria-label="Метрики сети">
+      <div class="stats" id="stats">
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-volume">–</div><div class="stat-label">Объём, USDC</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-vol30">–</div><div class="stat-label">Объём за 30 дней, USDC</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-users">–</div><div class="stat-label">Пользователей</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-markets">–</div><div class="stat-label">Открытых ставок-пулов</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-tx">–</div><div class="stat-label">Транзакций</div></div>
+        <div class="stat-card"><div class="stat-value skeleton" id="stat-fees">–</div><div class="stat-label">Собрано комиссий, USDC</div></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="workspace-section">
+      <span class="eyebrow">Кабинет</span>
+      <h2>Баланс, чаевые и позиции</h2>
+
+      <div id="connect" class="connect">
+        <div class="connect-grid">
+          <div class="wallet">
+            <div class="wallet-row"><span>Telegram</span><span class="eyebrow">вход по виджету</span></div>
+            <p class="hint">
+              Telegram подписывает свой набор полей HMAC-SHA256 с ключом
+              SHA256(bot token). Сайт проверяет подпись и выдаёт сессионную
+              cookie — ничего не хранится на сервере.
+            </p>
+            <div class="tg-widget" id="tg-widget"></div>
+
+            <div class="wallet-row wallet-sep"><span>Кошелёк</span><span class="eyebrow">подпись EIP-191</span></div>
+            <p class="hint">
+              Подписываете одноразовое сообщение — адрес сверяется с таблицей
+              <span class="mono">wallet_links</span>, которую заполняет бот командой
+              <span class="mono">/link</span>. Кошелёк, не привязанный в боте, войти не сможет.
+            </p>
+            <button class="btn btn-ghost btn-full" data-act="walletLogin">Подключить кошелёк</button>
+            <div class="msg" id="connectMsg"></div>
+          </div>
+
+          <div>
+            <h3>Что доступно после входа</h3>
+            <ul class="connect-list">
+              <li><b>Баланс и депозит</b> — адрес приёма USDC с QR-кодом, привязанный внешний кошелёк.</li>
+              <li><b>Чаевые</b> — перевод по @username, <span class="mono">name.base.eth</span> или числовому id.</li>
+              <li><b>Вывод</b> — в два шага: расчёт комиссии и итога, затем подтверждение одноразовым токеном.</li>
+              <li><b>LMSR-рынки</b> — покупка долей по живой цене, позиция и PnL.</li>
+              <li><b>Ставки-пулы</b> — парамутюэль: пул, шанс и доля выплат после закрытия.</li>
+              <li><b>Создание</b> — рынок с субсидией ликвидности или пул-ставка, дедлайн до 30 дней.</li>
+              <li><b>Ончейн (Cally)</b> — доли как ERC-1155 и покупка без газа через смарт-кошелёк.</li>
+              <li><b>История</b> — последние операции с контрагентом и назначением.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="workspace" class="ws" hidden>
+        <div class="ws-bar">
+          <div>
+            <div class="ws-user"><span id="wsName">–</span> <span class="hint mono" id="wsId"></span></div>
+            <div class="ws-bal"><span id="wsBalance">–</span> <span class="ws-cur">USDC</span></div>
+          </div>
+          <div class="ws-actions">
+            <button class="btn btn-ghost btn-sm" data-act="refreshState"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>Обновить</button>
+            <button class="btn btn-ghost btn-sm" data-act="logout">Выйти</button>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-act="tab" data-tab="balance">Баланс</button>
+          <button class="tab" data-act="tab" data-tab="tip">Чаевые</button>
+          <button class="tab" data-act="tab" data-tab="withdraw">Вывод</button>
+          <button class="tab" data-act="tab" data-tab="markets">Рынки</button>
+          <button class="tab" data-act="tab" data-tab="bets">Ставки</button>
+          <button class="tab" data-act="tab" data-tab="create">Создать</button>
+          <button class="tab" data-act="tab" data-tab="onchain">Ончейн</button>
+          <button class="tab" data-act="tab" data-tab="history">История</button>
+        </div>
+
+        <div class="panel" id="panel-balance">
+          <div class="grid-2">
+            <div>
+              <div class="wallet">
+                <div class="wallet-row"><span>Доступно</span><b id="balAvailable">–</b></div>
+                <div class="wallet-row"><span>Депозитный адрес (Base · USDC)</span></div>
+                <div class="wallet-addr" id="depositAddress">загрузка…</div>
+                <div class="qr-wrap">
+                  <div class="qr"><img id="depositQr" alt="QR-код депозитного адреса" width="220" height="220" /></div>
+                  <button class="btn btn-ghost btn-sm" data-act="copy" data-target="depositAddress">Скопировать адрес</button>
+                </div>
+                <p class="hint">
+                  Пополнение — перевод USDC в сети Base на этот адрес. Бот видит
+                  транзакцию и зачисляет баланс автоматически.
+                </p>
+              </div>
+              <div class="wallet">
+                <div class="wallet-row"><span>Привязанный кошелёк</span><b class="mono" id="linkedAddress">—</b></div>
+                <div class="wallet-row"><span>Язык сообщений бота</span></div>
+                <div class="amount-chips">
+                  <button class="amount-chip" data-act="setLang" data-lang="ru">Русский</button>
+                  <button class="amount-chip" data-act="setLang" data-lang="en">English</button>
+                  <button class="amount-chip" data-act="setLang" data-lang="zh">中文</button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3>Мои позиции</h3>
+              <div class="rows" id="positionsList"><div class="empty">загрузка…</div></div>
+              <div class="msg" id="balanceMsg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-tip" hidden>
+          <div class="field">
+            <label class="label" for="tipTo">Кому</label>
+            <input class="input" id="tipTo" placeholder="@username, name.base.eth или id" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label class="label" for="tipAmount">Сумма, USDC</label>
+            <input class="input mono" id="tipAmount" type="number" min="0.01" max="1000" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="amount-chips" id="tipChips"></div>
+            <div class="hint" id="tipLimit"></div>
+          </div>
+          <button class="btn btn-primary" data-act="sendTip">Отправить чаевые</button>
+          <div class="msg" id="tipMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-withdraw" hidden>
+          <div class="field">
+            <label class="label" for="wdAddress">Адрес получателя (Base)</label>
+            <input class="input mono" id="wdAddress" placeholder="0x…" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="label" for="wdAmount">Сумма, USDC</label>
+            <input class="input mono" id="wdAmount" type="number" min="1" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="amount-chips" id="wdChips"></div>
+            <div class="hint" id="wdLimits"></div>
+          </div>
+          <button class="btn btn-primary" data-act="stageWithdraw">Рассчитать и зафиксировать</button>
+
+          <div id="wdReview" class="review" hidden>
+            <h3>Подтверждение вывода</h3>
+            <div class="rows">
+              <div class="row"><span class="row-k">Сумма</span><b class="row-v mono" id="wdRvAmount">–</b></div>
+              <div class="row"><span class="row-k">Комиссия</span><b class="row-v mono" id="wdRvFee">–</b></div>
+              <div class="row"><span class="row-k">Спишется всего</span><b class="row-v mono" id="wdRvTotal">–</b></div>
+              <div class="row"><span class="row-k">Остаток</span><b class="row-v mono" id="wdRvAfter">–</b></div>
+              <div class="row"><span class="row-k">Адрес</span><b class="row-v mono" id="wdRvAddr">–</b></div>
+              <div class="row"><span class="row-k">Предложение действует</span><b class="row-v" id="wdRvTtl">–</b></div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" data-act="confirmWithdraw">Подтвердить вывод</button>
+              <button class="btn btn-ghost" data-act="cancelWithdraw">Отменить</button>
+            </div>
+          </div>
+          <div class="msg" id="wdMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-markets" hidden>
+          <div class="field">
+            <label class="label" for="tradeMarket">Рынок (LMSR)</label>
+            <select class="input" id="tradeMarket"></select>
+          </div>
+          <div class="field">
+            <span class="label">Исход</span>
+            <div class="opt-list" id="tradeOptions"></div>
+          </div>
+          <div class="field">
+            <label class="label" for="tradeAmount">Сумма, USDC</label>
+            <input class="input mono" id="tradeAmount" type="number" min="0.01" max="500" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="hint" id="tradeLimit"></div>
+          </div>
+          <button class="btn btn-primary" data-act="buyShares">Купить доли</button>
+          <div class="msg" id="tradeMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-bets" hidden>
+          <div class="field">
+            <label class="label" for="betPick">Ставка-пул</label>
+            <select class="input" id="betPick"></select>
+          </div>
+          <div class="field">
+            <span class="label">Вариант</span>
+            <div class="opt-list" id="betOptions"></div>
+          </div>
+          <div class="field">
+            <label class="label" for="betAmount">Сумма, USDC</label>
+            <input class="input mono" id="betAmount" type="number" min="0.01" max="500" step="0.01" inputmode="decimal" placeholder="0.00" />
+            <div class="hint" id="betLimit"></div>
+          </div>
+          <button class="btn btn-primary" data-act="placeBet">Поставить</button>
+          <div class="msg" id="betMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-create" hidden>
+          <div class="amount-chips switch-row">
+            <button class="amount-chip active" data-act="createKind" data-kind="market">Рынок LMSR</button>
+            <button class="amount-chip" data-act="createKind" data-kind="bet">Ставка-пул</button>
+          </div>
+          <div class="field">
+            <label class="label" for="newQuestion">Вопрос</label>
+            <input class="input" id="newQuestion" maxlength="200" placeholder="Например: будет ли BTC выше 120k USDC до конца месяца?" />
+            <div class="hint">5–200 символов.</div>
+          </div>
+          <div class="field">
+            <span class="label">Варианты (2–4)</span>
+            <div id="newOptions"></div>
+            <button data-act="addOption" class="btn btn-ghost btn-sm"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить вариант</button>
+          </div>
+          <div class="field">
+            <label class="label" for="newHours">Дедлайн, часов</label>
+            <input class="input" id="newHours" type="number" min="1" max="720" step="1" inputmode="numeric" />
+            <div class="hint" id="hoursLimits"></div>
+          </div>
+          <div class="field" id="subsidyField">
+            <label class="label" for="newSubsidy">Субсидия ликвидности, USDC</label>
+            <input class="input mono" id="newSubsidy" type="number" min="10" max="1000" step="1" inputmode="decimal" placeholder="10" />
+            <div class="hint" id="subsidyLimits"></div>
+          </div>
+          <button class="btn btn-primary" data-act="createMarket">Создать</button>
+          <div class="msg" id="createMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-onchain" hidden>
+          <div id="smartWalletBox">
+            <div class="wallet">
+              <div class="wallet-row"><span>Смарт-кошелёк (ERC-4337)</span><b id="swStatus">–</b></div>
+              <div class="wallet-addr" id="swAddress">—</div>
+              <div class="wallet-row"><span>USDC в кошельке</span><b id="swBalance">–</b></div>
+              <p class="hint" id="swHint">
+                Покупка долей идёт спонсируемым UserOperation: газ платит
+                paymaster, а не вы.
+              </p>
+            </div>
+          </div>
+
+          <div class="field field-after">
+            <label class="label" for="ocMarket">Ончейн-рынок</label>
+            <select class="input" id="ocMarket"></select>
+          </div>
+          <div class="field">
+            <span class="label">Исход</span>
+            <div class="opt-list" id="ocOptions"></div>
+          </div>
+          <div class="field grid-2">
+            <div class="field">
+              <label class="label" for="ocShares">Долей</label>
+              <input class="input" id="ocShares" type="number" min="1" step="1" inputmode="numeric" placeholder="1" />
+            </div>
+            <div class="field">
+              <label class="label" for="ocMaxCost">Макс. цена, USDC</label>
+              <input class="input mono" id="ocMaxCost" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="1.00" />
+            </div>
+          </div>
+          <button class="btn btn-primary" data-act="smartBuy">Купить без газа</button>
+          <div class="msg" id="ocMsg"></div>
+        </div>
+
+        <div class="panel" id="panel-history" hidden>
+          <div class="rows" id="historyList"><div class="empty">загрузка…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--band reveal" id="volume-chart-section">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Объём</span>
+          <h2 id="chart-title">Последние 14 дней</h2>
+        </div>
+        <p class="hint">Дневной объём USDC через бота: депозиты, чаевые, ставки в пулы, субсидии и покупка долей рынков, токены создателей, платные посты, подписки на каналы и x402-платежи.</p>
+      </div>
+      <div class="chart-head">
+        <p class="chart-summary" id="chart-summary">Наводите на столбцы, чтобы увидеть день и его объём.</p>
+        <div class="amount-chips" id="chart-ranges">
+          <button class="amount-chip" type="button" data-days="7" aria-pressed="false">7 дней</button>
+          <button class="amount-chip active" type="button" data-days="14" aria-pressed="true">14 дней</button>
+          <button class="amount-chip" type="button" data-days="30" aria-pressed="false">30 дней</button>
+        </div>
+      </div>
+      <div class="chart" id="volume-chart">
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-bar"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="predictions">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Рынки</span>
+          <h2>Предсказания на LMSR</h2>
+        </div>
+        <p class="hint">
+          Цены долей задаёт LMSR — логарифмический маркет-мейкер: каждая покупка
+          сдвигает котировку, поэтому цена и есть вероятность, а не ручная оценка.
+          Торгуете внутренним балансом в USDC, без газа.
+        </p>
+      </div>
+      <div class="markets" id="predictions-list">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="markets">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Ставки</span>
+          <h2>Пулы по парамутюэлю</h2>
+        </div>
+        <p class="hint">
+          Все ставки складываются в общий пул, доля выплат = ваш вклад / пул
+          выбранного исхода × 100%. Выиграл ваш вариант — получаете свою долю
+          всего пула за вычетом комиссии победителю; не выбранный исход обнуляется.
+        </p>
+      </div>
+      <div class="markets" id="markets-list">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="closed-markets">
+      <span class="eyebrow">Ставки</span>
+      <h2>Закрытые пулы</h2>
+      <div class="markets" id="closed-markets-list">
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="onchain-markets" hidden>
+      <span class="eyebrow">Ончейн</span>
+      <h2>Cally — рынки на Base</h2>
+      <p class="hint">
+        Доли — настоящие ERC-1155 токены в контракте OutcomeMarket, расчёты в
+        USDC на-цепи. В боте: /oc_create · /oc_buy · /oc_redeem.
+      </p>
+      <div class="markets" id="onchain-markets-list">
+        <div class="skeleton-card"></div>
+      </div>
+    </section>
+
+    <section class="section section--band reveal" id="terms">
+      <span class="eyebrow">Условия</span>
+      <h2>Комиссии и лимиты</h2>
+      <p class="hint">
+        Значения читаются из конфигурации бота тем же API, который их
+        проверяет, — то, что написано здесь, и есть то, что отклонит запрос.
+      </p>
+      <div class="table-wrap">
+        <table class="terms-table">
+          <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
+          <tbody id="terms-body">
+            <tr><td>загрузка…</td><td>–</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section section--band reveal" id="commands">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Telegram</span>
+          <h2>Команды бота</h2>
+        </div>
+        <p class="hint">
+          Тот же список, который бот регистрирует в меню Telegram через
+          <code>set_my_commands</code>, — сайт отдаёт его из того же источника,
+          поэтому команды здесь не могут разойтись с ботом. Нажмите на команду,
+          чтобы скопировать её.
+        </p>
+      </div>
+      <div class="cmd-groups" id="commands-grid">
+        <div class="skeleton-card"></div>
+      </div>
+      <p class="msg" id="commands-msg"></p>
+    </section>
+
+    <section class="section reveal" id="x402">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">x402</span>
+          <h2>Счёт за один HTTP-запрос</h2>
+        </div>
+        <p class="hint">
+          Протокол x402: агент платит USDC за ответ без аккаунта, OAuth и
+          сервиса-посредника. Первый запрос приходит без оплаты, и сервер
+          отвечает <span class="mono">402 Payment Required</span> со счётом — адресом, суммой и
+          временем жизни. Тот же запрос с подписью во втором заголовке становится
+          <span class="mono">200</span>. Кнопка ниже отправляет настоящий запрос этому
+          серверу: числа счёта прочитаны из ответа, а не нарисованы.
+        </p>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="field">
+            <label class="label" for="x402Recipient">Получатель</label>
+            <input class="input" id="x402Recipient" type="text" autocomplete="off"
+                   placeholder="@username, name.base.eth или tg_id" />
+            <p class="hint">Кому платит агент — бот находит его тем же способом, что и в <span class="mono">/tip</span>.</p>
+          </div>
+          <div class="field">
+            <label class="label" for="x402Amount">Сумма, USDC</label>
+            <input class="input mono" id="x402Amount" type="number" min="0.01" max="1000" step="0.01" inputmode="decimal" placeholder="0.10" />
+            <div class="amount-chips" id="x402Amounts"></div>
+            <p class="hint" id="x402Bounds">Пределы и время жизни счёта читаются с этого же сайта.</p>
+          </div>
+          <button class="btn btn-primary" type="button" id="x402Ask">Запросить счёт</button>
+          <div class="msg" id="x402Msg"></div>
+          <div class="rows field-after" id="x402Answer">
+            <div class="empty">Счёт ещё не запрошен.</div>
+          </div>
+          <div class="btn-row" id="x402AnswerLinks" hidden>
+            <button class="btn btn-ghost btn-sm" type="button" id="x402CopyPay">Скопировать адрес счёта</button>
+          </div>
+        </div>
+        <div>
+          <div class="curl">
+            <div class="curl-head">
+              <span class="label">1 · Запрос без оплаты → 402</span>
+              <button class="btn btn-ghost btn-sm" type="button" id="x402CopyAsk">Скопировать</button>
+            </div>
+            <pre class="curl-body" id="x402CurlAsk">–</pre>
+          </div>
+          <div class="curl">
+            <div class="curl-head">
+              <span class="label">2 · Официальный x402: подпись EIP-3009</span>
+              <button class="btn btn-ghost btn-sm" type="button" id="x402CopySpec">Скопировать</button>
+            </div>
+            <pre class="curl-body" id="x402CurlSpec">–</pre>
+          </div>
+          <div class="curl">
+            <div class="curl-head">
+              <span class="label">3 · Прежний клиент: хэш перевода</span>
+              <button class="btn btn-ghost btn-sm" type="button" id="x402CopyLegacy">Скопировать</button>
+            </div>
+            <pre class="curl-body" id="x402CurlLegacy">–</pre>
+          </div>
+          <p class="hint">
+            Адрес счёта выведен из его идентификатора, а идентификатор — из пары
+            (получатель, сумма), поэтому перевод, отправленный на этот адрес,
+            нельзя переадресовать на другой счёт. Подпись <span class="mono">X-PAYMENT</span>
+            создаёт кошелёк агента: страница её не генерирует и кнопкой ничего не
+            оплачивает.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="treasury">
+      <span class="eyebrow">Резервы</span>
+      <h2>Прозрачный кошелёк</h2>
+      <div class="grid-2">
+        <div>
+          <div class="wallet" id="wallet">
+            <div class="wallet-row"><span>USDC на горячем кошельке</span><b id="wallet-balance">–</b></div>
+            <div class="wallet-row" id="wallet-vault-row" hidden>
+              <span>Резервы в контракте TipBotVault</span><b id="wallet-vault">–</b>
+            </div>
+            <div class="wallet-row"><span>Все обязательства бота</span><b id="wallet-liabilities">–</b></div>
+            <div class="wallet-row"><span>в том числе незачтённых депозитов</span><b id="wallet-pending">–</b></div>
+            <div class="wallet-row"><span>Свободный резерв</span><b id="wallet-reserve">–</b></div>
+            <div class="wallet-row"><span>Платёжеспособность</span><b id="wallet-solvent">–</b></div>
+            <div class="wallet-addr mono" id="wallet-address">загрузка…</div>
+            <div class="wallet-addr mono" id="wallet-vault-addr" hidden>загрузка…</div>
+            <div class="btn-row">
+              <button class="btn btn-ghost btn-sm" type="button" id="copyWalletAddress">Скопировать адрес</button>
+              <a class="btn btn-ghost btn-sm" id="walletExplorer" target="_blank" rel="noopener" hidden>Кошелёк в обозревателе</a>
+              <a class="btn btn-ghost btn-sm" id="vaultExplorer" target="_blank" rel="noopener" hidden>Vault в обозревателе</a>
+            </div>
+            <div class="msg" id="walletMsg"></div>
+          </div>
+        </div>
+        <div>
+          <div class="gauge-box">
+            <svg class="gauge" viewBox="0 0 120 120" role="img" id="solvencyGauge" aria-label="Покрытие обязательств резервами">
+              <circle class="gauge-track" cx="60" cy="60" r="52" transform="rotate(-90 60 60)"></circle>
+              <circle class="gauge-value" id="gaugeArc" cx="60" cy="60" r="52" transform="rotate(-90 60 60)"></circle>
+              <text class="gauge-num" id="gaugePct" x="60" y="58">–</text>
+              <text class="gauge-cap" id="gaugeCap" x="60" y="74">покрытие</text>
+            </svg>
+            <p class="gauge-detail" id="gaugeDetail">Кольцо показывает, какая часть обязательств бота покрыта резервами, — это те же числа, что в таблице слева.</p>
+          </div>
+          <p class="hint">
+            Все депозиты, чаевые и пулы хранятся в USDC в сети Base — в
+            смарт-контракте TipBotVault либо на горячем кошельке до его деплоя.
+            Резервы читаются напрямую из блокчейна и сверяются со всеми
+            обязательствами бота: балансами пользователей, эскроу рынков,
+            открытыми пулами, казначействами сообществ, незачисленными x402 и
+            депозитами в ожидании. Ниже сверено с тем, что реально лежит на
+            адресе: если резервов меньше обязательств, строка
+            «Платёжеспособность» показывает «недостаточно».
+          </p>
+          <p class="hint">
+            Источник резервов сейчас: <b id="reserve-source">–</b>.
+            Баланс и reserves обновляются на этой странице автоматически.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--band reveal" id="leaderboard-section">
+      <span class="eyebrow">Сообщество</span>
+      <h2>Топ чаевых</h2>
+      <div class="leaderboard" id="leaderboard">
+        <div class="skeleton-card skeleton-row"></div>
+        <div class="skeleton-card skeleton-row"></div>
+        <div class="skeleton-card skeleton-row"></div>
+      </div>
+    </section>
+
+    <section class="section section--band reveal" id="how">
+      <span class="eyebrow">Механика</span>
+      <h2>Как это устроено</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Пополнение</h3>
+          <p>USDC в сети Base на ваш адрес бота. Бот находит транзакцию в блоке и зачисляет баланс — без ручной приёмки.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Действия</h3>
+          <p>Чаевые, покупка долей и ставки — внутренние проводки по той же ledger, что и в Telegram. Остаток пересчитывается сразу.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Вывод</h3>
+          <p>Двухшаговый: сначала фиксируются комиссия и итог, затем подтверждение одноразовым токеном с ограниченным сроком действия.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+        <div>
+          <b>Tippy</b>
+          <span class="footer-tag">USDC-экономика в Telegram и вебе</span>
+        </div>
+      </div>
+      <div class="footer-meta">
+        <span class="chain-chip"><span data-net="chain">Base</span></span>
+        <span class="chain-chip"><span data-net="usdc">USDC</span></span>
+        <span class="chain-chip" id="reserve-chip" hidden><span id="reserve-chip-text"></span></span>
+      </div>
+    </div>
+    <div class="author-links">
+      <span>Автор:</span>
+      <a href="https://t.me/b2wmain" target="_blank" rel="noopener">@b2wmain</a>
+      <a href="https://t.me/ssrjkk" target="_blank" rel="noopener">@ssrjkk</a>
+      <a href="https://x.com/ludych1" target="_blank" rel="noopener">X / Twitter</a>
+      <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p class="footer-legal"><a href="/tos">Условия использования</a></p>
+    <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
+      <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+      Built on Base · открытая кодовая база
+    </a>
+  </footer>
+
+  <dialog class="drawer" id="quoteDrawer" aria-labelledby="quoteQuestion">
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <span class="eyebrow">Котировка LMSR</span>
+          <h3 id="quoteQuestion">Рынок</h3>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="button" id="quoteClose">Закрыть</button>
+      </div>
+      <div class="drawer-body">
+        <div class="field">
+          <span class="label">Исход</span>
+          <div class="opt-list" id="quoteOptions"><div class="empty">загрузка…</div></div>
+        </div>
+        <div class="field">
+          <label class="label" for="quoteAmount">Сумма сделки, USDC</label>
+          <input class="input mono" id="quoteAmount" type="number" min="0.01" max="500" step="0.01" inputmode="decimal" placeholder="10.00" />
+          <div class="amount-chips" id="quoteChips"></div>
+          <div class="hint" id="quoteLimit"></div>
+        </div>
+        <div class="review">
+          <h3>Что будет, если купить сейчас</h3>
+          <div class="rows">
+            <div class="row"><span class="row-k">Долей</span><b class="row-v mono" id="quoteShares">–</b></div>
+            <div class="row"><span class="row-k">Средняя цена доли</span><b class="row-v mono" id="quoteAvg">–</b></div>
+            <div class="row"><span class="row-k">Спишется с баланса</span><b class="row-v mono" id="quoteCost">–</b></div>
+            <div class="row"><span class="row-k">Цена после сделки</span><b class="row-v mono" id="quotePrice">–</b></div>
+            <div class="row"><span class="row-k">Выплата при выигрыше</span><b class="row-v mono" id="quotePayout">–</b></div>
+            <div class="row"><span class="row-k">Профит и ROI</span><b class="row-v mono" id="quoteRoi">–</b></div>
+          </div>
+        </div>
+        <div class="msg" id="quoteMsg"></div>
+      </div>
+      <div class="drawer-foot">
+        <button class="btn btn-primary" type="button" id="quoteTrade">Перенести в терминал</button>
+        <p class="hint">
+          Котировку считает сервер тем же движком, что исполняет сделку: доли
+          округляются вниз до микродоли, поэтому с баланса спишется не больше
+          указанной суммы. Котировка ничего не резервирует — следующий покупатель
+          сдвигает кривую, и панель пересчитает цены заново.
+        </p>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="palette" id="searchDialog" aria-label="Поиск по рынкам">
+    <div class="palette-panel">
+      <div class="palette-head">
+        <span class="palette-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.2"/><path d="m15.7 15.7 3.6 3.6"/></svg>
+        </span>
+        <input class="palette-input" id="searchInput" type="search" autocomplete="off" spellcheck="false"
+               placeholder="Вопрос или номер рынка" aria-label="Что искать" />
+        <button class="btn btn-ghost btn-sm" type="button" id="searchClose">Закрыть</button>
+      </div>
+      <div class="palette-kinds" id="searchKinds" role="group" aria-label="Фильтр по виду рынка"></div>
+      <div class="palette-results" id="searchResults"></div>
+      <p class="hint palette-foot" id="searchFoot" aria-live="polite"></p>
+    </div>
+  </dialog>
+
+  <script src="/chain.js"></script>
+  <script src="/app.js"></script>
+  <script src="/site.js"></script>
+</body>
+</html>

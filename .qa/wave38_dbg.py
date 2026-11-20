@@ -1,0 +1,10 @@
+import importlib.util
+spec = importlib.util.spec_from_file_location("tds", "tests/test_design_system.py")
+tds = importlib.util.module_from_spec(spec); spec.loader.exec_module(tds)
+code = tds.code_only(tds.APP_HTML)
+fns = tds.js_functions(code)
+print("functions found:", len(fns), "renderMarkets" in fns)
+body = fns.get("renderMarkets", "")
+print(repr(body[:400]))
+print("NODE_WRITE_ASSIGN_RE:", tds.NODE_WRITE_ASSIGN_RE.findall(body)[:4])
+print("node_writes:", [(i, c, v[:60]) for i, c, v in tds.node_writes(body, set(tds.cell_classes(tds.APP_HTML)))])

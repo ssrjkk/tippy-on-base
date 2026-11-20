@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111111" />
+  <link rel="stylesheet" href="/fonts.css" />
+  <title>Агент — Tippy</title>
+  <meta name="description" content="Панель автономного агента: баланс, лимиты расходов за сутки и на одну ставку, журнал решений — по какой теме рынок выбран и почему ставка поставлена или нет." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230000ff'/%3E%3Ctext x='50' y='71' font-size='58' font-weight='800' text-anchor='middle' fill='white'%3Eb%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/theme.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
+        <span class="brand-name"><b>Tippy</b></span>
+      </a>
+      <div class="nav-actions">
+        <button class="theme-toggle" data-act="toggleTheme" aria-label="Переключить тему">
+          <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+          <span class="icon-sun"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.4M12 19v2.4M2.6 12H5M19 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg></span>
+        </button>
+        <a class="btn btn-ghost btn-sm" href="/#workspace-section">Кабинет</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <article class="page">
+      <span class="eyebrow">Автономный агент</span>
+      <h1 class="page-title">Состояние и лимиты</h1>
+      <div class="page-meta">
+        <span>Только для владельца</span><span>обновление каждые 30 секунд</span>
+      </div>
+
+      <div class="msg err" id="agent-error"></div>
+
+      <div class="stats stats-2" id="agent-stats" hidden>
+        <div class="stat-card"><div class="stat-value" id="s-balance">–</div><div class="stat-label">Баланс, USDC</div></div>
+        <div class="stat-card"><div class="stat-value" id="s-markets">–</div><div class="stat-label">Рынков создано</div></div>
+        <div class="stat-card"><div class="stat-value" id="s-bets">–</div><div class="stat-label">Ставок поставлено</div></div>
+        <div class="stat-card"><div class="stat-value" id="s-errors">–</div><div class="stat-label">Ошибок подряд</div></div>
+      </div>
+
+      <div class="market-footer" id="agent-state-row" hidden>
+        <span class="chip" id="s-cooldown">–</span>
+      </div>
+
+      <section class="page-block" id="caps-block" hidden>
+        <span class="eyebrow">Лимиты расходов</span>
+        <div id="caps"></div>
+      </section>
+
+      <section class="page-block" id="audit-block" hidden>
+        <span class="eyebrow">Журнал решений</span>
+        <p class="hint">
+          Одна строка — один цикл агента: рынок выбран по новостной теме, ставка
+          ставится только если уверенность выше порога и лимиты не исчерпаны.
+        </p>
+        <div class="rows" id="audit"></div>
+        <div class="empty" id="audit-empty" hidden>Циклов пока не было</div>
+      </section>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>Tippy — чаевые и рынки в USDC на Base</p>
+  </footer>
+
+<script src="/chain.js"></script>
+<script src="/agent.js"></script>
+</body>
+</html>

@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tippy on Base — Community Economy &amp; Prediction Markets</title>
+  <meta name="description" content="Zero-gas USDC tips, Hanson LMSR prediction markets, on-chain ERC-1155 OutcomeMarket, and x402 HTTP payment rails on Base L2.">
+  <style>
+
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f7f7f8;
+      --surface: #ffffff;
+      --surface-2: #f2f2f4;
+      --surface-hover: #eaecef;
+      --border: #e4e4e7;
+      --border-strong: #c8c8ce;
+      --text: #111111;
+      --text-muted: #52525b;
+      --text-dim: #71717a;
+      --brand: #0000ff;
+      --brand-hover: #0000cc;
+      --brand-fg: #ffffff;
+      --brand-tint: rgba(0, 0, 255, 0.07);
+      --brand-border: rgba(0, 0, 255, 0.35);
+      --yes: #047857;
+      --yes-bg: rgba(4, 120, 87, 0.09);
+      --yes-border: rgba(4, 120, 87, 0.35);
+      --no: #be123c;
+      --no-bg: rgba(190, 18, 60, 0.09);
+      --no-border: rgba(190, 18, 60, 0.35);
+      --warn: #b45309;
+      --warn-bg: rgba(180, 83, 9, 0.10);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --ease: cubic-bezier(0.2, 0, 0, 1);
+    }
+    [data-theme="dark"] {
+      --bg: #111111;
+      --bg-subtle: #161618;
+      --surface: #111111;
+      --surface-2: #1a1a1e;
+      --surface-hover: #222228;
+      --border: #26262c;
+      --border-strong: #3c3c46;
+      --text: #ffffff;
+      --text-muted: #a1a1aa;
+      --text-dim: #71717a;
+      --brand: #224bff;
+      --brand-hover: #4266ff;
+      --brand-fg: #ffffff;
+      --brand-tint: rgba(34, 75, 255, 0.14);
+      --brand-border: rgba(34, 75, 255, 0.50);
+      --yes: #34d399;
+      --yes-bg: rgba(52, 211, 153, 0.12);
+      --yes-border: rgba(52, 211, 153, 0.38);
+      --no: #fb7185;
+      --no-bg: rgba(251, 113, 133, 0.12);
+      --no-border: rgba(251, 113, 133, 0.38);
+      --warn: #fbbf24;
+      --warn-bg: rgba(251, 191, 36, 0.14);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input, select { font-family: inherit; color: inherit; }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .num { font-variant-numeric: tabular-nums; }
+    .label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-muted);
+    }
+    .container { max-width: 1320px; margin: 0 auto; padding: 0 20px; }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      display: inline-block; flex-shrink: 0;
+      background: var(--yes);
+    }
+    .dot.brand { background: var(--brand); }
+    .dot.warn { background: var(--warn); }
+    .dot.no { background: var(--no); }
+    .base-square {
+      width: 18px; height: 18px; background: var(--brand);
+      display: inline-block; flex-shrink: 0;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 9px; border: 1px solid var(--border);
+      background: var(--surface-2);
+      font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .badge.brand { background: var(--brand-tint); border-color: var(--brand-border); color: var(--brand); }
+    .badge.yes { background: var(--yes-bg); border-color: var(--yes-border); color: var(--yes); }
+    .badge.no { background: var(--no-bg); border-color: var(--no-border); color: var(--no); }
+    .badge.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 40px; padding: 0 16px;
+      border: 1px solid var(--border-strong); background: var(--surface);
+      color: var(--text); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease);
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--brand); }
+    .btn:active:not(:disabled) { opacity: 0.86; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--brand); border-color: var(--brand); color: var(--brand-fg); }
+    .btn-primary:hover:not(:disabled) { background: var(--brand-hover); border-color: var(--brand-hover); color: var(--brand-fg); }
+    .btn-sm { min-height: 32px; padding: 0 11px; font-size: 11px; }
+    .btn-pill { border-radius: 999px; }
+    .btn-yes { background: var(--yes-bg); border-color: var(--yes-border); color: var(--yes); }
+    .btn-yes:hover:not(:disabled) { background: var(--yes); color: #ffffff; border-color: var(--yes); }
+    .btn-no { background: var(--no-bg); border-color: var(--no-border); color: var(--no); }
+    .btn-no:hover:not(:disabled) { background: var(--no); color: #ffffff; border-color: var(--no); }
+    .input {
+      width: 100%; min-height: 42px; padding: 8px 12px;
+      background: var(--bg); border: 1px solid var(--border-strong);
+      color: var(--text); font-size: 13px;
+      transition: border-color 120ms var(--ease);
+    }
+    .input:focus { outline: none; border-color: var(--brand); }
+    .tabs { display: inline-flex; border: 1px solid var(--border); background: var(--surface-2); }
+    .tab {
+      background: transparent; border: none; border-right: 1px solid var(--border);
+      padding: 7px 13px; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+      cursor: pointer; transition: background 120ms var(--ease), color 120ms var(--ease);
+    }
+    .tab:last-child { border-right: none; }
+    .tab:hover { color: var(--text); background: var(--surface-hover); }
+    .tab.active { background: var(--brand); color: var(--brand-fg); }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(16px);
+      background: var(--text); color: var(--bg);
+      padding: 10px 18px; border: 1px solid var(--brand);
+      font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+      letter-spacing: 0.04em; z-index: 400; opacity: 0; pointer-events: none;
+      transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .telemetry {
+      border-bottom: 1px solid var(--border); background: var(--bg-subtle);
+      padding: 7px 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+    }
+    .telemetry-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .nav {
+      position: sticky; top: 0; z-index: 90;
+      background: var(--bg); border-bottom: 1px solid var(--border); padding: 12px 0;
+    }
+    .nav-inner { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.04em; }
+    .nav-links { display: flex; align-items: center; gap: 22px; }
+    .nav-links a { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+    .nav-links a:hover { color: var(--brand); }
+
+    /* Hero Hairline Bento Grid */
+    .hero-wrap { position: relative; border-bottom: 1px solid var(--border); overflow: hidden; }
+    .hero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .hero-grid {
+      position: relative; z-index: 2;
+      display: grid; grid-template-columns: 1.12fr 0.88fr;
+      border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    }
+    .hero-left { padding: 48px 32px; border-right: 1px solid var(--border); background: transparent; display: flex; flex-direction: column; justify-content: space-between; gap: 28px; }
+    .hero-right { padding: 28px; background: var(--bg); display: flex; flex-direction: column; gap: 16px; }
+    .hero-h1 { font-size: clamp(34px, 4.4vw, 56px); font-weight: 800; letter-spacing: -0.045em; line-height: 1.03; }
+
+    /* Hairline KPI Strip */
+    .kpi-strip {
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+      background: var(--border); gap: 1px;
+    }
+    .kpi-cell { background: var(--surface); padding: 18px 16px; }
+    .kpi-val { font-family: var(--font-mono); font-size: 22px; font-weight: 800; margin-top: 5px; letter-spacing: -0.03em; }
+
+    /* 60/40 Chart + Solvency Row */
+    .analytics-row {
+      display: grid; grid-template-columns: 1.45fr 1fr;
+      border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+      background: var(--border); gap: 1px;
+    }
+    .panel { background: var(--surface); padding: 24px; }
+    .seg-bar { display: flex; height: 10px; background: var(--surface-2); margin: 12px 0; overflow: hidden; }
+
+    /* Orderbook + Sidebar */
+    .workspace-row {
+      display: grid; grid-template-columns: 1.55fr 0.95fr;
+      border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+      background: var(--border); gap: 1px;
+    }
+    .mkt-item {
+      border: 1px solid var(--border); padding: 18px; background: var(--surface);
+      cursor: pointer; transition: border-color 120ms var(--ease), background 120ms var(--ease);
+    }
+    .mkt-item:hover { border-color: var(--brand); background: var(--bg-subtle); }
+    .odds-bar { display: flex; height: 6px; background: var(--surface-2); margin: 12px 0; }
+    .odds-fill { height: 100%; background: var(--brand); transition: width 160ms var(--ease); }
+    .out-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+    .out-cell {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border: 1px solid var(--border); background: var(--bg);
+      font-size: 12px; font-weight: 700;
+    }
+    .list-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .list-row:last-child { border-bottom: none; }
+
+    /* Whitepaper Status Matrix */
+    .wp-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+      background: var(--border); gap: 1px;
+    }
+
+    /* Modals & Drawers */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.58);
+      z-index: 200; display: none; justify-content: flex-end;
+    }
+    .overlay.open { display: flex; }
+    .drawer {
+      width: 100%; max-width: 440px; height: 100vh; overflow-y: auto;
+      background: var(--bg); border-left: 2px solid var(--brand);
+      padding: 24px; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .cmd-overlay {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.58);
+      z-index: 260; display: none; align-items: flex-start; justify-content: center; padding-top: 12vh;
+    }
+    .cmd-overlay.open { display: flex; }
+    .cmd-box {
+      width: 100%; max-width: 540px; background: var(--bg);
+      border: 2px solid var(--brand);
+    }
+    .cmd-item {
+      width: 100%; text-align: left; background: transparent; border: none; border-bottom: 1px solid var(--border);
+      padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer; font-size: 13px; font-weight: 600;
+    }
+    .cmd-item:hover { background: var(--brand); color: var(--brand-fg); }
+
+    @media (max-width: 1040px) {
+      .hero-grid, .analytics-row, .workspace-row, .wp-grid { grid-template-columns: 1fr; }
+      .hero-left { border-right: none; border-bottom: 1px solid var(--border); padding: 28px 20px; }
+      .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toast" id="toast">Copied</div>
+
+  <!-- Top Telemetry Bar -->
+  <div class="telemetry">
+    <div class="container telemetry-inner">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+        <span><span class="dot brand"></span> BASE MAINNET (8453)</span>
+        <span>HEAD: <strong id="telHead" class="mono">—</strong></span>
+        <span>LAG: <strong id="telLag" class="mono">0 blocks</strong></span>
+        <span>LEDGER: <strong id="telDb" class="mono">OK</strong></span>
+        <span class="badge brand" id="liveModeBadge">DEMO</span>
+      </div>
+      <div style="display:flex;gap:16px;align-items:center;">
+        <button type="button" class="btn btn-sm mono" id="openCmdBtn" style="min-height:24px;">CTRL+K</button>
+        <a href="/api/solvency" target="_blank" class="mono" style="color:var(--brand);font-weight:700;">SOLVENCY JSON ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sticky Header -->
+  <header class="nav">
+    <div class="container nav-inner">
+      <a href="/" class="brand">
+        <span class="base-square"></span>
+        <span>TIPPY</span>
+        <span class="badge">ON BASE</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#markets" data-en="Orderbook" data-ru="Рынки">Orderbook</a>
+        <a href="#analytics" data-en="Reserves &amp; Volume" data-ru="Резервы и объем">Reserves &amp; Volume</a>
+        <a href="#inventory" data-en="Whitepaper Status" data-ru="Статус кода">Whitepaper Status</a>
+        <a href="/app" data-en="Mini App" data-ru="Mini App">Mini App</a>
+        <a href="/me" data-en="Portfolio" data-ru="Портфель">Portfolio</a>
+      </nav>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="btn btn-sm mono" id="langBtn">RU</button>
+        <button type="button" class="btn btn-sm mono" id="themeBtn">DARK</button>
+        <a href="/app" class="btn btn-sm">Mini App</a>
+        <a href="https://t.me/tippy_on_base_bot" id="botTopLink" target="_blank" class="btn btn-primary btn-sm" data-en="Launch Bot ↗" data-ru="Открыть бота ↗">Launch Bot ↗</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Hero Section with Kinetic Canvas & 3-Mode Protocol Simulator -->
+    <section class="hero-wrap">
+      <canvas class="hero-canvas" id="heroCanvas"></canvas>
+      <div class="hero-grid">
+        <div class="hero-left">
+          <div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
+              <span class="badge brand">47 COMMANDS</span>
+              <span class="badge">47 HTTP ROUTES</span>
+              <span class="badge">9 CONTRACTS</span>
+              <span class="badge yes">1,320 TESTS</span>
+            </div>
+            <h1 class="hero-h1" style="margin-bottom:16px;">
+              <span data-en="Community Economy in" data-ru="Экономика сообществ в">Community Economy in</span>
+              <span style="color:var(--brand);" data-en="USDC on Base." data-ru="USDC на Base.">USDC on Base.</span>
+            </h1>
+            <p style="font-size:16px;color:var(--text-muted);max-width:560px;" data-en="Zero-gas USDC tips, Polymarket-grade Hanson LMSR prediction markets, on-chain ERC-1155 outcomes, and replay-proof x402 HTTP payment rails for autonomous AI agents." data-ru="Мгновенные чаевые в USDC без газа, рынки предсказаний LMSR уровня Polymarket, ончейн-акции ERC-1155 и платежный шлюз x402 для автономных ИИ-агентов.">
+              Zero-gas USDC tips, Polymarket-grade Hanson LMSR prediction markets, on-chain ERC-1155 outcomes, and replay-proof x402 HTTP payment rails for autonomous AI agents.
+            </p>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;">
+            <a href="https://t.me/tippy_on_base_bot" id="botHeroLink" target="_blank" class="btn btn-primary" data-en="Start in Telegram (10 Free Gasless Txs)" data-ru="Запустить в Telegram (10 бесплатных tx)">Start in Telegram (10 Free Gasless Txs)</a>
+            <a href="/app" class="btn" data-en="Open Mini App (/app)" data-ru="Открыть Mini App (/app)">Open Mini App (/app)</a>
+            <a href="/me" class="btn" data-en="My Portfolio (/me)" data-ru="Портфель (/me)">My Portfolio (/me)</a>
+          </div>
+        </div>
+
+        <!-- 3-Mode Interactive Protocol Sandbox -->
+        <div class="hero-right">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <span class="label" data-en="INTERACTIVE PROTOCOL SANDBOX" data-ru="ИНТЕРАКТИВНЫЙ СИМУЛЯТОР">INTERACTIVE PROTOCOL SANDBOX</span>
+            <div class="tabs" id="simTabs">
+              <button type="button" class="tab active" data-sim="lmsr">LMSR</button>
+              <button type="button" class="tab" data-sim="tg">TG BOT</button>
+              <button type="button" class="tab" data-sim="x402">x402</button>
+            </div>
+          </div>
+
+          <!-- SIM 1: LMSR Curve -->
+          <div id="sim-lmsr" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;">
+              <strong>Market #14 · Base 20M Daily Txs</strong>
+              <span class="mono" style="color:var(--brand);font-weight:700;" id="simShift">64.0% → 66.8%</span>
+            </div>
+            <div style="border:1px solid var(--border);background:var(--bg-subtle);padding:8px;">
+              <svg viewBox="0 0 420 90" style="width:100%;height:90px;display:block;">
+                <line x1="0" y1="45" x2="420" y2="45" stroke="var(--border-strong)" stroke-dasharray="3 3" stroke-width="1"/>
+                <path d="M0,78 C120,70 280,22 420,10" fill="none" stroke="var(--brand)" stroke-width="2"/>
+                <circle id="simDotBefore" cx="250" cy="36" r="4.5" fill="var(--text-muted)"/>
+                <circle id="simDotAfter" cx="275" cy="30" r="5.5" fill="var(--brand)"/>
+              </svg>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <button type="button" class="btn btn-primary btn-sm" id="simYesBtn">BUY YES</button>
+              <button type="button" class="btn btn-sm" id="simNoBtn">BUY NO</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="simAmtChips">
+              <button type="button" class="btn btn-sm mono" data-samt="10">$10</button>
+              <button type="button" class="btn btn-sm btn-primary mono" data-samt="25">$25</button>
+              <button type="button" class="btn btn-sm mono" data-samt="50">$50</button>
+              <button type="button" class="btn btn-sm mono" data-samt="100">$100</button>
+            </div>
+            <div class="mono" style="font-size:12px;border:1px solid var(--border);padding:10px;background:var(--surface-2);display:flex;flex-direction:column;gap:4px;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Shares ($1 par)</span><strong id="simShares">—</strong></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Est. Payout / ROI</span><strong style="color:var(--yes);" id="simPayout">—</strong></div>
+            </div>
+            <button type="button" class="btn btn-primary" id="runSimTradeBtn" data-en="Simulate Trade on Orderbook" data-ru="Симулировать сделку в стакане">Simulate Trade on Orderbook</button>
+          </div>
+
+          <!-- SIM 2: Telegram Bot Sync -->
+          <div id="sim-tg" style="display:none;flex-direction:column;gap:10px;">
+            <div class="mono" id="tgTermOut" style="height:155px;overflow-y:auto;border:1px solid var(--border);background:var(--surface-2);padding:10px;font-size:11px;line-height:1.6;">
+              &gt; @tippy_on_base_bot connected (PostgreSQL Decimal ledger)<br>
+              &gt; Balance: $142.50 USDC · Free gasless txs: 10/10
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="tgCmdButtons">
+              <button type="button" class="btn btn-sm mono" data-tgcmd="/tip 5 jesse.base.eth">/tip 5 jesse.base.eth</button>
+              <button type="button" class="btn btn-sm mono" data-tgcmd="/rain 20 10">/rain 20 10</button>
+              <button type="button" class="btn btn-sm mono" data-tgcmd="/gasless">/gasless</button>
+              <button type="button" class="btn btn-sm mono" data-tgcmd="/credit">/credit</button>
+            </div>
+          </div>
+
+          <!-- SIM 3: x402 Handshake Runner -->
+          <div id="sim-x402" style="display:none;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="badge yes">HTTP 402 + EIP-3009</span>
+              <button type="button" class="btn btn-sm mono" id="copyCurlBtn">COPY cURL</button>
+            </div>
+            <pre class="mono" id="x402Log" style="height:142px;overflow:auto;border:1px solid var(--border);background:var(--surface-2);padding:10px;font-size:11px;line-height:1.5;">Step 1: POST /api/x402/tip?to=@ssrjkk&amp;amount=5
+→ Ready to request 402 invoice</pre>
+            <button type="button" class="btn btn-primary" id="stepX402Btn">Step 1: Request 402 Invoice →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6-Column Protocol Telemetry -->
+    <section class="kpi-strip">
+      <div class="kpi-cell"><div class="label" data-en="TOTAL VOLUME" data-ru="ОБЩИЙ ОБЪЕМ">TOTAL VOLUME</div><div class="kpi-val" id="mVol">$—</div></div>
+      <div class="kpi-cell"><div class="label" data-en="30D VOLUME" data-ru="ОБЪЕМ 30Д">30D VOLUME</div><div class="kpi-val" id="mVol30">$—</div></div>
+      <div class="kpi-cell"><div class="label" data-en="USERS" data-ru="ЮЗЕРОВ">USERS</div><div class="kpi-val" id="mUsers">—</div></div>
+      <div class="kpi-cell"><div class="label" data-en="TIPS SETTLED" data-ru="ЧАЕВЫЕ">TIPS SETTLED</div><div class="kpi-val" id="mTips">$—</div></div>
+      <div class="kpi-cell"><div class="label" data-en="MARKET STAKES" data-ru="СТАВКИ">MARKET STAKES</div><div class="kpi-val" id="mBets">$—</div></div>
+      <div class="kpi-cell"><div class="label" data-en="FEES (1% WD)" data-ru="КОМИССИИ">FEES (1% WD)</div><div class="kpi-val" style="color:var(--yes);" id="mFees">$—</div></div>
+    </section>
+
+    <!-- 60/40 Volume Chart + Proof of Reserves -->
+    <section class="analytics-row" id="analytics">
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+          <div>
+            <div class="label" data-en="SETTLEMENT VOLUME HISTORY (/API/VOLUME_HISTORY)" data-ru="ДИНАМИКА ОБЪЕМА (/API/VOLUME_HISTORY)">SETTLEMENT VOLUME HISTORY (/API/VOLUME_HISTORY)</div>
+            <div class="mono" style="font-size:22px;font-weight:800;margin-top:3px;" id="volTotalLbl">$—</div>
+          </div>
+          <div class="tabs" id="volDaysTabs">
+            <button type="button" class="tab" data-days="7">7D</button>
+            <button type="button" class="tab active" data-days="14">14D</button>
+            <button type="button" class="tab" data-days="30">30D</button>
+          </div>
+        </div>
+        <svg viewBox="0 0 640 140" style="width:100%;height:140px;display:block;border:1px solid var(--border);background:var(--bg-subtle);" id="volSvg">
+          <line x1="0" y1="35" x2="640" y2="35" stroke="var(--border)" stroke-width="1"/>
+          <line x1="0" y1="70" x2="640" y2="70" stroke="var(--border)" stroke-width="1"/>
+          <line x1="0" y1="105" x2="640" y2="105" stroke="var(--border)" stroke-width="1"/>
+          <path id="volArea" d="M0,140 L640,140 Z" fill="var(--brand-tint)"/>
+          <path id="volLine" d="M0,120 L640,120" fill="none" stroke="var(--brand)" stroke-width="2"/>
+        </svg>
+      </div>
+
+      <div class="panel" style="display:flex;flex-direction:column;justify-content:space-between;">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <span class="label" data-en="ON-CHAIN PROOF OF RESERVES" data-ru="ДОКАЗАТЕЛЬСТВО РЕЗЕРВОВ">ON-CHAIN PROOF OF RESERVES</span>
+            <span class="badge yes" id="solvStatusBadge"><span class="dot"></span> 100% SOLVENT</span>
+          </div>
+          <div class="mono" style="font-size:30px;font-weight:800;letter-spacing:-0.03em;" id="solvReserves">$— USDC</div>
+          <div class="seg-bar">
+            <div id="barOwed" style="width:76%;background:var(--brand);"></div>
+            <div id="barPend" style="width:8%;background:var(--warn);"></div>
+            <div id="barSur" style="width:16%;background:var(--yes);"></div>
+          </div>
+          <div class="list-row"><span style="color:var(--text-muted);">User Liabilities (Owed)</span><strong class="mono" id="solvOwed">$—</strong></div>
+          <div class="list-row"><span style="color:var(--text-muted);">Pending Deposits</span><strong class="mono" id="solvPend">$—</strong></div>
+          <div class="list-row"><span style="color:var(--text-muted);">Net Surplus Buffer</span><strong class="mono" style="color:var(--yes);" id="solvSur">$—</strong></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border);margin-top:10px;">
+          <span class="mono" style="font-size:11px;color:var(--text-muted);" id="solvAddrShort">—</span>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn btn-sm mono" id="copyVaultBtn">COPY</button>
+            <a href="https://basescan.org" target="_blank" class="btn btn-sm mono" id="basescanLink">BASESCAN ↗</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Orderbook + Sidebar -->
+    <section class="workspace-row" id="markets">
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <h2 style="font-size:20px;font-weight:800;letter-spacing:-0.03em;" data-en="Prediction Orderbook" data-ru="Книга рынков предсказаний">Prediction Orderbook</h2>
+            <div class="tabs" id="mktTabs">
+              <button type="button" class="tab active" data-tab="amm">LMSR AMM</button>
+              <button type="button" class="tab" data-tab="onchain">ERC-1155</button>
+              <button type="button" class="tab" data-tab="polls">PARIMUTUEL</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="mktSort" class="input mono" style="min-height:34px;width:auto;padding:4px 10px;font-size:11px;">
+              <option value="liq">SORT: LIQUIDITY</option>
+              <option value="odds">SORT: HIGHEST ODDS</option>
+              <option value="id">SORT: NEWEST</option>
+            </select>
+            <input type="search" id="mktSearch" class="input" style="min-height:34px;width:180px;" placeholder="Filter...">
+          </div>
+        </div>
+        <div id="marketsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;background:var(--border);gap:1px;">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span class="badge brand">AI MARKET ORACLE</span>
+            <span class="label">POST /API/ASK</span>
+          </div>
+          <form id="askForm" style="display:flex;gap:8px;margin-top:8px;">
+            <input type="text" id="askInput" class="input" placeholder="Analyze live Base odds..." required maxlength="500">
+            <button type="submit" class="btn btn-primary" id="askBtn">Ask</button>
+          </form>
+          <div id="askResult" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border);background:var(--surface-2);font-size:12px;white-space:pre-wrap;"></div>
+        </div>
+
+        <div class="panel">
+          <div class="label" style="margin-bottom:8px;" data-en="LIVE ACTIVITY TAPE" data-ru="ЛЕНТА АКТИВНОСТИ">LIVE ACTIVITY TAPE</div>
+          <div id="deskTape"></div>
+        </div>
+
+        <div class="panel">
+          <div class="label" style="margin-bottom:8px;" data-en="BASENAMES LEADERBOARD" data-ru="ТОП УЧАСТНИКОВ">BASENAMES LEADERBOARD</div>
+          <div id="leaderList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Honest Whitepaper Status Matrix -->
+    <section class="wp-grid" id="inventory">
+      <div class="panel">
+        <span class="badge yes">LIVE IN HOT PATH</span>
+        <h3 style="font-size:16px;font-weight:700;margin:10px 0 6px;">Tips, LMSR AMM &amp; Proof of Reserves</h3>
+        <p style="font-size:13px;color:var(--text-muted);">47 bot commands, Decimal-exact LMSR + Parimutuel engines, ENSIP-19 Basenames lookup, TipBotVault solvency monitoring, 1% withdrawal fee.</p>
+      </div>
+      <div class="panel">
+        <span class="badge warn">BUILT · FLAG OFF (G0)</span>
+        <h3 style="font-size:16px;font-weight:700;margin:10px 0 6px;">x402, ERC-4337 Paymaster &amp; CREATE2</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Full EIP-3009 x402 payment handshake, SmartAccountFactory + VerifyingPaymaster, USDCForwarder (EIP-1167), and OutcomeMarket.sol ERC-1155.</p>
+      </div>
+      <div class="panel">
+        <span class="badge brand">PROPOSED (MONETIZATION)</span>
+        <h3 style="font-size:16px;font-weight:700;margin:10px 0 6px;">Subscriptions &amp; 0.5% Internal Flow</h3>
+        <p style="font-size:13px;color:var(--text-muted);">Free / Plus $5 / Pro $20 / Community $50 limit entitlements on top of recurring engine + 0.5% internal turnover lever. Explicit non-goal: treasury lending.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="container" style="padding:28px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-muted);">
+    <div><strong style="color:var(--text);">TIPPY ON BASE</strong> · Engineered by <a href="https://github.com/ssrjkk" target="_blank" style="color:var(--brand);font-weight:700;">@ssrjkk</a> · MIT License</div>
+    <div style="display:flex;gap:18px;">
+      <a href="/app">Mini App</a>
+      <a href="/me">Portfolio</a>
+      <a href="/api/solvency" target="_blank">Solvency</a>
+      <a href="/api/health" target="_blank">Health</a>
+      <a href="/tos" target="_blank">ToS</a>
+    </div>
+  </footer>
+
+  <!-- Right Order Ticket Drawer -->
+  <div class="overlay" id="orderDrawer">
+    <div class="drawer">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border);">
+          <span class="badge brand" id="dwBadge">ORDER TICKET</span>
+          <button type="button" class="btn btn-sm" id="dwClose">✕ Close</button>
+        </div>
+        <h3 style="font-size:17px;font-weight:700;margin:14px 0 12px;" id="dwQ">—</h3>
+        <div id="dwOpts" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+        <div class="label" style="margin-bottom:6px;">AMOUNT (USDC)</div>
+        <input type="number" id="dwAmt" class="input mono" value="25" min="1" max="1000">
+        <div class="mono" style="margin-top:12px;padding:12px;border:1px solid var(--border);background:var(--surface-2);font-size:12px;display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Implied Odds</span><strong id="dwProb">—</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Est. Shares</span><strong id="dwShares">—</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Est. Payout</span><strong style="color:var(--yes);" id="dwPay">—</strong></div>
+          <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);"><span style="color:var(--brand);" id="dwCmd">/trade ...</span><button type="button" class="badge brand" id="dwCopy" style="cursor:pointer;">COPY</button></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:16px;">
+        <a href="/m/1" id="dwPageLink" class="btn" style="width:100%;">Open Market Page</a>
+        <a href="https://t.me/tippy_on_base_bot" id="dwBotLink" target="_blank" class="btn btn-primary" style="width:100%;">Trade in Telegram ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ctrl+K Command Palette -->
+  <div class="cmd-overlay" id="cmdModal">
+    <div class="cmd-box">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <span class="label">QUICK COMMAND PALETTE (ESC TO CLOSE)</span>
+        <button type="button" class="btn btn-sm" id="cmdClose">✕</button>
+      </div>
+      <button type="button" class="cmd-item" data-cmd="app"><span>Open Telegram Mini App (/app)</span><span class="mono">/app</span></button>
+      <button type="button" class="cmd-item" data-cmd="me"><span>Open Portfolio &amp; Wallet (/me)</span><span class="mono">/me</span></button>
+      <button type="button" class="cmd-item" data-cmd="theme"><span>Toggle Light / Dark Theme</span><span class="mono">THEME</span></button>
+      <button type="button" class="cmd-item" data-cmd="lang"><span>Switch Language (EN / RU)</span><span class="mono">EN/RU</span></button>
+      <button type="button" class="cmd-item" data-cmd="solvency"><span>Inspect Raw Proof of Reserves JSON</span><span class="mono">/api/solvency</span></button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      let lang = 'en';
+      let tab = 'amm';
+      let sortBy = 'liq';
+      let query = '';
+      let simSide = 0;
+      let simAmt = 25;
+      let x402Step = 0;
+      let fullVault = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+      let activeMkt = null;
+      let activeOpt = 0;
+
+      const DEMO = {
+        amm: [
+          { id: 14, question: 'Will Base L2 exceed 20M daily transactions before Dec 2026?', liquidity_usdc: 1840.00, options: [{ label: 'YES', price_pct: 64.0 }, { label: 'NO', price_pct: 36.0 }] },
+          { id: 15, question: 'Will x402 Foundation cross 50,000 autonomous agent invoices this month?', liquidity_usdc: 920.50, options: [{ label: 'YES', price_pct: 71.5 }, { label: 'NO', price_pct: 28.5 }] },
+          { id: 16, question: 'Will Base TVL surpass $15B before Q1 2027?', liquidity_usdc: 640.00, options: [{ label: 'YES', price_pct: 52.0 }, { label: 'NO', price_pct: 48.0 }] }
+        ],
+        onchain: [
+          { id: 3, question: 'OutcomeMarket ERC-1155: ETH/USDC > $4,200 on Base Chainlink feed?', escrow_micro: 3450000000, options: [{ index: 0, label: 'ABOVE', price_pct: 58.2 }, { index: 1, label: 'BELOW', price_pct: 41.8 }] }
+        ],
+        polls: [
+          { id: 9, question: 'Next community /rain pool size for active Base builders?', pot: 420000000, pot_usdc: 420.00, options: [{ label: '100 USDC', pool: 294000000 }, { label: '50 USDC', pool: 126000000 }] }
+        ]
+      };
+      const DEMO_LEADERS = [
+        { tg_id: 101, username: 'ssrjkk.base.eth', total_usdc: 4280.50 },
+        { tg_id: 102, username: 'jesse.base.eth', total_usdc: 2915.00 },
+        { tg_id: 103, username: 'onchain_ai', total_usdc: 1840.25 }
+      ];
+      let cache = { amm: DEMO.amm.slice(), onchain: DEMO.onchain.slice(), polls: DEMO.polls.slice() };
+      let tape = [
+        { kind: 'LMSR', txt: 'Market #14 YES @ 64.0%', amt: '$25.00' },
+        { kind: 'TIP', txt: '@ssrjkk → jesse.base.eth (0 gas)', amt: '$5.00' },
+        { kind: 'X402', txt: 'POST /api/x402/paywall settled', amt: '$2.00' }
+      ];
+
+      const fmt = (n) => (n === null || n === undefined || isNaN(Number(n))) ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const short = (a) => (!a || a.length < 12) ? (a || '—') : (a.slice(0, 6) + '…' + a.slice(-4));
+
+      function toast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2000);
+      }
+
+      // Kinetic Base.org Canvas
+      (function initHeroCanvas() {
+        const c = document.getElementById('heroCanvas');
+        const ctx = c.getContext('2d');
+        const cell = 40;
+        let sparks = [];
+        function resize() {
+          const r = c.parentElement.getBoundingClientRect();
+          c.width = Math.max(Math.floor(r.width), 320);
+          c.height = Math.max(Math.floor(r.height), 320);
+        }
+        resize();
+        window.addEventListener('resize', resize);
+        c.parentElement.addEventListener('mousemove', (e) => {
+          const r = c.getBoundingClientRect();
+          const gx = Math.floor((e.clientX - r.left) / cell) * cell;
+          const gy = Math.floor((e.clientY - r.top) / cell) * cell;
+          sparks.push({ x: gx, y: gy, a: 0.24 });
+          if (sparks.length > 18) sparks.shift();
+        });
+        setInterval(() => {
+          const cols = Math.floor(c.width / cell), rows = Math.floor(c.height / cell);
+          if (cols > 0 && rows > 0) sparks.push({ x: Math.floor(Math.random() * cols) * cell, y: Math.floor(Math.random() * rows) * cell, a: 0.16 });
+        }, 500);
+        function tick() {
+          const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+          ctx.clearRect(0, 0, c.width, c.height);
+          ctx.strokeStyle = dark ? 'rgba(255,255,255,0.045)' : 'rgba(17,17,17,0.05)';
+          ctx.lineWidth = 1;
+          for (let x = 0; x <= c.width; x += cell) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, c.height); ctx.stroke(); }
+          for (let y = 0; y <= c.height; y += cell) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(c.width, y + 0.5); ctx.stroke(); }
+          const rgb = dark ? '34, 75, 255' : '0, 0, 255';
+          sparks.forEach((s) => { s.a *= 0.95; ctx.fillStyle = 'rgba(' + rgb + ',' + s.a.toFixed(3) + ')'; ctx.fillRect(s.x + 1, s.y + 1, cell - 1, cell - 1); });
+          sparks = sparks.filter((s) => s.a > 0.01);
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      })();
+
+      // Theme & Language
+      function toggleTheme() {
+        const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        document.getElementById('themeBtn').textContent = next === 'dark' ? 'LIGHT' : 'DARK';
+      }
+      function toggleLang() {
+        lang = lang === 'en' ? 'ru' : 'en';
+        document.getElementById('langBtn').textContent = lang === 'en' ? 'RU' : 'EN';
+        document.querySelectorAll('[data-en]').forEach((el) => { const v = el.getAttribute('data-' + lang); if (v) el.textContent = v; });
+      }
+      document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+      document.getElementById('langBtn').addEventListener('click', toggleLang);
+
+      // Ctrl+K Command Palette
+      const cmdModal = document.getElementById('cmdModal');
+      document.getElementById('openCmdBtn').addEventListener('click', () => cmdModal.classList.add('open'));
+      document.getElementById('cmdClose').addEventListener('click', () => cmdModal.classList.remove('open'));
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); cmdModal.classList.toggle('open'); }
+        if (e.key === 'Escape') { cmdModal.classList.remove('open'); document.getElementById('orderDrawer').classList.remove('open'); }
+      });
+      document.querySelectorAll('#cmdModal [data-cmd]').forEach((b) => {
+        b.addEventListener('click', () => {
+          const act = b.getAttribute('data-cmd');
+          cmdModal.classList.remove('open');
+          if (act === 'app') window.location.href = '/app';
+          else if (act === 'me') window.location.href = '/me';
+          else if (act === 'theme') toggleTheme();
+          else if (act === 'lang') toggleLang();
+          else if (act === 'solvency') window.open('/api/solvency', '_blank');
+        });
+      });
+
+      // Sandbox Tabs
+      document.querySelectorAll('#simTabs .tab').forEach((t) => {
+        t.addEventListener('click', () => {
+          document.querySelectorAll('#simTabs .tab').forEach((x) => x.classList.remove('active'));
+          t.classList.add('active');
+          const mode = t.getAttribute('data-sim');
+          ['lmsr', 'tg', 'x402'].forEach((id) => {
+            document.getElementById('sim-' + id).style.display = id === mode ? 'flex' : 'none';
+          });
+        });
+      });
+
+      // Hanson LMSR Math
+      function lmsrSim(p0, spend, liq) {
+        const b = Math.max((liq || 1000) / Math.LN2, 60);
+        const pc = Math.min(Math.max(p0, 0.02), 0.98);
+        const q1 = b * Math.log(pc / (1 - pc)), q2 = 0;
+        const cost = (a, c) => { const m = Math.max(a, c); return b * (Math.log(Math.exp((a - m) / b) + Math.exp((c - m) / b)) + m / b); };
+        const baseC = cost(q1, q2);
+        let lo = 0, hi = spend * 40;
+        for (let i = 0; i < 36; i++) { const mid = (lo + hi) / 2; if (cost(q1 + mid, q2) - baseC <= spend) lo = mid; else hi = mid; }
+        const mNew = Math.max(q1 + lo, q2);
+        const pAfter = Math.exp((q1 + lo - mNew) / b) / (Math.exp((q1 + lo - mNew) / b) + Math.exp((q2 - mNew) / b));
+        return { shares: lo, pAfter };
+      }
+
+      function renderHeroLmsr() {
+        const m = cache.amm[0] || DEMO.amm[0];
+        const p0Pct = m.options[simSide]?.price_pct ?? 50;
+        const res = lmsrSim(p0Pct / 100, simAmt, m.liquidity_usdc || 1840);
+        const pAfterPct = res.pAfter * 100;
+        const roi = Math.round(((res.shares - simAmt) / simAmt) * 100);
+        document.getElementById('simShift').textContent = p0Pct.toFixed(1) + '% → ' + pAfterPct.toFixed(1) + '%';
+        document.getElementById('simShares').textContent = res.shares.toFixed(2) + ' shares';
+        document.getElementById('simPayout').textContent = fmt(res.shares) + ' (+' + roi + '% ROI)';
+        document.getElementById('simDotBefore').setAttribute('cx', (20 + (p0Pct / 100) * 380).toFixed(1));
+        document.getElementById('simDotBefore').setAttribute('cy', (80 - (p0Pct / 100) * 68).toFixed(1));
+        document.getElementById('simDotAfter').setAttribute('cx', (20 + (pAfterPct / 100) * 380).toFixed(1));
+        document.getElementById('simDotAfter').setAttribute('cy', (80 - (pAfterPct / 100) * 68).toFixed(1));
+      }
+      document.getElementById('simYesBtn').addEventListener('click', function () { simSide = 0; this.classList.add('btn-primary'); document.getElementById('simNoBtn').classList.remove('btn-primary'); renderHeroLmsr(); });
+      document.getElementById('simNoBtn').addEventListener('click', function () { simSide = 1; this.classList.add('btn-primary'); document.getElementById('simYesBtn').classList.remove('btn-primary'); renderHeroLmsr(); });
+      document.querySelectorAll('#simAmtChips [data-samt]').forEach((b) => {
+        b.addEventListener('click', () => {
+          document.querySelectorAll('#simAmtChips [data-samt]').forEach((x) => x.classList.remove('btn-primary'));
+          b.classList.add('btn-primary');
+          simAmt = Number(b.getAttribute('data-samt'));
+          renderHeroLmsr();
+        });
+      });
+      document.getElementById('runSimTradeBtn').addEventListener('click', () => {
+        const m = cache.amm[0];
+        if (!m) return;
+        const p0 = m.options[simSide].price_pct;
+        const res = lmsrSim(p0 / 100, simAmt, m.liquidity_usdc || 1840);
+        const np = Number((res.pAfter * 100).toFixed(1));
+        m.options[simSide].price_pct = np;
+        if (m.options.length === 2) m.options[1 - simSide].price_pct = Number((100 - np).toFixed(1));
+        tape.unshift({ kind: 'LMSR', txt: 'Market #' + m.id + ' ' + m.options[simSide].label + ' → ' + np + '%', amt: fmt(simAmt) });
+        renderTape(); renderMarkets(); renderHeroLmsr();
+        toast('Simulated +' + res.shares.toFixed(1) + ' shares on Market #' + m.id);
+      });
+
+      // TG Bot Simulator
+      const tgResponses = {
+        '/tip 5 jesse.base.eth': '✓ Sent $5.00 USDC to jesse.base.eth (0 ETH gas · instant ledger)',
+        '/rain 20 10': '✓ Scattered $20.00 USDC across 10 active builders ($2.00 each)',
+        '/gasless': '✓ 10 of 10 free gasless ERC-4337 transactions remaining (Base Paymaster)',
+        '/credit': '✓ On-chain Credit Score: 785 (Grade A) · History 40% · Volume 15%'
+      };
+      document.querySelectorAll('#tgCmdButtons [data-tgcmd]').forEach((b) => {
+        b.addEventListener('click', () => {
+          const cmd = b.getAttribute('data-tgcmd');
+          const out = document.getElementById('tgTermOut');
+          out.innerHTML += '<br><strong style="color:var(--brand);">$ ' + esc(cmd) + '</strong><br>' + esc(tgResponses[cmd] || 'OK');
+          out.scrollTop = out.scrollHeight;
+        });
+      });
+
+      // x402 Stepper
+      const x402Steps = [
+        { btn: 'Step 2: Sign EIP-3009 USDC Auth →', log: '< HTTP/1.1 402 Payment Required\n< X-402-Pay-To: 0x402f...891a (Dedicated Invoice Addr)\n< X-402-Amount-Micro: 5000000 (5.00 USDC Base)\n< X-402-Expires: +300s' },
+        { btn: 'Step 3: Submit X-402-Payment Header →', log: '> Signed EIP-3009 transferWithAuthorization on Base (8453)\n> Tx Hash: 0x9b4f...c81e (Confirmed in 2s)' },
+        { btn: 'Reset x402 Simulation', log: '< HTTP/1.1 200 OK\n< {"credited": true, "recipient": "@ssrjkk", "amount_usdc": 5.00, "replay_guard": "recorded"}' }
+      ];
+      document.getElementById('stepX402Btn').addEventListener('click', function () {
+        if (x402Step >= x402Steps.length) {
+          x402Step = 0;
+          document.getElementById('x402Log').textContent = 'Step 1: POST /api/x402/tip?to=@ssrjkk&amount=5\n→ Ready to request 402 invoice';
+          this.textContent = 'Step 1: Request 402 Invoice →';
+          return;
+        }
+        document.getElementById('x402Log').textContent = x402Steps[x402Step].log;
+        this.textContent = x402Steps[x402Step].btn;
+        x402Step += 1;
+      });
+      document.getElementById('copyCurlBtn').addEventListener('click', () => {
+        navigator.clipboard?.writeText('curl -i -X POST "' + window.location.origin + '/api/x402/tip?to=@ssrjkk&amount=5"');
+        toast('Copied x402 cURL');
+      });
+      document.getElementById('copyVaultBtn').addEventListener('click', () => {
+        navigator.clipboard?.writeText(fullVault);
+        toast('Copied Treasury: ' + short(fullVault));
+      });
+
+      // SVG Volume Chart
+      function drawChart(vals, days) {
+        const sum = vals.reduce((a, b) => a + b, 0);
+        document.getElementById('volTotalLbl').textContent = fmt(sum) + ' (' + days + 'D)';
+        const maxV = Math.max(...vals, 1);
+        const pts = vals.map((v, i) => [((i / Math.max(vals.length - 1, 1)) * 640).toFixed(1), (132 - (v / maxV) * 114).toFixed(1)]);
+        const line = 'M' + pts.map((p) => p.join(',')).join(' L');
+        document.getElementById('volLine').setAttribute('d', line);
+        document.getElementById('volArea').setAttribute('d', line + ' L640,140 L0,140 Z');
+      }
+      async function loadChart(days) {
+        try {
+          const r = await fetch('/api/volume_history?days=' + days);
+          if (!r.ok) throw 0;
+          const rows = await r.json();
+          if (Array.isArray(rows) && rows.length) { drawChart(rows.map((x) => Number(x.volume_usdc || 0)), days); return; }
+        } catch (_) {}
+        const demoVals = Array.from({ length: days }, (_, i) => Math.round(420 + Math.sin(i * 0.7) * 210 + i * 48));
+        drawChart(demoVals, days);
+      }
+      document.querySelectorAll('#volDaysTabs .tab').forEach((t) => {
+        t.addEventListener('click', () => {
+          document.querySelectorAll('#volDaysTabs .tab').forEach((x) => x.classList.remove('active'));
+          t.classList.add('active');
+          loadChart(Number(t.getAttribute('data-days')));
+        });
+      });
+
+      // Order Drawer
+      function updateDrawer() {
+        if (!activeMkt) return;
+        const opt = (activeMkt.options || [])[activeOpt];
+        const p0 = opt ? (opt.price_pct ?? opt.prob_pct ?? (activeMkt.pot ? (opt.pool / activeMkt.pot) * 100 : 50)) : 50;
+        const amt = Math.max(parseFloat(document.getElementById('dwAmt').value) || 0, 1);
+        const liq = activeMkt.liquidity_usdc ?? ((activeMkt.escrow_micro || 0) / 1e6) ?? activeMkt.pot_usdc ?? 500;
+        const res = lmsrSim(p0 / 100, amt, liq);
+        const roi = Math.round(((res.shares - amt) / amt) * 100);
+        document.getElementById('dwProb').textContent = p0.toFixed(1) + '% → ' + (res.pAfter * 100).toFixed(1) + '%';
+        document.getElementById('dwShares').textContent = res.shares.toFixed(2) + ' shares';
+        document.getElementById('dwPay').textContent = fmt(res.shares) + ' (+' + roi + '%)';
+        const pref = tab === 'onchain' ? '/oc_buy ' : (tab === 'amm' ? '/trade ' : '/bet ');
+        document.getElementById('dwCmd').textContent = pref + activeMkt.id + ' ' + (tab === 'onchain' ? activeOpt : activeOpt + 1) + ' ' + amt;
+      }
+      function openDrawer(m) {
+        activeMkt = m; activeOpt = 0;
+        document.getElementById('dwBadge').textContent = (tab === 'onchain' ? 'ERC-1155 #' : 'LMSR #') + m.id;
+        document.getElementById('dwQ').textContent = m.question || m.title;
+        document.getElementById('dwPageLink').href = tab === 'onchain' ? ('/m/oc/' + m.id) : ('/m/' + m.id);
+        document.getElementById('dwOpts').innerHTML = (m.options || []).map((o, i) => {
+          const pct = o.price_pct ?? o.prob_pct ?? (m.pot ? (o.pool / m.pot) * 100 : 50);
+          return '<button type="button" class="btn ' + (i === 0 ? 'btn-primary' : '') + '" data-dopt="' + i + '" style="justify-content:space-between;"><span>' + esc(o.label || o.text) + '</span><span class="mono">' + Number(pct).toFixed(1) + '%</span></button>';
+        }).join('');
+        document.querySelectorAll('#dwOpts [data-dopt]').forEach((b) => {
+          b.addEventListener('click', () => {
+            activeOpt = Number(b.getAttribute('data-dopt'));
+            document.querySelectorAll('#dwOpts [data-dopt]').forEach((x) => x.classList.remove('btn-primary'));
+            b.classList.add('btn-primary');
+            updateDrawer();
+          });
+        });
+        updateDrawer();
+        document.getElementById('orderDrawer').classList.add('open');
+      }
+      document.getElementById('dwClose').addEventListener('click', () => document.getElementById('orderDrawer').classList.remove('open'));
+      document.getElementById('dwAmt').addEventListener('input', updateDrawer);
+      document.getElementById('dwCopy').addEventListener('click', () => {
+        const c = document.getElementById('dwCmd').textContent;
+        navigator.clipboard?.writeText(c);
+        toast('Copied: ' + c);
+      });
+
+      function renderTape() {
+        document.getElementById('deskTape').innerHTML = tape.slice(0, 5).map((ev) => (
+          '<div class="list-row"><div style="display:flex;gap:8px;align-items:center;"><span class="badge brand">' + esc(ev.kind) + '</span><span>' + esc(ev.txt) + '</span></div><strong class="mono">' + esc(ev.amt) + '</strong></div>'
+        )).join('');
+      }
+
+      function renderMarkets() {
+        const box = document.getElementById('marketsList');
+        let list = (cache[tab] || []).slice();
+        if (query) list = list.filter((m) => String(m.question || m.title || '').toLowerCase().includes(query));
+        if (sortBy === 'liq') list.sort((a, b) => (b.liquidity_usdc ?? b.pot_usdc ?? ((b.escrow_micro || 0) / 1e6) ?? 0) - (a.liquidity_usdc ?? a.pot_usdc ?? ((a.escrow_micro || 0) / 1e6) ?? 0));
+        else if (sortBy === 'odds') list.sort((a, b) => ((b.options?.[0]?.price_pct ?? 50) - (a.options?.[0]?.price_pct ?? 50)));
+        else list.sort((a, b) => Number(b.id) - Number(a.id));
+
+        if (!list.length) {
+          box.innerHTML = '<div class="mkt-item"><div class="label">NO OPEN MARKETS</div></div>';
+          return;
+        }
+        box.innerHTML = list.map((m, i) => {
+          const pool = tab === 'amm' ? fmt(m.liquidity_usdc) : tab === 'onchain' ? fmt((m.escrow_micro || 0) / 1e6) : fmt(m.pot_usdc);
+          const opts = m.options || [];
+          const p0 = opts[0] ? (opts[0].price_pct ?? opts[0].prob_pct ?? (m.pot ? (opts[0].pool / m.pot) * 100 : 50)) : 50;
+          const cells = opts.slice(0, 4).map((o) => {
+            const pct = o.price_pct ?? o.prob_pct ?? (m.pot ? (o.pool / m.pot) * 100 : 50);
+            return '<div class="out-cell"><span>' + esc(o.label || o.text) + '</span><span class="mono" style="color:var(--brand);">' + Number(pct).toFixed(1) + '%</span></div>';
+          }).join('');
+          return '<div class="mkt-item" data-mi="' + i + '">' +
+            '<div style="display:flex;justify-content:space-between;" class="label"><span>MARKET #' + m.id + '</span><span>POOL ' + pool + '</span></div>' +
+            '<div style="font-size:15px;font-weight:700;margin-top:6px;">' + esc(m.question || m.title) + '</div>' +
+            '<div class="odds-bar"><div class="odds-fill" style="width:' + Math.min(Math.max(p0, 4), 96) + '%"></div></div>' +
+            '<div class="out-grid">' + cells + '</div>' +
+          '</div>';
+        }).join('');
+
+        box.querySelectorAll('.mkt-item').forEach((el) => {
+          el.addEventListener('click', () => { const m = list[Number(el.getAttribute('data-mi'))]; if (m) openDrawer(m); });
+        });
+      }
+
+      document.querySelectorAll('#mktTabs .tab').forEach((t) => {
+        t.addEventListener('click', () => {
+          document.querySelectorAll('#mktTabs .tab').forEach((x) => x.classList.remove('active'));
+          t.classList.add('active');
+          tab = t.getAttribute('data-tab');
+          renderMarkets();
+        });
+      });
+      document.getElementById('mktSort').addEventListener('change', function () { sortBy = this.value; renderMarkets(); });
+      document.getElementById('mktSearch').addEventListener('input', function () { query = this.value.trim().toLowerCase(); renderMarkets(); });
+
+      // AI Ask
+      document.getElementById('askForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const q = document.getElementById('askInput').value.trim();
+        if (!q) return;
+        const btn = document.getElementById('askBtn'), out = document.getElementById('askResult');
+        btn.disabled = true; out.style.display = 'block'; out.textContent = 'Querying Base oracle...';
+        try {
+          const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
+          const d = await r.json();
+          out.textContent = r.ok ? (d.answer || 'No answer.') : (d.detail || 'AI unavailable.');
+        } catch (_) {
+          out.textContent = '[Preview Mode] Live endpoint POST /api/ask uses grounded tool-calling over open LMSR markets.';
+        } finally { btn.disabled = false; }
+      });
+
+      function renderLeaders(arr) {
+        document.getElementById('leaderList').innerHTML = arr.slice(0, 7).map((r, i) => {
+          const nm = r.username ? ('@' + r.username.replace(/^@/, '')) : ('User #' + r.tg_id);
+          return '<div class="list-row"><a href="/u/' + r.tg_id + '" style="font-weight:700;"><span class="mono" style="color:var(--text-dim);margin-right:8px;">0' + (i + 1) + '</span>' + esc(nm) + '</a><strong class="mono">' + fmt(r.total_usdc) + '</strong></div>';
+        }).join('');
+      }
+
+      async function hydrate() {
+        renderHeroLmsr(); renderTape(); renderMarkets(); renderLeaders(DEMO_LEADERS);
+        document.getElementById('mVol').textContent = '$48,920.00';
+        document.getElementById('mVol30').textContent = '$14,820.00';
+        document.getElementById('mUsers').textContent = '342';
+        document.getElementById('mTips').textContent = '$9,410.00';
+        document.getElementById('mBets').textContent = '$31,200.00';
+        document.getElementById('mFees').textContent = '$489.20';
+        document.getElementById('solvReserves').textContent = '$12,450.00 USDC';
+        document.getElementById('solvOwed').textContent = '$11,945.00';
+        document.getElementById('solvPend').textContent = '$180.00';
+        document.getElementById('solvSur').textContent = '+$505.00';
+        document.getElementById('solvAddrShort').textContent = short(fullVault);
+
+        const [st, sv, hl, am, oc, pl, lb, inf] = await Promise.allSettled([
+          fetch('/api/stats').then((r) => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('/api/solvency').then((r) => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('/api/health').then((r) => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('/api/predictions').then((r) => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('/api/onchain/markets').then((r) => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('/api/markets').then((r) => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('/api/leaderboard').then((r) => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('/api/info').then((r) => { if (!r.ok) throw 0; return r.json(); })
+        ]);
+
+        let live = false;
+        if (inf.status === 'fulfilled' && inf.value?.bot_username) {
+          const u = 'https://t.me/' + inf.value.bot_username.replace(/^@/, '');
+          document.getElementById('botTopLink').href = u;
+          document.getElementById('botHeroLink').href = u;
+          document.getElementById('dwBotLink').href = u;
+        }
+        if (hl.status === 'fulfilled' && hl.value) {
+          live = true;
+          document.getElementById('telHead').textContent = hl.value.chain_head ?? '—';
+          document.getElementById('telLag').textContent = (hl.value.deposit_lag ?? 0) + ' blocks';
+          document.getElementById('telDb').textContent = (hl.value.db || 'ok').toUpperCase();
+        }
+        if (sv.status === 'fulfilled' && sv.value) {
+          live = true;
+          const s = sv.value;
+          const res = s.vault_balance_usdc ?? s.hot_wallet_balance_usdc ?? s.owed_usdc ?? 0;
+          const owed = s.owed_usdc ?? 0, pend = s.pending_deposits_usdc ?? 0, sur = s.reserve_usdc ?? Math.max(res - owed, 0);
+          fullVault = s.vault_address || s.hot_wallet || fullVault;
+          document.getElementById('solvReserves').textContent = fmt(res) + ' USDC';
+          document.getElementById('solvOwed').textContent = fmt(owed);
+          document.getElementById('solvPend').textContent = fmt(pend);
+          document.getElementById('solvSur').textContent = fmt(sur);
+          document.getElementById('solvAddrShort').textContent = short(fullVault);
+          document.getElementById('basescanLink').href = 'https://basescan.org/address/' + fullVault;
+          const tot = Math.max(owed + pend + Math.max(sur, 0), 1);
+          document.getElementById('barOwed').style.width = ((owed / tot) * 100).toFixed(1) + '%';
+          document.getElementById('barPend').style.width = ((pend / tot) * 100).toFixed(1) + '%';
+          document.getElementById('barSur').style.width = ((Math.max(sur, 0) / tot) * 100).toFixed(1) + '%';
+        }
+        if (st.status === 'fulfilled' && st.value) {
+          live = true;
+          document.getElementById('mVol').textContent = fmt(st.value.volume_usdc);
+          document.getElementById('mVol30').textContent = fmt(st.value.volume_30d_usdc);
+          document.getElementById('mUsers').textContent = Number(st.value.users || 0).toLocaleString('en-US');
+          document.getElementById('mTips').textContent = fmt(st.value.tips_usdc);
+          document.getElementById('mBets').textContent = fmt(st.value.bets_usdc);
+          document.getElementById('mFees').textContent = fmt(st.value.fees_usdc);
+        }
+        if (am.status === 'fulfilled' && Array.isArray(am.value)) { cache.amm = am.value; live = true; }
+        if (oc.status === 'fulfilled' && Array.isArray(oc.value)) { cache.onchain = oc.value; live = true; }
+        if (pl.status === 'fulfilled' && Array.isArray(pl.value)) { cache.polls = pl.value; live = true; }
+        if (lb.status === 'fulfilled' && Array.isArray(lb.value) && lb.value.length) { renderLeaders(lb.value); live = true; }
+        if (live) {
+          document.getElementById('liveModeBadge').textContent = 'LIVE API';
+          document.getElementById('liveModeBadge').className = 'badge yes';
+          renderMarkets();
+        }
+      }
+      hydrate();
+      loadChart(14);
+      setInterval(hydrate, 15000);
+    })();
+  </script>
+</body>
+</html>

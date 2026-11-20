@@ -1,0 +1,19 @@
+  1 x Заголовок
+  1 x Раздел Ledger facts
+  1 x Раздел Interface
+  1 x Закон про превью edge
+  1 x Имя теста про превью
+  1 x Закон про алерт-чат
+  1 x Имя теста про алерт-чат
+  0 x 1547 tests
+  0 x 244 more, marked
+  0 x 2,696 s
+  0 x statement_timeout
+  0 x HEALTH_DB_TIMEOUT
+  0 x wave 40
+  1 x wave 39
+  1 x 1544 tests
+байт: 117162 строк: 1258
+  строка 1053: - **The edge may answer from the bundle, but only where a bundle docum
+  строка 1075: - **The one alert chat is the owner's, and a dropped notification is n
+  строка 1091: ## Ledger facts

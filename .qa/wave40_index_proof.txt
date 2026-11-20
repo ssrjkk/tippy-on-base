@@ -1,0 +1,25 @@
+=== WHERE ... balance в исходниках ===
+  bot\ledger\_admin.py:273  WHERE tg_id = %s AND balance >
+  bot\ledger\_creator.py:89  WHERE token_id = %s AND holder_tg_id = %s AND balance >
+  bot\ledger\_creator.py:138  WHERE tg_id = %s AND balance >
+  bot\ledger\_paywall.py:112  WHERE tg_id = %s AND balance >
+  bot\ledger\_paywall.py:314  WHERE tg_id = %s AND balance >
+  bot\ledger\_transfer.py:34  WHERE tg_id = %s AND balance >
+  bot\ledger\_transfer.py:80  WHERE tg_id = %s AND balance >
+  bot\ledger\_withdraw.py:92  WHERE tg_id = %s AND balance >
+
+=== tx_log.kind как предикат (первые 8) ===
+  bot\ledger\_base.py:79  kind in CREDIT_KINDS
+  bot\ledger\_views.py:34  kind = 'tip' AND created_at >= %s "
+  bot\ledger\_views.py:41  kind = 'tip' GROUP BY tg_id ORDER BY total DESC
+  bot\ledger\_views.py:124  kind = 'tip'"
+  bot\ledger\_views.py:135  kind IN ('tip_in'
+  bot\ledger\_views.py:139  kind = 'bet_win'"
+  bot\ledger\_views.py:143  kind = 'bet'"
+  bot\ledger\_views.py:162  kind = 'tip' AND counterparty ~ '^[0-9]+$'"
+  bot\ledger\_views.py:179  kind = 'creator_income'"
+  bot\ledger\_views.py:355  kind = ANY(%s
+  bot\ledger\_views.py:374  kind = …` — each scanning the same growing tabl
+  bot\ledger\_views.py:384  kind = 'tip'
+  bot\ledger\_views.py:385  kind = 'deposit'
+  bot\ledger\_views.py:386  kind = 'bet'

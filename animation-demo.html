@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tippy Animations Demo — Base.org Style</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #ffffff;
+      color: #111111;
+      line-height: 1.6;
+    }
+
+    /* Scroll-reveal animations */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .reveal-stagger > * {
+      opacity: 0;
+      transform: translateX(-30px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .reveal-stagger.is-visible > *:nth-child(1) { transition-delay: 0.05s; opacity: 1; transform: translateX(0); }
+    .reveal-stagger.is-visible > *:nth-child(2) { transition-delay: 0.15s; opacity: 1; transform: translateX(0); }
+    .reveal-stagger.is-visible > *:nth-child(3) { transition-delay: 0.25s; opacity: 1; transform: translateX(0); }
+    .reveal-stagger.is-visible > *:nth-child(4) { transition-delay: 0.35s; opacity: 1; transform: translateX(0); }
+    .reveal-stagger.is-visible > *:nth-child(5) { transition-delay: 0.45s; opacity: 1; transform: translateX(0); }
+
+    /* Hover-lift effect */
+    .hover-lift {
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .hover-lift:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    /* Pulse animation */
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.8; }
+    }
+
+    .pulse {
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    /* Counter animation */
+    .counter {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Hero section */
+    .hero {
+      padding: 80px 24px;
+      text-align: center;
+      background: #0000ff;
+      color: #ffffff;
+    }
+
+    .hero h1 {
+      font-size: 48px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      font-size: 20px;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Section styles */
+    section {
+      padding: 60px 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    section h2 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 24px;
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 36px;
+      font-weight: 800;
+      color: #0000ff;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Features section */
+    .features-section {
+      background: #f8f9fa;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      background: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 24px;
+      cursor: pointer;
+    }
+
+    .feature-card h3 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #0000ff;
+    }
+
+    .feature-card p {
+      font-size: 15px;
+      color: #666;
+      line-height: 1.6;
+    }
+
+    /* Market list */
+    .market-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .market-card {
+      background: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .market-card h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .market-meta {
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .market-meta strong {
+      color: #0000ff;
+    }
+
+    /* Pulse indicators */
+    .pulse-section {
+      background: #f8f9fa;
+    }
+
+    .pulse-grid {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .pulse-indicator {
+      text-align: center;
+    }
+
+    .pulse-dot {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      margin: 0 auto 12px;
+    }
+
+    .pulse-dot.live {
+      background: #00c853;
+      box-shadow: 0 0 20px rgba(0, 200, 83, 0.4);
+    }
+
+    .pulse-dot.processing {
+      background: #ff9800;
+      box-shadow: 0 0 20px rgba(255, 152, 0, 0.4);
+    }
+
+    .pulse-dot.error {
+      background: #f44336;
+      box-shadow: 0 0 20px rgba(244, 67, 54, 0.4);
+    }
+
+    .pulse-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 60px 24px;
+      background: #0000ff;
+      color: #ffffff;
+      text-align: center;
+    }
+
+    .footer h2 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .footer p {
+      font-size: 18px;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      
+      .reveal,
+      .reveal-stagger > * {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Hero -->
+  <section class="hero reveal">
+    <h1>Tippy Animations Demo</h1>
+    <p>Scroll down to see animations in action</p>
+  </section>
+
+  <!-- Stats with Counter Animation -->
+  <section>
+    <h2 class="reveal">Статистика с анимированными счётчиками</h2>
+    <div class="stats-grid reveal">
+      <div class="stat-card hover-lift">
+        <div class="stat-value counter" data-target="176">0</div>
+        <div class="stat-label">Объём, USDC</div>
+      </div>
+      <div class="stat-card hover-lift">
+        <div class="stat-value counter" data-target="17">0</div>
+        <div class="stat-label">Пользователей</div>
+      </div>
+      <div class="stat-card hover-lift">
+        <div class="stat-value counter" data-target="130">0</div>
+        <div class="stat-label">Транзакций</div>
+      </div>
+      <div class="stat-card hover-lift">
+        <div class="stat-value counter" data-target="30">0</div>
+        <div class="stat-label">Комиссий, USDC</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Hover Lift Cards -->
+  <section class="features-section">
+    <h2 class="reveal">Hover-эффект подъёма карточек</h2>
+    <div class="features-grid reveal">
+      <div class="feature-card hover-lift">
+        <h3>Мгновенные транзакции</h3>
+        <p>Суб-sekundные переводы за доли цента. Всегда онлайн, всегда быстро.</p>
+      </div>
+      <div class="feature-card hover-lift">
+        <h3>Ликвидные рынки</h3>
+        <p>Глубокая ликвидность и качественные активы круглосуточно.</p>
+      </div>
+      <div class="feature-card hover-lift">
+        <h3>Безопасность</h3>
+        <p>Postроено на Ethereum с фокусом на безопасность.</p>
+      </div>
+      <div class="feature-card hover-lift">
+        <h3>Масштабируемость</h3>
+        <p>Платформа для финансовых транзакций любого масштаба.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Staggered List -->
+  <section>
+    <h2 class="reveal">Каскадная анимация списков</h2>
+    <div class="market-list reveal-stagger">
+      <div class="market-card">
+        <h3>#1 Кто станет лидером по чаевым за ноябрь?</h3>
+        <div class="market-meta">
+          <span>Ликвидность: <strong>103,26 USDC</strong></span>
+          <span>Участников: <strong>3</strong></span>
+        </div>
+      </div>
+      <div class="market-card">
+        <h3>#2 Перепишет ли Tippy 1000 чаевых до конца месяца?</h3>
+        <div class="market-meta">
+          <span>Ликвидность: <strong>100,16 USDC</strong></span>
+          <span>Участников: <strong>3</strong></span>
+        </div>
+      </div>
+      <div class="market-card">
+        <h3>#3 Какая доля стейблкоинов в объёме Base будет в декабре?</h3>
+        <div class="market-meta">
+          <span>Ликвидность: <strong>53,74 USDC</strong></span>
+          <span>Участников: <strong>7</strong></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pulse Animation -->
+  <section class="pulse-section">
+    <h2 class="reveal">Pulse-анимация для индикаторов</h2>
+    <div class="pulse-grid reveal">
+      <div class="pulse-indicator">
+        <div class="pulse-dot live pulse"></div>
+        <div class="pulse-label">Live</div>
+      </div>
+      <div class="pulse-indicator">
+        <div class="pulse-dot processing pulse"></div>
+        <div class="pulse-label">Processing</div>
+      </div>
+      <div class="pulse-indicator">
+        <div class="pulse-dot error pulse"></div>
+        <div class="pulse-label">Error</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <section class="footer reveal">
+    <h2>Готово к внедрению</h2>
+    <p>Все анимации работают плавно и уважают prefers-reduced-motion</p>
+  </section>
+
+  <script>
+    // Intersection Observer for scroll-reveal
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          
+          // Trigger counter animation if this element has counters
+          const counters = entry.target.querySelectorAll('.counter');
+          counters.forEach((counter) => {
+            animateCounter(counter);
+          });
+          
+          observer.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    });
+
+    // Observe all reveal elements
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach((el) => {
+      observer.observe(el);
+    });
+
+    // Counter animation
+    function animateCounter(element) {
+      const target = parseInt(element.getAttribute('data-target'));
+      const duration = 2000;
+      const startTime = performance.now();
+      
+      function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const current = Math.floor(progress * target);
+        
+        element.textContent = current;
+        
+        if (progress < 1) {
+          requestAnimationFrame(update);
+        } else {
+          element.textContent = target;
+        }
+      }
+      
+      requestAnimationFrame(update);
+    }
+  </script>
+</body>
+</html>
