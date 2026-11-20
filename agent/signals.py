@@ -3,8 +3,7 @@
 The agent:
   1. Writes analysis as paywall content
   2. Creates paywall item via ledger
-  3. Optionally buys it back via x402 (for demo)
-  4. Returns the item_id so external agents can purchase it
+  3. Returns the item_id so external agents can purchase it
 
 This is the "Sell its analysis as paywalled signals via x402" job
 from the SURGE-AGENT-PROMPT.
@@ -70,36 +69,3 @@ async def sell_signal(
         caps.record_error()
         return {"error": str(e)}
 
-
-async def buy_own_signal(item_id: int, base_url: str) -> dict:
-    """Agent buys its own signal via x402 (for demo purposes).
-
-    Returns: {"status": str, "content_preview": str}
-    """
-    import requests
-
-    path = f"/api/x402/paywall?item={item_id}&amount=1"
-    url = f"{base_url.rstrip('/')}{path}"
-
-    try:
-        # Leg 1: get invoice
-        r1 = requests.post(url, timeout=30)
-        if r1.status_code != 402:
-            return {"error": f"Expected 402, got {r1.status_code}"}
-
-        # For demo: we print the payment command instead of executing it
-        invoice = r1.headers
-        pay_to = invoice.get("x-402-recipient", "")
-        amount = invoice.get("x-402-amount", "0")
-
-        return {
-            "status": "invoice_received",
-            "pay_to": pay_to,
-            "amount_micro": amount,
-            "instruction": (
-                f"To complete payment, send {int(amount) / 1_000_000} USDC to {pay_to} "
-                f"on Base, then repeat the request with x-402-payment header."
-            ),
-        }
-    except Exception as e:
-        return {"error": str(e)}

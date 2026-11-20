@@ -4,6 +4,7 @@ Commands are invoked directly (not through the aiogram router) with mocked
 message/bot objects; signatures use real local crypto (eth_account).
 """
 
+import ast
 import asyncio
 import re
 import time
@@ -3036,8 +3037,45 @@ def test_no_pre_formatted_money_is_handed_a_numeric_placeholder():
                         offenders.append(f"{rel}:{node.lineno}: t('{key}', {kw.arg}={expr[:40]})")
     assert not offenders, "\n".join(offenders)
 USER_TEXT_FIELDS = {"username", "to_username", "name", "full_name", "first_name",
-                    "question", "label", "memo", "title", "symbol"}
+                    "question", "label", "memo", "title", "symbol",
+                    "addr", "to_addr", "from_addr", "active_addr"}
 ESCAPERS = ("_h(", "_esc(", "esc(", "escape(", "quote_plus(")
+
+
+def _assignment_hops(tree: ast.Module, source: str) -> dict[str, list[str]]:
+    """`name -> every expression assigned to it in this module`, for the hop the
+    escaper sometimes takes one line before the call."""
+    hops: dict[str, list[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            value = ast.get_source_segment(source, node.value) or ""
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    hops.setdefault(target.id, []).append(value)
+    return hops
+
+
+def _carries_escaper(expr: str, hops: dict[str, list[str]], seen: frozenset = frozenset()) -> bool:
+    """Whether an argument expression passes through an escaper, following a bare name
+    through its assignments.
+
+    `to_addr = common._h(info['to'] or 'contract creation')` two lines above
+    `t(lang, 'tx_info', to_addr=to_addr)` is escaped, and a reader that looked only at the
+    argument would report it raw. Every write of that name has to carry the escaper,
+    because one raw assignment is enough to make the card unsafe. A name with no
+    assignment in the module — a parameter — is not proof of escaping either: that is the
+    call site the law is asking to wrap.
+    """
+    if any(escaper in expr for escaper in ESCAPERS):
+        return True
+    name = expr.strip()
+    if not re.fullmatch(r"[A-Za-z_]\w*", name) or name in seen:
+        return False
+    writes = hops.get(name)
+    if not writes:
+        return False
+    return all(_carries_escaper(write, hops, seen | {name}) for write in writes)
 
 
 def test_user_text_reaching_an_html_reply_is_escaped():
@@ -3045,16 +3083,25 @@ def test_user_text_reaching_an_html_reply_is_escaped():
     name with `<`/`&` in it either makes Telegram refuse the message (the action
     already happened) or injects markup into the card. `/subscribe` and
     `/createtoken` interpolated both raw. Any i18n argument that carries user
-    text has to pass through the escaper."""
-    import ast
+    text has to pass through the escaper.
+
+    The address keys joined this field set the wave three `addr=` arguments in
+    `bot/handlers/onchain.py` were found raw while fourteen other sites in the same tree
+    already called the escaper: a convention one law does not read is a convention a
+    later handler quietly drops, and `user_wallets.address`/`wallet_links.address` are
+    written from flows that were not the ones present when the rule was a habit.
+    Measured this wave as 592 `t()` calls and 66 user-text kwargs across `bot/` and `web/`.
+    """
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     offenders = []
+    checked = 0
     for pkg in ("bot", "web"):
         for path in sorted((root / pkg).rglob("*.py")):
             source = path.read_text(encoding="utf-8-sig")
             tree = ast.parse(source, filename=str(path))
+            hops = _assignment_hops(tree, source)
             for node in ast.walk(tree):
                 if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                         and node.func.attr == "t"):
@@ -3062,8 +3109,9 @@ def test_user_text_reaching_an_html_reply_is_escaped():
                 for kw in node.keywords:
                     if kw.arg not in USER_TEXT_FIELDS:
                         continue
+                    checked += 1
                     expr = ast.get_source_segment(source, kw.value) or ""
-                    if any(escaper in expr for escaper in ESCAPERS):
+                    if _carries_escaper(expr, hops):
                         continue
                     if isinstance(kw.value, ast.Constant):
                         continue  # a literal label, not user text
@@ -3071,7 +3119,40 @@ def test_user_text_reaching_an_html_reply_is_escaped():
                         continue  # a curated uppercase table, not user text
                     rel = path.relative_to(root).as_posix()
                     offenders.append(f"{rel}:{kw.lineno}: {kw.arg}={expr[:50]}")
+    assert checked >= 60, f"only {checked} user-text kwargs read over bot/ and web/ — the scan went blind"
     assert not offenders, "\n".join(offenders)
+
+
+def test_the_escaping_reader_follows_the_assignment_it_exists_to_trust():
+    """The hop rule is held to the shapes the shipped files take, on markup that is not
+    those files: a gate that flagged every escaped-by-variable card would be loosened by
+    the next person who met it, and the loosening is how the raw sites came back."""
+    cases = {
+        "direct": "x = common._h(row['address'])",
+        "raw": "x = row['address']",
+        "second_raw": "x = common._h(row['address'])\nx = row['other']",
+        "fstring": "x = f\"{common._h(name)}\"",
+    }
+    for name, source in cases.items():
+        tree = ast.parse(source)
+        expr = ast.get_source_segment(source, tree.body[-1].value) or ""
+        hops = _assignment_hops(tree, source)
+        got = _carries_escaper(expr, hops)
+        want = name in ("direct", "fstring")
+        assert got is want, f"{name}: {expr!r} read as escaped={got}"
+
+    # A bare name that only appears as a parameter has no assignment to trust.
+    source = "def f(addr):\n    return i18n.t(lang, 'k', addr=addr)"
+    tree = ast.parse(source)
+    hops = _assignment_hops(tree, source)
+    assert _carries_escaper("addr", hops) is False, "an unresolvable variable is not proof"
+
+    # One hop through a name that was escaped upstream is proof.
+    source = "to_addr = common._h(info['to'])\ncard = i18n.t(lang, 'tx_info', to_addr=to_addr)"
+    tree = ast.parse(source)
+    hops = _assignment_hops(tree, source)
+    assert _carries_escaper("to_addr", hops) is True, "the hop the shipped page takes was lost"
+
 def test_oc_create_hint_names_the_configured_limits(ledger, monkeypatch):
     """/oc_create used to print "Субсидия $10–1000 … метка до 60 символов" as text.
     The numbers a user is refused by come from config, so the card has to follow

@@ -20,7 +20,7 @@ External funding figures are quoted from the programs' own pages and listed in
   (паримутуэл и LMSR-AMM), платный контент, токены авторов с дивидендами,
   рекуррентные подписки, автономный AI-агент и приём платежей от AI-агентов по x402.
 - **Что уже написано:** 47 команд бота, 53 HTTP-маршрута, 9 контрактов, 18 доменных
-  миксинов леджера, 10 модулей агента, 1555 обычных тестов + 199 боевых. Три языка.
+  миксинов леджера, 10 модулей агента, 1559 обычных тестов + 199 боевых. Три языка.
 - **Что выключено флагами:** ончейн-рынки (ERC-1155) и gasless-кошельки (ERC-4337).
   Код есть, деплой на mainnet — нет.
 - **Что приносит деньги сегодня:** ровно одна строка — комиссия 1% с вывода.
@@ -306,7 +306,7 @@ data through `bot/ai_data.py` and says that it did.
 
 | Measure | Value |
 | --- | --- |
-| Tests | 1555 ordinary + 199 production (rendered-page and live-site gates) |
+| Tests | 1559 ordinary + 199 production (rendered-page and live-site gates) |
 | Languages | ru / en / zh, two independent catalogs, key sets gated equal |
 | Ledger domain mixins | 18 (every base of `Ledger` in `bot/ledger/__init__.py`) |
 | Agent modules | 10 (`git ls-files agent/*.py`) |
@@ -501,7 +501,7 @@ repository today):
 5. An autonomous agent with spend caps, a circuit breaker, stop-loss and EAS
    attestations, which also sells its analysis through the same paywall rail.
 6. Published solvency across six liability categories, an append-only audit trail,
-   and 1555 + 199 tests including structural gates that fail the build when a
+   and 1559 + 199 tests including structural gates that fail the build when a
    documented claim stops being true.
 7. Three languages, with the Mini App as the primary mobile surface.
 
@@ -590,8 +590,8 @@ Lines of code: every file `git ls-files` reports with one of `.py .sol .js .css
 .html .sh .ps1`, counted as `len(splitlines())` and grouped by top-level directory
 — so the vendored `contracts/lib/` (a `.gitkeep` in git) never enters, and neither
 does a scratch file `.gitignore` keeps out of the clone. Measured this way the tree
-is **83,565** lines: tests 40,453 · bot 20,825 · web 11,823 · scripts 2,906 ·
-contracts 2,649 · agent 1,670 · alembic 1,462 · deploy 1,373 · functions 348 ·
+is **83,928** lines: tests 40,850 · bot 20,825 · web 11,823 · scripts 2,906 ·
+contracts 2,649 · agent 1,636 · alembic 1,462 · deploy 1,373 · functions 348 ·
 script 56 (the one Foundry deploy script at the repository root).
 
 Live configuration is published by the origin itself: `GET /api/info` (chain,

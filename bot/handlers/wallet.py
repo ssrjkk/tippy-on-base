@@ -205,7 +205,7 @@ async def cmd_wallet(message: types.Message) -> None:
         row = await common.ledger.get_active_wallet(message.from_user.id)
         if not row:
             row = await _ensure_wallet(message.from_user.id)
-        await message.answer(i18n.t(lang, 'wallet_export_secure', addr=row['address']))
+        await message.answer(i18n.t(lang, 'wallet_export_secure', addr=common._h(row['address'])))
         return
 
     # /wallet new — create new wallet slot
@@ -217,7 +217,7 @@ async def cmd_wallet(message: types.Message) -> None:
         if err:
             await message.answer(i18n.t(lang, 'wallet_help'))
             return
-        await message.answer(i18n.t(lang, 'wallet_new_ok', addr=row['address'], slot=row['slot']))
+        await message.answer(i18n.t(lang, 'wallet_new_ok', addr=common._h(row['address']), slot=row['slot']))
         return
 
     # /wallet — show all slots
@@ -249,7 +249,7 @@ async def cb_wallet_new(cb: types.CallbackQuery) -> None:
     if err:
         await cb.answer()
         return
-    await cb.answer(i18n.t(lang, 'wallet_new_ok', addr=row['address'], slot=row['slot']), show_alert=True)
+    await cb.answer(i18n.t(lang, 'wallet_new_ok', addr=common._h(row['address']), slot=row['slot']), show_alert=True)
     # Refresh the wallet list
     await _refresh_wallet_list(cb, cb.from_user.id, lang)
 
@@ -269,7 +269,7 @@ async def cb_wallet_sel(cb: types.CallbackQuery) -> None:
     wallets = await common.ledger.get_wallets(cb.from_user.id)
     active = next((w for w in wallets if w['id'] == wallet_id), None)
     if active:
-        await cb.answer(i18n.t(lang, 'wallet_active_switched', slot=active['slot'], addr=active['address']), show_alert=True)
+        await cb.answer(i18n.t(lang, 'wallet_active_switched', slot=active['slot'], addr=common._h(active['address'])), show_alert=True)
     await _refresh_wallet_list(cb, cb.from_user.id, lang)
 
 def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[InlineKeyboardButton]]]:
@@ -281,7 +281,7 @@ def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[In
     slot_lines = [
         i18n.t(lang, 'wallet_slot_line',
                marker='🟢' if w['active'] else '⚪', slot=w['slot'],
-               addr=w['address'][:6] + '…' + w['address'][-4:])
+               addr=common._esc(w['address']))
         for w in wallets
     ]
     kb: list[list[InlineKeyboardButton]] = []
@@ -306,7 +306,7 @@ def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[In
                   max=common.config.MAX_WALLETS_PER_USER,
                   slots='\n'.join(slot_lines),
                   active_slot=active['slot'],
-                  active_addr=active['address'])
+                  active_addr=common._h(active['address']))
     return text, kb
 
 
@@ -371,7 +371,7 @@ async def cmd_export(message: types.Message) -> None:
     if message.from_user.id != common.config.ADMIN_TG_ID:
         await message.answer(i18n.t(lang, 'admin_only'))
         return
-    await message.answer(i18n.t(lang, 'hot_wallet_admin', addr=common.base.hot_wallet()))
+    await message.answer(i18n.t(lang, 'hot_wallet_admin', addr=common._h(common.base.hot_wallet())))
 
 async def _ensure_wallet(tg_id: int) -> dict:
     """Ensure user has at least one wallet (slot 1)."""

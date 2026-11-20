@@ -56,7 +56,7 @@
   with another project's suite sharing it, 1,012 s alone on the run this wave pinned its counts to,
   and 1,204 s with four read-only audit agents and the live origin sharing the box — which is why
   the CI job carries 30 minutes rather than a 20-minute limit it now overshoots),
-  1555 tests (199 more, marked `production`, run
+  1559 tests (199 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -311,7 +311,17 @@
   kwarg is a `KeyError`, not a blank. A fourth reads every `i18n.t` argument that carries user text
   (`name`, `to_username`, `question`, `label`, …) and requires the escaper — the bot answers with
   `parse_mode=HTML`, so raw text either makes Telegram refuse a message whose money already moved or
-  injects markup; the deadline notifiers in `bot/main.py` did that. Percentage fields have ONE
+  injects markup; the deadline notifiers in `bot/main.py` did that. Four of its field names are
+  address keys (`addr`, `to_addr`, `from_addr`, `active_addr`), and they joined the wave eight of the
+  twenty-four address-shaped arguments the tree writes turned out raw — seven in `bot/handlers/wallet.py`
+  and one in `bot/handlers/menu.py`, one of them a hand-rolled shortener that produced byte-for-byte what
+  `common._esc()` produces and skipped only the escape. A convention one law does not read is a
+  convention a later handler quietly drops. An argument escaped one line earlier is escaped: the reader
+  follows a bare-name argument through **every** write of it and requires each to carry an escaper
+  (`to_addr = common._h(info['to'] or 'contract creation')` above `t(lang, 'tx_info', to_addr=to_addr)`
+  is safe), while a name with no write in the module — a parameter — is no proof, because that parameter
+  is exactly the call site the law is asking to wrap. `checked >= 60` floors the scan (measured 592 `t()`
+  calls and 66 user-text kwargs over `bot/` and `web/`). Percentage fields have ONE
   rounder: `onchain_market.price_pct` (Decimal ROUND_HALF_UP) — the market list rounded with the
   builtin (banker's, over a float) while the market page used HALF_UP, so `0.00105` printed 0.1 in one
   place and 0.11 in the other (`test_onchain_list_and_market_page_print_the_same_price`).
@@ -1171,6 +1181,42 @@
   delayed sweep can show a short gauge beside a quiet canary. Unifying the three would move a public
   proof-of-reserves figure, so it is the maintainer's call and is recorded here and in the module
   docstring rather than taken.
+- **A module the runtime imports is a package the image installs, and the two vehicles read different
+  files.** The host and CI build a virtualenv from `requirements-dev.txt`; the container is built from
+  `Dockerfile`, whose only install line is `pip install -r requirements.txt`. A module the code imports
+  and only the first vehicle supplies therefore works everywhere anybody tests it and dies on boot in
+  the one artifact the runbooks deploy. That is not hypothetical here: `bot/paymaster.py` names `httpx`
+  at module scope, `bot/handlers/_common.py` imports the paymaster and every handler imports `_common`,
+  and `httpx` reached `requirements.txt` only as an *extra* of `fastapi` and `starlette` — which a bare
+  `pip install -r` never resolves — so `docker compose up -d app` raised `ModuleNotFoundError` before it
+  read `.env` while the whole suite stayed green. It is declared now, and `tests/test_dependencies.py`
+  is the law that keeps it declared: `image_closure()` walks the projects a file names through the
+  *installed* distributions' own requires, dropping a child whose marker cannot hold for this
+  interpreter (`extra == …` never does; a `python_version` comparison is evaluated; every host or
+  platform marker is treated as applicable, because the image is Linux and this gate may run anywhere),
+  `import_names_of()` answers what each distribution really puts on `sys.path` (`top_level.txt`, else a
+  package directory in `RECORD`, else the normalised project name), and `third_party_runtime_roots()`
+  takes the imports out of the AST of `bot|web|agent|deploy|alembic` — module scope and function scope
+  being the same to it, since an import inside a handler raises the moment that handler runs in the
+  container. Measured this wave as 13 declared projects, a 69-distribution closure with nothing
+  unresolved, 174 import names and 18 third-party roots the code reaches, with floors on all three sides
+  of the comparison (≥50 distributions, ≥100 roots, ≥8 imports) because an empty closure passes against
+  an empty import set and both empties look exactly like a clean tree. `scripts/` is outside the scope on
+  purpose: it is operator and developer tooling, it imports what no runtime image should carry (`solcx`
+  compiles contracts, `playwright` draws the docs pictures) and it reaches first-party modules by bare
+  name through its own `sys.path` hack. The companion law refuses the other vehicle's silent override —
+  `requirements-dev.txt` opens with `-r requirements.txt`, so an unqualified re-pin of a runtime package
+  changes only what CI tests, and every runtime line has to be an exact `==` after all, the dev file's
+  own header recording the unpinned pytest that broke CI once. What the law cannot see is a name built at
+  runtime (`importlib.import_module(var)`), stated here rather than hidden behind an exception list;
+  nothing in the boot tree imports that way today. `agent/signals.py`'s `buy_own_signal()` left with the
+  same wave: no caller, a blocking `requests.post(…, timeout=30)` inside an `async def`, and a payment
+  instruction that printed money by dividing micro-units in an f-string. Ten mutations were proven to
+  fire: `httpx` removed from `requirements.txt`, `bot/paymaster.py` importing a package nothing declares,
+  `requirements-dev.txt` re-pinning `httpx` to a second version, `qrcode==8.2` loosened to `qrcode>=8`,
+  `RUNTIME_DIRS` emptied, every environment marker refused so the closure shrinks, one on-chain `addr=`
+  argument back to raw, one wallet `addr=` argument back to raw, the escaper reader no longer following
+  the assignment hop, and the user-text field set emptied.
 
 ## Ledger facts
 

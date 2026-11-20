@@ -115,7 +115,7 @@ async def _donate_landing(message: types.Message, target_id: int) -> None:
     creator = await common.ledger.username_of(target_id) or await tip_targets.display_name_for(target_id) or f'id{target_id}'
     addr = common.base.hot_wallet()
     lang = await _lang(message.from_user.id)
-    caption = i18n.t(lang, 'donate_support', user=common._h(creator), addr=addr)
+    caption = i18n.t(lang, 'donate_support', user=common._h(creator), addr=common._h(addr))
     qr = await common._qr_bytes(addr)
     if qr:
         await message.answer_photo(BufferedInputFile(qr, filename='qr.png'), caption=caption, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=i18n.t(lang, 'btn_donate_page'), callback_data='donate')]]))

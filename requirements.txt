@@ -9,6 +9,13 @@ cryptography==50.0.2
 Pillow==13.0.0
 alembic==1.20.1
 python-json-logger==4.2.0
+# `bot/paymaster.py` names httpx at module scope, `bot/handlers/_common.py` imports the
+# paymaster and every handler imports `_common` — so the bot process needs httpx before it
+# reads `.env`. httpx reaches this file only through *extras* of fastapi/starlette, which a
+# bare `pip install -r requirements.txt` never resolves, so the image booted with
+# ModuleNotFoundError while CI (which installs requirements-dev.txt) stayed green.
+# tests/test_dependencies.py is the law that keeps it declared here.
+httpx==0.28.1
 # TELEGRAM_API_PROXY=socks5://… is a documented knob, and aiohttp needs python-socks
 # to dial a SOCKS proxy. This is the package that pins it (aiohttp-socks itself is not
 # imported anywhere); replacing it means declaring python-socks[asyncio] directly.
