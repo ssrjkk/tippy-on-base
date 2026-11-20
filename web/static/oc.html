@@ -33,34 +33,40 @@
     <article class="page" id="oc">
       <span class="eyebrow" id="oc-kind">Ончейн-рынок</span>
       <h1 class="page-title" id="oc-question">Загрузка…</h1>
-      <div id="oc-body">
-        <div class="page-meta" id="oc-meta"></div>
-
-        <div class="market-card">
-          <div id="oc-options"></div>
-          <div class="market-footer">
-            <span class="pot" id="oc-pool"></span>
-            <span class="pot" id="oc-creator"></span>
+      <div class="workspace-row">
+        <div class="workspace-col">
+          <div class="wp-card" id="oc-body">
+            <div class="page-meta" id="oc-meta"></div>
+            <div id="oc-options"></div>
+            <div class="market-footer">
+              <span class="pot" id="oc-pool"></span>
+              <span class="pot" id="oc-creator"></span>
+            </div>
           </div>
         </div>
+        <div class="workspace-col">
+          <section class="wp-card">
+            <h2>Торговля</h2>
+            <div class="cta-row">
+              <a class="btn btn-primary" href="https://t.me/__BOT_USERNAME__" data-tg-link>Торговать в Telegram</a>
+              <a class="btn btn-ghost" id="oc-scan" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
+              <button class="btn btn-ghost" id="oc-share" type="button">Скопировать ссылку</button>
+            </div>
+            <p class="hint">
+              Доли и USDC живут в контракте OutcomeMarket: бот подписывает сделку,
+              сеть её исполняет.
+            </p>
+          </section>
+          <section class="wp-card">
+            <h2>Механика</h2>
+            <div class="list-row"><span>Доли</span><b>ERC-1155</b></div>
+            <div class="list-row"><span>Расчёт</span><b>USDC на-цепи</b></div>
+            <div class="list-row"><span>Цены</span><b>кривая LMSR</b></div>
+            <div class="list-row"><span>В боте</span><b>/oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt;</b></div>
+            <div class="list-row"><span>Ещё</span><b>/oc_create · /oc_sell · /oc_redeem</b></div>
+          </section>
+        </div>
       </div>
-
-      <div class="cta-row">
-        <a class="btn btn-primary" href="https://t.me/__BOT_USERNAME__" data-tg-link>Торговать в Telegram</a>
-        <a class="btn btn-ghost" id="oc-scan" target="_blank" rel="noopener" hidden>Контракт в обозревателе</a>
-        <button class="btn btn-ghost" id="oc-share" type="button">Скопировать ссылку</button>
-      </div>
-
-      <section class="page-block">
-        <span class="eyebrow">Механика</span>
-        <p class="hint">
-          Исходные доли — токены ERC-1155 в контракте OutcomeMarket, расчёты идут в
-          USDC на-цепи. Цены держит LMSR-кривая: чем больше доли куплены, тем выше
-          их цена, и покупка следующего юнита всегда дороже. В боте:
-          <code>/oc_create</code>, <code>/oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt;</code>,
-          <code>/oc_sell</code>, <code>/oc_redeem &lt;id&gt;</code>.
-        </p>
-      </section>
     </article>
   </main>
 

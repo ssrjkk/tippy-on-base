@@ -95,6 +95,8 @@ async function loadInfo() {
     renderTerms(info);
     renderCommands(info);
     applyNetInfo(info);
+    paintStatus(info);
+    paintTelemetryNetwork(info);
     setupX402(info);
     /* The cap is configuration, not a property of one market, so the drawer can
      * state it and size its quick amounts before any quote has been asked. */
@@ -106,6 +108,63 @@ async function loadInfo() {
       applyQuoteFloor(info.limits.min_trade_usdc);
     }
   } catch (e) { /* keep original links */ }
+}
+
+/* Two cells of the telemetry strip come from /api/info, two from /api/solvency
+ * — the same two reads the panels below already make, so the strip adds no
+ * request and no number of its own. */
+function paintTelemetryNetwork(info) {
+  const name = $("telemetryChain");
+  const id = $("telemetryChainId");
+  if (name && info.chain_name) name.textContent = info.chain_name;
+  if (id) id.textContent = info.chain_id == null ? "–" : "chain " + info.chain_id;
+}
+
+/* The reserves bar is the panel's own three figures laid end to end: what is
+ * owed, the part of it still in flight, and what is left over. `pending` is one
+ * of the six liability categories, not a fourth thing beside them, so it is cut
+ * out of the owed segment instead of added to the total. */
+function paintReserves(s) {
+  const cov = $("telemetryCoverage");
+  if (cov) cov.textContent = s.coverage_pct == null ? "нет данных" : fmtPct(s.coverage_pct);
+  const bar = $("reserveBar");
+  const key = $("reserveKey");
+  if (!bar || !key) return;
+  const owed = Number(s.liabilities_usdc) || 0;
+  const inflight = Math.min(Number(s.pending_deposits_usdc) || 0, owed);
+  const free = Math.max(Number(s.reserve_usdc) || 0, 0);
+  const total = owed + free;
+  if (total <= 0) return;
+  $("segOwed").style.width = barWidth(((owed - inflight) / total) * 100) + "%";
+  $("segPending").style.width = barWidth((inflight / total) * 100) + "%";
+  $("segSurplus").style.width = barWidth((free / total) * 100) + "%";
+  bar.hidden = false;
+  key.hidden = false;
+}
+
+/* The v2 status matrix: three cards that say what this deployment runs, read
+ * off the same /api/info payload the fields take their bounds from. Nothing
+ * here is typed, because a promise the config does not keep is worse than a
+ * blank. */
+function paintStatus(info) {
+  const cell = (badgeId, textId, live, onText, offText) => {
+    const badge = $(badgeId);
+    const text = $(textId);
+    if (!badge || !text) return;
+    badge.textContent = live ? "работает" : "не включено";
+    badge.className = live ? "badge badge-yes" : "badge";
+    text.textContent = live ? onText : offText;
+  };
+  cell("statusAiBadge", "statusAiText", info.ai_mode === "llm",
+    "Отвечает модель из цепочки провайдеров; когда ни один не ответил, /ask отдаёт данные реестра.",
+    "Модель не настроена — /ask отвечает данными реестра и говорит об этом прямо.");
+  cell("statusOnchainBadge", "statusOnchainText", !!info.onchain_markets_enabled,
+    "Контракт долей подключён: доли ERC-1155 и вывод на адрес существуют.",
+    "Адрес контракта долей не задан — рынки живут в реестре, доли не выпускаются.");
+  const x402 = info.x402 || {};
+  cell("statusX402Badge", "statusX402Text", !!x402.enabled,
+    "origin отвечает 402 и зачитывает платёж; границы счёта публикует /api/info.",
+    "Счёт за один HTTP-запрос выключен: эндпоинт отвечает 404, а не 402.");
 }
 
 /* The Telegram Login Widget renders inline so signing in never leaves the
@@ -374,6 +433,7 @@ async function loadWallet() {
     const source =
       s.reserves_source === "vault" ? "контракт TipBotVault" : "горячий кошелёк";
     $("reserve-source").textContent = source;
+    paintReserves(s);
     const chip = $("reserve-chip");
     if (chip) {
       $("reserve-chip-text").textContent = "Резервы: " + source;

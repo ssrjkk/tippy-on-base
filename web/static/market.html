@@ -33,32 +33,38 @@
     <article class="page" id="market">
       <span class="eyebrow" id="m-kind">Ставка-пул</span>
       <h1 class="page-title" id="m-question">Загрузка…</h1>
-      <div id="m-body">
-        <div class="page-meta" id="m-meta"></div>
-
-        <div class="market-card">
-          <div id="m-options"></div>
-          <div class="market-footer">
-            <span class="pot" id="m-pot"></span>
-            <span class="pot" id="m-creator"></span>
+      <div class="workspace-row">
+        <div class="workspace-col">
+          <div class="wp-card" id="m-body">
+            <div class="page-meta" id="m-meta"></div>
+            <div id="m-options"></div>
+            <div class="market-footer">
+              <span class="pot" id="m-pot"></span>
+              <span class="pot" id="m-creator"></span>
+            </div>
           </div>
         </div>
-
-        <div class="cta-row" id="m-cta" hidden>
-          <a class="btn btn-primary" id="m-bet" target="_blank" rel="noopener">Поставить в Telegram</a>
-          <button class="btn btn-ghost" id="m-share" type="button">Скопировать ссылку</button>
+        <div class="workspace-col">
+          <section class="wp-card">
+            <h2>Ставка</h2>
+            <div class="cta-row" id="m-cta" hidden>
+              <a class="btn btn-primary" id="m-bet" target="_blank" rel="noopener">Поставить в Telegram</a>
+              <button class="btn btn-ghost" id="m-share" type="button">Скопировать ссылку</button>
+            </div>
+            <p class="hint">
+              Пул открывается и закрывается в боте: он держит взнос до исхода и
+              выплачивает долю тем, чей вариант победил.
+            </p>
+          </section>
+          <section class="wp-card">
+            <h2>Механика</h2>
+            <div class="list-row"><span>Пул</span><b>общая касса</b></div>
+            <div class="list-row"><span>Шанс варианта</span><b>его доля в пуле</b></div>
+            <div class="list-row"><span>Выплата</span><b>пул на вашу долю</b></div>
+            <div class="list-row"><span>Вручную</span><b>/bet &lt;id&gt; &lt;номер&gt; &lt;сумма&gt;</b></div>
+          </section>
         </div>
       </div>
-
-      <section class="page-block">
-        <span class="eyebrow">Механика</span>
-        <p class="hint">
-          Все ставки складываются в общий пул. Если ваш исход выиграл, вы получаете
-          долю всего пула, пропорциональную вашему вкладу в этот исход; шанс рядом
-          с вариантом — его доля в пуле на текущий момент. Вручную в боте:
-          <code>/bet &lt;id&gt; &lt;номер&gt; &lt;сумма&gt;</code>.
-        </p>
-      </section>
     </article>
   </main>
 

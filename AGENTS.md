@@ -56,7 +56,7 @@
   with another project's suite sharing it, 1,012 s alone on the run this wave pinned its counts to,
   and 1,204 s with four read-only audit agents and the live origin sharing the box — which is why
   the CI job carries 30 minutes rather than a 20-minute limit it now overshoots),
-  1559 tests (199 more, marked `production`, run
+  1562 tests (199 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).

@@ -15,6 +15,18 @@
 <body>
   <div class="scroll-progress" id="scrollProgress"></div>
 
+  <!-- The node, not the marketing copy: which chain this origin signs on, where
+       its reserves actually sit and what they cover. app.js paints every cell
+       from /api/info and /api/solvency, so the strip states no figure of its
+       own — a typed one would be a second copy of a knob nobody diffs. -->
+  <div class="telemetry" aria-label="Состояние сети">
+    <div class="telemetry-inner">
+      <span><span class="telemetry-k" id="telemetryChain">BASE</span> · USDC · <span id="telemetryChainId">–</span></span>
+      <span>ПОКРЫТИЕ: <span id="telemetryCoverage">–</span></span>
+      <a class="telemetry-link" href="/api/solvency">PROOF OF RESERVES → JSON</a>
+    </div>
+  </div>
+
   <header class="nav">
     <div class="nav-inner">
       <a class="brand" href="/">
@@ -44,6 +56,12 @@
           <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
           <span data-net="chain">Base</span> · USDC
         </a>
+        <div class="hero-tags">
+          <span class="badge badge-brand">LMSR AMM</span>
+          <span class="badge">ПАРАМЮЭЛЬ</span>
+          <span class="badge">ERC-1155</span>
+          <span class="badge">x402</span>
+        </div>
         <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
         <p class="hero-sub">
           Чаевые в один тап, ставки-пулы по парамутюэльной схеме, рынки предсказаний
@@ -411,6 +429,28 @@
       </div>
     </section>
 
+    <section class="section reveal" id="status">
+      <span class="eyebrow">Состояние внедрения</span>
+      <h2>Что работает на этом инстансе</h2>
+      <div class="wp-grid">
+        <div class="wp-card">
+          <span class="badge" id="statusAiBadge">–</span>
+          <h3>Ассистент рынка</h3>
+          <p id="statusAiText">–</p>
+        </div>
+        <div class="wp-card">
+          <span class="badge" id="statusOnchainBadge">–</span>
+          <h3>Ончейн-доли ERC-1155</h3>
+          <p id="statusOnchainText">–</p>
+        </div>
+        <div class="wp-card">
+          <span class="badge" id="statusX402Badge">–</span>
+          <h3>Оплата за HTTP-запрос</h3>
+          <p id="statusX402Text">–</p>
+        </div>
+      </div>
+    </section>
+
     <section class="section section--band reveal" id="terms">
       <span class="eyebrow">Условия</span>
       <h2>Комиссии и лимиты</h2>
@@ -532,6 +572,19 @@
             <div class="wallet-row"><span>в том числе незачтённых депозитов</span><b id="wallet-pending">–</b></div>
             <div class="wallet-row"><span>Свободный резерв</span><b id="wallet-reserve">–</b></div>
             <div class="wallet-row"><span>Платёжеспособность</span><b id="wallet-solvent">–</b></div>
+            <!-- The same three figures as one bar: what is owed, what is still
+                 in flight, what is left over. Painted by loadWallet from the
+                 /api/solvency response this panel already reads. -->
+            <div class="seg-bar" role="img" aria-label="Структура резервов" id="reserveBar" hidden>
+              <div class="seg-owed" id="segOwed"></div>
+              <div class="seg-pending" id="segPending"></div>
+              <div class="seg-surplus" id="segSurplus"></div>
+            </div>
+            <div class="seg-key" id="reserveKey" hidden>
+              <span class="seg-key-item"><span class="seg-swatch seg-owed"></span>обязательства</span>
+              <span class="seg-key-item"><span class="seg-swatch seg-pending"></span>в ожидании</span>
+              <span class="seg-key-item"><span class="seg-swatch seg-surplus"></span>свободно</span>
+            </div>
             <div class="wallet-addr mono" id="wallet-address">загрузка…</div>
             <div class="wallet-addr mono" id="wallet-vault-addr" hidden>загрузка…</div>
             <div class="btn-row">

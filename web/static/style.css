@@ -20,28 +20,29 @@
   --blue-hover: #0000cc;
   --blue-text: #0000ff;
   --blue-soft: rgba(0, 0, 255, 0.07);
-  --blue-line: rgba(0, 0, 255, 0.22);
+  --blue-line: rgba(0, 0, 255, 0.35);
 
   --canvas: #ffffff;
-  --surface: #f8f8f8;
-  --surface-hover: #efefef;
-  --border: #efefef;
-  --border-strong: #dadada;
+  --surface: #f7f7f8;
+  --surface-2: #f2f2f4;
+  --surface-hover: #eaecef;
+  --border: #e4e4e7;
+  --border-strong: #c8c8ce;
 
   --ink: #111111;
-  --ink-2: #3a3a3a;
+  --ink-2: #3f3f46;
   /* #6f6f6f was 4.43:1 on the chip background it was moved onto, and #767676
      was 4.28:1 on the grey band. These two are the quietest text the site is
      allowed to show, so both now clear AA on canvas, surface and surface-hover. */
-  --muted: #666666;
-  --muted-2: #707070;
+  --muted: #52525b;
+  --muted-2: #6b6b74;
 
-  --success: #10693f;
-  --success-bg: rgba(16, 105, 63, 0.08);
+  --success: #047857;
+  --success-bg: rgba(4, 120, 87, 0.08);
   /* There is no danger tint beside this colour, and no token for one: base paints
      a state on the figure that carries it, and nothing in this product fills chrome
      with an error colour. The palette law reads a token nothing reads. */
-  --danger: #b42318;
+  --danger: #be123c;
 
   /* legacy aliases still referenced by page CSS/JS */
   --bg: var(--canvas);
@@ -59,14 +60,14 @@
      light one. Two fills, two text colours, neither of them hardcoded. */
   --on-accent: #ffffff;
   --on-ink: var(--canvas);
-  --warning: #8a5a00;
-  --warning-bg: rgba(138, 90, 0, 0.08);
+  --warning: #a24b08;
+  --warning-bg: rgba(162, 75, 8, 0.10);
 
-  --radius: 8px;
-  --radius-2xs: 2px;
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-lg: 12px;
+  --radius: 0;
+  --radius-2xs: 0;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-lg: 0;
   --pill: 9999px;
 
   --font-ui: "Schibsted Grotesk", "Golos Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -90,12 +91,12 @@
   --t-h1: 28px;      /* page and legal titles */
   --t-xl: 32px;      /* the largest fixed size on the site */
   --measure: 68ch;   /* the reading line: prose is capped in characters, not in the column it sits in */
-  --t-hero: clamp(40px, 6.6vw, 76px);    /* the landing h1, the one fluid step */
+  --t-hero: clamp(34px, 4.4vw, 56px);    /* the landing h1, the one fluid step */
   --t-title: clamp(30px, 4.6vw, 44px);   /* an entity page title */
-  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
   --nav-bg: rgba(255, 255, 255, 0.92);
   --skeleton-shine: rgba(17, 17, 17, 0.05);
-  --code-bg: #f8f8f8;
+  --code-bg: #f2f2f4;
   --dot: rgba(17, 17, 17, 0.07);
   --chart-bar: var(--blue);
   /* The scrim behind an open <dialog>. It has to be a token because the dark
@@ -103,44 +104,45 @@
      over a dark one as nothing at all. */
   --scrim: rgba(17, 17, 17, 0.42);
   /* select.input drops the native arrow, so the control has to draw its own */
-  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f6f6f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2352525b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 [data-theme="dark"] {
   --blue: #224bff;
-  --blue-hover: #3d61ff;
+  --blue-hover: #4266ff;
   --blue-text: #7575ff;
-  --blue-soft: rgba(34, 75, 255, 0.16);
-  --blue-line: rgba(117, 117, 255, 0.32);
+  --blue-soft: rgba(34, 75, 255, 0.14);
+  --blue-line: rgba(117, 117, 255, 0.42);
 
   --canvas: #111111;
-  --surface: #1a1a1a;
-  --surface-hover: #262626;
-  --border: #2d2d2d;
-  --border-strong: #3a3a3a;
+  --surface: #161618;
+  --surface-2: #1a1a1e;
+  --surface-hover: #222228;
+  --border: #26262c;
+  --border-strong: #3c3c46;
 
   --ink: #ededed;
   --ink-2: #c8c8c8;
-  --muted: #9a9a9a;
+  --muted: #a1a1aa;
   /* Dark keeps the pair one step apart: muted-2 was #8b8b8b (5.36:1), still
      above 4.5 with the light token lifted. */
-  --muted-2: #8b8b8b;
+  --muted-2: #91919b;
 
-  --success: #4bd09b;
-  --success-bg: rgba(75, 208, 155, 0.14);
-  --danger: #ff7a70;
+  --success: #34d399;
+  --success-bg: rgba(52, 211, 153, 0.14);
+  --danger: #fb7185;
 
-  --warning: #d99a2b;
-  --warning-bg: rgba(217, 154, 43, 0.14);
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.14);
   --nav-bg: rgba(17, 17, 17, 0.92);
   --skeleton-shine: rgba(255, 255, 255, 0.06);
-  --code-bg: #1a1a1a;
+  --code-bg: #1a1a1e;
   /* The band texture has to recede in dark: white dots at 8% lift the pixel
      behind an 11px label to #2f2f2f and cost 1.5 points of contrast. */
   --dot: rgba(0, 0, 0, 0.35);
   --chart-bar: var(--blue-text);
   --scrim: rgba(0, 0, 0, 0.62);
-  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a9a9a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 /* ---------- Scroll Progress ---------- */
@@ -407,6 +409,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
   line-height: 1.03; margin-bottom: 22px; color: var(--ink);
 }
 .hero-sub { max-width: 52ch; margin: 0 0 34px; color: var(--muted); font-size: var(--t-h4); line-height: 1.55; animation: fadeUp 0.5s var(--ease) 0.1s both; }
+.hero-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 22px; }
 .hero-cta { display: flex; gap: 12px; justify-content: flex-start; flex-wrap: wrap; animation: fadeUp 0.5s var(--ease) 0.15s both; }
 
 /* The product is a price on a question, so the hero shows one real market. */
@@ -436,17 +439,22 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 }
 
 /* ---------- Buttons ---------- */
+/* v2: a control is a rectangle with a hairline, not a lozenge. The fill says
+   primary, the border says secondary, and the brand colour arrives on the edge
+   instead of tinting the label. */
 .btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 12px 22px; border-radius: var(--pill);
-  text-decoration: none; font-weight: 500; font-size: var(--t-lead); cursor: pointer; border: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 0 18px; border-radius: 0;
+  text-decoration: none; font-weight: 600; font-size: var(--t-small); cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink);
   font-family: var(--font-ui);
-  transition: background-color 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
+  transition: background-color 0.16s var(--ease), color 0.16s var(--ease), border-color 0.16s var(--ease);
 }
 .btn:active { opacity: 0.8; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn-primary { background: var(--blue); color: var(--on-accent); }
-.btn-primary:hover { background: var(--blue-hover); }
+.btn:hover { background: var(--surface-hover); border-color: var(--accent); }
+.btn-primary { background: var(--blue); border-color: var(--blue); color: var(--on-accent); }
+.btn-primary:hover { background: var(--blue-hover); border-color: var(--blue-hover); color: var(--on-accent); }
 .btn-ghost {
   border: 1px solid var(--border-strong); color: var(--ink); background: transparent;
 }
@@ -496,52 +504,19 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 }
 
 /* ---------- Hero metric strip ---------- */
-/* The same six numbers the cabinet reads, but as one line of evidence: hairlines
-   top and bottom, no boxes, and figures wide enough to be the second thing a
-   visitor reads after the headline. */
+/* The same six numbers the cabinet reads, but as one line of evidence: hairlines top
+   and bottom, square cells, and figures wide enough to be the second thing a visitor
+   reads after the headline. Six cells in six tracks is one row, and in two tracks
+   three rows — a framed grid never ends in a half row here. */
 .hero-metrics {
-  margin: 0 24px 72px;
+  margin: 0 24px 56px;
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
   animation: fadeUp 0.4s var(--ease) backwards;
 }
 .hero-metrics .stats { border-top: 0; border-left: 0; }
-.hero-metrics .stat-card { padding: 24px 22px; }
+.hero-metrics .stat-card { padding: 20px 18px; }
 .hero-metrics .stat-card:nth-child(n + 4) { border-bottom: 0; }
-.hero-metrics .stat-value { font-size: var(--t-xl); }
-
-/* ---------- Bento Grid: KPI Strip ---------- */
-/* Hairline KPI strip: 6 cells separated by 1px borders, mono figures, tight spacing. */
-.kpi-strip {
-  display: grid; grid-template-columns: repeat(6, 1fr);
-  border-bottom: 1px solid var(--border);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  background: var(--border);
-  gap: 1px;
-  margin: 0 24px 32px;
-}
-.kpi-cell {
-  background: var(--surface);
-  padding: 18px 16px;
-}
-.kpi-label {
-  font-size: var(--t-micro);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 500;
-}
-.kpi-val {
-  font-family: var(--font-mono);
-  font-size: var(--t-h2);
-  font-weight: 600;
-  margin-top: 5px;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
+.hero-metrics .stat-value { font-size: var(--t-h2); letter-spacing: -0.03em; }
 
 /* ---------- Bento Grid: Analytics Row ---------- */
 /* 60/40 split: chart panel + solvency sidebar, hairline separated. */
@@ -640,7 +615,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 /* ---------- Status Chips ---------- */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: var(--pill);
+  padding: 3px 9px; border-radius: 0; border: 1px solid var(--border);
   font-size: var(--t-chip); font-weight: 500;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums; letter-spacing: 0.06em; text-transform: uppercase;
@@ -1091,14 +1066,22 @@ code {
   font-variant-numeric: tabular-nums; letter-spacing: 0.08em; text-transform: uppercase; }
 .ws-actions { display: flex; gap: 8px; }
 
-.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0; }
-.tab {
-  background: transparent; border: 1px solid var(--border-strong);
-  color: var(--muted); font: inherit; font-size: var(--t-small); font-weight: 500;
-  padding: 8px 16px; border-radius: var(--pill); cursor: pointer;
-  transition: color 0.2s var(--ease), border-color 0.2s var(--ease), background-color 0.2s var(--ease);
+/* v2: the choices of one control share a frame. Cells butt against each other
+   behind a single hairline, so a group of three tabs is one object instead of
+   three buttons that happen to be neighbours. */
+.tabs {
+  display: inline-flex; flex-wrap: wrap; margin: 16px 0;
+  border: 1px solid var(--border); background: var(--surface-2);
 }
-.tab:hover { color: var(--ink); border-color: var(--ink); }
+.tab {
+  background: transparent; border: 0; border-right: 1px solid var(--border);
+  color: var(--muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--t-chip); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 8px 14px; cursor: pointer; text-decoration: none;
+  transition: color 0.16s var(--ease), background-color 0.16s var(--ease);
+}
+.tab:last-child { border-right: 0; }
+.tab:hover { color: var(--ink); background: var(--surface-hover); }
 .tab.active { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
 .panel { animation: fadeUp 0.3s var(--ease) both; }
 
@@ -1112,10 +1095,10 @@ code {
   font-variant-numeric: tabular-nums; letter-spacing: 0.1em; text-transform: uppercase;
 }
 .input {
-  width: 100%; padding: 12px 14px;
+  width: 100%; min-height: 42px; padding: 8px 12px;
   background: var(--canvas); color: var(--ink);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  font: inherit; font-size: var(--t-body);
+  border: 1px solid var(--border-strong); border-radius: 0;
+  font: inherit; font-size: var(--t-small);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 /* The border and the halo say "this field is active"; they are not the focus
@@ -1141,7 +1124,7 @@ select.input {
 .amount-chip {
   background: var(--canvas); border: 1px solid var(--border-strong);
   color: var(--text-secondary); font: inherit; font-size: var(--t-small); font-weight: 500;
-  padding: 6px 14px; border-radius: var(--pill); cursor: pointer;
+  padding: 6px 14px; border-radius: 0; cursor: pointer;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background-color 0.2s var(--ease);
@@ -1181,13 +1164,13 @@ select.input {
   width: 100vw; height: 100vh; max-width: none; max-height: none;
   padding: 0; border: 0; background: transparent;
 }
-.drawer[open] { display: flex; align-items: center; justify-content: center; }
+.drawer[open] { display: flex; align-items: stretch; justify-content: flex-end; }
 .drawer::backdrop { background: var(--scrim); }
 .drawer-panel {
-  width: min(560px, calc(100vw - 24px)); max-height: min(86vh, 760px);
+  width: min(460px, 100vw); max-height: none; height: 100%;
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--canvas); color: var(--ink);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  border: 0; border-left: 2px solid var(--blue); border-radius: 0;
   animation: drawerIn 0.22s var(--ease) both;
 }
 .drawer-head {
@@ -1207,13 +1190,13 @@ select.input {
   width: 100vw; height: 100vh; max-width: none; max-height: none;
   padding: 0; border: 0; background: transparent;
 }
-.palette[open] { display: flex; align-items: flex-start; justify-content: center; padding: 10vh 12px 12px; }
+.palette[open] { display: flex; align-items: flex-start; justify-content: center; padding: 12vh 12px 12px; }
 .palette::backdrop { background: var(--scrim); }
 .palette-panel {
-  width: min(660px, 100%); max-height: 100%;
+  width: min(540px, 100%); max-height: 100%;
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--canvas); color: var(--ink);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  border: 2px solid var(--blue); border-radius: 0;
   animation: slideDown 0.18s var(--ease) both;
 }
 .palette-head {
@@ -1378,11 +1361,111 @@ select.input {
 .cmd span { color: var(--muted); }
 
 /* ================================================================
+   v2 surfaces
+   ================================================================ */
+
+/* The strip above the navigation is the node speaking, not the marketing copy:
+   which chain, which block, whether it can pay. Every figure in it is painted
+   by app.js from /api/info and /api/solvency — the bar ships no number of its
+   own, because a typed one is a second copy of a knob nobody diffs. */
+.telemetry {
+  border-bottom: 1px solid var(--border); background: var(--surface-2);
+  padding: 7px 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--t-chip); color: var(--muted);
+}
+.telemetry-inner {
+  max-width: 1320px; margin: 0 auto; padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px 16px;
+}
+.telemetry-k { color: var(--ink-2); font-weight: 600; letter-spacing: 0.06em; }
+.telemetry-link { color: var(--accent-text); text-decoration: none; }
+.telemetry-link:hover { text-decoration: underline; }
+
+/* A badge is a fact about a thing, set in the money face at the size of a
+   caption. The market-state vocabulary stays with `.chip-*`, which the state
+   law measures; this family is for everything that is not a market state. */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 0;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.badge-brand { background: var(--blue-soft); border-color: var(--blue-line); color: var(--ink); }
+.badge-yes { background: var(--success-bg); border-color: var(--border); color: var(--success); }
+
+/* Reserves as one bar: what is owed, what is in flight, what is left over. The
+   track is --surface-2, so the segments are the only colour in the row. */
+.seg-bar {
+  display: flex; height: 10px; margin: 12px 0;
+  background: var(--surface-2); border: 1px solid var(--border); overflow: hidden;
+}
+.seg-owed { background: var(--blue); }
+.seg-pending { background: var(--warning); }
+.seg-surplus { background: var(--success); }
+.seg-key { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.seg-key-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--t-meta); color: var(--ink-2);
+}
+.seg-swatch { width: 8px; height: 8px; flex: none; border-radius: 0; }
+
+/* Two columns that are one object: the hairline between them is the frame
+   showing through a 1px gap, which is how the KPI strip already divides. */
+.workspace-row {
+  display: grid; grid-template-columns: 1.55fr 0.95fr;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--border);
+  gap: 1px;
+  margin: 0 24px 32px;
+}
+.workspace-col { display: flex; flex-direction: column; gap: 1px; background: var(--border); }
+.wp-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--border);
+  gap: 1px;
+  margin: 0 24px 32px;
+}
+.wp-card { background: var(--surface); padding: 20px 18px; }
+/* A card opens with its own title, so the title carries no top offset; on the
+   status grid the first child is a badge, which had none to lose. */
+.wp-card > :first-child { margin-top: 0; }
+.wp-card h2, .wp-card h3 { font-size: var(--t-ui); font-weight: 700; margin: 10px 0 6px; }
+.wp-card p { font-size: var(--t-meta); color: var(--ink-2); line-height: 1.55; }
+
+/* Key/value rows inside a panel: the label and the figure, one hairline apart. */
+.list-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border); font-size: var(--t-small);
+}
+.list-row:last-child { border-bottom: 0; }
+.list-row span { color: var(--muted); }
+.list-row b {
+  color: var(--ink); font-weight: 600;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.list-row b.pos { color: var(--success); }
+.list-row b.neg { color: var(--danger); }
+
+@media (pointer: coarse) {
+  /* The v2 field is 42 px on a keyboard and 44 under a thumb: the same control,
+     the floor the touch law pays for. */
+  .input { min-height: 44px; }
+}
+
+/* ================================================================
    Responsive
    ================================================================ */
 
 @media (max-width: 900px) {
   .stats, .steps { grid-template-columns: repeat(2, 1fr); }
+  .analytics-row, .workspace-row, .wp-grid { grid-template-columns: 1fr; }
   .grid-2 { grid-template-columns: 1fr; gap: 20px; }
   .connect-grid { grid-template-columns: 1fr; }
   /* One column, and the copy goes back to centred — but the card keeps its own
@@ -1397,7 +1480,6 @@ select.input {
      heads stop pretending two columns fit above a phone. */
   .hero-metrics { margin: 0 0 56px; }
   .hero-metrics .stat-card { padding: 18px 14px; }
-  .hero-metrics .stat-value { font-size: var(--t-h2); }
   .section-head { grid-template-columns: minmax(0, 1fr); }
 }
 

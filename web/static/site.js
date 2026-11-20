@@ -230,6 +230,24 @@
     }
   }
 
+  /* `--accent` resolves to a hex, and a hex ignores the alpha a canvas needs. */
+  function rgbTriplet(value) {
+    var s = (value || '').trim();
+    var short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(s);
+    if (short) {
+      return [1, 2, 3].map(function (i) { return parseInt(short[i] + short[i], 16); }).join(', ');
+    }
+    var full = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(s);
+    if (full) {
+      return [1, 2, 3].map(function (i) { return parseInt(full[i], 16); }).join(', ');
+    }
+    var rgb = /^rgba?\(([^)]+)\)$/i.exec(s);
+    if (rgb) {
+      return rgb[1].split(',').slice(0, 3).map(function (v) { return v.trim(); }).join(', ');
+    }
+    return '';
+  }
+
   /* ---------- Hero canvas: geometric grid with accent pulses ---------- */
   function initHeroCanvas() {
     var canvas = document.getElementById('heroCanvas');
@@ -248,8 +266,8 @@
       ctx.clearRect(0, 0, w, h);
       
       var style = getComputedStyle(document.documentElement);
-      var borderColor = style.getPropertyValue('--border').trim() || '#efefef';
-      var accentColor = style.getPropertyValue('--accent').trim() || '#0000ff';
+      var borderColor = style.getPropertyValue('--border').trim() || 'rgb(228, 228, 231)';
+      var accentRgb = rgbTriplet(style.getPropertyValue('--accent').trim()) || '0, 0, 255';
       
       ctx.strokeStyle = borderColor;
       ctx.lineWidth = 1;
@@ -274,7 +292,7 @@
         var px = (Math.sin(time + i * 2.1) * 0.5 + 0.5) * w;
         var py = (Math.cos(time + i * 1.7) * 0.5 + 0.5) * h;
         var alpha = 0.08 + Math.sin(time * 2 + i) * 0.04;
-        ctx.fillStyle = accentColor.replace(')', ', ' + alpha + ')').replace('rgb', 'rgba');
+        ctx.fillStyle = 'rgba(' + accentRgb + ', ' + alpha.toFixed(3) + ')';
         ctx.beginPath();
         ctx.arc(px, py, 80, 0, Math.PI * 2);
         ctx.fill();
