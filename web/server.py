@@ -847,18 +847,43 @@ async def api_ai_status(request: Request) -> dict:
 
     return ai.status()
 
+# `/api/health` is the answer the watchdog judges this process by:
+# `deploy/watchdog.ps1` probes it with `Invoke-WebRequest -TimeoutSec 8` and
+# reads a probe that never answered as `silent` — the one verdict that reboots a
+# running origin and takes Telegram polling down with it. Its legs were not bound
+# by that budget: the chain read waits `RPC_TIMEOUT_SECONDS` (10 s) and a stalled
+# statement waits the ledger connection's `statement_timeout` (10 s), so a live
+# process talking to a slow RPC was condemned by a probe that never got to
+# report. Each leg now gets its own slice, and a leg that misses its slice is
+# degraded in the payload — which the watchdog reads as `answered` and preserves.
+HEALTH_CHAIN_TIMEOUT_SECONDS = 2.5
+HEALTH_DB_TIMEOUT_SECONDS = 4.0
+
+
 @app.get('/api/health', tags=['stats'])
 async def api_health() -> dict:
-    """Liveness + deposit-scanner health + DB connectivity."""
+    """Liveness + deposit-scanner health + DB connectivity.
+
+    Always answers, and always inside the watchdog's probe budget: a dependency
+    that is slow is a fact to report, not a reason to go quiet.
+    """
     head = None
     try:
-        head = await asyncio.to_thread(lambda: base.w3.eth.block_number)
+        head = await asyncio.wait_for(
+            asyncio.to_thread(lambda: base.w3.eth.block_number),
+            timeout=HEALTH_CHAIN_TIMEOUT_SECONDS,
+        )
     except Exception:
         pass
-    last = await ledger.last_block()
+    last = None
     db_ok = True
     try:
-        await ledger.ping()
+        async def _db_read() -> int | None:
+            block = await ledger.last_block()
+            await ledger.ping()
+            return block
+
+        last = await asyncio.wait_for(_db_read(), timeout=HEALTH_DB_TIMEOUT_SECONDS)
     except Exception:
         db_ok = False
     status = 'ok' if db_ok else 'degraded'
@@ -867,7 +892,7 @@ async def api_health() -> dict:
         'hot_wallet': str(hot_wallet()),
         'chain_head': head,
         'last_scanned_block': last,
-        'deposit_lag': head - last if head is not None else None,
+        'deposit_lag': head - last if head is not None and last is not None else None,
         'db': 'ok' if db_ok else 'down',
     }
 

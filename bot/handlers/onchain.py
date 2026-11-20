@@ -282,7 +282,7 @@ async def _buy_core(tg_id: int, mid: int, outcome: int, spend: int, lang: str) -
     addr, key = await _wallet_key(tg_id)
     usdc_micro = await asyncio.to_thread(_wallet_usdc_sync, addr)
     if usdc_micro < spend:
-        return False, i18n.t(lang, 'oc_need_funds', addr=addr, have=common._fmt(usdc_micro))
+        return False, i18n.t(lang, 'oc_need_funds', addr=esc(addr), have=common._fmt(usdc_micro))
     options = json.loads(m['options'])
     q = await asyncio.to_thread(_q_sync, mid, len(options))
     b_micro = await asyncio.to_thread(_b_sync, mid)
@@ -445,7 +445,7 @@ async def cmd_oc_redeem(message: types.Message) -> None:
         return
     await status.edit_text(i18n.t(
         lang, 'oc_refunded' if cancelled else 'oc_redeemed',
-        amount=common._fmt(payout), addr=addr))
+        amount=common._fmt(payout), addr=esc(addr)))
 
 
 _SETTLE_CHUNK = 5
@@ -513,7 +513,7 @@ async def _settle_all(message: types.Message, lang: str) -> None:
             total += got
             lines.append(f"✅ {label} ×{len(chunk)}: {common._fmt(got)} USDC")
     await status.edit_text(i18n.t(
-        lang, 'oc_settle_result', amount=common._fmt(total), addr=addr,
+        lang, 'oc_settle_result', amount=common._fmt(total), addr=esc(addr),
         lines='\n'.join(lines) if lines else '—'))
 
 

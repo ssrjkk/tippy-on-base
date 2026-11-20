@@ -2,6 +2,7 @@
 
 Pure unit tests: no DB, no RPC, no network.
 """
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -102,11 +103,15 @@ class TestSolvencyChaos:
 
     @pytest.mark.asyncio
     async def test_insolvency_alert_fires_once_per_cooldown(self, monkeypatch):
-        """The canary must actually alert on a real deficit, and must not flood
-        the operator: a second check inside the window stays silent."""
+        """The canary must actually alert on a real deficit, and must not flood the
+        operator. Two clocks hold the second half: the five-minute floor, and the
+        fact that a verdict already reported is not news. Clearing the floor alone
+        therefore must NOT re-send — that every-five-minutes repeat is exactly what
+        silenced the channel once the alert chain resolved to a real owner."""
         from bot import solvency
 
         monkeypatch.setattr(solvency, "_last_alert_ts", 0.0)
+        monkeypatch.setattr(solvency, "_last_state", None)
         monkeypatch.setattr(solvency.config, "VAULT_ADDRESS", "")
         monkeypatch.setattr(solvency.config, "SOLVENCY_ALERT_CHAT_ID", 424242)
         monkeypatch.setattr(solvency.ledger, "total_liabilities", AsyncMock(return_value=1_000_000_000))
@@ -120,11 +125,15 @@ class TestSolvencyChaos:
         assert "INSOLVENCY" in bot.send_message.await_args.args[1]
 
         await solvency._check_solvency(bot)
-        assert bot.send_message.await_count == 1  # cooldown holds
+        assert bot.send_message.await_count == 1  # the floor holds
 
-        monkeypatch.setattr(solvency, "_last_alert_ts", 0.0)
+        monkeypatch.setattr(solvency, "_last_alert_ts", time.time() - solvency._ALERT_COOLDOWN - 1)
         await solvency._check_solvency(bot)
-        assert bot.send_message.await_count == 2
+        assert bot.send_message.await_count == 1  # same verdict, no repeat yet
+
+        monkeypatch.setattr(solvency, "_last_alert_ts", time.time() - solvency._ALERT_REPEAT - 1)
+        await solvency._check_solvency(bot)
+        assert bot.send_message.await_count == 2  # the slow clock says it again
 
 
 class TestHandlerErrorsChaos:

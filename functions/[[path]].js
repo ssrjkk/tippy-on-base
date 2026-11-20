@@ -164,6 +164,81 @@ function maintenance(reason) {
   });
 }
 
+// The bundle can stand in for an origin that is not answering, but only as what it
+// actually is: a preview of a page. Every gate below exists because the first
+// version of that fallback asked only «is this a read», and Pages answers a path the
+// project does not carry with the landing document — `200 text/html`, 41,661 bytes
+// of it, carrying `__SIGNED_IN__` unsubstituted. So `/api/health` and `/api/info`
+// answered markup for the JSON the Mini App and the bot parse, `/robots.txt` and
+// `/sitemap.xml` answered markup for the rules a crawler needs, a mistyped URL
+// answered the landing instead of the `noindex` dead end, and an origin that was
+// simply not configured looked healthy to anyone holding a browser while the card
+// that names the fault — the one `docs/CLOUDFLARE.md` routes an operator by — never
+// appeared. A preview is therefore asked for twice: by the project, and by the
+// browser.
+function pagePathOf(pathname) {
+  return pathname === '/' ? '/index.html' : `${pathname}.html`;
+}
+
+function mayPreview({ env, request, pathname }) {
+  // Opt-in, because a bundle standing in for an application is a design tool and a
+  // production outage are the same bytes; only a project that says `DEMO_HTML=1` —
+  // a Pages preview, never the production environment — gets the substitution.
+  if ((env.DEMO_HTML || '').trim() !== '1') return false;
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false;
+  // A client that asked for JSON is not a visitor looking at a page, whatever the
+  // method was. This is also the only signal that separates `/api/health` opened in
+  // a location bar from the same path fetched by code.
+  if (!(request.headers.get('accept') || '').includes('text/html')) return false;
+  if (pathname.startsWith('/api/') || pathname.startsWith('/_')) return false;
+  // A last segment carrying a suffix is a document with its own format (`.txt`,
+  // `.xml`, `.json`) or a bundle asset. Each has a truthful answer elsewhere in this
+  // file, and no page can stand in for either.
+  if (/\.[a-z0-9]+$/i.test(pathname.split('/').pop() || '')) return false;
+  return true;
+}
+
+async function previewPage(env, request, htmlPath) {
+  // A `200` from ASSETS is still not evidence the page exists: with the project's
+  // single-page capture on, any path the bundle lacks answers the landing. The probe
+  // asks for a name no file can hold, and a page returned byte-identical to that
+  // answer is the capture rather than the page — a soft 404, which is the failure
+  // `not_found.html` exists to prevent. The landing is exempt, because the landing
+  // standing in for itself is the preview this is for.
+  try {
+    const page = await env.ASSETS.fetch(new Request(new URL(htmlPath, request.url)));
+    if (page.status !== 200) return null;
+    if (!(page.headers.get('content-type') || '').includes('text/html')) return null;
+    const body = await page.text();
+    if (htmlPath === '/index.html') return previewDocument(body);
+    const probe = await env.ASSETS.fetch(new Request(new URL('/.tippy-preview-miss.html', request.url)));
+    const captured = probe.status === 200
+      && (probe.headers.get('content-type') || '').includes('text/html')
+      && (await probe.text()) === body;
+    return captured ? null : previewDocument(body);
+  } catch {
+    // A bundle that cannot be read is not a reason to fail the request: the caller
+    // answers the card, which names a cause the operator can act on.
+    return null;
+  }
+}
+
+function previewDocument(body) {
+  // `no-store` because the document is a snapshot of a build, not a cached page, and
+  // `x-tippy-demo-mode` because a visitor who is being shown the bundle instead of
+  // the application is owed a way to tell — including from `curl -I`.
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+      'x-tippy-demo-mode': 'true',
+    },
+  });
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const { pathname, search, host } = new URL(request.url);
@@ -183,28 +258,12 @@ export async function onRequest(context) {
 
   const backend = (env.BACKEND_URL || '').replace(/\/+$/, '');
   
-  // When the origin is not configured or unreachable, try to serve the HTML from
-  // the bundle as a design demo. The page will render without dynamic data, but
-  // the layout, typography and styles will be visible.
-  if (!backend && reads) {
-    const htmlPath = pathname === '/' ? '/index.html' : pathname + '.html';
-    try {
-      const demo = await env.ASSETS.fetch(new URL(htmlPath, request.url));
-      if (demo.status === 200 && (demo.headers.get('content-type') || '').includes('text/html')) {
-        return new Response(demo.body, {
-          status: 200,
-          headers: {
-            'content-type': 'text/html; charset=utf-8',
-            'cache-control': 'no-store',
-            'x-content-type-options': 'nosniff',
-            'referrer-policy': 'no-referrer',
-            'x-tippy-demo-mode': 'true',
-          },
-        });
-      }
-    } catch {
-      // Fall through to maintenance card
-    }
+  // No origin configured. A page-shaped read from a browser may be answered by the
+  // bundle; everything else owes the card, because `no-backend` is the one sentence
+  // that tells an operator `BACKEND_URL` is missing from this project.
+  if (!backend && mayPreview({ env, request, pathname })) {
+    const shown = await previewPage(env, request, pagePathOf(pathname));
+    if (shown) return shown;
   }
   
   if (!backend) return maintenance(outageReason({ hasBackend: false }));
@@ -266,28 +325,15 @@ export async function onRequest(context) {
     }
   }
   
-  // When the origin is down, serve the HTML from the bundle as a design demo
-  // instead of the maintenance card. The page will render without dynamic data,
-  // but the layout, typography and styles will be visible.
-  if ((!upstream || isDown(upstream)) && reads) {
-    const htmlPath = pathname === '/' ? '/index.html' : pathname + '.html';
-    try {
-      const demo = await env.ASSETS.fetch(new URL(htmlPath, request.url));
-      if (demo.status === 200 && (demo.headers.get('content-type') || '').includes('text/html')) {
-        clearTimeout(timer);
-        return new Response(demo.body, {
-          status: 200,
-          headers: {
-            'content-type': 'text/html; charset=utf-8',
-            'cache-control': 'no-store',
-            'x-content-type-options': 'nosniff',
-            'referrer-policy': 'no-referrer',
-            'x-tippy-demo-mode': 'true',
-          },
-        });
-      }
-    } catch {
-      // Fall through to maintenance card
+  // The origin answered nothing, or answered as a gateway in front of it. Same
+  // preview, same gates: the card stays the answer for anything that is not a
+  // browser asking for a page, and the deadline is released once an answer of any
+  // kind has been chosen.
+  if ((!upstream || isDown(upstream)) && mayPreview({ env, request, pathname })) {
+    const shown = await previewPage(env, request, pagePathOf(pathname));
+    if (shown) {
+      clearTimeout(timer);
+      return shown;
     }
   }
   

@@ -259,9 +259,20 @@ AI_MAX_ANSWER_CHARS: int = int(os.environ.get("AI_MAX_ANSWER_CHARS", "3500"))
 # Agent: Telegram user ID for the autonomous agent (0 = disabled)
 AGENT_TG_ID: int = int(os.environ.get("AGENT_TG_ID", "0") or "0")
 
-# Solvency alerting: Telegram chat/user ID for emergency alerts
+# Solvency alerting: Telegram chat/user ID for emergency alerts. One knob decides
+# three things — an insolvency alert, a low-margin alert and an AML flag — so the
+# chain ends at OWNER_ID: a deployment that names only its owner (which is what this
+# repository's `.env` does, with both of the first two left blank) used to answer
+# «no SOLVENCY_ALERT_CHAT_ID set, cannot send solvency alert» and drop the message
+# while `/api/solvency` printed a deficit of hundreds of USDC.
 SOLVENCY_ALERT_CHAT_ID: int = int(
-    (os.environ.get("SOLVENCY_ALERT_CHAT_ID", "") or os.environ.get("ADMIN_TG_ID", "") or "0").strip() or "0"
+    (
+        os.environ.get("SOLVENCY_ALERT_CHAT_ID", "")
+        or os.environ.get("ADMIN_TG_ID", "")
+        or os.environ.get("OWNER_ID", "")
+        or "0"
+    ).strip()
+    or "0"
 )
 
 # CREATE2 factory contract address (empty = disabled)

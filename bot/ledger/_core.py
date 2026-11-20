@@ -36,12 +36,6 @@ class LedgerCoreMixin:
         # until 018 closed it. See _run_alembic().
         self._run_alembic(database)
 
-
-
-    def batch_lock(self):
-        """Return the ledger lock for batch operations."""
-        return self._lock
-
     def _ensure(self) -> None:
         """Reconnect if the underlying connection is dead/broken."""
         self._conn._ensure()

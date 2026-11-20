@@ -207,10 +207,28 @@ GROUP BY action;
 
 ### Insolvency Alert
 
+The canary runs inside the bot process every 60 s (`bot/solvency.py`) and speaks by
+**verdict**, not by tick: `blind` (reserves unreadable), `insolvent`, `low_margin`
+(under a 5 % buffer) or none. A verdict that is unchanged since the last message is
+repeated at most every `_ALERT_REPEAT` (6 h), so a deficit that lasts a day is five
+messages, not 288 — a channel cried on every five minutes is a channel that gets
+muted. A change is sent immediately (floored by `_ALERT_COOLDOWN`, 5 min), recovery
+included: `SOLVENCY RESTORED` names the verdict it replaced and the buffer it now
+holds. A message Telegram refused leaves the verdict unrecorded, so the next pass
+retries in a minute instead of waiting out the repeat window.
+
+What the operator sees in the log rather than the chat: `solvency: reserves=… owed=…
+solvent=…` on every measurable pass, and `solvency: blind, reserves unreadable` while
+the RPC is down — that line is what tells a blind canary apart from a dead one.
+
 1. Check `GET /api/solvency` for details
 2. Verify on-chain reserves: `base.vault_balance()` or `base.hot_balance()`
 3. Check for large unprocessed withdrawals
 4. If reserves are correct, check for accounting bugs in `ledger.total_liabilities()`
+5. If the alert was `SOLVENCY CHECK BLIND`, the deficit may be real and simply
+   unreadable: check the RPC endpoint and `VAULT_ADDRESS` before trusting the verdict —
+   `/api/solvency` answers `null` for `solvent`, `reserve_usdc` and `coverage_pct` when
+   no reserve leg is readable, while `/metrics` answers `-1` for the same failure
 
 ### Deposit Scanner Lag
 
@@ -259,6 +277,13 @@ Weekly review checklist:
   payout against: at or above it, `check_aml_withdraw` writes a `large_withdraw` row into
   `suspicious_activity` and, with `SOLVENCY_ALERT_CHAT_ID` set, the alert chat gets the
   line. It does not block the withdrawal — the flag is a review queue, not a refusal.
+- That chat resolves as `SOLVENCY_ALERT_CHAT_ID`, then `ADMIN_TG_ID`, then `OWNER_ID`: with the
+  first two left blank in `.env` — which is what this host carried — the watcher answered
+  `no SOLVENCY_ALERT_CHAT_ID set, cannot send solvency alert` in `data/runtime/origin.err.log`
+  and dropped the line, while `_notify_aml` dropped an AML flag without a word at all. Both
+  reach the owner now when no narrower chat is set, and a flag with nowhere to go is logged.
+  A resolved chat is not a delivered message: a chat the bot cannot write to fails the way a
+  missing one did, so read the first alert rather than assuming it arrived.
 - When a user who already completed three withdrawals in the last hour requests a fourth,
   `check_aml_withdraw` writes a `rapid_withdraw` flag the same way. The count and the
   window are fixed in `bot/ledger/_withdraw.py`, so there is no knob to loosen here.

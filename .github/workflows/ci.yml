@@ -60,7 +60,11 @@ jobs:
   test:
     name: Tests (pytest)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Measured 643s alone on the maintainer's host and 1,204s with another project's
+    # suite sharing it, against a documented 11-17 min. A job cancelled at the limit
+    # prints no failures, which is the one answer a test job exists to avoid; the
+    # live-site workflow moved 15 -> 25 for the same reason.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine

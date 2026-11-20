@@ -52,9 +52,11 @@
   `scripts/backup_db.sh` or a `.md` file to Ruff is an error, not a finding. `alembic/` joined the
   list with a live `I001` already sitting in it: a directory no command names is a directory no lint
   has ever read.
-- `python -m pytest -q -m "not production"` — 11–17 min (measured 643 s alone on the host, 949 s
-  with another project's suite sharing it, 1,012 s alone on the run this wave pinned its counts to),
-  1540 tests (199 more, marked `production`, run
+- `python -m pytest -q -m "not production"` — 11–20 min (measured 643 s alone on the host, 949 s
+  with another project's suite sharing it, 1,012 s alone on the run this wave pinned its counts to,
+  and 1,204 s with four read-only audit agents and the live origin sharing the box — which is why
+  the CI job carries 30 minutes rather than a 20-minute limit it now overshoots),
+  1555 tests (199 more, marked `production`, run
   against the deployed site in `.github/workflows/prod-health-check.yml`). That
   workflow has no skip path: a 503 maintenance card makes every live test fail, and only a
   hand-dispatched `expect_down=true` keeps a run green (tests/test_web.py pins this shape).
@@ -1047,6 +1049,128 @@
   not a page of the site) declaring them is a failure — and absolute URLs come from
   `public_base_url()`, never from `X-Forwarded-Host`, which a visitor brings with them.
 - Never push without an explicit word from the maintainer. Commit locally, report, wait.
+
+- **A money statement that hangs is a process that stops moving money, and the bound that prevents it
+  had been applied to every connection except the one in use.** `bot/ledger/_conn.py:8` states
+  `STATEMENT_TIMEOUT = "10s"` and `_connect()` issues `SET statement_timeout` right after connecting,
+  because a query waiting on a row lock holds `self._lock` — the `threading.RLock` every ledger call
+  takes — so one hung statement freezes the bot, the web process and the agent for the life of the
+  process, with no exception and no log line. The same bound caps the wait for a row lock, which is
+  why no separate `lock_timeout` is written here. The defect was not the missing bound but where it
+  was applied: `__init__` opened its connection directly and only `_connect()` (the reconnect path)
+  set the timeout, so the first connection — the one a process actually runs on unless Postgres
+  restarts — was the single unbounded connection in the tree, and it was measured as `statement_timeout
+  = 0` while every reconnect reported `10000ms`.
+  `tests/test_ledger.py::test_the_first_ledger_connection_carries_the_bound_later_ones_do` opens a real
+  connection and reads the setting back out of `pg_settings` (Postgres answers in milliseconds, so the
+  assertion is `"10000"`, not `"10s"`), then closes the connection underneath the proxy, lets `_ensure()`
+  replace it and requires the same value — one code path, and two bounds written twice are two numbers
+  waiting to disagree. Reverting `__init__` to the bare `psycopg.connect` is the mutation this law
+  exists for, and it fails on the first assertion rather than at 4 a.m. on the host.
+- **`/api/health` is read by something that reboots this process, so it is a contract between two
+  files, not a status page.** `deploy/watchdog.ps1` probes it with one `Invoke-WebRequest -TimeoutSec
+  8`; the verdict for a probe that never answered is `silent`, and `silent` is the only outcome that
+  restarts `deploy/run.py` — taking Telegram polling down with it and the operator's one report of what
+  broke. The endpoint's two legs were unbounded against that budget: the chain read waited
+  `RPC_TIMEOUT_SECONDS` (10 s) and a stalled statement waits the ledger connection's
+  `statement_timeout` (10 s), so a live origin talking to a slow RPC was condemned by a probe that
+  never got to report. Each leg now owns a slice — `HEALTH_CHAIN_TIMEOUT_SECONDS = 2.5` and
+  `HEALTH_DB_TIMEOUT_SECONDS = 4.0`, 6.5 s against the 8 s the watchdog allows — and a leg that misses
+  its slice is reported degraded rather than silent: a late chain answers `chain_head: null` with
+  `status: "ok"`, because a slow scanner says nothing about whether the process is alive, and a stalled
+  database answers 200 with `status: "degraded"` and `db: "down"`. The database leg was worse than
+  unbounded: `last_block()` sat outside the `try`, so its exception escaped the handler and the probe
+  answered **500** — a body that says nothing about the database the operator is asking about.
+  `tests/test_web.py` holds the three shapes: `test_the_health_probe_answers_inside_the_budget_the_watchdog_allows`
+  reads `-TimeoutSec` out of the PowerShell text and `HEALTH_*` out of the module, so either side moving
+  its number alone fails here; `test_health_reports_a_stalled_chain_instead_of_going_quiet` and
+  `test_health_reports_a_stalled_database_as_degraded_instead_of_fifty_hundred` each shrink their own
+  slice with `monkeypatch` and drive a slow dependency, so the guards are proven to be the lines that
+  answer rather than a payload someone wrote by hand.
+
+- **The edge may answer from the bundle, but only where a bundle document is the honest answer.**
+  `functions/[[path]].js` carries a demo branch for a project that has no origin configured, and until
+  wave 39 it also caught every failed upstream fetch — so with `BACKEND_URL` unset, or with the tunnel
+  down, a `GET` of `/api/markets`, `/.well-known/traffic-advice`, `robots.txt` or a typo returned the
+  landing with **200**. `tests/test_design_system.py::test_the_edge_previews_the_bundle_only_for_a_browser_reading_a_page`
+  runs the shipped file in Node against a Pages-shaped `ASSETS` stub (the landing, the Mini App
+  launch card, three carried documents no route serves, and an origin that answers nothing) and holds
+  twelve rows: a browser `GET` of `/` or `/app` previews, and a `POST` to `/api/mini/trade`, a `GET`
+  of `/api/markets`, `/api/info`, `/health`, `/robots.txt`, `/.well-known/traffic-advice`,
+  `/m/12345` and `/not-a-page` all answer the card with their own reason — `no-backend` when the
+  variable is empty, `refused` when it is set and nothing listens. A preview is a real answer, so it
+  must carry the card's headers too (`text/html`, `no-store`, `nosniff`, `no-referrer`) plus
+  `x-tippy-demo-mode: true`, because the served `/app` document still says `__MIN_WITHDRAW_USDC__` and
+  `__IS_SIGNED_IN__`: **`web/server.py` builds that page in memory, so publishing the bundle is not a
+  demo.** Five conditions gate it — the flag, `GET`/`HEAD`, `Accept: text/html`, no `/api/` or `/_`
+  prefix, and no extension in the last segment (the fifth is what `previewPage`'s miss probe covers
+  for the first three) — and a path whose page the bundle lacks falls through to the card, because
+  Pages answers a missing document with `/index.html` and a 404 must not become the landing. Six
+  mutations were proven to fire in a scratch copy: the `!backend` branch back to a bare
+  `tryPreview(pathname)`, the `backend` branch back to `if (expired)`, `pagePathOf` back to
+  `` `${pathname}.html` ``, the `x-tippy-demo-mode` header removed, the `/api/` clause dropped,
+  and `pagePathOf` pointed at `/index.html` so the SPA swallows `/robots.txt`.
+- **The one alert chat is the owner's, and a dropped notification is now an event.** Insolvency,
+  low margin and the AML flag all read `config.SOLVENCY_ALERT_CHAT_ID`, and that chain used to end
+  at `0`: `.env` on this host leaves the knob and `ADMIN_TG_ID` blank and names only `OWNER_ID`, so
+  the watcher measured `solvent: false` on `/api/solvency` and answered itself with `no
+  SOLVENCY_ALERT_CHAT_ID set, cannot send solvency alert` in `data/runtime/origin.err.log`, while
+  `_notify_aml` in `bot/handlers/wallet.py` dropped a sanctioned-counterparty flag without a word.
+  The chain now ends at `OWNER_ID` and the wallet logs the flag it cannot deliver.
+  `test_the_alert_chat_falls_back_to_the_owner_rather_than_dropping_the_alert` reads the knob out of
+  a fresh interpreter — the fallback is import-time arithmetic in `bot/config.py`, and reloading
+  that module in this process would rewrite the knobs every other test of the session reads — and
+  holds four shapes: the owner alone, an admin beating the owner, an explicit chat beating both,
+  and three blanks still naming no recipient. Two mutations were proven to fire: the `OWNER_ID`
+  clause removed from the chain, and the wallet's log line removed. Neither law sees delivery: a
+  chat the bot cannot write to fails the way a missing one did, and only the first real alert
+  proves the address is good.
+- **The solvency canary reports a verdict change, not a tick.** The watcher wakes every 60 s
+  (`bot/main.py:301`, `solvency_watcher`), a deficit does not clear inside an hour, and the alert
+  chain now ends at `OWNER_ID` instead of `0` — so the five-minute cooldown that was a courtesy
+  while the chat was unset became 288 identical messages a day into a human's private chat, and a
+  channel cried on every five minutes is a channel that gets muted. `_report()` in `bot/solvency.py`
+  remembers `_last_state` (`blind` / `insolvent` / `low_margin` / none) and sends when the verdict
+  *changed* or when `_ALERT_REPEAT` (6 h) has passed since the last message, while `_ALERT_COOLDOWN`
+  (300 s) still floors every send so a verdict flapping between two bad states cannot spam. Recovery
+  is itself a verdict: `SOLVENCY RESTORED` names the verdict it replaced, and a solvent ledger that
+  never alerted sends nothing. The two clocks mean nothing in the other order, which is
+  `test_the_repeat_window_is_longer_than_the_floor`. A message Telegram refused must not consume the
+  repeat window, so `_send_alert()` answers whether it delivered and the stamp and the verdict
+  advance only after `True` — the next pass retries in a minute, not six hours later. The blind
+  branch logs `solvency: blind, reserves unreadable` before it alerts: the chat gets the emergency
+  and the log gets the fact that the canary is alive and blind, which is the only thing that tells a
+  blind watcher apart from a dead one — measured the hard way this wave, reading `origin.out.log` for
+  a deficit that was really this host's DNS failure. Six more mutations were proven to fire on the
+  state machine: a repeat allowed as soon as the floor passed, both stamps advanced before the send
+  was attempted, the recovery notice silenced, the blind log line deleted, `_ALERT_REPEAT` set equal
+  to the floor, and the verdict left unrecorded after a delivered message. What no law here sees:
+  Telegram accepting a message is not a human reading it, and `_ALERT_REPEAT` is the only clock that
+  keeps a long incident visible — mute that chat and this bullet's premise is already false.
+- **A gauge the code, the docstring and the runbook disagree about is a panel reading no data.**
+  `web/metrics.py` promised `tipbot_deposits_total`, `tipbot_withdrawals_total` and
+  `tipbot_rpc_latency_seconds` in its module docstring — names no version of that file ever printed
+  — stayed silent about `tipbot_volume_usdc`, which it did print, and divided `tips_micro` and
+  `deposits_micro` into the cache dict on every refill although no line of `_format_metrics` read
+  them: dead work, and a number an operator searches the exposition for in vain. Three laws in
+  `tests/test_metrics.py` hold one set. The collector's `m["…"]` writes and the formatter's
+  `m.get("…")` reads must be equal, taken through the AST because a regex over the source counts the
+  key inside `f"tipbot_x {m.get('x')}"` as the very confusion being refused. `_emitted_names()` — the
+  sample lines of `_format_metrics({})`, called with an empty dict so a deleted line vanishes without
+  a database or an RPC — must equal the `tipbot_*` names in the docstring, and must equal the bullets
+  of the `Available metrics` block in `docs/OPERATIONS.md`, whose two markers the law asserts it
+  found before trusting either set. Both readers carry a floor of six so a scan that went blind
+  reports instead of certifying. Five mutations were proven to fire: a figure collected and thrown
+  away, a name invented in the docstring, a bullet removed from the runbook, a printed line removed
+  from the exposition, and a formatter returning an empty payload. What these laws do not judge is the
+  value: a gauge publishing the wrong number under a real name reads clean here, which is why
+  `test_metrics_solvent_units` and `test_metrics_insolvent_when_reserves_low` remain the numeric half.
+  And one divergence is now stated in prose instead of silently tolerated: `/metrics` and
+  `/api/solvency` take reserves as the hot wallet or the vault, while `bot/solvency.py` — the program
+  that decides whether the owner is woken — adds the unswept x402 credit and the receive pool, so a
+  delayed sweep can show a short gauge beside a quiet canary. Unifying the three would move a public
+  proof-of-reserves figure, so it is the maintainer's call and is recorded here and in the module
+  docstring rather than taken.
 
 ## Ledger facts
 

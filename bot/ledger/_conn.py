@@ -1,5 +1,11 @@
+import logging
+
 import psycopg
 from psycopg.rows import dict_row
+
+log = logging.getLogger("tipbot.ledger")
+
+STATEMENT_TIMEOUT = "10s"
 
 
 class ReconnectingConn:
@@ -19,9 +25,11 @@ class ReconnectingConn:
 
     def __init__(self, database: str) -> None:
         self._database = database
-        self._conn = psycopg.connect(
-            database, row_factory=dict_row, connect_timeout=15
-        )
+        # _connect(), not a bare psycopg.connect(): the statement bound below is
+        # what keeps a hung query from pinning self._lock for the life of the
+        # process, and applying it only on reconnect left the connection a
+        # process actually runs on — the first one — unbounded.
+        self._connect()
 
     def _connect(self) -> None:
         self._conn = psycopg.connect(
@@ -30,10 +38,15 @@ class ReconnectingConn:
         # Bound every statement: a query that hangs (network stall, DB lock
         # contention) would otherwise pin self._lock forever and freeze every
         # other ledger call on the event loop. Error out instead of hanging.
+        # The same bound caps the wait for a row lock, which is why no separate
+        # lock_timeout is set here.
         try:
-            self._conn.execute("SET statement_timeout = '10s'")
-        except Exception:
-            pass
+            self._conn.execute(f"SET statement_timeout = '{STATEMENT_TIMEOUT}'")
+        except Exception as e:
+            # The connection still works without the bound, so this stays
+            # non-fatal — but an unbounded money connection must never pass
+            # quietly: it is the exact hang the statement exists to prevent.
+            log.error("ledger connection opened WITHOUT statement_timeout: %s", e)
 
     def _ensure(self) -> None:
         if self._conn.closed or self._conn.broken:

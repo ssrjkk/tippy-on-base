@@ -21,6 +21,10 @@ async def _notify_aml(bot, tg_id: int, warnings: list[str]) -> None:
     """Send AML flags to the configured admin chat (no-op if unset)."""
     chat_id = common.config.SOLVENCY_ALERT_CHAT_ID
     if not chat_id:
+        # The flag has no other recipient and no retry, and nothing else in the
+        # request path notices: without this line the only record that the platform
+        # saw a sanctioned counterparty is a database row nobody reads.
+        log.warning("no alert chat configured, an AML flag for tg_id=%s was not sent", tg_id)
         return
     text = (
         f"🚩 <b>AML flag</b> (user <code>{tg_id}</code>):\n"

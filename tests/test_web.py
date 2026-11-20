@@ -371,6 +371,81 @@ def test_health_deposit_lag_none_when_rpc_down(client, monkeypatch):
     assert data["status"] == "ok"
 
 
+def test_the_health_probe_answers_inside_the_budget_the_watchdog_allows():
+    """/api/health is the verdict the watchdog votes with, so it owes an answer.
+
+    `deploy/watchdog.ps1` probes this URL with one `Invoke-WebRequest` and reads a
+    probe that never answered as `silent` — the only outcome that reboots a live
+    origin, taking Telegram polling with it and the operator's one report of what
+    broke. The endpoint's two legs each get a slice, and the sum of those slices is
+    the contract between the two files: read from both, so either side moving its
+    number without the other fails here rather than on the host at 4 a.m.
+    """
+    root = Path(__file__).resolve().parents[1]
+    script = (root / "deploy" / "watchdog.ps1").read_text(encoding="utf-8")
+    probe = re.search(r"Invoke-WebRequest[^\n]*?-TimeoutSec\s+(\d+)", script)
+    assert probe, "watchdog.ps1 no longer states the probe budget this law reads"
+    allowed = int(probe.group(1))
+
+    from web import server
+
+    budget = server.HEALTH_CHAIN_TIMEOUT_SECONDS + server.HEALTH_DB_TIMEOUT_SECONDS
+    assert budget < allowed, (
+        f"/api/health can take {budget}s while the watchdog gives up at {allowed}s: a slow "
+        "chain RPC or a contended row lock would be read as a dead process, not a degraded one"
+    )
+
+
+def test_health_reports_a_stalled_chain_instead_of_going_quiet(client, monkeypatch):
+    """A chain that answers late is reported as `chain_head: null`, not as silence."""
+    import time
+
+    from web import server
+
+    class Slow:
+        @property
+        def block_number(self):
+            time.sleep(1.0)
+            return 1
+
+    monkeypatch.setattr(server, "HEALTH_CHAIN_TIMEOUT_SECONDS", 0.2)
+    monkeypatch.setattr(server.base, "w3", types.SimpleNamespace(eth=Slow()))
+    data = client.get("/api/health").json()
+    assert data["chain_head"] is None
+    assert data["deposit_lag"] is None
+    assert data["status"] == "ok", (
+        "the deposit scanner being slow says nothing about whether this process is alive"
+    )
+
+
+def test_health_reports_a_stalled_database_as_degraded_instead_of_fifty_hundred(client, monkeypatch):
+    """A DB read that never returns used to be the one leg with no bound and no
+    guard: `last_block()` outside the `try` meant an exception escaped the handler
+    and the probe answered 500 — a report the watchdog reads as `answered`, but one
+    whose body says nothing about the database the operator is asking about."""
+    import asyncio
+
+    from web import server
+
+    class Stalled:
+        async def last_block(self):
+            await asyncio.sleep(1.0)
+            return 1
+
+        async def ping(self):
+            return None
+
+    monkeypatch.setattr(server, "HEALTH_DB_TIMEOUT_SECONDS", 0.2)
+    monkeypatch.setattr(server, "ledger", Stalled())
+    monkeypatch.setattr(server.base, "w3", types.SimpleNamespace(eth=types.SimpleNamespace(block_number=7)))
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "degraded"
+    assert data["db"] == "down"
+    assert data["last_scanned_block"] is None
+
+
 def test_solvency_zeros(client):
     r = client.get("/api/solvency")
     assert r.status_code == 200

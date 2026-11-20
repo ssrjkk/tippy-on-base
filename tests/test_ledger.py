@@ -2828,3 +2828,38 @@ def test_no_verdict_of_a_money_writing_ledger_call_is_thrown_away():
                         offenders.append(f"{rel}:{node.lineno} discards {call.func.attr}()")
 
     assert not offenders, "a bool verdict about money was read as a statement of fact:\n" + "\n".join(sorted(offenders))
+
+
+def test_the_first_ledger_connection_carries_the_bound_later_ones_do():
+    """One connection, one bound — for its whole life.
+
+    `_connect()` set `statement_timeout` while `__init__` opened its connection
+    directly, so the statement a process actually runs on from boot — the one it
+    never replaces — was the single connection in the tree with no bound at all.
+    A query waiting on a row lock then pinned `self._lock` forever, froze every
+    money path in the process, and stopped `/api/health` answering inside the
+    watchdog's probe budget, which reads as a dead origin rather than a slow
+    database. Postgres reports the setting in milliseconds.
+    """
+    from bot.ledger._conn import ReconnectingConn
+
+    conn = ReconnectingConn(TEST_DB_URL)
+    try:
+        def _timeout_ms() -> str:
+            return conn.execute(
+                "SELECT setting FROM pg_settings WHERE name = 'statement_timeout'"
+            ).fetchone()["setting"]
+
+        first = _timeout_ms()
+        assert first == "10000", (
+            f"a brand-new ledger connection opened with statement_timeout={first}ms; "
+            "an unbounded statement holds the ledger lock for the life of the process"
+        )
+        conn._conn.close()
+        conn._ensure()
+        assert _timeout_ms() == first, (
+            "the first connection and a reconnect are the same code path: two bounds "
+            "written twice are two numbers waiting to disagree"
+        )
+    finally:
+        conn.close()

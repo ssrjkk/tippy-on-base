@@ -1,14 +1,24 @@
-"""Prometheus-compatible metrics endpoint for monitoring.
+"""Prometheus text exposition served by the origin at `/metrics` on `WEB_PORT`.
 
-Exposes key metrics in Prometheus text format:
-  - tipbot_liabilities_usdc
-  - tipbot_reserves_usdc
-  - tipbot_solvent (0 or 1)
-  - tipbot_users_total
-  - tipbot_markets_open
-  - tipbot_deposits_total
-  - tipbot_withdrawals_total
-  - tipbot_rpc_latency_seconds
+The names below are the whole surface — `tipbot_liabilities_usdc`,
+`tipbot_reserves_usdc`, `tipbot_solvent`, `tipbot_users_total`,
+`tipbot_markets_open`, `tipbot_volume_usdc` — and
+`tests/test_metrics.py` holds this list, the `# TYPE` lines and the bullets in
+`docs/OPERATIONS.md` to one set, because a metric the runbook promises and the
+formatter does not print is a dashboard panel that silently reads no data.
+
+A leg that could not be measured answers `-1`: the gauge is never dropped, so a
+scrape that lost the RPC still draws a line and an alert on `tipbot_solvent == 0`
+still fires instead of going quiet. Values are refilled at most every
+`_CACHE_TTL` seconds — without that, a 15 s scrape would drive four aggregate
+queries and an on-chain balance read every interval.
+
+The reserves line is the hot wallet, or the vault when `VAULT_ADDRESS` is set. It
+does NOT count the two in-flight x402 legs that `bot/solvency.py` adds to its own
+reserves (unswept booked credit, still parked on the per-invoice derived address,
+and the receive pool the sweep has not drained), so a delayed sweep can make this
+gauge read short while the canary that alerts the owner stays quiet. `/api/solvency`
+carries the same narrower definition.
 """
 
 import time
@@ -57,13 +67,13 @@ async def collect_metrics() -> str:
         and m["reserves_usdc"] >= m["liabilities_usdc"]
     ) else 0
 
-    # Stats
+    # Stats — only the figures the exposition prints. A value collected and never
+    # formatted is work no scrape reads; `test_the_collector_writes_exactly_what_the_formatter_reads`
+    # refuses it.
     try:
         s = await ledger.global_stats()
         m["users_total"] = s.get("users", 0)
         m["volume_usdc"] = float(Decimal(s.get("volume_micro", 0)) / Decimal(_MICRO))
-        m["tips_usdc"] = float(Decimal(s.get("tips_micro", 0)) / Decimal(_MICRO))
-        m["deposits_usdc"] = float(Decimal(s.get("deposits_micro", 0)) / Decimal(_MICRO))
     except Exception:
         m["users_total"] = 0
         m["volume_usdc"] = 0

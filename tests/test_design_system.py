@@ -4196,6 +4196,171 @@ def test_the_reason_the_card_gives_is_the_reason_the_measured_shape_produced(tmp
     assert "json" in (observed["app-own-502"]["type"] or ""), observed["app-own-502"]
 
 
+_EDGE_PREVIEW_DRIVER = """
+import { onRequest } from './function.mjs';
+
+// What the bundle really answers on a Pages project with the single-page capture on:
+// a path the project does not carry comes back `200 text/html` holding the landing
+// document. Every driver above stubs `ASSETS` as always-404, which is precisely why
+// none of them ever saw the preview branch — a 404 stub cannot be mistaken for a
+// page, so the fallback looked inert and the site shipped serving the landing for
+// `/api/health`, `/robots.txt` and a mistyped URL alike.
+const LANDING = '<!doctype html><html lang="ru" data-signed-in="__SIGNED_IN__"><title>Tippy</title><body>the landing document</body></html>';
+const APP_PAGE = '<!doctype html><html lang="en"><title>Tippy — Mini App</title><body>the mini app document</body></html>';
+// Three documents a bundle can hold whose names are not pages. They are here on
+// purpose: without them the capture probe below refuses every shape this law names,
+// and the gates on the path would be measured by nothing but their own redundancy.
+const API_PAGE = '<!doctype html><html><body>a document the bundle carries under an API name</body></html>';
+const TEXT_PAGE = '<!doctype html><html><body>a document the bundle carries behind a suffix</body></html>';
+const PLUMB_PAGE = '<!doctype html><html><body>a document the bundle carries behind the plumbing prefix</body></html>';
+
+const CARRIED = {
+  '/index.html': LANDING,
+  '/app.html': APP_PAGE,
+  '/api/health.html': API_PAGE,
+  '/robots.txt.html': TEXT_PAGE,
+  '/_headers.html': PLUMB_PAGE,
+};
+
+const assets = {
+  fetch: async (req) => new Response(
+    CARRIED[new URL(req.url).pathname] ?? LANDING,
+    { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
+  ),
+};
+
+// A port nothing listens on: the origin is configured here but dead, which is the
+// second branch the preview was written into.
+const DEAD = 'http://127.0.0.1:1';
+
+async function ask(path, { accept = 'text/html', method = 'GET', demo = '1', backend = '' } = {}) {
+  const res = await onRequest({
+    request: new Request(`https://tippy.test${path}`, { method, headers: { accept } }),
+    env: { ASSETS: assets, BACKEND_URL: backend, DEMO_HTML: demo },
+  });
+  return {
+    status: res.status,
+    type: res.headers.get('content-type'),
+    preview: res.headers.get('x-tippy-demo-mode'),
+    reason: res.headers.get('x-tippy-outage-reason'),
+    cache: res.headers.get('cache-control'),
+    nosniff: res.headers.get('x-content-type-options'),
+    refer: res.headers.get('referrer-policy'),
+    text: await res.text(),
+  };
+}
+
+const out = {
+  'preview-off': await ask('/', { demo: '0' }),
+  'landing': await ask('/'),
+  'named-page': await ask('/app'),
+  'soft-404': await ask('/definitely-not-a-page'),
+  'api-for-json': await ask('/api/health', { accept: 'application/json' }),
+  'api-in-a-browser': await ask('/api/health'),
+  'page-for-json': await ask('/app', { accept: 'application/json' }),
+  'robots': await ask('/robots.txt'),
+  'plumbing': await ask('/_headers'),
+  'post': await ask('/', { method: 'POST' }),
+  'origin-down-landing': await ask('/', { backend: DEAD }),
+  'origin-down-api': await ask('/api/info', { accept: 'application/json', backend: DEAD }),
+};
+console.log(JSON.stringify(out));
+"""
+
+
+def test_the_edge_previews_the_bundle_only_for_a_browser_reading_a_page(tmp_path):
+    """A design preview and a production outage are made of the same bytes, and only
+    an agreement about which one to answer keeps them apart. Five questions decide it
+    on this file's own side — did the project ask for a preview (`DEMO_HTML=1`), is
+    the request a read, does the client accept HTML, is the path a page rather than
+    `/api/`, `/_*` or a name carrying a format suffix, and does the bundle really hold
+    that page rather than the single-page capture answering for it. This law drives
+    the shipped Function against an ASSETS stub that behaves the way Pages does — `200
+    text/html` for a path the project lacks — because every earlier harness stubbed a
+    404 there and so watched none of this, and it also carries three documents whose
+    names are not pages, so that each gate is measured by a row of its own instead of
+    being covered by the capture probe.
+
+    The shape each row refuses is a shape the live host was measured in on 2026-11-20:
+    `GET /api/health` answered `200 text/html` carrying `x-tippy-demo-mode: true`,
+    `/robots.txt` and `/sitemap.xml` answered the landing's 41,661 bytes instead of
+    rules, an unknown URL answered a soft 200 where `not_found.html` owes a `noindex`
+    dead end, and the card that names the fault — the one `docs/CLOUDFLARE.md` routes
+    an operator by — appeared only for a POST."""
+    source = EDGE.read_text(encoding="utf-8-sig")
+    (tmp_path / "function.mjs").write_bytes(source.encode("utf-8"))
+    (tmp_path / "driver.mjs").write_bytes(_EDGE_PREVIEW_DRIVER.encode("utf-8"))
+
+    result = subprocess.run(
+        ["node", str(tmp_path / "driver.mjs")],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=tmp_path, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    observed = json.loads(result.stdout.strip().splitlines()[-1])
+
+    wants = {
+        "preview-off": (503, "no-backend"),
+        "landing": (200, None),
+        "named-page": (200, None),
+        "soft-404": (503, "no-backend"),
+        "api-for-json": (503, "no-backend"),
+        "api-in-a-browser": (503, "no-backend"),
+        "page-for-json": (503, "no-backend"),
+        "robots": (503, "no-backend"),
+        "plumbing": (503, "no-backend"),
+        "post": (503, "no-backend"),
+        "origin-down-landing": (200, None),
+        "origin-down-api": (503, "refused"),
+    }
+    assert set(observed) == set(wants), (
+        "the driver answered a different set of shapes than this law judges — the "
+        "harness went blind, which is how the preview branch shipped untested"
+    )
+    previews = [name for name, (status, _) in wants.items() if status == 200]
+    assert len(previews) >= 2, "no row is a preview, so the gates above prove nothing"
+
+    for name, (status, reason) in wants.items():
+        row = observed[name]
+        assert row["status"] == status, (name, row["status"], row["reason"], row["text"][:90])
+        assert row["reason"] == reason, (name, row["reason"], reason)
+        card = "временно недоступен" in row["text"]
+        if status == 200:
+            assert not card, f"{name} is a card wearing a preview"
+            assert row["preview"] == "true", (name, "a bundle document served without saying so")
+            assert row["cache"] == "no-store" and row["nosniff"] == "nosniff", (name, row)
+            assert row["refer"] == "no-referrer", (name, row)
+            assert "text/html" in (row["type"] or ""), (name, row["type"])
+        else:
+            assert card, f"{name} answered neither the card nor the page: {row['text'][:90]}"
+            assert row["preview"] is None, f"{name} stamps a card as a preview"
+            assert "__SIGNED_IN__" not in row["text"], (
+                f"{name} leaked a bundle document into the answer a card owes"
+            )
+
+    assert "the landing document" in observed["landing"]["text"], (
+        "the landing is not standing in for itself, so nothing here is a preview"
+    )
+    assert "the mini app document" in observed["named-page"]["text"], (
+        "/app was answered by the landing: the capture was taken for the page"
+    )
+    assert "the landing document" not in observed["soft-404"]["text"], (
+        "a path the bundle does not carry answered the landing — a soft 404 is a page "
+        "that exists everywhere, and a crawler cannot tell an outage from a typo"
+    )
+    for name, phrase in {
+        "api-in-a-browser": "under an API name",
+        "api-for-json": "under an API name",
+        "robots": "behind a suffix",
+        "plumbing": "behind the plumbing prefix",
+        "page-for-json": "the mini app document",
+    }.items():
+        assert phrase not in observed[name]["text"], (
+            f"{name} answered a bundle document that the path and Accept gates "
+            "exist to refuse: one of them is now doing nothing"
+        )
+
+
 def test_the_doc_gives_every_outage_reason_its_own_remedy():
     """A reason the runbook does not name is a card an operator has to re-derive.
     The table has one row per word the Function can print, no row for a word the

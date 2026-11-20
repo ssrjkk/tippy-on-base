@@ -176,6 +176,39 @@ tighter: the same origin has answered a plain health read in 7.8 s while the mac
 hosting it ran the test suite, and a deadline that cuts a live origin off invents the
 outage it is supposed to report.
 
+### Preview of the bundle, for a project that asks for one
+
+The same function can render the design with no application behind it, and that is a
+thing a project has to want. Four questions decide it, all of them on the edge's own
+side: the deployment carries `DEMO_HTML=1` (a Pages variable, set on a preview
+deployment and absent from production and from every `.env` in this repository), the
+request is a `GET` or `HEAD`, it accepts `text/html`, and the path is a page — not
+`/api/…`, not `/_…`, and not a name carrying a format suffix. A fifth answer comes from
+the bundle itself: the function asks Pages for a filename no file can hold, and a page
+returned byte-identical to that answer is the project's single-page capture standing in
+for a document that does not exist, so the card is served instead.
+
+```bash
+# A page-shaped read on a deployment with the preview on answers the bundle:
+curl -sSI -H 'accept: text/html' https://tippy.yourdomain.com/ | grep -i 'x-tippy-demo-mode'
+# and an API read never does, whatever the client asks for:
+curl -sSI -H 'accept: text/html' https://tippy.yourdomain.com/api/health | grep -i 'x-tippy-outage-reason'
+```
+
+The ungated version of that fallback was measured live on 2026-11-20, on a project
+whose `BACKEND_URL` was empty: `GET /api/health` answered `200 text/html` carrying
+`x-tippy-demo-mode: true` and the landing's 41,661 bytes, `/robots.txt` and
+`/sitemap.xml` answered markup where a crawler reads rules, an unknown URL answered a
+soft `200` where `not_found.html` owes a `noindex` dead end, and `/app` answered the
+Mini App shell with `__MIN_WITHDRAW_USDC__` and six more placeholders unsubstituted.
+Every one of those is the answer a preview owes only a browser looking at a page, and
+the card naming `no-backend` — the row in [Why the card came](#why-the-card-came-and-what-each-reason-says)
+that tells an operator the variable is missing — appeared for nothing but a POST. That
+is also why the preview is the one place where the bundle may speak for the origin: the
+`*.html` refusal in `BundleFiles`, the `txt` exclusion at the head of the function and
+the dead-end page all describe a site that answers a page with a page, and a document
+that stands in for an application has to say so in its headers.
+
 ## 4. Proxy trust on the backend
 
 Per-IP rate limits read the client address from the connection by default. Once
