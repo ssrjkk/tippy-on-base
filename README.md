@@ -420,6 +420,8 @@ worst-case payout.
 - The autonomous agent is fail-closed: LLM errors mean no action, caps are
   validated at startup, and the DB blocks trading on its own markets
 
+- [Security](SECURITY.md)
+
 ## Roadmap
 
 - ~~Per-user deposit addresses (CREATE2 vaults)~~ shipped: `bot/create2.py` derives one
