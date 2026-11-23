@@ -11,7 +11,7 @@ accounting backed by public proof-of-reserves.
 
 **Author:** [@ssrjkk](https://t.me/ssrjkk) · [@b2wmain](https://t.me/b2wmain) · [X / Twitter](https://x.com/ludych1) · [GitHub](https://github.com/ssrjkk)
 
-**Links:** [Telegram Bot](https://t.me/tippy_on_base_bot)
+**Links:** [Telegram Bot](https://t.me/tippy_on_base_bot) · [Landing](https://tippy-egi.pages.dev/)
 
 **Whitepaper:** [docs/WHITEPAPER.md](docs/WHITEPAPER.md) — the full function inventory,
 the growth roadmap, and what the product can earn (grants, subscriptions, fees).
