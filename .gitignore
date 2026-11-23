@@ -86,6 +86,20 @@ scripts/*
 !scripts/final_release_check.sh
 !scripts/make_docs_screenshots.py
 
+# Scratch design exports and QA captures (operator artifacts, never repo content)
+.qa/
+canvases/
+tippy_base_designs_v2_temp/
+tippy_base_designs_v2.zip
+animation-demo.html
+landing_check.png
+landing_final.png
+mini_app_markets.png
+mini_app_wallet.png
+site_desktop.png
+site_desktop_scrolled.png
+site_mobile.png
+
 # Agent runtime artifacts
 .agent_seen_news.json
 .agent_state.json

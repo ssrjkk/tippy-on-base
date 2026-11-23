@@ -1191,17 +1191,16 @@
   `pip install -r` never resolves — so `docker compose up -d app` raised `ModuleNotFoundError` before it
   read `.env` while the whole suite stayed green. It is declared now, and `tests/test_dependencies.py`
   is the law that keeps it declared: `image_closure()` walks the projects a file names through the
-  *installed* distributions' own requires, dropping a child whose marker cannot hold for this
-  interpreter (`extra == …` never does; a `python_version` comparison is evaluated; every host or
-  platform marker is treated as applicable, because the image is Linux and this gate may run anywhere),
-  `import_names_of()` answers what each distribution really puts on `sys.path` (`top_level.txt`, else a
-  package directory in `RECORD`, else the normalised project name), and `third_party_runtime_roots()`
-  takes the imports out of the AST of `bot|web|agent|deploy|alembic` — module scope and function scope
-  being the same to it, since an import inside a handler raises the moment that handler runs in the
-  container. Measured this wave as 13 declared projects, a 69-distribution closure with nothing
-  unresolved, 174 import names and 18 third-party roots the code reaches, with floors on all three sides
-  of the comparison (≥50 distributions, ≥100 roots, ≥8 imports) because an empty closure passes against
-  an empty import set and both empties look exactly like a clean tree. `scripts/` is outside the scope on
+  *installed* distributions' own requires, evaluating each PEP 508 marker for the deployed Linux image
+  (`extra == …` never holds; Python comparisons use the CI interpreter; Windows-only children are not
+  part of the image), `import_names_of()` answers what each distribution really puts on `sys.path`
+  (`top_level.txt`, else a package directory in `RECORD`, else the normalised project name), and
+  `third_party_runtime_roots()` takes the imports out of the AST of `bot|web|agent|deploy|alembic` —
+  module scope and function scope being the same to it, since an import inside a handler raises the
+  moment that handler runs in the container. The closure requires every declared project, refuses an
+  unresolved distribution and floors the walked closure at 50; the runtime import scan still has its
+  floor of 8, because an empty closure passes against an empty import set and both empties look exactly
+  like a clean tree. `scripts/` is outside the scope on
   purpose: it is operator and developer tooling, it imports what no runtime image should carry (`solcx`
   compiles contracts, `playwright` draws the docs pictures) and it reaches first-party modules by bare
   name through its own `sys.path` hack. The companion law refuses the other vehicle's silent override —
