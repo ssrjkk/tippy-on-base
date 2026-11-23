@@ -1198,10 +1198,12 @@
   package directory in `RECORD`, else the normalised project name), and `third_party_runtime_roots()`
   takes the imports out of the AST of `bot|web|agent|deploy|alembic` — module scope and function scope
   being the same to it, since an import inside a handler raises the moment that handler runs in the
-  container. Measured this wave as 13 declared projects, a 69-distribution closure with nothing
-  unresolved, 174 import names and 18 third-party roots the code reaches, with floors on all three sides
-  of the comparison (≥50 distributions, ≥100 roots, ≥8 imports) because an empty closure passes against
-  an empty import set and both empties look exactly like a clean tree. `scripts/` is outside the scope on
+  container. Measured in Linux CI as 13 declared projects, a 69-distribution closure with nothing
+  unresolved, 77 import names and 18 third-party roots the code reaches. The original 100-root floor was
+  host-dependent: Windows metadata counted pywin32 modules the Linux image never installs. The closure now
+  requires every declared project, refuses an unresolved distribution and floors the walked closure at 50;
+  the runtime import scan still has its floor of 8, because an empty closure passes against an empty import
+  set and both empties look exactly like a clean tree. `scripts/` is outside the scope on
   purpose: it is operator and developer tooling, it imports what no runtime image should carry (`solcx`
   compiles contracts, `playwright` draws the docs pictures) and it reaches first-party modules by bare
   name through its own `sys.path` hack. The companion law refuses the other vehicle's silent override —

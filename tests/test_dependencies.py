@@ -238,17 +238,37 @@ def test_every_module_the_runtime_imports_is_one_the_image_installs():
 
     The subject set is the runtime tree itself, so a new import at module scope joins
     this law the commit it lands, and no list in this file has to be edited for that to
-    happen. Measured the day it was written: 13 declared projects, a 69-distribution
-    closure, 174 import names, 18 third-party roots the code reaches — and ``httpx``
-    among them with nothing in the image to supply it.
+    happen. Measured in Linux CI: 13 declared projects, a 69-distribution closure,
+    77 import names and 18 third-party roots the code reaches. The original 100-root
+    floor was host-dependent: Windows metadata counted pywin32 modules the Linux image
+    never installs. The closure is checked against its declared projects instead, and
+    an unresolved distribution fails explicitly.
 
     The floors refuse a scan that went blind on either side: an empty closure passes
     against an empty import set, and both empties look exactly like a clean tree.
     """
     available, walked, unresolved = image_closure(REPO / "requirements.txt")
     used = third_party_runtime_roots()
-    assert len(walked) >= 50, f"the image closure walked only {len(walked)} distributions — the walk is blind"
-    assert len(available) >= 100, f"the image closure names {len(available)} import roots — the walk is blind"
+    declared = {
+        _norm(name)
+        for name in map(_project_of, requirements_lines(REPO / "requirements.txt"))
+        if name
+    }
+    assert len(declared) >= 10, (
+        f"only {len(declared)} declared runtime projects read — the reader is blind"
+    )
+    assert declared <= walked, (
+        f"declared projects missing from the image closure: {sorted(declared - walked)}"
+    )
+    assert len(walked) >= 50, (
+        f"the image closure walked only {len(walked)} distributions — the walk is blind"
+    )
+    assert not unresolved, (
+        f"distributions whose own requirements could not be read: {sorted(unresolved)}"
+    )
+    assert len(available) >= len(declared), (
+        f"the image closure names {len(available)} import roots — the walk is blind"
+    )
     assert len(used) >= 8, f"the runtime scan found {sorted(used)} — the import reader is blind"
     missing = {root: files for root, files in used.items() if root not in available}
     assert not missing, (
