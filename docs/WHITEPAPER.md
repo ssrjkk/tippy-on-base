@@ -590,7 +590,7 @@ Lines of code: every file `git ls-files` reports with one of `.py .sol .js .css
 .html .sh .ps1`, counted as `len(splitlines())` and grouped by top-level directory
 — so the vendored `contracts/lib/` (a `.gitkeep` in git) never enters, and neither
 does a scratch file `.gitignore` keeps out of the clone. Measured this way the tree
-is **84,433** lines: tests 41,130 · bot 20,825 · web 12,048 · scripts 2,906 ·
+is **84,412** lines: tests 41,129 · bot 20,825 · web 12,048 · scripts 2,906 ·
 contracts 2,649 · agent 1,636 · alembic 1,462 · deploy 1,373 · functions 348 ·
 script 56 (the one Foundry deploy script at the repository root).
 

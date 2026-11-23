@@ -21,6 +21,8 @@ import pathlib
 import re
 import sys
 
+from packaging.markers import Marker
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
 #: The tree the container boots: the bot process, the origin, the agent, the supervisor
@@ -34,8 +36,12 @@ RUNTIME_DIRS = ("bot", "web", "agent", "deploy", "alembic")
 FIRST_PARTY = {"bot", "web", "agent", "deploy", "scripts", "alembic", "tests", "functions", "contracts", "conftest"}
 
 _REQ_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
-_MARKER_VERSION_RE = re.compile(r'python_version\s*(<=|>=|==|!=|<|>)\s*["\']([\d.]+)["\']')
-_HOST_MARKER_RE = re.compile(r"os_name|platform_system|sys_platform|platform_machine|platform_release|platform_version")
+_LINUX_MARKER_ENV = {
+    "os_name": "posix",
+    "sys_platform": "linux",
+    "platform_system": "Linux",
+    "extra": "",
+}
 
 
 def _norm(name: str) -> str:
@@ -43,43 +49,14 @@ def _norm(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).strip().lower()
 
 
-def _version_tuple(text: str) -> tuple:
-    return tuple(int(p) for p in re.findall(r"\d+", text)[:3])
-
-
 def marker_applies(marker: str) -> bool:
-    """Whether a PEP 508 marker can be true for ``pip install -r`` on this interpreter.
+    """Whether a PEP 508 marker can hold in the deployed Linux image.
 
-    ``extra == "standard"`` never is: an install line that names no extra resolves no
-    extras, and that single fact is the difference between the CI venv and the image.
-    A ``python_version`` comparison is evaluated against this interpreter, because a
-    dependency held back to an old Python (``exceptiongroup``) is not a gap in the
-    image. Every other marker — host, platform, implementation — is treated as
-    applicable: the image is Linux and this gate may run anywhere, so refusing a
-    platform-conditional package would report a missing dependency that the deployed
-    container really does have.
+    Python and implementation comparisons use the CI interpreter. Operating-system
+    markers use Linux even when this gate runs on Windows, and no extra is selected,
+    matching the image's bare ``pip install -r requirements.txt``.
     """
-    text = (marker or "").strip().lower()
-    if not text:
-        return True
-    if "extra" in text:
-        return False
-    here = _version_tuple(sys.version.split()[0])
-    for op, want in _MARKER_VERSION_RE.findall(text):
-        there = _version_tuple(want)
-        if op == "<" and not here < there:
-            return False
-        if op == "<=" and not here <= there:
-            return False
-        if op == ">" and not here > there:
-            return False
-        if op == ">=" and not here >= there:
-            return False
-        if op == "==" and here[: len(there)] != there:
-            return False
-        if op == "!=" and here[: len(there)] == there:
-            return False
-    return True
+    return Marker(marker).evaluate(environment=_LINUX_MARKER_ENV) if marker.strip() else True
 
 
 def import_names_of(dist_name: str) -> set[str]:
@@ -238,11 +215,10 @@ def test_every_module_the_runtime_imports_is_one_the_image_installs():
 
     The subject set is the runtime tree itself, so a new import at module scope joins
     this law the commit it lands, and no list in this file has to be edited for that to
-    happen. Measured in Linux CI: 13 declared projects, a 69-distribution closure,
-    77 import names and 18 third-party roots the code reaches. The original 100-root
-    floor was host-dependent: Windows metadata counted pywin32 modules the Linux image
-    never installs. The closure is checked against its declared projects instead, and
-    an unresolved distribution fails explicitly.
+    happen. The closure is checked against its declared projects, dependency markers
+    are evaluated for the deployed Linux image rather than the host, and a distribution
+    missing from the test environment fails explicitly. This keeps the gate portable
+    without letting a Windows-only child invent a Linux runtime dependency.
 
     The floors refuse a scan that went blind on either side: an empty closure passes
     against an empty import set, and both empties look exactly like a clean tree.
@@ -313,7 +289,10 @@ def test_the_dependency_reader_refuses_the_shapes_a_requirement_line_takes(tmp_p
     assert marker_applies("extra == \"all\"") is False
     assert marker_applies(f'python_version < "{sys.version_info[0] - 1}"') is False
     assert marker_applies('python_version >= "3.8"') is True
-    assert marker_applies('platform_system == "Linux"') is True, "a host marker must not shrink the image's closure"
+    assert marker_applies('platform_system == "Linux"') is True
+    assert marker_applies('platform_system == "Windows"') is False
+    assert marker_applies('platform_system == "Windows" and python_version >= "3.8"') is False
+    assert marker_applies('platform_system == "Linux" and python_version >= "3.8"') is True
 
     assert _project_of("psycopg[binary]==3.3.8") == "psycopg"
     assert _project_of("-r requirements.txt") is None, "an include line names no package"
