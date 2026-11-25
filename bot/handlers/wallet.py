@@ -7,11 +7,10 @@ from decimal import Decimal
 from aiogram import F, types
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
-from bot.ledger import blocked_destination
 from eth_utils import is_address, to_checksum_address
 
-from bot import i18n
-
+from .. import i18n
+from ..ledger import blocked_destination
 from . import _common as common
 
 log = logging.getLogger("tipbot.wallet")
@@ -288,7 +287,7 @@ def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[In
     row: list[InlineKeyboardButton] = []
     for w in wallets:
         row.append(InlineKeyboardButton(
-            text=common.btn_text(f"{'●' if w['active'] else '○'}{w['slot']}"),
+            text=common.btn_text(f"{'●' if w['active'] else '○'} {w['slot']}"),
             callback_data=f"wallet_sel:{w['id']}"))
         if len(row) == 5:
             kb.append(row)

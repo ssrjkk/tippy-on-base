@@ -16,10 +16,9 @@ import asyncio
 from aiogram import types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.ledger import async_ledger as ledger
 
-from bot import ai, i18n
-
+from .. import ai, i18n
+from ..ledger import async_ledger as ledger
 from . import _common as common
 
 SECTIONS = ("ai", "treasury", "markets", "agent")

@@ -5,10 +5,9 @@ import logging
 from aiogram import F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from bot.fees import win_fee_pct_label
 
-from bot import i18n, tip_targets
-
+from .. import i18n, tip_targets
+from ..fees import win_fee_pct_label
 from . import _common as common
 from .bets import _bets_text, _market_detail_text
 from .paywall import _paywall_list_text

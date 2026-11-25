@@ -8,10 +8,9 @@ from decimal import Decimal
 from aiogram import F, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from bot.fees import win_fee_pct_label
 
-from bot import i18n
-
+from .. import i18n
+from ..fees import win_fee_pct_label
 from . import _common as common
 
 log = logging.getLogger("tipbot.bets")

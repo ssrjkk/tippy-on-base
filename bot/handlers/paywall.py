@@ -1,4 +1,4 @@
-from bot import i18n
+﻿from bot import i18n
 
 'Paywall (paid content) handlers + reaction tips + message indexing.'
 import html

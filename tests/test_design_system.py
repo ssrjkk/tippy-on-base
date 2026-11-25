@@ -2679,6 +2679,24 @@ def test_telegram_bot_button_labels_fit_the_client_limit():
     assert not offenders, offenders
 
 
+def test_telegram_bot_translations_use_only_supported_html_tags():
+    from bot import i18n
+
+    allowed = {
+        "b", "strong", "i", "em", "u", "ins", "s", "strike", "del",
+        "tg-spoiler", "a", "code", "pre", "blockquote", "expandable-blockquote",
+    }
+    pattern = re.compile(r"<\/?([A-Za-z][A-Za-z0-9_-]*)(?:\s[^>]*)?>")
+    offenders = [
+        (key, lang, tag)
+        for key, translations in i18n.STRINGS.items()
+        for lang, text in translations.items()
+        for tag in pattern.findall(text)
+        if tag not in allowed
+    ]
+    assert not offenders, offenders[:10]
+
+
 def test_every_escaper_that_builds_html_escapes_quotes():
     """The four files below build markup by string concatenation and interpolate
     esc() INSIDE attributes (`data-val="${esc(r.to)}"`, `aria-label="${…}"`).

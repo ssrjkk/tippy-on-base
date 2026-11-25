@@ -670,7 +670,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "market_open": {
         "ru": "↗ Открытых рынков нет.\nСоздай первый: /market create <банк> <вопрос> | <в1> | <в2>",
-        "en": "↗ No open markets.\nCreate the first: /market create <bank> <question> | <o1> | <o2>",
+        "en": "↗ No open markets.\nCreate the first: /market create &lt;bank&gt; &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt;",
         "zh": "↗ 暂无开放市场。\n创建第一个：/market create <资金> <问题> | <选项1> | <选项2>",
     },
     "market_list_header": {
@@ -699,9 +699,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "↗ 没有持仓。市场：/markets",
     },
     "market_trade_format": {
-        "ru": "Формат: /trade <id> <номер> <сумма>",
-        "en": "Format: /trade <id> <option> <amount>",
-        "zh": "格式：/trade <id> <选项> <金额>",
+        "ru": "Формат: /trade &lt;id&gt; <номер> <сумма>",
+        "en": "Format: /trade &lt;id&gt; &lt;option&gt; &lt;amount&gt;",
+        "zh": "格式：/trade &lt;id&gt; <选项> <金额>",
     },
     "market_trade_max": {
         "ru": "Максимум за одну сделку: <b>{n} USDC</b>.",
@@ -729,9 +729,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "金额太小——不发放份额。请增加金额。",
     },
     "market_sell_format": {
-        "ru": "Формат: /sell <id> <номер> [процент%]",
-        "en": "Format: /sell <id> <option> [percent%]",
-        "zh": "格式：/sell <id> <选项> [百分比%]",
+        "ru": "Формат: /sell &lt;id&gt; <номер> [процент%]",
+        "en": "Format: /sell &lt;id&gt; &lt;option&gt; [percent%]",
+        "zh": "格式：/sell &lt;id&gt; <选项> [百分比%]",
     },
     "market_sell_no_shares": {
         "ru": "У тебя нет долей этого исхода. Позиции: /positions",
@@ -771,7 +771,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "bet_open_empty": {
         "ru": "Открытых ставок нет.\nСоздай: /bet create <вопрос> | <в1> | <в2>",
-        "en": "No open bets.\nCreate: /bet create <question> | <o1> | <o2>",
+        "en": "No open bets.\nCreate: /bet create &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt;",
         "zh": "暂无开放投注。\n创建：/bet create <问题> | <选项1> | <选项2>",
     },
     "bet_create_card": {
@@ -1127,7 +1127,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "bet_empty": {
         "ru": "Открытых ставок нет.\nСоздай: /bet create <вопрос> | <в1> | <в2>",
-        "en": "No open bets.\nCreate: /bet create <question> | <o1> | <o2>",
+        "en": "No open bets.\nCreate: /bet create &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt;",
         "zh": "暂无开放投注。\n创建：/bet create <问题> | <选项1> | <选项2>",
     },
     "bet_list_header": {
@@ -1316,13 +1316,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": " 奖池 {amount} USDC",
     },
     "ai_data_market_hint": {
-        "ru": "Полная карточка: /market <id>. Торгует: /trade <id> <вариант> <сумма>.",
-        "en": "Full card: /market <id>. Trading: /trade <id> <option> <amount>.",
-        "zh": "完整卡片：/market <id>。交易：/trade <id> <选项> <金额>。",
+        "ru": "Полная карточка: /market &lt;id&gt;. Торгует: /trade &lt;id&gt; <вариант> <сумма>.",
+        "en": "Full card: /market &lt;id&gt;. Trading: /trade &lt;id&gt; &lt;option&gt; &lt;amount&gt;.",
+        "zh": "完整卡片：/market &lt;id&gt;。交易：/trade &lt;id&gt; <选项> <金额>。",
     },
     "ai_data_no_bets": {
         "ru": "Открытых ставок пока нет. Создай первую: /bet create <вопрос> | <в1> | <в2>",
-        "en": "No open pool bets yet. Create one: /bet create <question> | <o1> | <o2>",
+        "en": "No open pool bets yet. Create one: /bet create &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt;",
         "zh": "暂无奖池投注。创建第一个：/bet create <问题> | <选项1> | <选项2>",
     },
     "ai_data_not_found": {
@@ -1474,7 +1474,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "broadcast_format": {
         "ru": "Формат: /broadcast <текст>",
-        "en": "Format: /broadcast <text>",
+        "en": "Format: /broadcast &lt;text&gt;",
         "zh": "格式：/broadcast <文本>",
     },
     "broadcast_sent": {
@@ -1496,7 +1496,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # ----- market deadline notification -----
     "deadline_notify": {
         "ru": "Рынок #{id} — «{question}» достиг дедлайна.\nЗакрой: /resolve {id} <номер>.\nИначе после grace-периода любой вернёт деньги.",
-        "en": "Market #{id} — \"{question}\" hit the deadline.\nResolve: /resolve {id} <option>.\nOtherwise anyone can refund after grace period.",
+        "en": "Market #{id} — \"{question}\" hit the deadline.\nResolve: /resolve {id} &lt;option&gt;.\nOtherwise anyone can refund after grace period.",
         "zh": "市场 #{id} ——「{question}」已到截止时间。\n结算：/resolve {id} <选项>。\n否则宽限期后任何人都可以退款。",
     },
     "grace_warn": {
@@ -1618,7 +1618,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "market_trade_hint": {
         "ru": "Торговля: /trade {id} <номер> <сумма> или кнопки: /markets\nЦены движутся с спросом — как на Polymarket.",
-        "en": "Trade: /trade {id} <option> <amount> or use buttons: /markets\nPrices move with demand — like Polymarket.",
+        "en": "Trade: /trade {id} &lt;option&gt; &lt;amount&gt; or use buttons: /markets\nPrices move with demand — like Polymarket.",
         "zh": "交易：/trade {id} <选项> <金额> 或使用按钮：/markets\n价格随供需波动——类似 Polymarket。",
     },
     "market_card_resolved": {
@@ -1772,9 +1772,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "没有进行中的创建。",
     },
     "paywall_list_buy_hint": {
-        "ru": "Купить: /paywall buy <id>",
-        "en": "Buy: /paywall buy <id>",
-        "zh": "购买：/paywall buy <id>",
+        "ru": "Купить: /paywall buy &lt;id&gt;",
+        "en": "Buy: /paywall buy &lt;id&gt;",
+        "zh": "购买：/paywall buy &lt;id&gt;",
     },
     "paywall_list_shown": {
         "ru": "…показаны последние {n}",
@@ -1828,7 +1828,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "paywall_channel_format": {
         "ru": "Формат: /paywall channel <цена USDC за 30 дней> или /paywall channel off",
-        "en": "Format: /paywall channel <price USDC per 30 days> or /paywall channel off",
+        "en": "Format: /paywall channel &lt;price USDC per 30 days&gt; or /paywall channel off",
         "zh": "格式：/paywall channel <每 30 天 USDC 价格> 或 /paywall channel off",
     },
     "paywall_channel_limit": {
@@ -1912,9 +1912,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": " — <b>{amount} USDC/{period} 天</b>",
     },
     "paywall_channel_until": {
-        "ru": " — до {until}",
-        "en": " — until {until}",
-        "zh": " — 至 {until}",
+        "ru": " — ✓ до {until}",
+        "en": " — ✓ until {until}",
+        "zh": " — ✓ 至 {until}",
     },
     "paywall_content_too_long": {
         "ru": "! Контент слишком длинный: максимум {n} символов.\nПришли заново (укороти или разбей на части).",
@@ -1967,9 +1967,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "× 帖子未找到。",
     },
     "paywall_buy_id_hint": {
-        "ru": "Купить: /paywall buy <id>",
-        "en": "Buy: /paywall buy <id>",
-        "zh": "购买：/paywall buy <id>",
+        "ru": "Купить: /paywall buy &lt;id&gt;",
+        "en": "Buy: /paywall buy &lt;id&gt;",
+        "zh": "购买：/paywall buy &lt;id&gt;",
     },
     "app_open": {
         "ru": "Открыть приложение",
@@ -1998,7 +1998,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "betcreate_hint_v2": {
         "ru": "<b>Создание рынка</b>\n\n/bet create <вопрос> | <вариант1> | <вариант2> [24h]\n\nДо 4 вариантов, дедлайн — например <i>24h</i> или <i>7d</i>, по умолчанию <i>{default}</i>. Создатель получает {pct}% от выигрыша победителя.",
-        "en": "<b>Create a market</b>\n\n/bet create <question> | <option1> | <option2> [24h]\n\nUp to 4 options, deadline (e.g. <i>24h</i> or <i>7d</i>, default <i>{default}</i>). Creator gets {pct}% of winner's winnings.",
+        "en": "<b>Create a market</b>\n\n/bet create &lt;question&gt; | &lt;option1&gt; | &lt;option2&gt; [24h]\n\nUp to 4 options, deadline (e.g. <i>24h</i> or <i>7d</i>, default <i>{default}</i>). Creator gets {pct}% of winner's winnings.",
         "zh": "<b>创建市场</b>\n\n/bet create <问题> | <选项1> | <选项2> [24h]\n\n最多 4 个选项，截止时间（如 <i>24h</i> 或 <i>7d</i>），默认 <i>{default}</i>。创建者获得赢家 {pct}% 手续费。",
     },
     "hot_wallet_admin": {
@@ -2506,9 +2506,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "<b>我的订阅：</b>\n\n{list}",
     },
     "cancel_sub_format": {
-        "ru": "Формат: /cancelsub <id>\n\nИспользуй /subscriptions чтобы увидеть ID.",
-        "en": "Format: /cancelsub <id>\n\nUse /subscriptions to see IDs.",
-        "zh": "格式：/cancelsub <id>\n\n使用 /subscriptions 查看 ID。",
+        "ru": "Формат: /cancelsub &lt;id&gt;\n\nИспользуй /subscriptions чтобы увидеть ID.",
+        "en": "Format: /cancelsub &lt;id&gt;\n\nUse /subscriptions to see IDs.",
+        "zh": "格式：/cancelsub &lt;id&gt;\n\n使用 /subscriptions 查看 ID。",
     },
     "subscription_cancelled": {
         "ru": "✓ Подписка отменена.",
@@ -2521,8 +2521,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "× 未找到订阅或你没有权限。",
     },
     "create_token_format": {
-        "ru": "Формат: /createtoken <name> <SYMBOL> <supply> <price>\nПример: /createtoken \"My Token\" MTK 1000000 0.10",
-        "en": "Format: /createtoken <name> <SYMBOL> <supply> <price>\nExample: /createtoken \"My Token\" MTK 1000000 0.10",
+        "ru": "Формат: /createtoken &lt;name&gt; &lt;SYMBOL&gt; &lt;supply&gt; &lt;price&gt;\nПример: /createtoken \"My Token\" MTK 1000000 0.10",
+        "en": "Format: /createtoken &lt;name&gt; &lt;SYMBOL&gt; &lt;supply&gt; &lt;price&gt;\nExample: /createtoken \"My Token\" MTK 1000000 0.10",
         "zh": "格式：/createtoken <名称> <符号> <供应量> <价格>\n示例：/createtoken \"My Token\" MTK 1000000 0.10",
     },
     "token_created": {
@@ -2531,9 +2531,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "<b>代币已创建！</b>\n\n{name}（${symbol}）\nID：<code>{token_id}</code>\n\n持有者自动从你的收入中获得分红。",
     },
     "buy_token_format": {
-        "ru": "Формат: /buytoken <token_id> <amount>",
-        "en": "Format: /buytoken <token_id> <amount>",
-        "zh": "格式：/buytoken <token_id> <数量>",
+        "ru": "Формат: /buytoken &lt;token_id&gt; &lt;amount&gt;",
+        "en": "Format: /buytoken &lt;token_id&gt; &lt;amount&gt;",
+        "zh": "格式：/buytoken &lt;token_id&gt; <数量>",
     },
     "token_buy_failed": {
         "ru": "× Не удалось купить токены. Проверь ID и баланс.",
@@ -2541,14 +2541,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "× 购买代币失败。请检查 ID 和余额。",
     },
     "token_bought": {
-        "ru": "✓ Куплено <b>{amount}</b> токенов за {cost} USDC!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
-        "en": "✓ Bought <b>{amount}</b> tokens for {cost} USDC!\n\nYou'll receive dividends. Check: /claim <token_id>",
-        "zh": "✓ 已购买 <b>{amount}</b> 个代币，花费 {cost} USDC！\n\n你将获得分红。查看：/claim <token_id>",
+        "ru": "✓ Куплено <b>{amount}</b> токенов за {cost} USDC!\n\nТы будешь получать дивиденды. Проверь: /claim &lt;token_id&gt;",
+        "en": "✓ Bought <b>{amount}</b> tokens for {cost} USDC!\n\nYou'll receive dividends. Check: /claim &lt;token_id&gt;",
+        "zh": "✓ 已购买 <b>{amount}</b> 个代币，花费 {cost} USDC！\n\n你将获得分红。查看：/claim &lt;token_id&gt;",
     },
     "claim_format": {
-        "ru": "Формат: /claim <token_id>",
-        "en": "Format: /claim <token_id>",
-        "zh": "格式：/claim <token_id>",
+        "ru": "Формат: /claim &lt;token_id&gt;",
+        "en": "Format: /claim &lt;token_id&gt;",
+        "zh": "格式：/claim &lt;token_id&gt;",
     },
     "no_dividends": {
         "ru": "Нет дивидендов для получения.",

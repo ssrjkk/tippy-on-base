@@ -1,4 +1,4 @@
-"""Prediction markets v2: Polymarket-style LMSR AMM handlers."""
+﻿"""Prediction markets v2: Polymarket-style LMSR AMM handlers."""
 import json
 import logging
 import time

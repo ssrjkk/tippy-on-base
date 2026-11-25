@@ -1,13 +1,12 @@
-"""Stats / leaderboard / history handlers."""
+﻿"""Stats / leaderboard / history handlers."""
 import html
 
 from aiogram import types
 from aiogram.filters import Command
-from bot.ledger import is_credit
 
-from bot import i18n, tip_targets
-from bot.tx_view import label_for
-
+from .. import i18n, tip_targets
+from ..ledger import is_credit
+from ..tx_view import label_for
 from . import _common as common
 
 __all__ = ['_history_text', '_stats_text', '_tip_counterparties', '_top_text', '_withdraw_state', 'cmd_history', 'cmd_stats', 'cmd_top']

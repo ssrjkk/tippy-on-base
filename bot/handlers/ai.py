@@ -1,4 +1,4 @@
-"""/ask — the assistant: an LLM provider when one answers, ledger data when none does."""
+﻿"""/ask — the assistant: an LLM provider when one answers, ledger data when none does."""
 import html
 
 from aiogram import types

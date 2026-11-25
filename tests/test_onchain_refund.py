@@ -596,7 +596,7 @@ async def test_settle_all_chunks_batches_and_totals(ledger, handlers):
     assert handlers["redeem_many"].await_count == 2
     assert len(handlers["redeem_many"].await_args_list[0].args[0]) == onchain._SETTLE_CHUNK
     text = m.last_edit
-    assert "❌" in text and "✅" in text
+    assert "×" in text and "✓" in text
     assert common._fmt(700_000) in text
     assert i18n.t("ru", "oc_settle_winnings") in text
 
