@@ -24,7 +24,7 @@ const DEMO_DATA = {
       default_deadline_hours: 24,
     },
     fees: { withdraw_pct: 1, win_pct: 2 },
-    x402: { enabled: false, min_usdc: 0.01, max_usdc: 100, ttl_seconds: 900 },
+    x402: { enabled: false, min_usdc: 0.01, max_usdc: 100, invoice_ttl_seconds: 900 },
     smart_wallet_enabled: false,
     onchain_markets_enabled: false,
     ai_mode: "data",

@@ -465,7 +465,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
   </header>
   <div class="app-terminal-strip" aria-label="Сеть и режим приложения">
     <span><b>BASE</b> / USDC</span>
-    <span><span class="live-dot" aria-hidden="true"></span> Mini app terminal</span>
+    <span><span class="live-dot" aria-hidden="true"></span> <span id="appModeLabel">Mini app terminal</span></span>
   </div>
 
   <!-- Content -->
@@ -631,6 +631,17 @@ const I18N = {
 };
 
 let STATE = { lang: window.__seedLang || 'en', balance_usdc: 0, deposit_address: '', markets: [], bets: [], onchain_markets: [], history: [], history_truncated: false, top: [], recent_tips: [], stats: null, smart: null, username: '', tg_id: null, linked_address: '', authStale: false };
+let DEMO_MODE = false;
+const DEMO_STATE = {
+  lang: 'en', balance_usdc: 250.5, deposit_address: '0x2222222222222222222222222222222222222222',
+  markets: [{ id: 14, question: 'Will Base daily active addresses exceed 3M before Q1 2027?', status: 'open', close_at: Math.floor(Date.now() / 1000) + 86400 * 40, options: [{ index: 0, label: 'YES', price_pct: 64.2 }, { index: 1, label: 'NO', price_pct: 35.8 }], traders: 184 }],
+  bets: [], onchain_markets: [],
+  history: [{ incoming: true, label: 'Deposit', kind: 'deposit', ref: 'Base USDC', note: '0x1234', created_at: Math.floor(Date.now() / 1000) - 600, amount_usdc: 25 }],
+  history_truncated: false, top: [{ handle: 'jesse.base.eth', total_usdc: 14820.5 }], recent_tips: [],
+  stats: { users: 1842, volume: 148920.5, tips: 11408 }, smart: null,
+  username: 'ssrjkk', tg_id: 900001, linked_address: '0x3333333333333333333333333333333333333333', authStale: false,
+};
+const DEMO_INFO = { chain_name: 'Base', limits: {}, fees: {}, x402: {} };
 let currentTab = 0;
 let toastTimer = null;
 
@@ -939,9 +950,27 @@ function hideDetail() {
 }
 
 // ─── Auth + Load ───
+async function probeDemoMode() {
+  try {
+    const r = await fetch('/api/health', { credentials: 'same-origin' });
+    return r.headers.get('x-tippy-demo-mode') === 'true';
+  } catch(e) { return false; }
+}
+
 async function init() {
   const tg = window.Telegram?.WebApp;
   if (tg?.onEvent) tg.onEvent('backButtonClicked', dismissTopLayer);
+  if (await probeDemoMode()) {
+    DEMO_MODE = true;
+    Object.assign(STATE, DEMO_STATE);
+    INFO = DEMO_INFO;
+    LIMITS = INFO.limits;
+    FEES = INFO.fees;
+    const mode = document.getElementById('appModeLabel');
+    if (mode) mode.textContent = 'Demo terminal';
+    renderAll();
+    return;
+  }
   const initData = tg ? (tg.initData || '') : '';
   if (initData) {
     try {
