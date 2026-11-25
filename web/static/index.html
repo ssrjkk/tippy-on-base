@@ -31,8 +31,14 @@
     <div class="nav-inner">
       <a class="brand" href="/">
         <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
-        <span class="brand-name"><b>Tippy</b></span>
+        <span class="brand-name"><b>TIPPY</b><small>ON BASE</small></span>
       </a>
+      <nav class="nav-links" aria-label="Основная навигация">
+        <a href="#terminal">Терминал</a>
+        <a href="#markets">Рынки</a>
+        <a href="#treasury">Резервы</a>
+        <a href="#architecture">Архитектура</a>
+      </nav>
       <div class="nav-actions">
         <button class="nav-search" type="button" id="searchOpen" aria-label="Найти рынок">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.2"/><path d="m15.7 15.7 3.6 3.6"/></svg>
@@ -49,9 +55,10 @@
   </header>
 
   <main>
-    <section class="hero">
+    <section class="hero" id="terminal">
       <canvas class="hero-canvas" id="heroCanvas" aria-hidden="true"></canvas>
       <div class="hero-copy">
+        <div class="hero-kicker"><span class="live-dot"></span>Onchain social economy / prediction rail</div>
         <a class="hero-badge" data-net-explorer>
           <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
           <span data-net="chain">Base</span> · USDC
@@ -62,22 +69,46 @@
           <span class="badge">ERC-1155</span>
           <span class="badge">x402</span>
         </div>
-        <h1>Экономика сообщества<br />в USDC на <span class="accent">Base</span></h1>
+        <h1 lang="en">Social economy <br />&amp; prediction terminal <br />on <span class="accent">Base</span>.</h1>
         <p class="hero-sub">
           Чаевые в один тап, ставки-пулы по парамутюэльной схеме, рынки предсказаний
           на LMSR-маркмейкере и ончейн-доли ERC-1155. Без газа на переводы между
           пользователями, с публичной сверкой резервов.
         </p>
         <div class="hero-cta">
-          <a class="btn btn-primary" href="#workspace-section">Открыть кабинет</a>
-          <a class="btn btn-ghost" href="https://t.me/__BOT_USERNAME__" data-tg-link>Начать в Telegram</a>
+          <a class="btn btn-primary" href="https://t.me/__BOT_USERNAME__" data-tg-link>Запустить в Telegram</a>
+          <a class="btn btn-ghost" href="#markets">Открыть orderbook</a>
+          <a class="btn btn-ghost" href="#treasury">Проверить резервы</a>
+        </div>
+        <div class="hero-proof" aria-label="Протокольные поверхности">
+          <div><b>USDC</b><span>Native settlement</span></div>
+          <div><b>LMSR / ERC-1155</b><span>Market rails</span></div>
+          <div><b>Public API</b><span>Verifiable state</span></div>
         </div>
       </div>
       <!-- The product is a price on a question, so the hero shows one: real odds
-           off /api/predictions, not a mock-up. Hidden until the data arrives. -->
-      <aside class="hero-spot" id="heroSpot" aria-label="Текущий рынок" hidden>
-        <span class="eyebrow">Самый ликвидный рынок</span>
-        <div id="hero-spot-body"></div>
+           off /api/predictions, not a mock-up. -->
+      <aside class="hero-spot" id="heroSpot" aria-label="Протокольный терминал">
+        <div class="console-head"><b>Live protocol terminal</b><span id="heroMarketState">loading</span></div>
+        <div class="console-tabs" role="tablist" aria-label="Режимы терминала">
+          <button class="console-tab active" type="button" data-console-tab="lmsr" role="tab" aria-selected="true">LMSR</button>
+          <button class="console-tab" type="button" data-console-tab="telegram" role="tab" aria-selected="false">Telegram</button>
+          <button class="console-tab" type="button" data-console-tab="x402" role="tab" aria-selected="false">x402</button>
+        </div>
+        <div class="console-pane active" id="heroPaneLmsr" role="tabpanel">
+          <div id="hero-spot-body"><div class="empty">Загрузка живого рынка…</div></div>
+        </div>
+        <div class="console-pane" id="heroPaneTelegram" role="tabpanel">
+          <p class="console-note">Команды приходят из того же каталога, который бот регистрирует в меню Telegram.</p>
+          <div id="heroCommands"><div class="empty">Загрузка каталога…</div></div>
+        </div>
+        <div class="console-pane" id="heroPaneX402" role="tabpanel">
+          <p class="console-note">Платёж за HTTP-запрос: сначала счёт 402, затем подпись EIP-3009 и зачисление USDC.</p>
+          <pre class="console-code">POST /api/x402/tip
+HTTP 402 · PAYMENT REQUIRED
+X-PAYMENT → 200 OK</pre>
+          <a class="btn btn-ghost console-quote" href="#x402">Открыть x402 handshake</a>
+        </div>
       </aside>
     </section>
 
@@ -429,25 +460,35 @@
       </div>
     </section>
 
-    <section class="section reveal" id="status">
-      <span class="eyebrow">Состояние внедрения</span>
-      <h2>Что работает на этом инстансе</h2>
-      <div class="wp-grid">
-        <div class="wp-card">
-          <span class="badge" id="statusAiBadge">–</span>
-          <h3>Ассистент рынка</h3>
+    <section class="section reveal" id="architecture">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Архитектура / runtime matrix</span>
+          <h2>Что работает на этом инстансе</h2>
+        </div>
+        <p class="hint">Статус читается из конфигурации origin. Флаг-off показывается как выключенный, а не как обещание будущего деплоя.</p>
+      </div>
+      <div class="architecture-table">
+        <div class="arch-row">
+          <div class="arch-module"><b>Grounded AI oracle</b><code>web/server.py · POST /api/ask</code></div>
+          <div><span class="badge" id="statusAiBadge">–</span></div>
           <p id="statusAiText">–</p>
         </div>
-        <div class="wp-card">
-          <span class="badge" id="statusOnchainBadge">–</span>
-          <h3>Ончейн-доли ERC-1155</h3>
+        <div class="arch-row">
+          <div class="arch-module"><b>On-chain outcome shares</b><code>contracts/ · ERC-1155</code></div>
+          <div><span class="badge" id="statusOnchainBadge">–</span></div>
           <p id="statusOnchainText">–</p>
         </div>
-        <div class="wp-card">
-          <span class="badge" id="statusX402Badge">–</span>
-          <h3>Оплата за HTTP-запрос</h3>
+        <div class="arch-row">
+          <div class="arch-module"><b>x402 agent settlement</b><code>web/x402.py · EIP-3009</code></div>
+          <div><span class="badge" id="statusX402Badge">–</span></div>
           <p id="statusX402Text">–</p>
         </div>
+      </div>
+      <div class="architecture-ledger" aria-label="Слои протокола">
+        <div class="arch-layer"><b>Ledger</b><span>PostgreSQL · атомарные переводы · идемпотентные операции</span></div>
+        <div class="arch-layer"><b>Settlement</b><span>Base USDC · TipBotVault · публичная сверка обязательств</span></div>
+        <div class="arch-layer"><b>Market rails</b><span>Hanson LMSR · парамутюэль · ERC-1155 · ERC-4337</span></div>
       </div>
     </section>
 
@@ -633,6 +674,28 @@
       </div>
     </section>
 
+    <section class="section reveal" id="oracle">
+      <div class="terminal-panel">
+        <div class="panel-head">
+          <h2 class="panel-title"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a3 3 0 0 1 5.6 1c0 2-2.8 2.7-2.8 4.2M12 17h.01"/></svg>Grounded AI market oracle</h2>
+          <span class="badge">POST /api/ask</span>
+        </div>
+        <div class="panel-body">
+          <form class="oracle-form" id="oracleForm">
+            <label class="sr-only" for="oracleInput">Вопрос о рынках, резервах или x402</label>
+            <input class="input" id="oracleInput" type="text" autocomplete="off" maxlength="500" placeholder="Спросите о рынках, резервах, комиссиях или x402" />
+            <button class="btn btn-primary" type="submit">Спросить</button>
+          </form>
+          <div class="oracle-prompts" aria-label="Примеры вопросов">
+            <button class="oracle-prompt" type="button" data-oracle-q="Какие рынки сейчас самые ликвидные?">Топ рынки</button>
+            <button class="oracle-prompt" type="button" data-oracle-q="Проверь текущее покрытие резервов">Проверить резервы</button>
+            <button class="oracle-prompt" type="button" data-oracle-q="Объясни протокол x402 и EIP-3009">Протокол x402</button>
+          </div>
+          <div class="oracle-out" id="oracleOut" aria-live="polite">Готов. Ответ строится из живого реестра и состояния рынков; если модель не настроена, оракул прямо говорит об этом.</div>
+        </div>
+      </div>
+    </section>
+
     <section class="section section--band reveal" id="how">
       <span class="eyebrow">Механика</span>
       <h2>Как это устроено</h2>
@@ -679,6 +742,12 @@
       <a href="https://github.com/ssrjkk" target="_blank" rel="noopener">GitHub</a>
     </div>
     <p class="footer-legal"><a href="/tos">Условия использования</a></p>
+    <div class="api-links" aria-label="Публичные API">
+      <a href="/api/info">/api/info</a>
+      <a href="/api/solvency">/api/solvency</a>
+      <a href="/api/health">/api/health</a>
+      <a href="/app">Mini App</a>
+    </div>
     <a class="powered" href="https://github.com/ssrjkk/tippy-on-base" target="_blank" rel="noopener">
       <span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span>
       Built on Base · открытая кодовая база

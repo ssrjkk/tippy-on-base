@@ -55,8 +55,8 @@
 /* Tokens copied from /style.css — base.org values: one brand blue, neutral greys,
  * hairline borders, no shadows. --accent paints surfaces, --accent-text paints type,
  * because #224bff is a fill colour and is not readable as text on the dark canvas. */
-:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.35);--bg:#ffffff;--card:#ffffff;--card2:#f7f7f8;--card3:#eaecef;--border:#e4e4e7;--border-strong:#c8c8ce;--text:#111111;--text2:#3f3f46;--text3:#52525b;--text4:#6b6b74;--success:#047857;--success-bg:rgba(4,120,87,.08);--danger:#be123c;--warning:#a24b08;--warning-bg:rgba(162,75,8,.10);--nav-bg:rgba(255,255,255,.92);--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius-sm:0;--radius:0;--radius-lg:0;--pill:9999px;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--measure:68ch;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--t-chip:11px;--t-meta:12px;--t-small:13px;--t-ui:14px;--t-lead:15px;--t-body:16px;--t-h4:18px;--t-h3:20px;--t-h2:24px;--t-h1:28px;--t-xl:32px;--ease:cubic-bezier(.2,0,0,1);--safe-b:env(safe-area-inset-bottom,0px)}
-[data-theme="dark"]{--accent:#224bff;--accent2:#4266ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.14);--blue-line:rgba(117,117,255,.42);--bg:#111111;--card:#1a1a1e;--card2:#161618;--card3:#222228;--border:#26262c;--border-strong:#3c3c46;--text:#ededed;--text2:#c8c8c8;--text3:#a1a1aa;--text4:#91919b;--success:#34d399;--success-bg:rgba(52,211,153,.14);--danger:#fb7185;--warning:#fbbf24;--warning-bg:rgba(251,191,36,.14);--nav-bg:rgba(17,17,17,.92);--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
+:root,[data-theme="light"]{--accent:#0000ff;--accent2:#0000cc;--accent-text:#0000ff;--blue-soft:rgba(0,0,255,.07);--blue-line:rgba(0,0,255,.35);--bg:#ffffff;--card:#ffffff;--card2:#f7f7f8;--card3:#eaecef;--border:#e4e4e7;--border-strong:#c8c8ce;--text:#111111;--text2:#3f3f46;--text3:#52525b;--text4:#6b6b74;--success:#047857;--success-bg:rgba(4,120,87,.08);--danger:#be123c;--warning:#a24b08;--warning-bg:rgba(162,75,8,.10);--nav-bg:#ffffff;--scrim:rgba(17,17,17,.45);--on-accent:#ffffff;--qr-plate:#ffffff;--radius-sm:0;--radius:0;--radius-lg:0;--pill:0;--font-ui:"Schibsted Grotesk","Golos Text","Helvetica Neue",Helvetica,Arial,sans-serif;--measure:68ch;--font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;--t-micro:10px;--t-chip:11px;--t-meta:12px;--t-small:13px;--t-ui:14px;--t-lead:15px;--t-body:16px;--t-h4:18px;--t-h3:20px;--t-h2:24px;--t-h1:28px;--t-xl:32px;--ease:cubic-bezier(.2,0,0,1);--safe-b:env(safe-area-inset-bottom,0px)}
+[data-theme="dark"]{--accent:#224bff;--accent2:#4266ff;--accent-text:#7575ff;--blue-soft:rgba(34,75,255,.14);--blue-line:rgba(117,117,255,.42);--bg:#111111;--card:#1a1a1e;--card2:#161618;--card3:#222228;--border:#26262c;--border-strong:#3c3c46;--text:#ededed;--text2:#c8c8c8;--text3:#a1a1aa;--text4:#91919b;--success:#34d399;--success-bg:rgba(52,211,153,.14);--danger:#fb7185;--warning:#fbbf24;--warning-bg:rgba(251,191,36,.14);--nav-bg:#111111;--scrim:rgba(0,0,0,.65);--on-accent:#ffffff;--qr-plate:#ffffff}
 html,body{height:100%;font-family:var(--font-ui);font-size:var(--t-lead);line-height:1.5;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
 /* The heading floor, the same law the site's reset states: a heading never takes
 its size from the browser's own sheet, where h3 is 1.17em — 18.72px, a value on no
@@ -82,8 +82,10 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 #app{max-width:480px;margin:0 auto;height:100%;position:relative;display:flex;flex-direction:column;overflow:hidden}
 
 /* Header */
-.header{position:sticky;top:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);min-height:54px}
-.header-logo{display:flex;align-items:center;gap:8px;font-size:var(--t-h4);font-weight:600;letter-spacing:-.02em}
+.header{position:sticky;top:0;z-index:100;background:var(--nav-bg);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);min-height:54px}
+.header-logo{display:flex;align-items:center;gap:8px;font-size:var(--t-h4);font-weight:700;letter-spacing:.06em}
+.header-brand{display:flex;flex-direction:column;line-height:1.05}
+.header-brand small{margin-top:3px;color:var(--text3);font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--t-micro);font-weight:500;letter-spacing:.14em}
 .header-logo .base-mark{width:22px;height:22px;border-radius:var(--radius-sm);background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .header-logo .base-mark svg{width:14px;height:14px}
 /* The glyph is an SVG <text>, so its size is the 24-unit box, not a CSS
@@ -93,6 +95,9 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 .header-logo .base-mark svg text{fill:var(--on-accent);font-family:var(--font-ui);font-weight:700}
 .header-logo .dot{color:var(--accent-text)}
 .header-right{display:flex;align-items:center;gap:8px}
+.app-terminal-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 16px;border-bottom:1px solid var(--border);background:var(--card2);color:var(--text3);font-family:var(--font-mono);font-size:var(--t-micro);font-variant-numeric:tabular-nums;letter-spacing:.09em;text-transform:uppercase}
+.app-terminal-strip b{color:var(--text);font-weight:600}
+.app-terminal-strip .live-dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
 .theme-toggle{width:34px;height:34px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text3);transition:color .2s var(--ease),border-color .2s var(--ease)}
 .theme-toggle:hover,.theme-toggle:active{border-color:var(--text);color:var(--text)}
 [data-theme="dark"] .theme-toggle .icon-sun{display:inline}
@@ -111,10 +116,12 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* Tab Bar */
-.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:var(--safe-b)}
+.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--nav-bg);border-top:1px solid var(--border);display:flex;z-index:100;padding-bottom:var(--safe-b)}
 .tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 8px;font-size:var(--t-chip);color:var(--text4);transition:color .2s var(--ease);position:relative}
 .tab-item.active{color:var(--text);font-weight:500}
 .tab-item .icon{width:20px;height:20px}
+.tab-item span{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--t-micro);letter-spacing:.07em;text-transform:uppercase}
+.tab-item.active::before{content:'';position:absolute;top:0;left:12px;right:12px;height:2px;background:var(--accent)}
 
 /* Cards and the micro-label above them. `--card2` is the site's `--surface`: a
    panel on this screen is a band of the page, not a box floated on it, which is
@@ -130,7 +137,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
    `.input-label` drew that label in the interface face at 12px — one job, two
    grammars, inside one form. */
 .eyebrow,.input-label,.mini-label{display:block;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:var(--t-chip);font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin:0 0 8px}
-.big-number{font-size:var(--t-xl);font-weight:500;letter-spacing:-.03em;line-height:1.1;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.big-number{font-size:var(--t-xl);font-weight:600;letter-spacing:-.045em;line-height:1.05;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .big-number .currency{font-size:var(--t-ui);color:var(--text3);font-weight:500;margin-left:6px;letter-spacing:0}
 /* The balance is the number this screen exists to show, so it takes the canvas
    and the whole width instead of a box: an eyebrow above a figure is how the
@@ -187,8 +194,8 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
    layer it sits on, told apart from it by the strong hairline: a 16px radius on a
    44px input is a lozenge, and a field painted in its band's own fill is a field
    whose edges nothing but the border states. */
-.input{width:100%;background:var(--bg);border:1px solid var(--border-strong);border-radius:0;padding:11px 14px;font-size:var(--t-small);color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
-.input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--blue-soft)}
+.input{width:100%;background:var(--bg);border:1px solid var(--border-strong);border-radius:0;padding:11px 14px;font-size:var(--t-small);color:var(--text);transition:border-color .2s var(--ease)}
+.input:focus{border-color:var(--accent)}
 .input::placeholder{color:var(--text4)}
 .input-group{margin-bottom:16px}
 /* A line that says why a sum was refused is a sentence, not a unit: the landing
@@ -290,7 +297,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 
 /* Detail View */
 .detail-view{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:150;overflow-y:auto;max-width:480px;margin:0 auto}
-.detail-header{position:sticky;top:0;z-index:10;background:var(--nav-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);min-height:52px}
+.detail-header{position:sticky;top:0;z-index:10;background:var(--nav-bg);padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);min-height:52px}
 .detail-back{width:32px;height:32px;border-radius:var(--pill);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text);flex-shrink:0;cursor:pointer;transition:border-color .2s var(--ease)}
 .detail-back:hover,.detail-back:active{border-color:var(--text)}
 .detail-back .icon{width:16px;height:16px}
@@ -444,7 +451,7 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
 <div id="app">
   <!-- Header -->
   <header class="header">
-    <h1 class="header-logo"><span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span><span>Tippy<span class="dot">.</span></span></h1>
+    <h1 class="header-logo"><span class="base-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" font-size="15" text-anchor="middle">b</text></svg></span><span class="header-brand"><b>TIPPY</b><small>ON BASE</small></span></h1>
     <div class="header-right">
       <button class="theme-toggle" data-act="toggleTheme" data-i18n-label="theme_toggle">
         <span class="icon-moon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
@@ -456,6 +463,10 @@ input,textarea{font-family:inherit;outline:none;color:inherit}
       </button>
     </div>
   </header>
+  <div class="app-terminal-strip" aria-label="Сеть и режим приложения">
+    <span><b>BASE</b> / USDC</span>
+    <span><span class="live-dot" aria-hidden="true"></span> Mini app terminal</span>
+  </div>
 
   <!-- Content -->
   <main class="content" id="contentArea">

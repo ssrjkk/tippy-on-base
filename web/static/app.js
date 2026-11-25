@@ -94,6 +94,7 @@ async function loadInfo() {
     renderTelegramWidget(username);
     renderTerms(info);
     renderCommands(info);
+    renderConsoleCommands(info);
     applyNetInfo(info);
     paintStatus(info);
     paintTelemetryNetwork(info);
@@ -242,6 +243,18 @@ function renderCommands(info) {
       + `<h3 class="cmd-group-title">${escapeHtml(g.title)}</h3>`
       + `<div class="cmd-grid">${g.rows.map(cell).join("")}</div></div>`)
     .join("");
+}
+
+function renderConsoleCommands(info) {
+  const el = $("heroCommands");
+  if (!el) return;
+  const wanted = ["balance", "tip", "rain", "trade", "bet", "gasless"];
+  const rows = wanted.map((name) => (info.commands || []).find((c) => c.command === name)).filter(Boolean);
+  el.innerHTML = rows.length ? rows.map((c) => `
+    <div class="console-command">
+      <code>/${escapeHtml(c.command)}</code>
+      <span>${escapeHtml(c.description)}</span>
+    </div>`).join("") : '<div class="empty">Каталог команд сейчас недоступен.</div>';
 }
 
 function setMsg(id, text, ok) {
@@ -694,7 +707,12 @@ function renderHeroSpot(markets) {
   const body = $("hero-spot-body");
   if (!box || !body) return;
   const top = markets.reduce((best, m) => (m.liquidity_usdc > best.liquidity_usdc ? m : best), markets[0]);
-  if (!top) { box.hidden = true; return; }
+  if (!top) {
+    $("heroMarketState").textContent = "no market";
+    body.innerHTML = '<div class="empty">Открытых LMSR-рынков пока нет. Telegram и x402-режимы терминала доступны.</div>';
+    return;
+  }
+  $("heroMarketState").textContent = statusWord(top);
   body.innerHTML = `
     <div class="spot-question">#${top.id} ${escapeHtml(top.question)}</div>
     <div class="spot-meta">${metaLine(deadlineHtml(top, REFUND_NOTE), statusBadge(top))}</div>
@@ -709,8 +727,8 @@ function renderHeroSpot(markets) {
     <div class="spot-foot">
       <span class="pot">Ликвидность: <b>${fmtUSDC(top.liquidity_usdc)} USDC</b> · ${escapeHtml(String(top.traders))}&nbsp;чел.</span>
       <a class="m-link" href="#predictions">Все рынки →</a>
-    </div>`;
-  box.hidden = false;
+    </div>
+    <button class="btn btn-primary console-quote" type="button" data-quote="${top.id}">Открыть котировку</button>`;
 }
 
 async function loadPredictions() {
@@ -722,6 +740,7 @@ async function loadPredictions() {
     const el = $("predictions-list");
     if (!markets.length) {
       el.innerHTML = '<div class="empty">Рынков с открытым торгом пока нет</div>';
+      renderHeroSpot([]);
       return;
     }
     el.innerHTML = markets.map(predictionCard).join("");
@@ -729,6 +748,7 @@ async function loadPredictions() {
   } catch (e) {
     searchIndex.lmsr = [];
     $("predictions-list").innerHTML = '<div class="empty">Не удалось загрузить рынки</div>';
+    renderHeroSpot([]);
   }
 }
 
@@ -1110,6 +1130,70 @@ for (const [btnId, preId] of [["x402CopyAsk", "x402CurlAsk"],
 }
 
 renderX402Curl();
+
+/* ---------- protocol console ---------- */
+document.querySelectorAll("[data-console-tab]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const target = btn.dataset.consoleTab;
+    document.querySelectorAll("[data-console-tab]").forEach((tab) => {
+      const active = tab === btn;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    document.querySelectorAll(".console-pane").forEach((pane) => {
+      pane.classList.toggle("active", pane.id === "heroPane" + target[0].toUpperCase() + target.slice(1));
+    });
+  });
+});
+
+$("heroSpot").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-quote]");
+  if (btn) openQuote(Number(btn.dataset.quote));
+});
+
+/* ---------- grounded oracle ---------- */
+let oracleSeq = 0;
+async function askOracle(question) {
+  const input = $("oracleInput");
+  const out = $("oracleOut");
+  const form = $("oracleForm");
+  const q = String(question || "").trim();
+  if (!q) {
+    out.textContent = "Введите вопрос о рынках, резервах, комиссиях или x402.";
+    input.focus();
+    return;
+  }
+  const seq = ++oracleSeq;
+  form.setAttribute("aria-busy", "true");
+  out.textContent = "Сверяю реестр и состояние рынков…";
+  try {
+    const r = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ question: q, lang: "ru" }),
+    });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || body.error || "oracle " + r.status);
+    if (seq !== oracleSeq) return;
+    out.textContent = body.answer || "Ответ не получен.";
+  } catch (e) {
+    if (seq !== oracleSeq) return;
+    out.textContent = "Оракул недоступен: " + e.message;
+  } finally {
+    if (seq === oracleSeq) form.removeAttribute("aria-busy");
+  }
+}
+
+$("oracleForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  askOracle($("oracleInput").value);
+});
+document.querySelectorAll("[data-oracle-q]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    $("oracleInput").value = btn.dataset.oracleQ;
+    askOracle(btn.dataset.oracleQ);
+  });
+});
 
 /* ---------- market search ---------- */
 

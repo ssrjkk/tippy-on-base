@@ -73,7 +73,7 @@ const MAINTENANCE = (reason) => `<!doctype html>
     --blue: #0000ff; --blue-hover: #0000cc; --blue-soft: rgba(0, 0, 255, 0.07);
     --canvas: #ffffff; --surface: #f7f7f8; --border: #e4e4e7; --border-strong: #c8c8ce;
     --ink: #111111; --muted: #52525b; --muted-2: #6b6b74; --warning: #a24b08;
-    --pill: 9999px;
+    --pill: 0;
     --font-ui: "Schibsted Grotesk", "Golos Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
     --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     color-scheme: light;
