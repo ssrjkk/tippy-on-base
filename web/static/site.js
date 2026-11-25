@@ -286,30 +286,19 @@
         ctx.stroke();
       }
       
-      var pulseCount = 3;
-      var time = Date.now() / 2000;
-      for (var i = 0; i < pulseCount; i++) {
-        var px = (Math.sin(time + i * 2.1) * 0.5 + 0.5) * w;
-        var py = (Math.cos(time + i * 1.7) * 0.5 + 0.5) * h;
-        var alpha = 0.08 + Math.sin(time * 2 + i) * 0.04;
-        ctx.fillStyle = 'rgba(' + accentRgb + ', ' + alpha.toFixed(3) + ')';
+      ctx.strokeStyle = 'rgb(' + accentRgb + ')';
+      ctx.lineWidth = 1;
+      var marks = [[0.25, 0.3], [0.75, 0.22], [0.68, 0.78]];
+      marks.forEach(function (point) {
+        var mx = Math.round(w * point[0]) + 0.5;
+        var my = Math.round(h * point[1]) + 0.5;
         ctx.beginPath();
-        ctx.arc(px, py, 80, 0, Math.PI * 2);
-        ctx.fill();
-      }
+        ctx.moveTo(mx - 5, my); ctx.lineTo(mx + 5, my);
+        ctx.moveTo(mx, my - 5); ctx.lineTo(mx, my + 5);
+        ctx.stroke();
+      });
     }
-    
-    var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!prefersReducedMotion) {
-      function animate() {
-        draw();
-        requestAnimationFrame(animate);
-      }
-      animate();
-    } else {
-      draw();
-    }
-    
+
     window.addEventListener('resize', resize);
     resize();
   }
