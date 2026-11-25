@@ -84,7 +84,7 @@ async def cmd_agent(message: types.Message) -> None:
                spent=common._fmt_usdc(s["daily_spent_usdc"]),
                cap=common._fmt_usdc(s["daily_cap_usdc"])),
         i18n.t(lang, 'agent_actions', done=s['actions_this_hour'], cap=s['max_actions_per_hour']),
-        i18n.t(lang, 'agent_errors', n=s['consecutive_errors'], cb='🔴' if s['cooldown_active'] else '🟢'),
+        i18n.t(lang, 'agent_errors', n=s['consecutive_errors'], cb='×' if s['cooldown_active'] else '✓'),
         i18n.t(lang, 'agent_caps_line',
                daily=common._fmt_usdc(agent_config.DAILY_SPEND_CAP_USDC),
                per_tx=common._fmt_usdc(agent_config.PER_TX_CAP_USDC)),
@@ -97,7 +97,7 @@ async def cmd_agent(message: types.Message) -> None:
             # What actually happened, not what was decided: a rejected bet is
             # still an audit line, and printing its amount would report a spend
             # the ledger never took.
-            action = f"${e['bet_amount_usdc']:.2f} bet" if e.get('bet_placed') else "market only"
+            action = f"{e['bet_amount_usdc']:.2f} USDC bet" if e.get('bet_placed') else "market only"
             lines.append(f"• #{e['market_id']}: {common._esc(e['question'][:60])} — {action} ({as_pct(e['confidence'])}%)")
     else:
         lines.append(i18n.t(lang, 'agent_no_audit'))

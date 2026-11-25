@@ -91,7 +91,7 @@ def test_agent_shows_circuit_breaker(admin_cfg, monkeypatch):
     monkeypatch.setattr(caps, "get_status", lambda: _status(errors=3, cooldown=True))
     m = Message(from_id=ADMIN)
     run(cmd_agent(m))
-    assert "🔴" in m.answers[0]
+    assert "×" in m.answers[0]
 
 
 def test_agent_shows_audit_tail(admin_cfg, monkeypatch, tmp_path):

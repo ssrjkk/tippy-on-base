@@ -6,9 +6,8 @@ from aiogram import F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
-from bot import i18n, tip_targets
-from bot.fees import win_fee_pct_label
-
+from .. import i18n, tip_targets
+from ..fees import win_fee_pct_label
 from . import _common as common
 from .bets import _bets_text, _market_detail_text
 from .paywall import _paywall_list_text
@@ -31,7 +30,7 @@ async def cmd_about(message: types.Message) -> None:
     lang = await _lang(message.from_user.id)
     from web.mini import public_base_url
     site_url = public_base_url()
-    about_text = f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}\n\n🌐 <b>{i18n.t(lang, 'about_website')}</b>: <a href=\"{site_url}\">{site_url.replace('https://', '').replace('http://', '')}</a>"
+    about_text = f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}\n\n<b>{i18n.t(lang, 'about_website')}</b>: <a href=\"{site_url}\">{site_url.replace('https://', '').replace('http://', '')}</a>"
     await message.answer(about_text, reply_markup=common._menu_kb(lang), disable_web_page_preview=False)
 
 @common.router.message(Command('app'))
@@ -49,7 +48,7 @@ async def cb_about(cb: types.CallbackQuery) -> None:
     lang = await _lang(user.id)
     from web.mini import public_base_url
     site_url = public_base_url()
-    about_text = f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}\n\n🌐 <b>{i18n.t(lang, 'about_website')}</b>: <a href=\"{site_url}\">{site_url.replace('https://', '').replace('http://', '')}</a>"
+    about_text = f"{i18n.t(lang, 'about_title')}\n\n{i18n.t(lang, 'about_body')}\n\n<b>{i18n.t(lang, 'about_website')}</b>: <a href=\"{site_url}\">{site_url.replace('https://', '').replace('http://', '')}</a>"
     await common._edit_menu(cb, about_text, common._menu_kb(lang))
     await cb.answer()
 
@@ -99,7 +98,7 @@ async def cmd_start(message: types.Message, command: CommandObject) -> None:
         lang = await _lang(message.from_user.id)
         bal = await common.ledger.balance(message.from_user.id)
         bal_s = f'{bal:.6f}'.rstrip('0').rstrip('.')
-        welcome = f"{i18n.t(lang, 'start_hi', name=common._h(name))}\n\n{i18n.t(lang, 'start_intro')}\n\n💰 {i18n.t(lang, 'menu_balance', bal=bal_s)}\n\n{i18n.t(lang, 'start_try')}"
+        welcome = f"{i18n.t(lang, 'start_hi', name=common._h(name))}\n\n{i18n.t(lang, 'start_intro')}\n\n{i18n.t(lang, 'menu_balance', bal=bal_s)}\n\n{i18n.t(lang, 'start_try')}"
         await message.answer(welcome, reply_markup=common._menu_kb(lang))
         return
     lang = await _lang(message.from_user.id)
@@ -229,7 +228,7 @@ async def on_menu(cb: types.CallbackQuery) -> None:
         from web.mini import public_base_url
         url = public_base_url() + '/app'
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='🚀 ' + i18n.t(lang, 'btn_mini_app'), web_app=WebAppInfo(url=url))],
+            [InlineKeyboardButton(text=i18n.t(lang, 'btn_mini_app'), web_app=WebAppInfo(url=url))],
             [common._back_row(lang)]])
         await common._edit_menu(cb, i18n.t(lang, 'app_mini_description'), kb)
     elif cb.data == 'betcreate':
@@ -248,7 +247,7 @@ async def _settings_kb_text(tg_id: int) -> tuple[str, InlineKeyboardMarkup]:
     react = i18n.t(lang, 'on') if s['reaction_tips'] else i18n.t(lang, 'off')
     notif = i18n.t(lang, 'on') if s['notify_deposits'] else i18n.t(lang, 'off')
     text = f"{i18n.t(lang, 'set_title')}\n\n{i18n.t(lang, 'set_react', state=react)}\n\n{i18n.t(lang, 'set_notif', state=notif)}"
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"⚡ {(i18n.t(lang, 'on') if s['reaction_tips'] else i18n.t(lang, 'off'))}"), callback_data='set:react')], [InlineKeyboardButton(text=common.btn_text(f"🔔 {(i18n.t(lang, 'on') if s['notify_deposits'] else i18n.t(lang, 'off'))}"), callback_data='set:notif')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_lang', name=i18n.LANG_NAME[lang]), callback_data='set:lang')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_back'), callback_data='menu')]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(i18n.t(lang, 'on') if s['reaction_tips'] else i18n.t(lang, 'off')), callback_data='set:react')], [InlineKeyboardButton(text=common.btn_text(i18n.t(lang, 'on') if s['notify_deposits'] else i18n.t(lang, 'off')), callback_data='set:notif')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_lang', name=i18n.LANG_NAME[lang]), callback_data='set:lang')], [InlineKeyboardButton(text=i18n.t(lang, 'btn_back'), callback_data='menu')]])
     return (text, kb)
 
 @common.router.message(Command('settings'))

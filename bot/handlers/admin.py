@@ -17,9 +17,8 @@ from aiogram import types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot import ai, i18n
-from bot.ledger import async_ledger as ledger
-
+from .. import ai, i18n
+from ..ledger import async_ledger as ledger
 from . import _common as common
 
 SECTIONS = ("ai", "treasury", "markets", "agent")
@@ -94,7 +93,7 @@ async def _ai_screen(lang: str) -> str:
     state = await asyncio.to_thread(ai.status)
     lines = [f"<b>{i18n.t(lang, 'admin_btn_ai')}</b>", i18n.t(lang, "admin_ai_mode", mode=state["mode"]), ""]
     for p in state["providers"]:
-        mark = "✅" if p["usable"] and not p["parked"] else ("⏸" if p["parked"] else "⛔")
+        mark = "✓" if p["usable"] and not p["parked"] else ("·" if p["parked"] else "×")
         lines.append(
             f"{mark} <code>{common._h(p['name'])}</code> · {common._h(p['kind'])} · "
             + (

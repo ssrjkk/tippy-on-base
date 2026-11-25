@@ -116,7 +116,7 @@ def test_basename_free(monkeypatch, ledger, no_reverse):
     run(cmd_basename(m))
     text = m.answers[0][0]
     assert "freena" in text  # _esc truncates long tokens with "…"
-    assert "✅" in text
+    assert "✓" in text
 
 
 def test_basename_taken_other_owner(monkeypatch, ledger, no_reverse):
@@ -125,7 +125,7 @@ def test_basename_taken_other_owner(monkeypatch, ledger, no_reverse):
     m = Message("/basename taken.base.eth")
     run(cmd_basename(m))
     text = m.answers[0][0]
-    assert "❌" in text
+    assert "×" in text
     assert "0x9999" in text  # owner address (truncated by _esc)
 
 
@@ -141,7 +141,7 @@ def test_basename_owned_by_linked_wallet(monkeypatch, ledger, no_reverse):
     run(cmd_basename(m))
     text = m.answers[0][0]
     assert "mine.b" in text  # _esc truncates long tokens with "…"
-    assert "❌" not in text
+    assert "×" not in text
 
 
 def test_basename_rpc_error(monkeypatch, ledger, no_reverse):

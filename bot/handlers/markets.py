@@ -109,7 +109,7 @@ async def _market_card(m: dict, tg_id: int | None=None) -> str:
     options = json.loads(m['options'])
     quantities = await common.ledger.market_quantities(mid)
     prices = lmsr_prices(quantities, int(m['b_micro']))
-    lines = [f"📈 #{mid} <b>{common._h(m['question'])}</b>"]
+    lines = [f"↗ #{mid} <b>{common._h(m['question'])}</b>"]
     if m['status'] == 'resolved':
         w = int(m['winner']) if m['winner'] is not None else -1
         label = options[w] if 0 <= w < len(options) else '?'
@@ -119,7 +119,7 @@ async def _market_card(m: dict, tg_id: int | None=None) -> str:
     elif int(time.time()) > int(m['close_at']):
         lines.append(i18n.t(lang, 'market_card_deadline_passed'))
     else:
-        lines.append(f"⏰ {_rel_deadline(int(m['close_at']), lang)}")
+        lines.append(f"{_rel_deadline(int(m['close_at']), lang)}")
     pos = await common.ledger.user_market_position(mid, tg_id) if tg_id else {}
     for i, o in enumerate(options):
         p = prices[i]
@@ -149,7 +149,7 @@ async def _markets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMark
         top = max(range(len(prices)), key=lambda i: prices[i]) if prices else 0
         leader = json.loads(m['options'])[top] if prices else '?'
         lines.append(f"#{mid} {common._h(m['question'])}{i18n.t(lang, 'market_fav', leader=f'{common._h(leader[:30])} {_pct(prices[top])}')}" if prices else f"#{mid} {common._h(m['question'])}")
-        kb_rows.append([InlineKeyboardButton(text=common.btn_text(f"📈 #{mid}: {m['question'][:36]}"), callback_data=f'mk:{mid}')])
+        kb_rows.append([InlineKeyboardButton(text=common.btn_text(f"↗ #{mid}: {m['question'][:36]}"), callback_data=f'mk:{mid}')])
     lines.append(i18n.t(lang, 'market_list_hint'))
     kb_rows.append([InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='mkcreate')])
     return ('\n'.join(lines), InlineKeyboardMarkup(inline_keyboard=kb_rows))
@@ -321,7 +321,7 @@ async def cb_mk_resolve(cb: types.CallbackQuery) -> None:
         return
     if len(ids) == 1:
         options = json.loads(m['options'])
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f'🏆 {o[:30]}'), callback_data=f'mkres:{mid}:{i}')] for i, o in enumerate(options)] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_back_short'), callback_data=f'mk:{mid}')]])
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f'★ {o[:30]}'), callback_data=f'mkres:{mid}:{i}')] for i, o in enumerate(options)] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_back_short'), callback_data=f'mk:{mid}')]])
         await common._edit_menu(cb, i18n.t(lang, 'market_resolve_title', mid=mid, question=common._h(m['question'])), kb)
         await cb.answer()
         return
@@ -352,7 +352,7 @@ async def cb_mk_cancel(cb: types.CallbackQuery) -> None:
         await cb.answer(msg, show_alert=True)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=i18n.t(lang, 'btn_all_markets_v2'), callback_data='markets_amm')]])
-    await common._edit_menu(cb, f'✅ {msg}', kb)
+    await common._edit_menu(cb, f'✓ {msg}', kb)
     await cb.answer()
 
 @common.router.message(Command('trade'))
@@ -444,7 +444,7 @@ async def cmd_positions(message: types.Message) -> None:
         total_cost += max(p['cost'], 0)
         pnl = value_micro - p['cost']
         sign = '+' if pnl >= 0 else '−'
-        lines.append(f"📈 #{p['market_id']} <b>{common._h(p['question'][:60])}</b>\n" + i18n.t(lang, 'market_position_line', option=common._h(p['option']), shares=common._fmt(p['shares']), price=_pct(p['price']), value=common._fmt(value_micro), pnl=f'{sign}{common._fmt(abs(pnl))}'))
+        lines.append(f"↗ #{p['market_id']} <b>{common._h(p['question'][:60])}</b>\n" + i18n.t(lang, 'market_position_line', option=common._h(p['option']), shares=common._fmt(p['shares']), price=_pct(p['price']), value=common._fmt(value_micro), pnl=f'{sign}{common._fmt(abs(pnl))}'))
     lines.append(i18n.t(lang, 'market_total_value', value=common._fmt(total_value)))
     await message.answer('\n\n'.join(lines))
 

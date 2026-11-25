@@ -1679,7 +1679,7 @@ def test_cmd_bets_shows_deadline(ledger):
     ledger.create_bet(ALICE, "С дедлайном?", ["А", "Б"], close_at=int(time.time()) + 3600)
     m = Message("/bets", from_id=ALICE)
     run(cmd_bets(m))
-    assert "⏰" in m.answers[0][0] and ("h" in m.answers[0][0] or "m" in m.answers[0][0])
+    assert "h" in m.answers[0][0] or "m" in m.answers[0][0]
 
 
 def test_cb_market_expired_text(ledger):
@@ -1695,7 +1695,7 @@ def test_cb_market_deadline_text(ledger):
     bid = ledger.create_bet(ALICE, "Срок?", ["А", "Б"], close_at=int(time.time()) + 3600)
     cb = Callback(f"market:{bid}", ALICE)
     run(cb_market(cb))
-    assert "⏰" in cb.message.text and ("h" in cb.message.text or "m" in cb.message.text)
+    assert "h" in cb.message.text or "m" in cb.message.text
 
 
 def test_notify_bet_result_dedup(ledger):
@@ -1895,7 +1895,7 @@ def test_cmd_broadcast_admin(ledger, monkeypatch):
     ledger.credit(BOB, 5_000_000, "deposit")
     m = Message("/broadcast всем привет", from_id=ALICE)
     run(cmd_broadcast(m))
-    assert m.answers[0][0].startswith("📣 Разослано: 1")
+    assert m.answers[0][0].startswith("Разослано: 1")
     assert m.bot.sent == [(BOB, "всем привет")]
 
 
@@ -2223,7 +2223,7 @@ def test_cmd_paywall_list_sends_one_message(ledger):
 
 
 def test_cmd_paywall_list_reads_ownership_once_whatever_the_post_count(ledger):
-    """The ✅ marker used to cost one paywall_purchased() per post — so opening the
+    """The ✓ marker used to cost one paywall_purchased() per post — so opening the
     list was a query for every post any user ever put up for sale, each one behind
     the ledger lock."""
 
@@ -2256,8 +2256,8 @@ def test_cmd_paywall_list_reads_ownership_once_whatever_the_post_count(ledger):
     assert len(lines) == 5
     # Parity with the single-row reader the batch replaced, post by post.
     for r in ledger.paywall_items_list():
-        assert ("✅" in lines[f"#{r['id']}"]) == bool(ledger.paywall_purchased(r["id"], ALICE))
-    assert sum("✅" in l for l in lines.values()) == 1
+        assert ("✓" in lines[f"#{r['id']}"]) == bool(ledger.paywall_purchased(r["id"], ALICE))
+    assert sum("✓" in l for l in lines.values()) == 1
 
 
 def test_cmd_paywall_list_shows_a_page_and_says_so(ledger):
@@ -2510,7 +2510,7 @@ def test_paywall_channels_lists_my_subs(ledger):
     run(cmd_paywall(m2, CommandObject(command="paywall", args="subscribe " + str(CHANNEL_ID))))
     m3 = Message("/paywall channels", bot=bot)
     run(cmd_paywall(m3, CommandObject(command="paywall", args="channels")))
-    assert "🔑" in m3.answers[0][0]
+    assert "✓" in m3.answers[0][0]
 
 
 def test_paywall_owner_notification_uses_the_owner_language(ledger):
@@ -2579,7 +2579,7 @@ def test_paywall_channels_reads_subs_and_lang_once_whatever_the_channel_count(le
     run(cmd_paywall(m, CommandObject(command="paywall", args="channels")))
     lines = [l for l in m.answers[0][0].split("\n") if l.startswith("•")]
     assert len(lines) == 6
-    assert sum("🔑" in l for l in lines) == 2  # -1001 and -1005, nobody else's
+    assert sum("✓" in l for l in lines) == 2  # -1001 and -1005, nobody else's
 
 
 def test_paywall_channels_pages_and_trims_to_fit(ledger):
@@ -2639,7 +2639,7 @@ def test_wallet_list_slots_and_create_button_are_localized(ledger):
     assert "Slot 1:" in text
     assert not re.search(r"[а-яА-ЯёЁ]", text), text
     labels = [btn.text for row in kb for btn in row]
-    assert any(label.startswith("➕ Create (") for label in labels), labels
+    assert any(label.startswith("+ Create (") for label in labels), labels
 
     # The command renders through the same helper, so the list and the
     # post-switch refresh cannot disagree: same lines, same language.
@@ -2655,7 +2655,7 @@ def test_wallet_export_returns_key_and_seed(ledger):
     run(cmd_wallet(m))
     text = m.answers[0][0]
     assert "0x" in text
-    assert "🔒" in text  # security notice
+    assert "Экспорт приватного ключа" in text  # security notice
 
 
 def test_wallet_encrypted_at_rest(ledger):
