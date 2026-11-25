@@ -2,6 +2,171 @@ const $ = (id) => document.getElementById(id);
 document.body.classList.add("js");
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let DEMO_MODE = false;
+
+const DEMO_DATA = {
+  info: {
+    bot_username: "TippyOnBaseBot",
+    chain_name: "Base",
+    chain_id: 8453,
+    usdc_address: "0x833589fCD6edb6E04fC7C1D01bAad89c3D045c0b7d",
+    explorer: "https://basescan.org",
+    limits: {
+      max_tip_usdc: 1000,
+      max_trade_usdc: 500,
+      min_trade_usdc: 0.01,
+      max_bet_usdc: 500,
+      min_withdraw_usdc: 1,
+      max_withdraws_per_day: 3,
+      min_subsidy_usdc: 10,
+      max_subsidy_usdc: 1000,
+      max_deadline_hours: 720,
+      default_deadline_hours: 24,
+    },
+    fees: { withdraw_pct: 1, win_pct: 2 },
+    x402: { enabled: false, min_usdc: 0.01, max_usdc: 100, ttl_seconds: 900 },
+    smart_wallet_enabled: false,
+    onchain_markets_enabled: false,
+    ai_mode: "data",
+    commands: [
+      { command: "balance", description: "Показать баланс", group: "wallet" },
+      { command: "tip", description: "Отправить чаевые", group: "tips" },
+      { command: "rain", description: "Раздать чаевые", group: "tips" },
+      { command: "trade", description: "Купить долю", group: "markets" },
+      { command: "bet", description: "Сделать ставку", group: "bets" },
+      { command: "gasless", description: "Безгазовая покупка", group: "onchain" },
+    ],
+  },
+  stats: {
+    volume_usdc: 148920.5,
+    volume_30d_usdc: 42611,
+    users: 1842,
+    open_markets: 7,
+    transactions: 11408,
+    fees_usdc: 684.5,
+  },
+  solvency: {
+    liabilities_usdc: 26184.1,
+    pending_deposits_usdc: 415,
+    reserve_usdc: 8640.4,
+    reserves_source: "vault",
+    vault_balance_usdc: 34820.5,
+    vault_address: "0x1111111111111111111111111111111111111111",
+    hot_wallet_balance_usdc: 0,
+    coverage_pct: 104.24,
+    solvent: true,
+  },
+  wallet: { address: "0x2222222222222222222222222222222222222222", balance_usdc: 34820.5 },
+  predictions: [
+    {
+      id: 14,
+      question: "Will Base daily active addresses exceed 3M before Q1 2027?",
+      status: "open",
+      close_at: Math.floor(Date.now() / 1000) + 86400 * 40,
+      options: [
+        { index: 0, label: "YES", price_pct: 64.2 },
+        { index: 1, label: "NO", price_pct: 35.8 },
+      ],
+      liquidity_usdc: 4280.5,
+      volume_usdc: 18240.25,
+      traders: 184,
+      creator: { id: 1, username: "ssrjkk" },
+    },
+    {
+      id: 15,
+      question: "Will native USDC supply on Base surpass $6B by March 2027?",
+      status: "open",
+      close_at: Math.floor(Date.now() / 1000) + 86400 * 70,
+      options: [
+        { index: 0, label: "YES", price_pct: 41.5 },
+        { index: 1, label: "NO", price_pct: 58.5 },
+      ],
+      liquidity_usdc: 3151,
+      volume_usdc: 9800,
+      traders: 122,
+      creator: { id: 2, username: "builder" },
+    },
+  ],
+  markets: [
+    {
+      id: 21,
+      question: "Кто выиграет следующий раунд Base Cup?",
+      status: "open",
+      close_at: Math.floor(Date.now() / 1000) + 86400 * 10,
+      options: [
+        { index: 0, label: "Команда A", probability: 62, pool_usdc: 120, backers: 14 },
+        { index: 1, label: "Команда B", probability: 38, pool_usdc: 74, backers: 9 },
+      ],
+      pot_usdc: 194,
+      total_backers: 23,
+      creator: { id: 3, username: "fan" },
+    },
+  ],
+  leaderboard: [
+    { username: "jesse.base.eth", total_usdc: 14820.5 },
+    { username: "builders.base.eth", total_usdc: 11340 },
+    { username: "ssrjkk.base.eth", total_usdc: 9650.25 },
+  ],
+  quote: {
+    shares_usdc: 14.8,
+    avg_price_usdc: 0.675,
+    cost_usdc: 10,
+    price_before_pct: 64.2,
+    price_after_pct: 69.9,
+    payout_usdc: 14.8,
+    profit_usdc: 4.8,
+    roi_pct: 48,
+    max_trade_usdc: 500,
+    min_trade_usdc: 0.01,
+  },
+};
+
+function demoPayload(path) {
+  if (path.startsWith("/api/info")) return DEMO_DATA.info;
+  if (path.startsWith("/api/stats")) return DEMO_DATA.stats;
+  if (path.startsWith("/api/solvency")) return DEMO_DATA.solvency;
+  if (path.startsWith("/api/wallet")) return DEMO_DATA.wallet;
+  if (path.startsWith("/api/volume_history")) {
+    return Array.from({ length: 14 }, (_, i) => ({
+      day: new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10),
+      volume_usdc: 500 + (i + 1) * 137.5,
+    }));
+  }
+  if (path.startsWith("/api/predictions")) return DEMO_DATA.predictions;
+  if (path.startsWith("/api/markets")) return path.includes("status=resolved") ? [] : DEMO_DATA.markets;
+  if (path.startsWith("/api/onchain/markets")) return [];
+  if (path.startsWith("/api/leaderboard")) return DEMO_DATA.leaderboard;
+  if (path.startsWith("/api/prediction/") && path.includes("/quote")) return DEMO_DATA.quote;
+  if (path.startsWith("/api/ask")) {
+    return { mode: "data", answer: "Демо-режим: в примере 2 открытых LMSR-рынка. Самый ликвидный — #14, вероятность YES 64,2%." };
+  }
+  if (path.startsWith("/api/health")) return { ok: true, demo: true };
+  return {};
+}
+
+function paintDemoMode() {
+  const el = $("telemetryMode");
+  if (!el) return;
+  el.textContent = "DEMO DATA";
+  el.classList.add("is-demo");
+}
+
+async function fetchJson(path, options) {
+  const response = await fetch(path, options);
+  if (response.headers.get("x-tippy-demo-mode") === "true") {
+    DEMO_MODE = true;
+    paintDemoMode();
+    return demoPayload(path);
+  }
+  if (!response.ok) {
+    let body = null;
+    try { body = await response.json(); } catch (e) { /* non-JSON error */ }
+    throw new Error(body?.detail || body?.error || path + " " + response.status);
+  }
+  const type = response.headers.get("content-type") || "";
+  if (!type.includes("application/json")) throw new Error(path + " returned non-JSON");
+  return response.json();
+}
 
 /* ---------- scroll progress ---------- */
 const scrollProgress = $("scrollProgress");
@@ -80,8 +245,7 @@ function setCount(el, value) {
 
 async function loadInfo() {
   try {
-    const r = await fetch("/api/info");
-    const info = await r.json();
+    const info = await fetchJson("/api/info");
     const username = info.bot_username;
     const tgLink = username ? "https://t.me/" + encodeURIComponent(username) : null;
     if (tgLink) {
@@ -156,9 +320,16 @@ function paintStatus(info) {
     badge.className = live ? "badge badge-yes" : "badge";
     text.textContent = live ? onText : offText;
   };
-  cell("statusAiBadge", "statusAiText", info.ai_mode === "llm",
-    "Отвечает модель из цепочки провайдеров; когда ни один не ответил, /ask отдаёт данные реестра.",
-    "Модель не настроена — /ask отвечает данными реестра и говорит об этом прямо.");
+  const aiBadge = $("statusAiBadge");
+  const aiText = $("statusAiText");
+  if (aiBadge && aiText) {
+    const model = info.ai_mode === "llm";
+    aiBadge.textContent = model ? "работает" : "data mode";
+    aiBadge.className = model ? "badge badge-yes" : "badge badge-brand";
+    aiText.textContent = model
+      ? "Отвечает модель из цепочки провайдеров; когда ни один не ответил, /ask отдаёт данные реестра."
+      : "Модель не настроена — /ask отвечает данными реестра и говорит об этом прямо.";
+  }
   cell("statusOnchainBadge", "statusOnchainText", !!info.onchain_markets_enabled,
     "Контракт долей подключён: доли ERC-1155 и вывод на адрес существуют.",
     "Адрес контракта долей не задан — рынки живут в реестре, доли не выпускаются.");
@@ -176,6 +347,12 @@ function renderTelegramWidget(username) {
   const box = $("tg-widget");
   if (!box || box.dataset.ready) return;
   box.dataset.ready = "1";
+  if (DEMO_MODE) {
+    box.innerHTML = '<div class="hint">Демо-режим: авторизация доступна в '
+      + '<a class="m-link" href="https://t.me/' + encodeURIComponent(username || "TippyOnBaseBot")
+      + '" target="_blank" rel="noopener">Telegram-боте</a>.</div>';
+    return;
+  }
   if (!username) {
     box.innerHTML = '<div class="hint">Имя бота не настроено — вход через Telegram недоступен.</div>';
     return;
@@ -318,9 +495,7 @@ const STAT_IDS = ["stat-volume", "stat-vol30", "stat-users", "stat-markets", "st
 
 async function loadStats() {
   try {
-    const r = await fetch("/api/stats");
-    if (!r.ok) throw new Error("stats " + r.status);
-    const s = await r.json();
+    const s = await fetchJson("/api/stats");
     setCount($("stat-volume"), s.volume_usdc);
     setCount($("stat-vol30"), s.volume_30d_usdc);
     setCount($("stat-users"), s.users);
@@ -341,9 +516,7 @@ function fmtDay(day) {
 
 async function loadVolumeChart() {
   try {
-    const r = await fetch("/api/volume_history?days=" + chartDays);
-    if (!r.ok) throw new Error("volume_history " + r.status);
-    const days = await r.json();
+    const days = await fetchJson("/api/volume_history?days=" + chartDays);
     chartSeries = days;
     chartTotal = days.reduce((sum, d) => sum + d.volume_usdc, 0);
     const el = $("volume-chart");
@@ -426,8 +599,7 @@ volumeChartEl.addEventListener("pointerleave", chartSummaryTotal);
 
 async function loadWallet() {
   try {
-    const r = await fetch("/api/wallet");
-    const w = await r.json();
+    const w = await fetchJson("/api/wallet");
     $("wallet-address").textContent = w.address;
     $("wallet-balance").textContent = w.balance_usdc === null || w.balance_usdc === undefined
       ? "RPC недоступен"
@@ -435,8 +607,7 @@ async function loadWallet() {
   } catch (e) { /* keep placeholders */ }
 
   try {
-    const r = await fetch("/api/solvency");
-    const s = await r.json();
+    const s = await fetchJson("/api/solvency");
     $("wallet-liabilities").textContent = fmtUSDC(s.liabilities_usdc) + " USDC";
     $("wallet-pending").textContent = fmtUSDC(s.pending_deposits_usdc) + " USDC";
     $("wallet-reserve").textContent =
@@ -637,8 +808,7 @@ function marketCard(m, i) {
 
 async function loadMarkets() {
   try {
-    const r = await fetch("/api/markets");
-    const markets = await r.json();
+    const markets = await fetchJson("/api/markets");
     searchIndex.pool = markets;
     const el = $("markets-list");
     if (!markets.length) {
@@ -654,8 +824,7 @@ async function loadMarkets() {
 
 async function loadClosedMarkets() {
   try {
-    const r = await fetch("/api/markets?status=resolved");
-    const markets = await r.json();
+    const markets = await fetchJson("/api/markets?status=resolved");
     searchIndex.closed = markets;
     const el = $("closed-markets-list");
     if (!markets.length) {
@@ -708,11 +877,11 @@ function renderHeroSpot(markets) {
   if (!box || !body) return;
   const top = markets.reduce((best, m) => (m.liquidity_usdc > best.liquidity_usdc ? m : best), markets[0]);
   if (!top) {
-    $("heroMarketState").textContent = "no market";
+    $("heroMarketState").textContent = (DEMO_MODE ? "DEMO · " : "") + "no market";
     body.innerHTML = '<div class="empty">Открытых LMSR-рынков пока нет. Telegram и x402-режимы терминала доступны.</div>';
     return;
   }
-  $("heroMarketState").textContent = statusWord(top);
+  $("heroMarketState").textContent = (DEMO_MODE ? "DEMO · " : "") + statusWord(top);
   body.innerHTML = `
     <div class="spot-question">#${top.id} ${escapeHtml(top.question)}</div>
     <div class="spot-meta">${metaLine(deadlineHtml(top, REFUND_NOTE), statusBadge(top))}</div>
@@ -733,8 +902,7 @@ function renderHeroSpot(markets) {
 
 async function loadPredictions() {
   try {
-    const r = await fetch("/api/predictions");
-    const markets = await r.json();
+    const markets = await fetchJson("/api/predictions");
     predictions = markets;
     searchIndex.lmsr = markets;
     const el = $("predictions-list");
@@ -821,11 +989,9 @@ async function requestQuote() {
   let q = null;
   let refusal = "";
   try {
-    const r = await fetch(url);
-    if (r.ok) q = await r.json();
-    else refusal = (await r.json()).detail || "Котировка недоступна.";
+    q = await fetchJson(url);
   } catch (e) {
-    refusal = "Сервер не ответил — котировки нет.";
+    refusal = "Котировка недоступна.";
   }
   if (seq !== quoteSeq) return;
   if (!q) {
@@ -1096,6 +1262,10 @@ $("x402Ask").addEventListener("click", async () => {
     setMsg("x402Msg", "Нужны оба поля: счёт привязан к паре (получатель, сумма).", false);
     return;
   }
+  if (DEMO_MODE) {
+    setMsg("x402Msg", "Демо-режим: счёт x402 не выставляется. Подключите origin с BACKEND_URL.", false);
+    return;
+  }
   const btn = $("x402Ask");
   btn.disabled = true;
   try {
@@ -1167,13 +1337,11 @@ async function askOracle(question) {
   form.setAttribute("aria-busy", "true");
   out.textContent = "Сверяю реестр и состояние рынков…";
   try {
-    const r = await fetch("/api/ask", {
+    const body = await fetchJson("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ question: q, lang: "ru" }),
     });
-    const body = await r.json();
-    if (!r.ok) throw new Error(body.detail || body.error || "oracle " + r.status);
     if (seq !== oracleSeq) return;
     out.textContent = body.answer || "Ответ не получен.";
   } catch (e) {
@@ -1355,8 +1523,7 @@ $("searchKey").textContent =
 
 async function loadLeaderboard() {
   try {
-    const r = await fetch("/api/leaderboard");
-    const rows = await r.json();
+    const rows = await fetchJson("/api/leaderboard");
     const el = $("leaderboard");
     if (!rows.length) {
       el.innerHTML = '<div class="empty">Пока пусто</div>';
@@ -1382,9 +1549,7 @@ function escapeHtml(s) {
 async function loadOnchainMarkets() {
   try {
     const net = await netInfo();
-    const r = await fetch("/api/onchain/markets");
-    if (!r.ok) throw new Error();
-    const markets = await r.json();
+    const markets = await fetchJson("/api/onchain/markets");
     const section = $("onchain-markets");
     const el = $("onchain-markets-list");
     if (!section || !el) return;

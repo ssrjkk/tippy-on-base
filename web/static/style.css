@@ -1365,6 +1365,8 @@ select.input {
   flex-wrap: wrap; gap: 8px 16px;
 }
 .telemetry-k { color: var(--ink-2); font-weight: 600; letter-spacing: 0.06em; }
+.telemetry-mode { color: var(--success); font-weight: 600; letter-spacing: 0.08em; }
+.telemetry-mode.is-demo { color: var(--warning); }
 .telemetry-link { color: var(--accent-text); text-decoration: none; }
 .telemetry-link:hover { text-decoration: underline; }
 
