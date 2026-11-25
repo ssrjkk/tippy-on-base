@@ -641,7 +641,7 @@ const DEMO_STATE = {
   stats: { users: 1842, volume: 148920.5, tips: 11408 }, smart: null,
   username: 'ssrjkk', tg_id: 900001, linked_address: '0x3333333333333333333333333333333333333333', authStale: false,
 };
-const DEMO_INFO = { chain_name: 'Base', limits: {}, fees: {}, x402: {} };
+const DEMO_INFO = { chain_name: 'Base', chain_id: 8453, usdc_address: '0x833589fCD6edb6E04fC7C1D01bAad89c3D045c0b7d', explorer: 'https://basescan.org', limits: { max_tip_usdc: 1000, max_trade_usdc: 500, min_trade_usdc: 0.01, max_bet_usdc: 500, min_withdraw_usdc: 1, max_withdraws_per_day: 3, min_subsidy_usdc: 10, max_subsidy_usdc: 1000, max_deadline_hours: 720, default_deadline_hours: 24, deposit_confirmations: 12 }, fees: { withdraw_pct: 1, win_pct: 2 }, x402: { enabled: false, min_usdc: 0.01, max_usdc: 100, invoice_ttl_seconds: 900 } };
 let currentTab = 0;
 let toastTimer = null;
 
@@ -789,7 +789,15 @@ function explorerLink() {
 }
 
 // ─── i18n ───
-function t(key) { return (I18N[STATE.lang] && I18N[STATE.lang][key]) || I18N.en[key] || key; }
+function t(key) {
+  let text = (I18N[STATE.lang] && I18N[STATE.lang][key]) || I18N.en[key] || key;
+  return String(text)
+    .split('__CHAIN_NAME__').join(INFO.chain_name || 'Base')
+    .split('__DEFAULT_DEADLINE_HOURS__').join(LIMITS.default_deadline_hours ?? 24)
+    .split('__WITHDRAW_FEE_PCT__').join(FEES.withdraw_pct ?? 0)
+    .split('__MIN_WITHDRAW_USDC__').join(LIMITS.min_withdraw_usdc ?? 0)
+    .split('__MAX_WITHDRAWS_PER_DAY__').join(LIMITS.max_withdraws_per_day ?? 0);
+}
 function icon(name, cls) { return `<svg class="${cls || 'icon'}" viewBox="0 0 24 24" aria-hidden="true"><use href="#${name}"/></svg>`; }
 function applyI18n() {
   document.documentElement.lang = STATE.lang;
