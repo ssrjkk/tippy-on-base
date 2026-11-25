@@ -124,7 +124,7 @@ async def _trade_keyboard(mid: int, options: list[str], tg_id: int | None) -> ty
 
 def _card(m: dict, prices: list[Decimal], lang: str) -> str:
     options = json.loads(m['options'])
-    lines = [f"⛓️ #{m['id']} <b>{esc(m['question'])}</b>"]
+    lines = [f"#{m['id']} <b>{esc(m['question'])}</b>"]
     lines.append(i18n.t(lang, 'oc_deadline', dt=time.strftime('%d.%m %H:%M', time.localtime(m['close_at']))))
     for i, o in enumerate(options):
         pct = as_pct(prices[i]) if i < len(prices) else 0.0
@@ -167,7 +167,7 @@ async def cmd_oc(message: types.Message) -> None:
     if not rows:
         lines.append(i18n.t(lang, 'oc_list_empty'))
     for m, pcts in zip(rows, pcts_list):
-        lines.append(f"⛓️ #{m['id']} {esc(m['question'])} — {pcts}")
+        lines.append(f"#{m['id']} {esc(m['question'])} — {pcts}")
     lines.append('\n' + i18n.t(lang, 'oc_help'))
     await message.answer('\n'.join(lines))
 
@@ -265,7 +265,7 @@ async def cmd_oc_create(message: types.Message) -> None:
         # The market is real on-chain; never let a DB hiccup hide it from
         # the user — tell them it exists and how to re-register it.
         log.warning('onchain registry save failed for #%s: %s', market_id, e)
-        registry_note = '\n⚠️ ' + i18n.t(lang, 'oc_registry_warn', err=esc(str(e)[:120]), id2=market_id)
+        registry_note = '\n! ' + i18n.t(lang, 'oc_registry_warn', err=esc(str(e)[:120]), id2=market_id)
     await status.edit_text(i18n.t(lang, 'oc_created', id=market_id, q=esc(question), addr=esc(addr)) + registry_note)
 
 
@@ -368,7 +368,7 @@ async def cmd_oc_buy(message: types.Message) -> None:
         await message.answer(i18n.t(lang, 'market_trade_max', n=f'{common.config.MARKET_MAX_TRADE_USDC:.0f}'))
         return
     ok, text = await _buy_core(message.from_user.id, mid, outcome, spend, lang)
-    await message.answer(('✅ ' if ok else '') + text)
+    await message.answer(('✓ ' if ok else '') + text)
 
 
 @common.router.message(Command('oc_sell'))
@@ -391,7 +391,7 @@ async def cmd_oc_sell(message: types.Message) -> None:
             return
         pct = int(raw)
     ok, text = await _sell_core(message.from_user.id, mid, outcome, pct, lang)
-    await message.answer(('✅ ' if ok else '') + text)
+    await message.answer(('✓ ' if ok else '') + text)
 
 
 @common.router.message(Command('oc_redeem'))
@@ -508,10 +508,10 @@ async def _settle_all(message: types.Message, lang: str) -> None:
             try:
                 got = await send(chunk, key)
             except Exception as e:
-                lines.append(f"❌ {label} #{', #'.join(str(x) for x in chunk)}: {esc(str(e)[:120])}")
+                lines.append(f"× {label} #{', #'.join(str(x) for x in chunk)}: {esc(str(e)[:120])}")
                 continue
             total += got
-            lines.append(f"✅ {label} ×{len(chunk)}: {common._fmt(got)} USDC")
+            lines.append(f"✓ {label} ×{len(chunk)}: {common._fmt(got)} USDC")
     await status.edit_text(i18n.t(
         lang, 'oc_settle_result', amount=common._fmt(total), addr=esc(addr),
         lines='\n'.join(lines) if lines else '—'))
@@ -544,7 +544,7 @@ async def cmd_oc_pos(message: types.Message) -> None:
             continue
         found = True
         parts = [f"{common._fmt(v)}× {esc(o)}" for o, v in zip(options, bals) if v > 0]
-        lines.append(f"⛓️ #{m['id']} {esc(m['question'])}\n  " + '\n  '.join(parts))
+        lines.append(f"#{m['id']} {esc(m['question'])}\n  " + '\n  '.join(parts))
     if not found:
         lines.append(i18n.t(lang, 'oc_pos_empty'))
     await message.answer('\n'.join(lines))
@@ -673,7 +673,7 @@ async def cmd_oc_resolve(message: types.Message) -> None:
         await message.answer(wait)
         return
     ok, text = await _do_resolve(mid, winner_idx, lang, bot=message.bot)
-    await message.answer(('✅ ' if ok else '❌ ') + text)
+    await message.answer(('✓ ' if ok else '× ') + text)
 
 
 @common.router.callback_query(F.data.startswith('ocr:'))
@@ -705,7 +705,7 @@ async def cb_oc_resolve(cb: types.CallbackQuery) -> None:
     ok, text = await _do_resolve(mid, winner_idx, lang, bot=res_bot)
     await cb.answer(text, show_alert=True)
     if ok:
-        await common.paint_or_send(cb, f"⛓️ #{mid} — {esc(options[winner_idx])}\n{text}",
+        await common.paint_or_send(cb, f"#{mid} — {esc(options[winner_idx])}\n{text}",
                                    what=f"onchain resolve #{mid}")
 
 
@@ -780,7 +780,7 @@ async def cb_oc_buy(cb: types.CallbackQuery) -> None:
         return
     label = json.loads(m['options'])[outcome]
     kb = types.InlineKeyboardMarkup(inline_keyboard=[[
-        types.InlineKeyboardButton(text=common.btn_text(f"${a}"), callback_data=f"ocbuydo:{mid}:{outcome}:{a}")
+        types.InlineKeyboardButton(text=common.btn_text(f"{a} USDC"), callback_data=f"ocbuydo:{mid}:{outcome}:{a}")
         for a in common.QUICK_AMOUNTS
     ]])
     try:
@@ -815,7 +815,7 @@ async def cb_oc_buy_do(cb: types.CallbackQuery) -> None:
     ok, text = await _buy_core(cb.from_user.id, mid, outcome, spend, lang)
     markup = None
     if ok:
-        text = '✅ ' + text
+        text = '✓ ' + text
         try:
             m = await common.ledger.get_onchain_market(mid)
             if m:
@@ -880,7 +880,7 @@ async def cb_oc_sell_do(cb: types.CallbackQuery) -> None:
     ok, text = await _sell_core(cb.from_user.id, mid, outcome, pct, lang)
     markup = None
     if ok:
-        text = '✅ ' + text
+        text = '✓ ' + text
         try:
             m = await common.ledger.get_onchain_market(mid)
             if m:

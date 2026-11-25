@@ -124,12 +124,12 @@ async def cmd_subscriptions(message: types.Message) -> None:
         other_id = p.to_tg_id if p.from_tg_id == uid else p.from_tg_id
         other_name = names.get(other_id) or f"ID{other_id}"
 
-        status = "✅" if p.active else "❌"
+        status = "✓" if p.active else "×"
         amount_str = common._fmt(p.amount_micro)
         # The id is part of the row because /cancelsub takes exactly this value:
         # a list without it is a command nobody can call.
         lines.append(
-            f"{status} {direction} @{other_name}: ${amount_str} {p.interval.value}"
+            f"{status} {direction} @{other_name}: {amount_str} USDC {p.interval.value}"
             f" · <code>{p.id}</code>"
         )
 

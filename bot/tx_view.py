@@ -9,8 +9,9 @@ renders a withdrawal as income.
 
 from decimal import Decimal
 
-from bot import i18n
 from bot.ledger import MICRO, is_credit
+
+from bot import i18n
 
 __all__ = ['label_for', 'row_view', 'rows_view']
 

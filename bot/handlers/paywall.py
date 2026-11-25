@@ -1,4 +1,4 @@
-﻿from bot import i18n
+from bot import i18n
 
 'Paywall (paid content) handlers + reaction tips + message indexing.'
 import html
@@ -35,7 +35,7 @@ async def _paywall_list_text(lang: str, uid: int) -> str | None:
     owned = await common.ledger.paywall_purchased_bulk([int(r["id"]) for r in shown], uid)
     lines = [
         f"#{r['id']} — {html.escape(r['title'])} — <b>{common._fmt(int(r['price_micro']))} USDC</b>"
-        f"{' ✅' if int(r['id']) in owned else ''}"
+        f"{' ✓' if int(r['id']) in owned else ''}"
         for r in shown
     ]
     cut = len(rows) > len(shown)

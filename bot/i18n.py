@@ -8,185 +8,186 @@ LANG_NAME = {"ru": "Русский", "en": "English", "zh": "中文"}
 STRINGS: dict[str, dict[str, str]] = {
     # ----- menu buttons -----
     "btn_bal": {
-        "ru": "💰 Баланс",
-        "en": "💰 Balance",
-        "zh": "💰 余额",
+        "ru": "Баланс",
+        "en": "Balance",
+        "zh": "余额",
     },
     "btn_dep": {
-        "ru": "💳 Пополнить",
-        "en": "💳 Deposit",
-        "zh": "💳 充值",
+        "ru": "Пополнить",
+        "en": "Deposit",
+        "zh": "充值",
     },
     "btn_tip": {
-        "ru": "💸 Чаевые",
-        "en": "💸 Tips",
-        "zh": "💸 打赏",
+        "ru": "Чаевые",
+        "en": "Tips",
+        "zh": "打赏",
     },
     "btn_ask": {
-        "ru": "🧠 ИИ-ассистент",
-        "en": "🧠 AI assistant",
-        "zh": "🧠 AI 助手",
+        "ru": "AI-ассистент",
+        "en": "AI assistant",
+        "zh": "AI 助手",
     },
     "btn_markets": {
-        "ru": "📈 Рынки",
-        "en": "📈 Markets",
-        "zh": "📈 预测市场",
+        "ru": "↗ Рынки",
+        "en": "↗ Markets",
+        "zh": "↗ 预测市场",
     },
     "btn_bets": {
-        "ru": "🎲 Ставки",
-        "en": "🎲 Bets",
-        "zh": "🎲 投注",
+        "ru": "Ставки",
+        "en": "Bets",
+        "zh": "投注",
     },
     "btn_donate": {
-        "ru": "💛 Донаты",
-        "en": "💛 Donate page",
-        "zh": "💛 捐赠页",
+        "ru": "Донаты",
+        "en": "Donate page",
+        "zh": "捐赠页",
     },
     "btn_top": {
-        "ru": "🏆 Топ",
-        "en": "🏆 Top users",
-        "zh": "🏆 排行榜",
+        "ru": "★ Топ",
+        "en": "★ Top users",
+        "zh": "★ 排行榜",
     },
     "btn_hist": {
-        "ru": "🧾 История",
-        "en": "🧾 History",
-        "zh": "🧾 历史记录",
+        "ru": "История",
+        "en": "History",
+        "zh": "历史记录",
     },
     "btn_stats": {
-        "ru": "📊 Статистика",
-        "en": "📊 Stats",
-        "zh": "📊 统计",
+        "ru": "Статистика",
+        "en": "Stats",
+        "zh": "统计",
     },
     "btn_more": {
-        "ru": "🧭 Ещё",
-        "en": "🧭 More",
-        "zh": "🧭 更多",
+        "ru": "Ещё",
+        "en": "More",
+        "zh": "更多",
     },
     "btn_wallet": {
-        "ru": "👛 Кошелёк",
-        "en": "👛 Wallet",
-        "zh": "👛 钱包",
+        "ru": "Кошелёк",
+        "en": "Wallet",
+        "zh": "钱包",
     },
     "btn_paywall": {
-        "ru": "🔐 Платные посты",
-        "en": "🔐 Paid posts",
-        "zh": "🔐 付费内容",
+        "ru": "Платные посты",
+        "en": "Paid posts",
+        "zh": "付费内容",
     },
     "btn_settings": {
-        "ru": "⚙️ Настройки",
-        "en": "⚙️ Settings",
-        "zh": "⚙️ 设置",
+        "ru": "Настройки",
+        "en": "Settings",
+        "zh": "设置",
     },
     "btn_about": {
-        "ru": "ℹ️ О боте",
-        "en": "ℹ️ About",
-        "zh": "ℹ️ 关于",
+        "ru": "О боте",
+        "en": "About",
+        "zh": "关于",
     },
     "btn_mini_app": {
-        "ru": "📱 Mini App",
-        "en": "📱 Mini App",
-        "zh": "📱 Mini App",
+        "ru": "Mini App",
+        "en": "Mini App",
+        "zh": "Mini App",
     },
     # ----- common -----
     "menu_balance": {
-        "ru": "💰 Баланс: <b>{bal} USDC</b>",
-        "en": "💰 Balance: <b>{bal} USDC</b>",
-        "zh": "💰 余额：<b>{bal} USDC</b>",
+        "ru": "Баланс: <b>{bal} USDC</b>",
+        "en": "Balance: <b>{bal} USDC</b>",
+        "zh": "余额：<b>{bal} USDC</b>",
     },
     # ----- settings -----
     "set_title": {
-        "ru": "⚙️ <b>Настройки</b>",
-        "en": "⚙️ <b>Settings</b>",
-        "zh": "⚙️ <b>设置</b>",
+        "ru": "<b>Настройки</b>",
+        "en": "<b>Settings</b>",
+        "zh": "<b>设置</b>",
     },
     "set_react": {
-        "ru": "⚡ <b>Реакции-чаевые</b> — {state}.\nКогда ставишь реакцию на сообщение — автору начисляются USDC.",
-        "en": "⚡ <b>Reaction tips</b> — {state}.\nWhen you react to a message, its author receives USDC.",
-        "zh": "⚡ <b>表情打赏</b> — {state}。\n当你给消息添加表情时，作者会收到 USDC。",
+        "ru": "<b>Реакции-чаевые</b> — {state}.\nКогда ставишь реакцию на сообщение — автору начисляются USDC.",
+        "en": "<b>Reaction tips</b> — {state}.\nWhen you react to a message, its author receives USDC.",
+        "zh": "<b>表情打赏</b> — {state}。\n当你给消息添加表情时，作者会收到 USDC。",
     },
     "set_notif": {
-        "ru": "🔔 <b>Уведомления о депозитах</b> — {state}.\nСообщение при зачислении депозита.",
-        "en": "🔔 <b>Deposit notifications</b> — {state}.\nA message when a deposit is credited.",
-        "zh": "🔔 <b>充值通知</b> — {state}。\n充值到账时发送消息通知。",
+        "ru": "<b>Уведомления о депозитах</b> — {state}.\nСообщение при зачислении депозита.",
+        "en": "<b>Deposit notifications</b> — {state}.\nA message when a deposit is credited.",
+        "zh": "<b>充值通知</b> — {state}。\n充值到账时发送消息通知。",
     },
     "on": {"ru": "включены", "en": "on", "zh": "已开启"},
     "off": {"ru": "выключены", "en": "off", "zh": "已关闭"},
     "btn_lang": {
-        "ru": "🌐 Язык: {name}",
-        "en": "🌐 Language: {name}",
-        "zh": "🌐 语言：{name}",
+        "ru": "Язык: {name}",
+        "en": "Language: {name}",
+        "zh": "语言：{name}",
     },
     "btn_back": {
-        "ru": "◀️ В меню",
-        "en": "◀️ Back to menu",
-        "zh": "◀️ 返回菜单",
+        "ru": "← В меню",
+        "en": "← Back to menu",
+        "zh": "← 返回菜单",
     },
     # ----- language screen -----
     "lang_title": {
-        "ru": "🌐 <b>Выбери язык</b>",
-        "en": "🌐 <b>Choose a language</b>",
-        "zh": "🌐 <b>选择语言</b>",
+        "ru": "<b>Выбери язык</b>",
+        "en": "<b>Choose a language</b>",
+        "zh": "<b>选择语言</b>",
     },
     "lang_set": {
-        "ru": "✅ Язык изменён: <b>{name}</b>",
-        "en": "✅ Language changed: <b>{name}</b>",
-        "zh": "✅ 语言已切换：<b>{name}</b>",
+        "ru": "✓ Язык изменён: <b>{name}</b>",
+        "en": "✓ Language changed: <b>{name}</b>",
+        "zh": "✓ 语言已切换：<b>{name}</b>",
     },
     # ----- about -----
     "about_title": {
-        "ru": "ℹ️ <b>Что такое Tippy — простыми словами</b>",
-        "en": "ℹ️ <b>What is Tippy — in plain words</b>",
-        "zh": "ℹ️ <b>Tippy 是什么 —— 简单来说</b>",
-    },    "about_body": {
+        "ru": "<b>Что такое Tippy — простыми словами</b>",
+        "en": "<b>What is Tippy — in plain words</b>",
+        "zh": "<b>Tippy 是什么 —— 简单来说</b>",
+    },
+    "about_body": {
         "ru": (
-            "💵 <b>Это деньги для чатов.</b>\n"
+            "<b>Это деньги для чатов.</b>\n"
             "Внутри бота у тебя свой кошелёк с монетами USDC — как мелочь в кармане, "
             "только в Telegram и в сети Base.\n\n"
-            "💸 <b>Благодари деньгами.</b>\n"
-            "Кинул другу /tip — он получил USDC. Поставил 🔥 на классное сообщение — "
+            "<b>Благодари деньгами.</b>\n"
+            "Кинул другу /tip — он получил USDC. Поставил на классное сообщение — "
             "автор получил чаевые. Всё за пару секунд, без карт и банков.\n\n"
-            "🎯 <b>Играй и выигрывай.</b>\n"
+            "<b>Играй и выигрывай.</b>\n"
             "Ставь на исходы событий в /bets, торгуй на рынках предсказаний /markets — "
             "угадал, забрал больше.\n\n"
-            "🔓 <b>Это твой кошелёк.</b>\n"
+            "<b>Это твой кошелёк.</b>\n"
             "Вывод куда угодно (/withdraw). "
             "Все операции видны в блокчейне Base — ничего не спрятано.\n\n"
-            "🟦 Мы строим на <b>Base</b> — официальной L2-экосистеме от Coinbase · base.org\n"
-            "🧑‍💻 Автор и поддержка: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
-            "⚡ by <b>@ssrjkk</b>"
+            "● Мы строим на <b>Base</b> — официальной L2-экосистеме от Coinbase · base.org\n"
+            "Автор и поддержка: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
+            "by <b>@ssrjkk</b>"
         ),
         "en": (
-            "💵 <b>It's money for chats.</b>\n"
+            "<b>It's money for chats.</b>\n"
             "Inside the bot you get your own USDC wallet — like loose change in your "
             "pocket, only inside Telegram, living on the Base network.\n\n"
-            "💸 <b>Say thanks with money.</b>\n"
-            "Send /tip to a friend — they get USDC. React 🔥 to a great message — "
+            "<b>Say thanks with money.</b>\n"
+            "Send /tip to a friend — they get USDC. React to a great message — "
             "its author gets a tip. Takes seconds, no cards or banks involved.\n\n"
-            "🎯 <b>Play and win.</b>\n"
+            "<b>Play and win.</b>\n"
             "Back your predictions in /bets, trade on prediction markets in /markets — "
             "guess right and take the pot.\n\n"
-            "🔓 <b>The wallet is yours.</b>\n"
+            "<b>The wallet is yours.</b>\n"
             "Withdraw anywhere (/withdraw). "
             "Every move is visible on the Base blockchain — nothing hidden.\n\n"
-            "🟦 Built on <b>Base</b> — Coinbase's secure and scalable Ethereum L2 · base.org\n"
-            "🧑‍💻 Team & support: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
-            "⚡ by <b>@ssrjkk</b>"
+            "● Built on <b>Base</b> — Coinbase's secure and scalable Ethereum L2 · base.org\n"
+            "Team & support: @b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
+            "by <b>@ssrjkk</b>"
         ),
         "zh": (
-            "💵 <b>这是聊天里的钱。</b>\n"
+            "<b>这是聊天里的钱。</b>\n"
             "在机器人里你有自己的 USDC 钱包——就像口袋里的零钱，只不过住在 Telegram 里，"
             "运行在 Base 网络上。\n\n"
-            "💸 <b>用金钱表达感谢。</b>\n"
-            "给朋友发 /tip——他立刻收到 USDC。给精彩的消息点个 🔥——作者收到打赏。"
+            "<b>用金钱表达感谢。</b>\n"
+            "给朋友发 /tip——他立刻收到 USDC。给精彩的消息点个 ——作者收到打赏。"
             "几秒钟搞定，不需要银行卡和银行。\n\n"
-            "🎯 <b>边玩边赢。</b>\n"
+            "<b>边玩边赢。</b>\n"
             "在 /bets 押注事件结果，在 /markets 预测市场交易——猜对了就能赢走奖池。\n\n"
-            "🔓 <b>钱包属于你。</b>\n"
+            "<b>钱包属于你。</b>\n"
             "可以提到任何地方（/withdraw）。"
             "每笔操作都能在 Base 区块链上查到——没有任何隐瞒。\n\n"
-            "🟦 基于 <b>Base</b> 构建 —— Coinbase 推出的安全可扩展的 Ethereum L2 · base.org\n"
-            "🧑‍💻 作者与支持：@b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
-            "⚡ by <b>@ssrjkk</b>"
+            "● 基于 <b>Base</b> 构建 —— Coinbase 推出的安全可扩展的 Ethereum L2 · base.org\n"
+            "作者与支持：@b2wmain · @ssrjkk · x.com/ludych1 · github.com/ssrjkk\n"
+            "by <b>@ssrjkk</b>"
         ),
     },
     "about_website": {
@@ -196,14 +197,14 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     # ----- start -----
     "start_hi": {
-        "ru": "👋 Привет, <b>@{name}</b>!",
-        "en": "👋 Hi, <b>@{name}</b>!",
-        "zh": "👋 你好，<b>@{name}</b>！",
+        "ru": "Привет, <b>@{name}</b>!",
+        "en": "Hi, <b>@{name}</b>!",
+        "zh": "你好，<b>@{name}</b>！",
     },
     "start_intro": {
-        "ru": "🟦 <b>Tippy</b> — USDC-экономика прямо в Telegram:\n💸 чаевые и реакции · 🎁 донат-страницы · 🎯 рынки предсказаний",
-        "en": "🟦 <b>Tippy</b> — a USDC economy right inside Telegram:\n💸 tips and reactions · 🎁 donate pages · 🎯 prediction markets",
-        "zh": "🟦 <b>Tippy</b> —— Telegram 里的 USDC 经济：\n💸 打赏与表情 · 🎁 捐赠页 · 🎯 预测市场",
+        "ru": "● <b>Tippy</b> — USDC-экономика прямо в Telegram:\nчаевые и реакции · донат-страницы · рынки предсказаний",
+        "en": "● <b>Tippy</b> — a USDC economy right inside Telegram:\ntips and reactions · donate pages · prediction markets",
+        "zh": "● <b>Tippy</b> —— Telegram 里的 USDC 经济：\n打赏与表情 · 捐赠页 · 预测市场",
     },
     "start_try": {
         "ru": "Что попробовать?\n• <b>/deposit</b> — пополнить (QR)\n• <b>/bets</b> — поставить на рынок\n• <b>/tip 1 @ник</b> — кинуть чаевые\n• <b>/help</b> — все команды",
@@ -212,41 +213,41 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     # ----- hints (menu buttons) -----
     "hint_ask": {
-        "ru": "🧠 <b>ИИ-ассистент</b>\n\n/ask &lt;вопрос&gt; — например: /ask Что такое Base?\nМожно задать вопрос ответом на сообщение — ИИ увидит его контекст.",
-        "en": "🧠 <b>AI assistant</b>\n\n/ask &lt;question&gt; — e.g. /ask What is Base?\nReply to any message with your question and the AI will see its context.",
-        "zh": "🧠 <b>AI 助手</b>\n\n/ask &lt;问题&gt; —— 例如：/ask 什么是 Base？\n也可以回复某条消息提问，AI 会看到该消息的上下文。",
+        "ru": "<b>AI-ассистент</b>\n\n/ask &lt;вопрос&gt; — например: /ask Что такое Base?\nМожно задать вопрос ответом на сообщение — ИИ увидит его контекст.",
+        "en": "<b>AI assistant</b>\n\n/ask &lt;question&gt; — e.g. /ask What is Base?\nReply to any message with your question and the AI will see its context.",
+        "zh": "<b>AI 助手</b>\n\n/ask &lt;问题&gt; —— 例如：/ask 什么是 Base？\n也可以回复某条消息提问，AI 会看到该消息的上下文。",
     },
     # ----- balance -----
     "bal_linked": {
-        "ru": "\n🔗 Кошелёк: <code>{addr}</code>",
-        "en": "\n🔗 Wallet: <code>{addr}</code>",
-        "zh": "\n🔗 钱包：<code>{addr}</code>",
+        "ru": "\n↗ Кошелёк: <code>{addr}</code>",
+        "en": "\n↗ Wallet: <code>{addr}</code>",
+        "zh": "\n↗ 钱包：<code>{addr}</code>",
     },
     "bal_nolink": {
-        "ru": "\n🔗 Кошелёк не привязан — /link",
-        "en": "\n🔗 No wallet linked — /link",
-        "zh": "\n🔗 尚未绑定钱包 —— /link",
+        "ru": "\n↗ Кошелёк не привязан — /link",
+        "en": "\n↗ No wallet linked — /link",
+        "zh": "\n↗ 尚未绑定钱包 —— /link",
     },
     "bal_ingame": {
-        "ru": "\n🎲 В игре: <b>{n}</b> позиция(и) на <b>{stake} USDC</b>\n🏆 Потенциальный выигрыш: <b>{pot} USDC</b>\n📌 Твои ставки: /mybets",
-        "en": "\n🎲 In play: <b>{n}</b> position(s) worth <b>{stake} USDC</b>\n🏆 Potential win: <b>{pot} USDC</b>\n📌 Your bets: /mybets",
-        "zh": "\n🎲 进行中：<b>{n}</b> 个仓位，共 <b>{stake} USDC</b>\n🏆 潜在赢额：<b>{pot} USDC</b>\n📌 我的投注：/mybets",
+        "ru": "\nВ игре: <b>{n}</b> позиция(и) на <b>{stake} USDC</b>\n★ Потенциальный выигрыш: <b>{pot} USDC</b>\nТвои ставки: /mybets",
+        "en": "\nIn play: <b>{n}</b> position(s) worth <b>{stake} USDC</b>\n★ Potential win: <b>{pot} USDC</b>\nYour bets: /mybets",
+        "zh": "\n进行中：<b>{n}</b> 个仓位，共 <b>{stake} USDC</b>\n★ 潜在赢额：<b>{pot} USDC</b>\n我的投注：/mybets",
     },
     "bal_fees": {
-        "ru": "\n🧾 Заработано на рынках: <b>{fees} USDC</b>",
-        "en": "\n🧾 Earned on markets: <b>{fees} USDC</b>",
-        "zh": "\n🧾 市场收益：<b>{fees} USDC</b>",
+        "ru": "\nЗаработано на рынках: <b>{fees} USDC</b>",
+        "en": "\nEarned on markets: <b>{fees} USDC</b>",
+        "zh": "\n市场收益：<b>{fees} USDC</b>",
     },
     # ----- deposit -----
     "dep_head": {
-        "ru": "💳 Отправь USDC на адрес бота\n🟦 <b>Сеть Base</b> · монета USDC (ERC-20)",
-        "en": "💳 Send USDC to the bot's address\n🟦 <b>Base network</b> · USDC coin (ERC-20)",
-        "zh": "💳 将 USDC 转入机器人地址\n🟦 <b>Base 网络</b> · USDC 代币（ERC-20）",
+        "ru": "Отправь USDC на адрес бота\n● <b>Сеть Base</b> · монета USDC (ERC-20)",
+        "en": "Send USDC to the bot's address\n● <b>Base network</b> · USDC coin (ERC-20)",
+        "zh": "将 USDC 转入机器人地址\n● <b>Base 网络</b> · USDC 代币（ERC-20）",
     },
     "dep_linked": {
-        "ru": "С твоего привязанного кошелька <code>{addr}</code> — зачислится автоматически ✅",
-        "en": "From your linked wallet <code>{addr}</code> deposits credit automatically ✅",
-        "zh": "从你绑定的钱包 <code>{addr}</code> 转账将自动到账 ✅",
+        "ru": "С твоего привязанного кошелька <code>{addr}</code> — зачислится автоматически ✓",
+        "en": "From your linked wallet <code>{addr}</code> deposits credit automatically ✓",
+        "zh": "从你绑定的钱包 <code>{addr}</code> 转账将自动到账 ✓",
     },
     "dep_claim": {
         "ru": "После отправки пришли /claim <i>&lt;tx_hash&gt;</i>.\n<b>Удобнее:</b> привяжи кошелёк — /link, и депозиты будут зачисляться сами.",
@@ -254,305 +255,305 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "转账后发送 /claim <i>&lt;交易哈希&gt;</i>。\n<b>更方便：</b>用 /link 绑定钱包，充值将自动到账。",
     },
     "dep_public": {
-        "ru": "🏗️ Операция в блокчейне, видна всем: basescan.org",
-        "en": "🏗️ On-chain and visible to everyone: basescan.org",
-        "zh": "🏗️ 链上操作，人人可见：basescan.org",
+        "ru": "Операция в блокчейне, видна всем: basescan.org",
+        "en": "On-chain and visible to everyone: basescan.org",
+        "zh": "链上操作，人人可见：basescan.org",
     },
     "dep_disclaimer": {
-        "ru": "⚠️ <b>Дисклеймер:</b> средства хранит бот (кастодиальный кошелёк). Ключи зашифрованы и защищены.",
-        "en": "⚠️ <b>Disclaimer:</b> funds are held by the bot (custodial wallet). Keys are encrypted and secured.",
-        "zh": "⚠️ <b>免责声明：</b>资金由机器人托管。密钥已加密并受到保护。",
+        "ru": "! <b>Дисклеймер:</b> средства хранит бот (кастодиальный кошелёк). Ключи зашифрованы и защищены.",
+        "en": "! <b>Disclaimer:</b> funds are held by the bot (custodial wallet). Keys are encrypted and secured.",
+        "zh": "! <b>免责声明：</b>资金由机器人托管。密钥已加密并受到保护。",
     },
     # ----- donate -----
     "donate_text": {
-        "ru": "💛 <b>Твоя страница донатов</b>\n\nСкинь эту ссылку куда угодно — по ней откроется твой адрес для USDC:\n<code>{link}</code>\n\nПо ссылке сразу видно, кому и куда платить — без посредников.",
-        "en": "💛 <b>Your donate page</b>\n\nShare this link anywhere — it opens your USDC address:\n<code>{link}</code>\n\nIt shows exactly who gets paid and where — no middlemen.",
-        "zh": "💛 <b>你的捐赠页</b>\n\n把这条链接分享到任何地方——打开就是你的 USDC 收款地址：\n<code>{link}</code>\n\n谁收款、付到哪里一目了然——没有中间商。",
+        "ru": "<b>Твоя страница донатов</b>\n\nСкинь эту ссылку куда угодно — по ней откроется твой адрес для USDC:\n<code>{link}</code>\n\nПо ссылке сразу видно, кому и куда платить — без посредников.",
+        "en": "<b>Your donate page</b>\n\nShare this link anywhere — it opens your USDC address:\n<code>{link}</code>\n\nIt shows exactly who gets paid and where — no middlemen.",
+        "zh": "<b>你的捐赠页</b>\n\n把这条链接分享到任何地方——打开就是你的 USDC 收款地址：\n<code>{link}</code>\n\n谁收款、付到哪里一目了然——没有中间商。",
     },
     # ----- help (full command reference) -----
     "help_full": {
         "ru": (
-            "🤖 <b>Tippy</b> — экономика сообщества в USDC на <b>Base</b>.\n"
-            "🟦 Сеть Base · монета USDC · все переводы в блокчейне\n\n"
-            "💸 <b>Чаевые</b>\n"
+            "<b>Tippy</b> — экономика сообщества в USDC на <b>Base</b>.\n"
+            "● Сеть Base · монета USDC · все переводы в блокчейне\n\n"
+            "<b>Чаевые</b>\n"
             "• /tip 5 @nick — кинуть 5 USDC\n"
             "• /tip 5 (ответом на сообщение) — кинуть автору\n"
-            "• 🔥/❤️/⚡/👏/🎉 на сообщение — реакция-чаевые (в группах)\n"
-            "• /rain 10 — разбросать 10 USDC случайным участникам группы 🌧️\n\n"
-            "📈 <b>Рынки предсказаний (AMM)</b>\n"
+            "• ////на сообщение — реакция-чаевые (в группах)\n"
+            "• /rain 10 — разбросать 10 USDC случайным участникам группы \n\n"
+            "↗ <b>Рынки предсказаний (AMM)</b>\n"
             "• /market create &lt;банк&gt; &lt;вопрос&gt; | &lt;в1&gt; | &lt;в2&gt; [24h] — создать рынок с живыми котировками\n"
             "• /markets — открытые рынки (кнопки)\n"
             "• /trade &lt;id&gt; &lt;номер&gt; &lt;сумма&gt; — купить доли по живой цене\n"
             "• /sell &lt;id&gt; &lt;номер&gt; [50%] — продать доли в любой момент\n"
             "• /positions — твои позиции и PnL\n\n"
-            "🎲 <b>Ставки (пулы)</b>\n"
+            "<b>Ставки (пулы)</b>\n"
             "• /bet create &lt;вопрос&gt; | &lt;в1&gt; | &lt;в2&gt; [24h] — создать\n"
             "• /bets — открытые ставки (кнопки)\n"
             "• /bet &lt;id&gt; &lt;номер&gt; &lt;сумма&gt; — поставить\n"
             "• /mybets — твои позиции\n"
             "• /resolve &lt;id&gt; &lt;номер&gt; — закрыть (создатель)\n"
             "• /cancel &lt;id&gt; — отменить / вернуть деньги после истечения\n\n"
-            "🧠 <b>ИИ-ассистент</b>\n"
+            "<b>AI-ассистент</b>\n"
             "• /ask &lt;вопрос&gt; — спросить ИИ о чём угодно (можно ответом на сообщение)\n\n"
-            "💰 <b>Кошелёк</b>\n"
+            "<b>Кошелёк</b>\n"
             "• /donate — твоя страница донатов с QR\n"
             "• /deposit — QR + адрес для пополнения\n"
             "• /link &lt;адрес&gt; — привязать кошелёк (авто-зачисление)\n"
             "• /withdraw &lt;адрес&gt; &lt;сумма&gt; — вывод (комиссия {wd_fee}%, мин. {min_wd} USDC)\n"
             "• /tx &lt;hash&gt; — проверить транзакцию в Base\n"
-            "• /basename — твоё ончейн-имя на Base 🏷 (получай чаевые по имени)\n\n"
-            "📊 <b>Ещё</b>\n"
+            "• /basename — твоё ончейн-имя на Base (получай чаевые по имени)\n\n"
+            "<b>Ещё</b>\n"
             "• /menu — меню · /balance · /stats · /top · /history\n"
-            "• /settings — уведомления и реакции ⚙️\n\n"
-            "🔐 <b>Платный контент</b>\n"
+            "• /settings — уведомления и реакции \n\n"
+            "<b>Платный контент</b>\n"
             "• /paywall create 5 Заголовок — создать платный пост\n"
             "• /paywall list · /paywall buy &lt;id&gt; — купить и открыть\n"
             "• /paywall subscribe @канал — доступ к платному каналу\n\n"
-            "🟦 <b>На Base</b> · 🪙 USDC (ERC-20) · 🔍 все транзакции в блокчейне\n"
-            "🏗️ <b>Base</b> — быстрорастущая, безопасная L2-экосистема от Coinbase: base.org\n"
-            "👛 Свой кошелёк: /wallet · импорт по сид-фразе: /import"
+            "● <b>На Base</b> · USDC (ERC-20) · все транзакции в блокчейне\n"
+            "<b>Base</b> — быстрорастущая, безопасная L2-экосистема от Coinbase: base.org\n"
+            "Свой кошелёк: /wallet · импорт по сид-фразе: /import"
         ),
         "en": (
-            "🤖 <b>Tippy</b> — a community economy in USDC on <b>Base</b>.\n"
-            "🟦 Base network · USDC coin · every transfer is on-chain\n\n"
-            "💸 <b>Tips</b>\n"
+            "<b>Tippy</b> — a community economy in USDC on <b>Base</b>.\n"
+            "● Base network · USDC coin · every transfer is on-chain\n\n"
+            "<b>Tips</b>\n"
             "• /tip 5 @nick — send 5 USDC\n"
             "• /tip 5 (reply to a message) — tip the author\n"
-            "• 🔥/❤️/⚡/👏/🎉 on a message — reaction tip (in groups)\n"
-            "• /rain 10 — spread 10 USDC among random group members 🌧️\n\n"
-            "📈 <b>Prediction markets (AMM)</b>\n"
+            "• ////on a message — reaction tip (in groups)\n"
+            "• /rain 10 — spread 10 USDC among random group members \n\n"
+            "↗ <b>Prediction markets (AMM)</b>\n"
             "• /market create &lt;bank&gt; &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt; [24h] — create a market with live odds\n"
             "• /markets — open markets (buttons)\n"
             "• /trade &lt;id&gt; &lt;option&gt; &lt;amount&gt; — buy shares at the live price\n"
             "• /sell &lt;id&gt; &lt;option&gt; [50%] — sell shares anytime\n"
             "• /positions — your positions and PnL\n\n"
-            "🎲 <b>Bets (pools)</b>\n"
+            "<b>Bets (pools)</b>\n"
             "• /bet create &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt; [24h] — create\n"
             "• /bets — open bets (buttons)\n"
             "• /bet &lt;id&gt; &lt;option&gt; &lt;amount&gt; — place a bet\n"
             "• /mybets — your positions\n"
             "• /resolve &lt;id&gt; &lt;option&gt; — close it (creator)\n"
             "• /cancel &lt;id&gt; — cancel / refund after expiry\n\n"
-            "🧠 <b>AI assistant</b>\n"
+            "<b>AI assistant</b>\n"
             "• /ask &lt;question&gt; — ask the AI anything (or reply to a message)\n\n"
-            "💰 <b>Wallet</b>\n"
+            "<b>Wallet</b>\n"
             "• /donate — your donate page with QR\n"
             "• /deposit — QR + address to top up\n"
             "• /link &lt;address&gt; — link a wallet (auto-credits)\n"
             "• /withdraw &lt;address&gt; &lt;amount&gt; — withdraw ({wd_fee}% fee, min {min_wd} USDC)\n"
             "• /tx &lt;hash&gt; — look up a Base transaction\n"
-            "• /basename — your on-chain Base name 🏷 (receive tips by name)\n\n"
-            "📊 <b>More</b>\n"
+            "• /basename — your on-chain Base name (receive tips by name)\n\n"
+            "<b>More</b>\n"
             "• /menu — menu · /balance · /stats · /top · /history\n"
-            "• /settings — notifications and reactions ⚙️\n\n"
-            "🔐 <b>Paid content</b>\n"
+            "• /settings — notifications and reactions \n\n"
+            "<b>Paid content</b>\n"
             "• /paywall create 5 Title — create a paid post\n"
             "• /paywall list · /paywall buy &lt;id&gt; — buy and unlock\n"
             "• /paywall subscribe @channel — access to a paid channel\n\n"
-            "🟦 <b>On Base</b> · 🪙 USDC (ERC-20) · 🔍 all transactions on-chain\n"
-            "🏗️ <b>Base</b> — a fast, secure L2 ecosystem by Coinbase: base.org\n"
-            "👛 Your wallet: /wallet · import seed: /import"
+            "● <b>On Base</b> · USDC (ERC-20) · all transactions on-chain\n"
+            "<b>Base</b> — a fast, secure L2 ecosystem by Coinbase: base.org\n"
+            "Your wallet: /wallet · import seed: /import"
         ),
         "zh": (
-            "🤖 <b>Tippy</b> —— 建立在 <b>Base</b> 上的 USDC 社区经济。\n"
-            "🟦 Base 网络 · USDC 代币 · 所有转账都在链上\n\n"
-            "💸 <b>打赏</b>\n"
+            "<b>Tippy</b> —— 建立在 <b>Base</b> 上的 USDC 社区经济。\n"
+            "● Base 网络 · USDC 代币 · 所有转账都在链上\n\n"
+            "<b>打赏</b>\n"
             "• /tip 5 @昵称 —— 发送 5 USDC\n"
             "• /tip 5（回复某条消息）—— 打赏作者\n"
-            "• 给消息加 🔥/❤️/⚡/👏/🎉 —— 表情打赏（群聊中）\n"
-            "• /rain 10 —— 把 10 USDC 随机分给群成员 🌧️\n\n"
-            "📈 <b>预测市场（AMM）</b>\n"
+            "• 给消息加 ////—— 表情打赏（群聊中）\n"
+            "• /rain 10 —— 把 10 USDC 随机分给群成员 \n\n"
+            "↗ <b>预测市场（AMM）</b>\n"
             "• /market create &lt;资金&gt; &lt;问题&gt; | &lt;选项1&gt; | &lt;选项2&gt; [24h] —— 创建实时报价市场\n"
             "• /markets —— 开放市场（按钮）\n"
             "• /trade &lt;id&gt; &lt;选项&gt; &lt;金额&gt; —— 按实时价格买入份额\n"
             "• /sell &lt;id&gt; &lt;选项&gt; [50%] —— 随时卖出份额\n"
             "• /positions —— 你的持仓与盈亏\n\n"
-            "🎲 <b>投注（奖池）</b>\n"
+            "<b>投注（奖池）</b>\n"
             "• /bet create &lt;问题&gt; | &lt;选项1&gt; | &lt;选项2&gt; [24h] —— 创建\n"
             "• /bets —— 开放投注（按钮）\n"
             "• /bet &lt;id&gt; &lt;选项&gt; &lt;金额&gt; —— 下注\n"
             "• /mybets —— 我的持仓\n"
             "• /resolve &lt;id&gt; &lt;选项&gt; —— 结算（创建者）\n"
             "• /cancel &lt;id&gt; —— 到期后取消 / 退款\n\n"
-            "🧠 <b>AI 助手</b>\n"
+            "<b>AI 助手</b>\n"
             "• /ask &lt;问题&gt; —— 向 AI 提问（也可回复消息提问）\n\n"
-            "💰 <b>钱包</b>\n"
+            "<b>钱包</b>\n"
             "• /donate —— 带二维码的捐赠页\n"
             "• /deposit —— 充值二维码与地址\n"
             "• /link &lt;地址&gt; —— 绑定钱包（自动到账）\n"
             "• /withdraw &lt;地址&gt; &lt;金额&gt; —— 提现（手续费 {wd_fee}%，最低 {min_wd} USDC）\n"
             "• /tx &lt;hash&gt; —— 查询 Base 交易\n"
-            "• /basename —— 你在 Base 上的链上名字 🏷（可用名字接收打赏）\n\n"
-            "📊 <b>更多</b>\n"
+            "• /basename —— 你在 Base 上的链上名字 （可用名字接收打赏）\n\n"
+            "<b>更多</b>\n"
             "• /menu —— 菜单 · /balance · /stats · /top · /history\n"
-            "• /settings —— 通知与表情打赏 ⚙️\n\n"
-            "🔐 <b>付费内容</b>\n"
+            "• /settings —— 通知与表情打赏 \n\n"
+            "<b>付费内容</b>\n"
             "• /paywall create 5 标题 —— 创建付费帖子\n"
             "• /paywall list · /paywall buy &lt;id&gt; —— 购买并解锁\n"
             "• /paywall subscribe @频道 —— 访问付费频道\n\n"
-            "🟦 <b>基于 Base</b> · 🪙 USDC（ERC-20）· 🔍 所有交易上链\n"
-            "🏗️ <b>Base</b> —— Coinbase 推出、快速安全的 L2 生态：base.org\n"
-            "👛 你的钱包：/wallet · 用助记词导入：/import"
+            "● <b>基于 Base</b> · USDC（ERC-20）· 所有交易上链\n"
+            "<b>Base</b> —— Coinbase 推出、快速安全的 L2 生态：base.org\n"
+            "你的钱包：/wallet · 用助记词导入：/import"
         ),
     },
     # ----- tip -----
     "tip_ok": {
-        "ru": "💸 Ты отправил <b>{amount} USDC</b> пользователю @{to}!",
-        "en": "💸 You sent <b>{amount} USDC</b> to @{to}!",
-        "zh": "💸 你向 @{to} 发送了 <b>{amount} USDC</b>！",
+        "ru": "Ты отправил <b>{amount} USDC</b> пользователю @{to}!",
+        "en": "You sent <b>{amount} USDC</b> to @{to}!",
+        "zh": "你向 @{to} 发送了 <b>{amount} USDC</b>！",
     },
     "tip_fail_balance": {
-        "ru": "❌ Недостаточно средств. Баланс: <b>{bal} USDC</b>",
-        "en": "❌ Insufficient funds. Balance: <b>{bal} USDC</b>",
-        "zh": "❌ 余额不足。余额：<b>{bal} USDC</b>",
+        "ru": "× Недостаточно средств. Баланс: <b>{bal} USDC</b>",
+        "en": "× Insufficient funds. Balance: <b>{bal} USDC</b>",
+        "zh": "× 余额不足。余额：<b>{bal} USDC</b>",
     },
     "tip_fail_self": {
-        "ru": "❌ Нельзя отправить чаевые самому себе.",
-        "en": "❌ You can't tip yourself.",
-        "zh": "❌ 不能给自己打赏。",
+        "ru": "× Нельзя отправить чаевые самому себе.",
+        "en": "× You can't tip yourself.",
+        "zh": "× 不能给自己打赏。",
     },
     "tip_fail_user": {
-        "ru": "❌ Пользователь @{user} не найден. Он должен сначала написать боту.",
-        "en": "❌ User @{user} not found. They need to message the bot first.",
-        "zh": "❌ 用户 @{user} 未找到。他需要先给机器人发消息。",
+        "ru": "× Пользователь @{user} не найден. Он должен сначала написать боту.",
+        "en": "× User @{user} not found. They need to message the bot first.",
+        "zh": "× 用户 @{user} 未找到。他需要先给机器人发消息。",
     },
     "tip_reply": {
-        "ru": "💸 Сколько USDC отправить автору сообщения?",
-        "en": "💸 How much USDC to send to the message author?",
-        "zh": "💸 向消息作者发送多少 USDC？",
+        "ru": "Сколько USDC отправить автору сообщения?",
+        "en": "How much USDC to send to the message author?",
+        "zh": "向消息作者发送多少 USDC？",
     },
     # ----- markets -----
     "market_created": {
-        "ru": "✅ Рынок создан!\n<b>{question}</b>\nID: <code>{id}</code> · Банк: {bank} USDC",
-        "en": "✅ Market created!\n<b>{question}</b>\nID: <code>{id}</code> · Bank: {bank} USDC",
-        "zh": "✅ 市场已创建！\n<b>{question}</b>\nID: <code>{id}</code> · 资金池：{bank} USDC",
+        "ru": "✓ Рынок создан!\n<b>{question}</b>\nID: <code>{id}</code> · Банк: {bank} USDC",
+        "en": "✓ Market created!\n<b>{question}</b>\nID: <code>{id}</code> · Bank: {bank} USDC",
+        "zh": "✓ 市场已创建！\n<b>{question}</b>\nID: <code>{id}</code> · 资金池：{bank} USDC",
     },
     "market_buy_ok": {
-        "ru": "📈 Куплено! {n} долей «{label}» за {amount} USDC.\nНовая цена: {price}%",
-        "en": "📈 Bought! {n} shares of \"{label}\" for {amount} USDC.\nNew price: {price}%",
-        "zh": "📈 已买入！{n} 份「{label}」，花费 {amount} USDC。\n新价格：{price}%",
+        "ru": "↗ Куплено! {n} долей «{label}» за {amount} USDC.\nНовая цена: {price}%",
+        "en": "↗ Bought! {n} shares of \"{label}\" for {amount} USDC.\nNew price: {price}%",
+        "zh": "↗ 已买入！{n} 份「{label}」，花费 {amount} USDC。\n新价格：{price}%",
     },
     "market_sell_ok": {
-        "ru": "📉 Продано! {n} долей «{label}» за {amount} USDC.",
-        "en": "📉 Sold! {n} shares of \"{label}\" for {amount} USDC.",
-        "zh": "📉 已卖出！{n} 份「{label}」，获得 {amount} USDC。",
+        "ru": "↘ Продано! {n} долей «{label}» за {amount} USDC.",
+        "en": "↘ Sold! {n} shares of \"{label}\" for {amount} USDC.",
+        "zh": "↘ 已卖出！{n} 份「{label}」，获得 {amount} USDC。",
     },
     "market_positions": {
-        "ru": "📊 <b>Твои позиции</b>\n\n{lines}\n\n💰 Баланс: <b>{bal} USDC</b>",
-        "en": "📊 <b>Your positions</b>\n\n{lines}\n\n💰 Balance: <b>{bal} USDC</b>",
-        "zh": "📊 <b>你的持仓</b>\n\n{lines}\n\n💰 余额：<b>{bal} USDC</b>",
+        "ru": "<b>Твои позиции</b>\n\n{lines}\n\nБаланс: <b>{bal} USDC</b>",
+        "en": "<b>Your positions</b>\n\n{lines}\n\nBalance: <b>{bal} USDC</b>",
+        "zh": "<b>你的持仓</b>\n\n{lines}\n\n余额：<b>{bal} USDC</b>",
     },
     "market_no_positions": {
-        "ru": "📊 У тебя пока нет позиций. Зайди в /markets!",
-        "en": "📊 No positions yet. Check out /markets!",
-        "zh": "📊 你还没有持仓。去看看 /markets！",
+        "ru": "У тебя пока нет позиций. Зайди в /markets!",
+        "en": "No positions yet. Check out /markets!",
+        "zh": "你还没有持仓。去看看 /markets！",
     },
     "market_need_args": {
-        "ru": "📈 Формат: /market create &lt;банк&gt; &lt;вопрос&gt; | &lt;в1&gt; | &lt;в2&gt; [24h]\nПример: /market create 50 Кто победит? | Biden | Trump | 24h",
-        "en": "📈 Format: /market create &lt;bank&gt; &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt; [24h]\nExample: /market create 50 Who wins? | Biden | Trump | 24h",
-        "zh": "📈 格式：/market create &lt;资金&gt; &lt;问题&gt; | &lt;选项1&gt; | &lt;选项2&gt; [24h]\n示例：/market create 50 谁赢？ | Biden | Trump | 24h",
+        "ru": "↗ Формат: /market create &lt;банк&gt; &lt;вопрос&gt; | &lt;в1&gt; | &lt;в2&gt; [24h]\nПример: /market create 50 Кто победит? | Biden | Trump | 24h",
+        "en": "↗ Format: /market create &lt;bank&gt; &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt; [24h]\nExample: /market create 50 Who wins? | Biden | Trump | 24h",
+        "zh": "↗ 格式：/market create &lt;资金&gt; &lt;问题&gt; | &lt;选项1&gt; | &lt;选项2&gt; [24h]\n示例：/market create 50 谁赢？ | Biden | Trump | 24h",
     },
     # ----- bets -----
     "bet_placed": {
-        "ru": "🎲 Поставлено {amount} USDC на «{label}»!\nВсего в пуле: {pot} USDC",
-        "en": "🎲 Bet {amount} USDC on \"{label}\"!\nTotal pool: {pot} USDC",
-        "zh": "🎲 下注 {amount} USDC 到「{label}」！\n奖池总额：{pot} USDC",
+        "ru": "Поставлено {amount} USDC на «{label}»!\nВсего в пуле: {pot} USDC",
+        "en": "Bet {amount} USDC on \"{label}\"!\nTotal pool: {pot} USDC",
+        "zh": "下注 {amount} USDC 到「{label}」！\n奖池总额：{pot} USDC",
     },
     "bet_need_args": {
-        "ru": "🎲 Формат: /bet create &lt;вопрос&gt; | &lt;в1&gt; | &lt;в2&gt; [24h]\nПример: /bet create Кто первый? | Alice | Bob | 24h",
-        "en": "🎲 Format: /bet create &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt; [24h]\nExample: /bet create Who first? | Alice | Bob | 24h",
-        "zh": "🎲 格式：/bet create &lt;问题&gt; | &lt;选项1&gt; | &lt;选项2&gt; [24h]\n示例：/bet create 谁先到？ | Alice | Bob | 24h",
+        "ru": "Формат: /bet create &lt;вопрос&gt; | &lt;в1&gt; | &lt;в2&gt; [24h]\nПример: /bet create Кто первый? | Alice | Bob | 24h",
+        "en": "Format: /bet create &lt;question&gt; | &lt;o1&gt; | &lt;o2&gt; [24h]\nExample: /bet create Who first? | Alice | Bob | 24h",
+        "zh": "格式：/bet create &lt;问题&gt; | &lt;选项1&gt; | &lt;选项2&gt; [24h]\n示例：/bet create 谁先到？ | Alice | Bob | 24h",
     },
     # ----- rain -----
     "rain_ok": {
-        "ru": "🌧️ Раздано <b>{amount} USDC</b> среди {count} участников!",
-        "en": "🌧️ Spread <b>{amount} USDC</b> among {count} members!",
-        "zh": "🌧️ 已将 <b>{amount} USDC</b> 分给 {count} 位成员！",
+        "ru": "Раздано <b>{amount} USDC</b> среди {count} участников!",
+        "en": "Spread <b>{amount} USDC</b> among {count} members!",
+        "zh": "已将 <b>{amount} USDC</b> 分给 {count} 位成员！",
     },
     "rain_fail": {
-        "ru": "❌ Не удалось: {reason}. Баланс: <b>{bal} USDC</b>",
-        "en": "❌ Failed: {reason}. Balance: <b>{bal} USDC</b>",
-        "zh": "❌ 失败：{reason}。余额：<b>{bal} USDC</b>",
+        "ru": "× Не удалось: {reason}. Баланс: <b>{bal} USDC</b>",
+        "en": "× Failed: {reason}. Balance: <b>{bal} USDC</b>",
+        "zh": "× 失败：{reason}。余额：<b>{bal} USDC</b>",
     },
     # ----- withdraw -----
     "withdraw_need_args": {
-        "ru": "⬆️ Формат: /withdraw &lt;адрес&gt; &lt;сумма&gt;\nПример: /withdraw 0x123...abc 10",
-        "en": "⬆️ Format: /withdraw &lt;address&gt; &lt;amount&gt;\nExample: /withdraw 0x123...abc 10",
-        "zh": "⬆️ 格式：/withdraw &lt;地址&gt; &lt;金额&gt;\n示例：/withdraw 0x123...abc 10",
+        "ru": "↑ Формат: /withdraw &lt;адрес&gt; &lt;сумма&gt;\nПример: /withdraw 0x123...abc 10",
+        "en": "↑ Format: /withdraw &lt;address&gt; &lt;amount&gt;\nExample: /withdraw 0x123...abc 10",
+        "zh": "↑ 格式：/withdraw &lt;地址&gt; &lt;金额&gt;\n示例：/withdraw 0x123...abc 10",
     },
     "withdraw_checking": {
-        "ru": "⏳ Транзакция отправлена, проверяем подтверждение на сети…\nСумма: <b>{amount} USDC</b>, комиссия: <b>{fee} USDC</b>.\nЕсли транзакция не подтвердится, средства вернутся автоматически.",
-        "en": "⏳ Transaction sent, confirming on-chain…\nAmount: <b>{amount} USDC</b>, fee: <b>{fee} USDC</b>.\nIf the transaction is not confirmed, funds are refunded automatically.",
-        "zh": "⏳ 交易已发送，正在链上确认…\n金额：<b>{amount} USDC</b>，手续费：<b>{fee} USDC</b>。\n如果交易未确认，资金将自动退回。",
+        "ru": "… Транзакция отправлена, проверяем подтверждение на сети…\nСумма: <b>{amount} USDC</b>, комиссия: <b>{fee} USDC</b>.\nЕсли транзакция не подтвердится, средства вернутся автоматически.",
+        "en": "… Transaction sent, confirming on-chain…\nAmount: <b>{amount} USDC</b>, fee: <b>{fee} USDC</b>.\nIf the transaction is not confirmed, funds are refunded automatically.",
+        "zh": "… 交易已发送，正在链上确认…\n金额：<b>{amount} USDC</b>，手续费：<b>{fee} USDC</b>。\n如果交易未确认，资金将自动退回。",
     },
     # ----- link -----
     "link_ok": {
-        "ru": "🔗 Кошелёк <code>{addr}</code> привязан! Депозиты будут зачисляться автоматически.",
-        "en": "🔗 Wallet <code>{addr}</code> linked! Deposits will credit automatically.",
-        "zh": "🔗 钱包 <code>{addr}</code> 已绑定！充值将自动到账。",
+        "ru": "↗ Кошелёк <code>{addr}</code> привязан! Депозиты будут зачисляться автоматически.",
+        "en": "↗ Wallet <code>{addr}</code> linked! Deposits will credit automatically.",
+        "zh": "↗ 钱包 <code>{addr}</code> 已绑定！充值将自动到账。",
     },
     "link_need_address": {
-        "ru": "🔗 Формат: /link &lt;адрес Base&gt;\nПример: /link 0x123...abc",
-        "en": "🔗 Format: /link &lt;Base address&gt;\nExample: /link 0x123...abc",
-        "zh": "🔗 格式：/link &lt;Base 地址&gt;\n示例：/link 0x123...abc",
+        "ru": "↗ Формат: /link &lt;адрес Base&gt;\nПример: /link 0x123...abc",
+        "en": "↗ Format: /link &lt;Base address&gt;\nExample: /link 0x123...abc",
+        "zh": "↗ 格式：/link &lt;Base 地址&gt;\n示例：/link 0x123...abc",
     },
     # ----- claim -----
     "claim_ok": {
-        "ru": "✅ Депозит зачислен: <b>{amount} USDC</b>!\nБаланс: <b>{bal} USDC</b>",
-        "en": "✅ Deposit credited: <b>{amount} USDC</b>!\nBalance: <b>{bal} USDC</b>",
-        "zh": "✅ 充值已到账：<b>{amount} USDC</b>！\n余额：<b>{bal} USDC</b>",
+        "ru": "✓ Депозит зачислен: <b>{amount} USDC</b>!\nБаланс: <b>{bal} USDC</b>",
+        "en": "✓ Deposit credited: <b>{amount} USDC</b>!\nBalance: <b>{bal} USDC</b>",
+        "zh": "✓ 充值已到账：<b>{amount} USDC</b>！\n余额：<b>{bal} USDC</b>",
     },
     "claim_fail": {
-        "ru": "❌ Транзакция не найдена или уже зачислена. Попробуй позже.",
-        "en": "❌ Transaction not found or already credited. Try again later.",
-        "zh": "❌ 交易未找到或已到账。请稍后重试。",
+        "ru": "× Транзакция не найдена или уже зачислена. Попробуй позже.",
+        "en": "× Transaction not found or already credited. Try again later.",
+        "zh": "× 交易未找到或已到账。请稍后重试。",
     },
     "claim_unavailable": {
-        "ru": "⚠️ Сейчас не могу проверить подтверждения трансакции (RPC недоступен). Подожди пару минут и повтори, либо дождись автоматического зачисления.",
-        "en": "⚠️ Can't verify the deposit's confirmations right now (RPC unreachable). Wait a few minutes and retry, or let the automatic credit finish.",
-        "zh": "⚠️ 当前无法确认交易确认数（RPC 不可用）。请稍候重试，或等待自动到账。",
+        "ru": "! Сейчас не могу проверить подтверждения трансакции (RPC недоступен). Подожди пару минут и повтори, либо дождись автоматического зачисления.",
+        "en": "! Can't verify the deposit's confirmations right now (RPC unreachable). Wait a few minutes and retry, or let the automatic credit finish.",
+        "zh": "! 当前无法确认交易确认数（RPC 不可用）。请稍候重试，或等待自动到账。",
     },
     # ----- stats -----
     "stats_text": {
-        "ru": "📊 <b>Статистика Tippy</b>\n\n👥 Пользователей: <b>{users}</b>\n💸 Всего чаевых: <b>{tips} USDC</b>\n📈 Объём ставок: <b>{bets} USDC</b>\n🏦 Общий объём: <b>{volume} USDC</b>\n💰 Комиссии: <b>{fees} USDC</b>",
-        "en": "📊 <b>Tippy Stats</b>\n\n👥 Users: <b>{users}</b>\n💸 Total tips: <b>{tips} USDC</b>\n📈 Bets volume: <b>{bets} USDC</b>\n🏦 Total volume: <b>{volume} USDC</b>\n💰 Fees: <b>{fees} USDC</b>",
-        "zh": "📊 <b>Tippy 统计</b>\n\n👥 用户数：<b>{users}</b>\n💸 打赏总额：<b>{tips} USDC</b>\n📈 投注总额：<b>{bets} USDC</b>\n🏦 总交易量：<b>{volume} USDC</b>\n💰 手续费：<b>{fees} USDC</b>",
+        "ru": "<b>Статистика Tippy</b>\n\nПользователей: <b>{users}</b>\nВсего чаевых: <b>{tips} USDC</b>\n↗ Объём ставок: <b>{bets} USDC</b>\nОбщий объём: <b>{volume} USDC</b>\nКомиссии: <b>{fees} USDC</b>",
+        "en": "<b>Tippy Stats</b>\n\nUsers: <b>{users}</b>\nTotal tips: <b>{tips} USDC</b>\n↗ Bets volume: <b>{bets} USDC</b>\nTotal volume: <b>{volume} USDC</b>\nFees: <b>{fees} USDC</b>",
+        "zh": "<b>Tippy 统计</b>\n\n用户数：<b>{users}</b>\n打赏总额：<b>{tips} USDC</b>\n↗ 投注总额：<b>{bets} USDC</b>\n总交易量：<b>{volume} USDC</b>\n手续费：<b>{fees} USDC</b>",
     },
     "top_text": {
-        "ru": "🏆 <b>Топ пользователей</b>\n\n{lines}",
-        "en": "🏆 <b>Top users</b>\n\n{lines}",
-        "zh": "🏆 <b>用户排行榜</b>\n\n{lines}",
+        "ru": "★ <b>Топ пользователей</b>\n\n{lines}",
+        "en": "★ <b>Top users</b>\n\n{lines}",
+        "zh": "★ <b>用户排行榜</b>\n\n{lines}",
     },
     "history_text": {
-        "ru": "🧾 <b>История операций</b>\n\n{lines}\n\n<i>Показаны последние {limit} операций</i>",
-        "en": "🧾 <b>Transaction history</b>\n\n{lines}\n\n<i>Last {limit} transactions shown</i>",
-        "zh": "🧾 <b>交易记录</b>\n\n{lines}\n\n<i>显示最近 {limit} 笔交易</i>",
+        "ru": "<b>История операций</b>\n\n{lines}\n\n<i>Показаны последние {limit} операций</i>",
+        "en": "<b>Transaction history</b>\n\n{lines}\n\n<i>Last {limit} transactions shown</i>",
+        "zh": "<b>交易记录</b>\n\n{lines}\n\n<i>显示最近 {limit} 笔交易</i>",
     },
     "history_empty": {
-        "ru": "🧾 История пока пуста. Попробуй /deposit или /tip!",
-        "en": "🧾 No history yet. Try /deposit or /tip!",
-        "zh": "🧾 暂无记录。试试 /deposit 或 /tip！",
+        "ru": "История пока пуста. Попробуй /deposit или /tip!",
+        "en": "No history yet. Try /deposit or /tip!",
+        "zh": "暂无记录。试试 /deposit 或 /tip！",
     },
     "history_empty_filter": {
-        "ru": "🧾 Нет транзакций типа {kind}.",
-        "en": "🧾 No {kind} transactions found.",
-        "zh": "🧾 没有找到 {kind} 类型的交易。",
+        "ru": "Нет транзакций типа {kind}.",
+        "en": "No {kind} transactions found.",
+        "zh": "没有找到 {kind} 类型的交易。",
     },
     "history_title_filter": {
-        "ru": "🧾 История ({kind}):",
-        "en": "🧾 History ({kind}):",
-        "zh": "🧾 历史 ({kind}):",
+        "ru": "История ({kind}):",
+        "en": "History ({kind}):",
+        "zh": "历史 ({kind}):",
     },
     "history_export_caption": {
-        "ru": "📎 Ваша полная история транзакций",
-        "en": "📎 Your full transaction history",
-        "zh": "📎 您的完整交易记录",
+        "ru": "Ваша полная история транзакций",
+        "en": "Your full transaction history",
+        "zh": "您的完整交易记录",
     },
     # ----- rain -----
     "rain_only_groups": {
-        "ru": "🌧️ /rain работает только в группах!",
-        "en": "🌧️ /rain only works in groups!",
-        "zh": "🌧️ /rain 仅在群聊中可用！",
+        "ru": "/rain работает только в группах!",
+        "en": "/rain only works in groups!",
+        "zh": "/rain 仅在群聊中可用！",
     },
     "rain_format": {
         "ru": "Формат: /rain 10 (или /rain 10 15 — на 15 чел.)",
@@ -575,9 +576,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "最多参与人数：<b>{n}</b>。",
     },
     "rain_recipients": {
-        "ru": "🎁 Получили: {names}{tail}\n\n🌧️ Дождь закончился!",
-        "en": "🎁 Received: {names}{tail}\n\n🌧️ Rain complete!",
-        "zh": "🎁 获得者：{names}{tail}\n\n🌧️ 降雨结束！",
+        "ru": "Получили: {names}{tail}\n\nДождь закончился!",
+        "en": "Received: {names}{tail}\n\nRain complete!",
+        "zh": "获得者：{names}{tail}\n\n降雨结束！",
     },
     # ----- tip errors -----
     "tip_need_amount": {
@@ -606,9 +607,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "找不到 @{user}。他需要先给机器人发消息（/start）。",
     },
     "tip_pick_amount": {
-        "ru": "💸 Сколько кидаем?",
-        "en": "💸 How much are you sending?",
-        "zh": "💸 打赏多少？",
+        "ru": "Сколько кидаем?",
+        "en": "How much are you sending?",
+        "zh": "打赏多少？",
     },
     "tip_pick_recipient": {
         "ru": "Кому отправить <b>{amt} USDC</b> — ты уже кидал этим:",
@@ -627,55 +628,55 @@ STRINGS: dict[str, dict[str, str]] = {
              "<code>/tip {amt}</code>。",
     },
     "tip_self": {
-        "ru": "Себе кидать нельзя 😅",
-        "en": "You can't tip yourself 😅",
-        "zh": "不能给自己打赏 😅",
+        "ru": "Себе кидать нельзя ",
+        "en": "You can't tip yourself ",
+        "zh": "不能给自己打赏 ",
     },
     "tip_no_balance": {
-        "ru": "❌ Недостаточно баланса. Пополни: /deposit",
-        "en": "❌ Insufficient balance. Top up: /deposit",
-        "zh": "❌ 余额不足。充值：/deposit",
+        "ru": "× Недостаточно баланса. Пополни: /deposit",
+        "en": "× Insufficient balance. Top up: /deposit",
+        "zh": "× 余额不足。充值：/deposit",
     },
     "tip_sent": {
-        "ru": "💸 <b>{sender}</b> → {mention}\n<b>{amount} USDC</b>\nОстаток: {bal} USDC",
-        "en": "💸 <b>{sender}</b> → {mention}\n<b>{amount} USDC</b>\nBalance: {bal} USDC",
-        "zh": "💸 <b>{sender}</b> → {mention}\n<b>{amount} USDC</b>\n余额：{bal} USDC",
+        "ru": "<b>{sender}</b> → {mention}\n<b>{amount} USDC</b>\nОстаток: {bal} USDC",
+        "en": "<b>{sender}</b> → {mention}\n<b>{amount} USDC</b>\nBalance: {bal} USDC",
+        "zh": "<b>{sender}</b> → {mention}\n<b>{amount} USDC</b>\n余额：{bal} USDC",
     },
     "tip_received": {
-        "ru": "💸 <b>Тебе кинули {amount} USDC</b>\nОт: @{sender}\n\nБаланс: /balance",
-        "en": "💸 <b>You received {amount} USDC</b>\nFrom: @{sender}\n\nBalance: /balance",
-        "zh": "💸 <b>你收到了 {amount} USDC</b>\n来自：@{sender}\n\n余额：/balance",
+        "ru": "<b>Тебе кинули {amount} USDC</b>\nОт: @{sender}\n\nБаланс: /balance",
+        "en": "<b>You received {amount} USDC</b>\nFrom: @{sender}\n\nBalance: /balance",
+        "zh": "<b>你收到了 {amount} USDC</b>\n来自：@{sender}\n\n余额：/balance",
     },
     # ----- market buy/sell -----
     "market_buy_card": {
-        "ru": "🛒 #{mid}: <b>{label}</b>\n\nСколько вкладываем? Доли начисляются по живой цене.",
-        "en": "🛒 #{mid}: <b>{label}</b>\n\nHow much to invest? Shares are priced live.",
-        "zh": "🛒 #{mid}: <b>{label}</b>\n\n投入多少？份额按实时价格计算。",
+        "ru": "#{mid}: <b>{label}</b>\n\nСколько вкладываем? Доли начисляются по живой цене.",
+        "en": "#{mid}: <b>{label}</b>\n\nHow much to invest? Shares are priced live.",
+        "zh": "#{mid}: <b>{label}</b>\n\n投入多少？份额按实时价格计算。",
     },
     "market_buy_ok_detail": {
-        "ru": "✅ Куплено!\n📈 #{mid} — <b>{label}</b>\nДоли: <b>{shares}</b> по цене {price}\nПотрачено: <b>{cost} USDC</b>\nОстаток: {bal} USDC",
-        "en": "✅ Bought!\n📈 #{mid} — <b>{label}</b>\nShares: <b>{shares}</b> at {price}\nSpent: <b>{cost} USDC</b>\nBalance: {bal} USDC",
-        "zh": "✅ 已买入！\n📈 #{mid} — <b>{label}</b>\n份额：<b>{shares}</b>，价格 {price}\n花费：<b>{cost} USDC</b>\n余额：{bal} USDC",
+        "ru": "✓ Куплено!\n↗ #{mid} — <b>{label}</b>\nДоли: <b>{shares}</b> по цене {price}\nПотрачено: <b>{cost} USDC</b>\nОстаток: {bal} USDC",
+        "en": "✓ Bought!\n↗ #{mid} — <b>{label}</b>\nShares: <b>{shares}</b> at {price}\nSpent: <b>{cost} USDC</b>\nBalance: {bal} USDC",
+        "zh": "✓ 已买入！\n↗ #{mid} — <b>{label}</b>\n份额：<b>{shares}</b>，价格 {price}\n花费：<b>{cost} USDC</b>\n余额：{bal} USDC",
     },
     "market_sell_card": {
-        "ru": "📉 #{mid}: продаём доли?\nУ тебя: <b>{held}</b> долей по живой цене.",
-        "en": "📉 #{mid}: sell shares?\nYou hold: <b>{held}</b> shares at live price.",
-        "zh": "📉 #{mid}：卖出份额？\n你持有：<b>{held}</b> 份，按实时价格。",
+        "ru": "↘ #{mid}: продаём доли?\nУ тебя: <b>{held}</b> долей по живой цене.",
+        "en": "↘ #{mid}: sell shares?\nYou hold: <b>{held}</b> shares at live price.",
+        "zh": "↘ #{mid}：卖出份额？\n你持有：<b>{held}</b> 份，按实时价格。",
     },
     "market_sell_ok_detail": {
-        "ru": "✅ Продано!\n📉 #{mid} — <b>{label}</b>\nДоли: <b>{shares}</b> по цене {price}\nПолучено: <b>{value} USDC</b>",
-        "en": "✅ Sold!\n📉 #{mid} — <b>{label}</b>\nShares: <b>{shares}</b> at {price}\nReceived: <b>{value} USDC</b>",
-        "zh": "✅ 已卖出！\n📉 #{mid} — <b>{label}</b>\n份额：<b>{shares}</b>，价格 {price}\n获得：<b>{value} USDC</b>",
+        "ru": "✓ Продано!\n↘ #{mid} — <b>{label}</b>\nДоли: <b>{shares}</b> по цене {price}\nПолучено: <b>{value} USDC</b>",
+        "en": "✓ Sold!\n↘ #{mid} — <b>{label}</b>\nShares: <b>{shares}</b> at {price}\nReceived: <b>{value} USDC</b>",
+        "zh": "✓ 已卖出！\n↘ #{mid} — <b>{label}</b>\n份额：<b>{shares}</b>，价格 {price}\n获得：<b>{value} USDC</b>",
     },
     "market_open": {
-        "ru": "📈 Открытых рынков нет.\nСоздай первый: /market create <банк> <вопрос> | <в1> | <в2>",
-        "en": "📈 No open markets.\nCreate the first: /market create <bank> <question> | <o1> | <o2>",
-        "zh": "📈 暂无开放市场。\n创建第一个：/market create <资金> <问题> | <选项1> | <选项2>",
+        "ru": "↗ Открытых рынков нет.\nСоздай первый: /market create <банк> <вопрос> | <в1> | <в2>",
+        "en": "↗ No open markets.\nCreate the first: /market create <bank> <question> | <o1> | <o2>",
+        "zh": "↗ 暂无开放市场。\n创建第一个：/market create <资金> <问题> | <选项1> | <选项2>",
     },
     "market_list_header": {
-        "ru": "📈 <b>Рынки предсказаний</b> — живые котировки",
-        "en": "📈 <b>Prediction markets</b> — live odds",
-        "zh": "📈 <b>预测市场</b> — 实时行情",
+        "ru": "↗ <b>Рынки предсказаний</b> — живые котировки",
+        "en": "↗ <b>Prediction markets</b> — live odds",
+        "zh": "↗ <b>预测市场</b> — 实时行情",
     },
     "market_list_hint": {
         "ru": "Нажми на рынок — карточка с котировками и кнопками.",
@@ -683,19 +684,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "点击市场查看行情和按钮。",
     },
     "market_resolve_title": {
-        "ru": "🏁 <b>Закрыть рынок #{mid}</b> — «{question}»\n\nКто победил? Победные доли платят 1 USDC за долю, остаток пула — тебе.",
-        "en": "🏁 <b>Close market #{mid}</b> — \"{question}\"\n\nWho won? Winning shares pay 1 USDC each, pool remainder goes to you.",
-        "zh": "🏁 <b>关闭市场 #{mid}</b> ——「{question}」\n\n谁赢了？获胜份额每份支付 1 USDC，剩余资金归你。",
+        "ru": "<b>Закрыть рынок #{mid}</b> — «{question}»\n\nКто победил? Победные доли платят 1 USDC за долю, остаток пула — тебе.",
+        "en": "<b>Close market #{mid}</b> — \"{question}\"\n\nWho won? Winning shares pay 1 USDC each, pool remainder goes to you.",
+        "zh": "<b>关闭市场 #{mid}</b> ——「{question}」\n\n谁赢了？获胜份额每份支付 1 USDC，剩余资金归你。",
     },
     "market_balance": {
-        "ru": "❌ Недостаточно баланса. Пополни: /deposit",
-        "en": "❌ Insufficient balance. Top up: /deposit",
-        "zh": "❌ 余额不足。充值：/deposit",
+        "ru": "× Недостаточно баланса. Пополни: /deposit",
+        "en": "× Insufficient balance. Top up: /deposit",
+        "zh": "× 余额不足。充值：/deposit",
     },
     "market_positions_empty": {
-        "ru": "📈 У тебя нет открытых позиций. Рынки: /markets",
-        "en": "📈 No open positions. Markets: /markets",
-        "zh": "📈 没有持仓。市场：/markets",
+        "ru": "↗ У тебя нет открытых позиций. Рынки: /markets",
+        "en": "↗ No open positions. Markets: /markets",
+        "zh": "↗ 没有持仓。市场：/markets",
     },
     "market_trade_format": {
         "ru": "Формат: /trade <id> <номер> <сумма>",
@@ -713,9 +714,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "市场未找到或已关闭。",
     },
     "market_trade_deadline": {
-        "ru": "⏰ Дедлайн рынка прошёл.",
-        "en": "⏰ Market deadline has passed.",
-        "zh": "⏰ 市场截止时间已过。",
+        "ru": "Дедлайн рынка прошёл.",
+        "en": "Market deadline has passed.",
+        "zh": "市场截止时间已过。",
     },
     "market_trade_badopt": {
         "ru": "Неверный номер варианта.",
@@ -738,19 +739,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "你没有持有此选项的份额。持仓：/positions",
     },
     "market_sell_done": {
-        "ru": "✅ Продано!\n📉 #{mid} — <b>{label}</b>\nДоли: <b>{shares}</b> по цене {price}\nПолучено: <b>{value} USDC</b>",
-        "en": "✅ Sold!\n📉 #{mid} — <b>{label}</b>\nShares: <b>{shares}</b> at {price}\nReceived: <b>{value} USDC</b>",
-        "zh": "✅ 已卖出！\n📉 #{mid} — <b>{label}</b>\n份额：<b>{shares}</b>，价格 {price}\n获得：<b>{value} USDC</b>",
+        "ru": "✓ Продано!\n↘ #{mid} — <b>{label}</b>\nДоли: <b>{shares}</b> по цене {price}\nПолучено: <b>{value} USDC</b>",
+        "en": "✓ Sold!\n↘ #{mid} — <b>{label}</b>\nShares: <b>{shares}</b> at {price}\nReceived: <b>{value} USDC</b>",
+        "zh": "✓ 已卖出！\n↘ #{mid} — <b>{label}</b>\n份额：<b>{shares}</b>，价格 {price}\n获得：<b>{value} USDC</b>",
     },
     "market_win": {
-        "ru": "🏆 Ты выиграл {amount} USDC!\n📈 #{mid} — «{question}»\nПобедил: <b>{winner}</b>\nБаланс: /balance",
-        "en": "🏆 You won {amount} USDC!\n📈 #{mid} — \"{question}\"\nWinner: <b>{winner}</b>\nBalance: /balance",
-        "zh": "🏆 你赢了 {amount} USDC！\n📈 #{mid} ——「{question}」\n获胜者：<b>{winner}</b>\n余额：/balance",
+        "ru": "★ Ты выиграл {amount} USDC!\n↗ #{mid} — «{question}»\nПобедил: <b>{winner}</b>\nБаланс: /balance",
+        "en": "★ You won {amount} USDC!\n↗ #{mid} — \"{question}\"\nWinner: <b>{winner}</b>\nBalance: /balance",
+        "zh": "★ 你赢了 {amount} USDC！\n↗ #{mid} ——「{question}」\n获胜者：<b>{winner}</b>\n余额：/balance",
     },
     "market_lose": {
-        "ru": "📈 Рынок #{mid} — «{question}» закрыт.\nПобедил: <b>{winner}</b>\nТвои доли не сыграли. Новые рынки: /markets",
-        "en": "📈 Market #{mid} — \"{question}\" closed.\nWinner: <b>{winner}</b>\nYour shares didn't win. New markets: /markets",
-        "zh": "📈 市场 #{mid} ——「{question}」已关闭。\n获胜者：<b>{winner}</b>\n你的份额未中奖。更多市场：/markets",
+        "ru": "↗ Рынок #{mid} — «{question}» закрыт.\nПобедил: <b>{winner}</b>\nТвои доли не сыграли. Новые рынки: /markets",
+        "en": "↗ Market #{mid} — \"{question}\" closed.\nWinner: <b>{winner}</b>\nYour shares didn't win. New markets: /markets",
+        "zh": "↗ 市场 #{mid} ——「{question}」已关闭。\n获胜者：<b>{winner}</b>\n你的份额未中奖。更多市场：/markets",
     },
     # ----- bet errors -----
     "bet_invalid_option": {
@@ -769,39 +770,39 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "单笔最大：<b>{n} USDC</b>。",
     },
     "bet_open_empty": {
-        "ru": "🎲 Открытых ставок нет.\nСоздай: /bet create <вопрос> | <в1> | <в2>",
-        "en": "🎲 No open bets.\nCreate: /bet create <question> | <o1> | <o2>",
-        "zh": "🎲 暂无开放投注。\n创建：/bet create <问题> | <选项1> | <选项2>",
+        "ru": "Открытых ставок нет.\nСоздай: /bet create <вопрос> | <в1> | <в2>",
+        "en": "No open bets.\nCreate: /bet create <question> | <o1> | <o2>",
+        "zh": "暂无开放投注。\n创建：/bet create <问题> | <选项1> | <选项2>",
     },
     "bet_create_card": {
-        "ru": "🎯 #{id} <b>{question}</b>\n✅ <b>Решён:</b> {winner}",
-        "en": "🎯 #{id} <b>{question}</b>\n✅ <b>Resolved:</b> {winner}",
-        "zh": "🎯 #{id} <b>{question}</b>\n✅ <b>已结算：</b> {winner}",
+        "ru": "#{id} <b>{question}</b>\n✓ <b>Решён:</b> {winner}",
+        "en": "#{id} <b>{question}</b>\n✓ <b>Resolved:</b> {winner}",
+        "zh": "#{id} <b>{question}</b>\n✓ <b>已结算：</b> {winner}",
     },
     "bet_open": {
-        "ru": "⏰ {deadline} · создатель: @{creator}",
-        "en": "⏰ {deadline} · creator: @{creator}",
-        "zh": "⏰ {deadline} · 创建者：@{creator}",
+        "ru": "{deadline} · создатель: @{creator}",
+        "en": "{deadline} · creator: @{creator}",
+        "zh": "{deadline} · 创建者：@{creator}",
     },
     "bet_open_nodl": {
-        "ru": "⌛ Закрытие: создателем /resolve · @{creator}",
-        "en": "⌛ Closing: by creator /resolve · @{creator}",
-        "zh": "⌛ 关闭方式：创建者 /resolve · @{creator}",
+        "ru": "… Закрытие: создателем /resolve · @{creator}",
+        "en": "… Closing: by creator /resolve · @{creator}",
+        "zh": "… 关闭方式：创建者 /resolve · @{creator}",
     },
     "bet_resolve_win": {
-        "ru": "🏆 <b>Ты выиграл {amount} USDC!</b>\n🎲 #{mid} — «{question}»\nПобедил: <b>{winner}</b>\nБаланс: /balance",
-        "en": "🏆 <b>You won {amount} USDC!</b>\n🎲 #{mid} — \"{question}\"\nWinner: <b>{winner}</b>\nBalance: /balance",
-        "zh": "🏆 <b>你赢了 {amount} USDC！</b>\n🎲 #{mid} ——「{question}」\n获胜者：<b>{winner}</b>\n余额：/balance",
+        "ru": "★ <b>Ты выиграл {amount} USDC!</b>\n#{mid} — «{question}»\nПобедил: <b>{winner}</b>\nБаланс: /balance",
+        "en": "★ <b>You won {amount} USDC!</b>\n#{mid} — \"{question}\"\nWinner: <b>{winner}</b>\nBalance: /balance",
+        "zh": "★ <b>你赢了 {amount} USDC！</b>\n#{mid} ——「{question}」\n获胜者：<b>{winner}</b>\n余额：/balance",
     },
     "bet_resolve_lose": {
-        "ru": "🎲 Ставка #{mid} — «{question}» закрыта.\nПобедил: <b>{winner}</b>\nТвои ставки не сыграли. Попробуй: /bets",
-        "en": "🎲 Bet #{mid} — \"{question}\" closed.\nWinner: <b>{winner}</b>\nYour bets didn't win. Try: /bets",
-        "zh": "🎲 投注 #{mid} ——「{question}」已结算。\n获胜者：<b>{winner}</b>\n你的投注未中奖。试试：/bets",
+        "ru": "Ставка #{mid} — «{question}» закрыта.\nПобедил: <b>{winner}</b>\nТвои ставки не сыграли. Попробуй: /bets",
+        "en": "Bet #{mid} — \"{question}\" closed.\nWinner: <b>{winner}</b>\nYour bets didn't win. Try: /bets",
+        "zh": "投注 #{mid} ——「{question}」已结算。\n获胜者：<b>{winner}</b>\n你的投注未中奖。试试：/bets",
     },
     "bet_cancel_msg": {
-        "ru": "↩️ Ставка #{id} — «{question}» отменена.\nДеньги возвращены: /history",
-        "en": "↩️ Bet #{id} — \"{question}\" cancelled.\nFunds returned: /history",
-        "zh": "↩️ 投注 #{id} ——「{question}」已取消。\n资金已退还：/history",
+        "ru": "← Ставка #{id} — «{question}» отменена.\nДеньги возвращены: /history",
+        "en": "← Bet #{id} — \"{question}\" cancelled.\nFunds returned: /history",
+        "zh": "← 投注 #{id} ——「{question}」已取消。\n资金已退还：/history",
     },
     # ----- wallet extra -----
     "wallet_help": {
@@ -810,19 +811,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：\n• /wallet —— 地址\n• /wallet new —— 新钱包\n• /wallet export hot —— 热钱包密钥（管理员）",
     },
 "wallet_export_secure": {
-        "ru": "🔑 <b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\n\n🔒 Экспорт приватного ключа и сид-фразы отключён в целях безопасности. Ключи зашифрованы и хранятся на сервере.",
-        "en": "🔑 <b>Your wallet</b>\n\nAddress: <code>{addr}</code>\n\n🔒 Private key and seed export is disabled for security. Keys are encrypted and stored on the server.",
-        "zh": "🔑 <b>你的钱包</b>\n\n地址：<code>{addr}</code>\n\n🔒 出于安全考虑，已禁用私钥和助记词导出。密钥已加密并存储在服务器上。",
+        "ru": "<b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\n\nЭкспорт приватного ключа и сид-фразы отключён в целях безопасности. Ключи зашифрованы и хранятся на сервере.",
+        "en": "<b>Your wallet</b>\n\nAddress: <code>{addr}</code>\n\nPrivate key and seed export is disabled for security. Keys are encrypted and stored on the server.",
+        "zh": "<b>你的钱包</b>\n\n地址：<code>{addr}</code>\n\n出于安全考虑，已禁用私钥和助记词导出。密钥已加密并存储在服务器上。",
     },
     "wallet_addr": {
-        "ru": "👛 <b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\n🟦 Сеть Base · монета USDC",
-        "en": "👛 <b>Your wallet</b>\n\nAddress: <code>{addr}</code>\n🟦 Base network · USDC coin",
-        "zh": "👛 <b>你的钱包</b>\n\n地址：<code>{addr}</code>\n🟦 Base 网络 · USDC 代币",
+        "ru": "<b>Твой кошелёк</b>\n\nАдрес: <code>{addr}</code>\n● Сеть Base · монета USDC",
+        "en": "<b>Your wallet</b>\n\nAddress: <code>{addr}</code>\n● Base network · USDC coin",
+        "zh": "<b>你的钱包</b>\n\n地址：<code>{addr}</code>\n● Base 网络 · USDC 代币",
     },
     "wallet_list": {
-        "ru": "👛 <b>Твои кошельки</b> ({count}/{max})\n\n{slots}\n\nАктивный: слот {active_slot} · <code>{active_addr}</code>\n\n➕ Создать новый: /wallet new",
-        "en": "👛 <b>Your wallets</b> ({count}/{max})\n\n{slots}\n\nActive: slot {active_slot} · <code>{active_addr}</code>\n\n➕ Create new: /wallet new",
-        "zh": "👛 <b>你的钱包</b> ({count}/{max})\n\n{slots}\n\n当前活跃：槽位 {active_slot} · <code>{active_addr}</code>\n\n➕ 创建新钱包：/wallet new",
+        "ru": "<b>Твои кошельки</b> ({count}/{max})\n\n{slots}\n\nАктивный: слот {active_slot} · <code>{active_addr}</code>\n\n+ Создать новый: /wallet new",
+        "en": "<b>Your wallets</b> ({count}/{max})\n\n{slots}\n\nActive: slot {active_slot} · <code>{active_addr}</code>\n\n+ Create new: /wallet new",
+        "zh": "<b>你的钱包</b> ({count}/{max})\n\n{slots}\n\n当前活跃：槽位 {active_slot} · <code>{active_addr}</code>\n\n+ 创建新钱包：/wallet new",
     },
     "wallet_slot_line": {
         "ru": "{marker} Слот {slot}: <code>{addr}</code>",
@@ -830,34 +831,34 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "{marker} 槽位 {slot}：<code>{addr}</code>",
     },
     "wallet_new_btn": {
-        "ru": "➕ Создать ({count}/{max})",
-        "en": "➕ Create ({count}/{max})",
-        "zh": "➕ 新建（{count}/{max}）",
+        "ru": "+ Создать ({count}/{max})",
+        "en": "+ Create ({count}/{max})",
+        "zh": "+ 新建（{count}/{max}）",
     },
     "dep_personal_note": {
-        "ru": "\n\n🔑 Твой личный адрес — средства автоматически на баланс.",
-        "en": "\n\n🔑 This is your personal address — deposits land on your balance automatically.",
-        "zh": "\n\n🔑 这是你的专属地址——存款会自动到账余额。",
+        "ru": "\n\nТвой личный адрес — средства автоматически на баланс.",
+        "en": "\n\nThis is your personal address — deposits land on your balance automatically.",
+        "zh": "\n\n这是你的专属地址——存款会自动到账余额。",
     },
     "wallet_new_ok": {
-        "ru": "✅ Новый кошелёк создан!\n\nАдрес: <code>{addr}</code>\nСлот: {slot}\n\nОн стал активным. Выбери другой: тапни на кнопку ниже.",
-        "en": "✅ New wallet created!\n\nAddress: <code>{addr}</code>\nSlot: {slot}\n\nIt's now active. Switch: tap a button below.",
-        "zh": "✅ 新钱包已创建！\n\n地址：<code>{addr}</code>\n槽位：{slot}\n\n已设为活跃钱包。切换请点击下方按钮。",
+        "ru": "✓ Новый кошелёк создан!\n\nАдрес: <code>{addr}</code>\nСлот: {slot}\n\nОн стал активным. Выбери другой: тапни на кнопку ниже.",
+        "en": "✓ New wallet created!\n\nAddress: <code>{addr}</code>\nSlot: {slot}\n\nIt's now active. Switch: tap a button below.",
+        "zh": "✓ 新钱包已创建！\n\n地址：<code>{addr}</code>\n槽位：{slot}\n\n已设为活跃钱包。切换请点击下方按钮。",
     },
     "wallet_limit_reached": {
-        "ru": "❌ Лимит кошельков ({max}) исчерпан. Удали лишние через /wallet.",
-        "en": "❌ Wallet limit ({max}) reached. Remove extras via /wallet.",
-        "zh": "❌ 钱包数量已达上限 ({max})。请通过 /wallet 删除多余钱包。",
+        "ru": "× Лимит кошельков ({max}) исчерпан. Удали лишние через /wallet.",
+        "en": "× Wallet limit ({max}) reached. Remove extras via /wallet.",
+        "zh": "× 钱包数量已达上限 ({max})。请通过 /wallet 删除多余钱包。",
     },
     "wallet_active_switched": {
-        "ru": "✅ Активный кошелёк: слот {slot} · <code>{addr}</code>",
-        "en": "✅ Active wallet: slot {slot} · <code>{addr}</code>",
-        "zh": "✅ 活跃钱包：槽位 {slot} · <code>{addr}</code>",
+        "ru": "✓ Активный кошелёк: слот {slot} · <code>{addr}</code>",
+        "en": "✓ Active wallet: slot {slot} · <code>{addr}</code>",
+        "zh": "✓ 活跃钱包：槽位 {slot} · <code>{addr}</code>",
     },
     "link_sign_prompt": {
-        "ru": "🔗 <b>Привязка кошелька</b>\n\nПодпиши сообщение в кошельке:\n<code>{text}</code>\n\nПотом: /confirm <i>&lt;0x…подпись&gt;</i>",
-        "en": "🔗 <b>Link wallet</b>\n\nSign this in your wallet:\n<code>{text}</code>\n\nThen: /confirm <i>&lt;0x…signature&gt;</i>",
-        "zh": "🔗 <b>绑定钱包</b>\n\n在钱包中签署：\n<code>{text}</code>\n\n然后：/confirm <i>&lt;0x…签名&gt;</i>",
+        "ru": "↗ <b>Привязка кошелька</b>\n\nПодпиши сообщение в кошельке:\n<code>{text}</code>\n\nПотом: /confirm <i>&lt;0x…подпись&gt;</i>",
+        "en": "↗ <b>Link wallet</b>\n\nSign this in your wallet:\n<code>{text}</code>\n\nThen: /confirm <i>&lt;0x…signature&gt;</i>",
+        "zh": "↗ <b>绑定钱包</b>\n\n在钱包中签署：\n<code>{text}</code>\n\n然后：/confirm <i>&lt;0x…签名&gt;</i>",
     },
     "confirm_need_signature": {
         "ru": "Формат: /confirm <i>&lt;0x…подпись&gt;</i>",
@@ -865,24 +866,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/confirm <i>&lt;0x…签名&gt;</i>",
     },
     "confirm_no_nonce": {
-        "ru": "❌ Сначала начни привязку: /link <i>&lt;адрес&gt;</i>",
-        "en": "❌ Start linking first: /link <i>&lt;address&gt;</i>",
-        "zh": "❌ 请先开始绑定：/link <i>&lt;地址&gt;</i>",
+        "ru": "× Сначала начни привязку: /link <i>&lt;адрес&gt;</i>",
+        "en": "× Start linking first: /link <i>&lt;address&gt;</i>",
+        "zh": "× 请先开始绑定：/link <i>&lt;地址&gt;</i>",
     },
     "confirm_expired": {
-        "ru": "⏳ Код привязки устарел ({min} мин). Начни: /link <i>&lt;адрес&gt;</i>",
-        "en": "⏳ Link code expired ({min} min). Start again: /link <i>&lt;address&gt;</i>",
-        "zh": "⏳ 绑定码已过期（{min} 分钟）。请重新开始：/link <i>&lt;地址&gt;</i>",
+        "ru": "… Код привязки устарел ({min} мин). Начни: /link <i>&lt;адрес&gt;</i>",
+        "en": "… Link code expired ({min} min). Start again: /link <i>&lt;address&gt;</i>",
+        "zh": "… 绑定码已过期（{min} 分钟）。请重新开始：/link <i>&lt;地址&gt;</i>",
     },
     "confirm_bad_sig": {
-        "ru": "❌ Подпись не совпадает.",
-        "en": "❌ Signature doesn't match.",
-        "zh": "❌ 签名不匹配。",
+        "ru": "× Подпись не совпадает.",
+        "en": "× Signature doesn't match.",
+        "zh": "× 签名不匹配。",
     },
     "confirm_ok": {
-        "ru": "✅ Кошелёк <code>{addr}</code> привязан.\nДепозиты зачисляются автоматически.{extra}",
-        "en": "✅ Wallet <code>{addr}</code> linked.\nDeposits credit automatically.{extra}",
-        "zh": "✅ 钱包 <code>{addr}</code> 已绑定。\n充值自动到账。{extra}",
+        "ru": "✓ Кошелёк <code>{addr}</code> привязан.\nДепозиты зачисляются автоматически.{extra}",
+        "en": "✓ Wallet <code>{addr}</code> linked.\nDeposits credit automatically.{extra}",
+        "zh": "✓ 钱包 <code>{addr}</code> 已绑定。\n充值自动到账。{extra}",
     },
     "import_format": {
         "ru": "Формат: /import <i>&lt;12 или 24 слова&gt;</i>",
@@ -890,14 +891,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/import <i>&lt;12 或 24 个词&gt;</i>",
     },
     "import_bad_seed": {
-        "ru": "❌ Сид-фраза должна содержать 12 или 24 слова.",
-        "en": "❌ Seed phrase must be 12 or 24 words.",
-        "zh": "❌ 助记词必须为 12 或 24 个词。",
+        "ru": "× Сид-фраза должна содержать 12 или 24 слова.",
+        "en": "× Seed phrase must be 12 or 24 words.",
+        "zh": "× 助记词必须为 12 或 24 个词。",
     },
     "import_ok": {
-        "ru": "✅ Кошелёк <code>{addr}</code> импортирован.\nКлюч и сид зашифрованы.",
-        "en": "✅ Wallet <code>{addr}</code> imported.\nKey and seed are encrypted.",
-        "zh": "✅ 钱包 <code>{addr}</code> 已导入。\n密钥和助记词已加密。",
+        "ru": "✓ Кошелёк <code>{addr}</code> импортирован.\nКлюч и сид зашифрованы.",
+        "en": "✓ Wallet <code>{addr}</code> imported.\nKey and seed are encrypted.",
+        "zh": "✓ 钱包 <code>{addr}</code> 已导入。\n密钥和助记词已加密。",
     },
     "withdraw_format": {
         "ru": "Формат: /withdraw <i>&lt;адрес&gt; &lt;сумма&gt;</i>",
@@ -910,92 +911,92 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "最低提现额：<b>{n} USDC</b>。",
     },
     "withdraw_daily_limit": {
-        "ru": "⏳ Лимит <b>{n} выводов в сутки</b>. Попробуй завтра.",
-        "en": "⏳ Limit of <b>{n} withdrawals per day</b>. Try again tomorrow.",
-        "zh": "⏳ 每日限 <b>{n} 次提现</b>。请明天再试。",
+        "ru": "… Лимит <b>{n} выводов в сутки</b>. Попробуй завтра.",
+        "en": "… Limit of <b>{n} withdrawals per day</b>. Try again tomorrow.",
+        "zh": "… 每日限 <b>{n} 次提现</b>。请明天再试。",
     },
     "withdraw_balance_short": {
-        "ru": "❌ Недостаточно баланса. Нужно <b>{need} USDC</b> (сумма + комиссия {fee}).\nБаланс: <b>{bal} USDC</b>",
-        "en": "❌ Insufficient balance. Need <b>{need} USDC</b> (amount + fee {fee}).\nBalance: <b>{bal} USDC</b>",
-        "zh": "❌ 余额不足。需要 <b>{need} USDC</b>（金额 + 手续费 {fee}）。\n余额：<b>{bal} USDC</b>",
+        "ru": "× Недостаточно баланса. Нужно <b>{need} USDC</b> (сумма + комиссия {fee}).\nБаланс: <b>{bal} USDC</b>",
+        "en": "× Insufficient balance. Need <b>{need} USDC</b> (amount + fee {fee}).\nBalance: <b>{bal} USDC</b>",
+        "zh": "× 余额不足。需要 <b>{need} USDC</b>（金额 + 手续费 {fee}）。\n余额：<b>{bal} USDC</b>",
     },
     "withdraw_queued": {
-        "ru": "⏳ <b>{amount} USDC</b> поставлено в очередь на вывод (комиссия {fee}).\nОтправлю батчем в течение минуты — пришлю TX, когда подтвердится.",
-        "en": "⏳ <b>{amount} USDC</b> queued for withdrawal (fee {fee}).\nI'll send it batched within a minute; you'll get the TX once it confirms.",
-        "zh": "⏳ <b>{amount} USDC</b> 已加入提现队列（手续费 {fee}）。\n将在一分钟内批量发送，确认后会提供交易号。",
+        "ru": "… <b>{amount} USDC</b> поставлено в очередь на вывод (комиссия {fee}).\nОтправлю батчем в течение минуты — пришлю TX, когда подтвердится.",
+        "en": "… <b>{amount} USDC</b> queued for withdrawal (fee {fee}).\nI'll send it batched within a minute; you'll get the TX once it confirms.",
+        "zh": "… <b>{amount} USDC</b> 已加入提现队列（手续费 {fee}）。\n将在一分钟内批量发送，确认后会提供交易号。",
     },
     "withdraw_ok": {
-        "ru": "✅ Отправлено <b>{amount} USDC</b> (комиссия {fee})\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>",
-        "en": "✅ Sent <b>{amount} USDC</b> (fee {fee})\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>",
-        "zh": "✅ 已发送 <b>{amount} USDC</b>（手续费 {fee}）\nTx：<a href=\"{tx_url}\"><code>{tx}</code></a>",
+        "ru": "✓ Отправлено <b>{amount} USDC</b> (комиссия {fee})\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>",
+        "en": "✓ Sent <b>{amount} USDC</b> (fee {fee})\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>",
+        "zh": "✓ 已发送 <b>{amount} USDC</b>（手续费 {fee}）\nTx：<a href=\"{tx_url}\"><code>{tx}</code></a>",
     },
     "withdraw_error": {
-        "ru": "❌ Ошибка отправки: {error}",
-        "en": "❌ Send error: {error}",
-        "zh": "❌ 发送失败：{error}",
+        "ru": "× Ошибка отправки: {error}",
+        "en": "× Send error: {error}",
+        "zh": "× 发送失败：{error}",
     },
     "withdraw_bad_address": {
-        "ru": "❌ Непохоже на адрес Base (0x + 40 hex).",
-        "en": "❌ Doesn't look like a Base address (0x + 40 hex).",
-        "zh": "❌ 看起来不像 Base 地址（0x + 40 位十六进制）。",
+        "ru": "× Непохоже на адрес Base (0x + 40 hex).",
+        "en": "× Doesn't look like a Base address (0x + 40 hex).",
+        "zh": "× 看起来不像 Base 地址（0x + 40 位十六进制）。",
     },
     "withdraw_contract": {
-        "ru": "❌ Вывод на контракт заблокирован: средства на контрактном адресе могут быть навсегда утеряны. Укажите личный (EOA) адрес.",
-        "en": "❌ Withdrawal to a smart contract is blocked: funds sent to a contract address can be lost forever. Use a personal (EOA) address.",
-        "zh": "❌ 禁止向合约地址提现：转入合约的资金可能永久丢失。请使用个人（EOA）地址。",
+        "ru": "× Вывод на контракт заблокирован: средства на контрактном адресе могут быть навсегда утеряны. Укажите личный (EOA) адрес.",
+        "en": "× Withdrawal to a smart contract is blocked: funds sent to a contract address can be lost forever. Use a personal (EOA) address.",
+        "zh": "× 禁止向合约地址提现：转入合约的资金可能永久丢失。请使用个人（EOA）地址。",
     },
     # ---- first-party destinations: contracts the bot owns, where a payout
     # succeeds on-chain and the user still loses the money ----
     "withdraw_block_zero": {
-        "ru": "❌ Нулевой адрес: перевод на него сжигает средства. Вывод отклонён.",
-        "en": "❌ Zero address: a payout there burns the funds. Withdrawal refused.",
-        "zh": "❌ 零地址：向该地址转账将销毁资金。已拒绝提现。",
+        "ru": "× Нулевой адрес: перевод на него сжигает средства. Вывод отклонён.",
+        "en": "× Zero address: a payout there burns the funds. Withdrawal refused.",
+        "zh": "× 零地址：向该地址转账将销毁资金。已拒绝提现。",
     },
     "withdraw_block_hot": {
-        "ru": "❌ Это адрес самого бота. Вывод на него ничего не переведёт: средства останутся у бота, а баланс спишется.",
-        "en": "❌ That is the bot's own wallet. Withdrawing there moves nothing: the funds stay with the bot and your balance is debited.",
-        "zh": "❌ 这是机器人自己的钱包。向该地址提现毫无意义：资金留在机器人处，而你的余额会被扣除。",
+        "ru": "× Это адрес самого бота. Вывод на него ничего не переведёт: средства останутся у бота, а баланс спишется.",
+        "en": "× That is the bot's own wallet. Withdrawing there moves nothing: the funds stay with the bot and your balance is debited.",
+        "zh": "× 这是机器人自己的钱包。向该地址提现毫无意义：资金留在机器人处，而你的余额会被扣除。",
     },
     "withdraw_block_vault": {
-        "ru": "❌ Это хранилище бота (vault): вывести из него может только бот. Вывод отклонён.",
-        "en": "❌ That is the bot's vault — only the bot can withdraw from it. Withdrawal refused.",
-        "zh": "❌ 这是机器人的金库，只有机器人能从中取出。已拒绝提现。",
+        "ru": "× Это хранилище бота (vault): вывести из него может только бот. Вывод отклонён.",
+        "en": "× That is the bot's vault — only the bot can withdraw from it. Withdrawal refused.",
+        "zh": "× 这是机器人的金库，只有机器人能从中取出。已拒绝提现。",
     },
     "withdraw_block_x402": {
-        "ru": "❌ Это приёмный пул x402: средства из него уходят обратно боту, а не тебе. Вывод отклонён.",
-        "en": "❌ That is the x402 receive pool: funds drain from it back to the bot, not to you. Withdrawal refused.",
-        "zh": "❌ 这是 x402 接收池：其中的资金会回流给机器人而不是你。已拒绝提现。",
+        "ru": "× Это приёмный пул x402: средства из него уходят обратно боту, а не тебе. Вывод отклонён.",
+        "en": "× That is the x402 receive pool: funds drain from it back to the bot, not to you. Withdrawal refused.",
+        "zh": "× 这是 x402 接收池：其中的资金会回流给机器人而不是你。已拒绝提现。",
     },
     "withdraw_block_changed": {
-        "ru": "❌ Адрес отклонён как служебный адрес бота. Деньги не списаны — отправь /withdraw на личный (EOA) адрес.",
-        "en": "❌ The address was refused as a bot-owned destination. Nothing was debited — send /withdraw to a personal (EOA) address.",
-        "zh": "❌ 该地址被作为机器人自有地址拒绝。未扣除任何资金——请向个人（EOA）地址重新发起 /withdraw。",
+        "ru": "× Адрес отклонён как служебный адрес бота. Деньги не списаны — отправь /withdraw на личный (EOA) адрес.",
+        "en": "× The address was refused as a bot-owned destination. Nothing was debited — send /withdraw to a personal (EOA) address.",
+        "zh": "× 该地址被作为机器人自有地址拒绝。未扣除任何资金——请向个人（EOA）地址重新发起 /withdraw。",
     },
     # ---- two-step confirmation: the prompt, then the tap that debits ----
     "withdraw_confirm": {
-        "ru": "⚠️ <b>Подтверди вывод</b>\n\n💵 Сумма: <b>{amount} USDC</b>\n🧾 Комиссия: <b>{fee} USDC</b>\n📉 Спишется: <b>{total} USDC</b>\n💰 Баланс после: <b>{after} USDC</b>\n\n📬 Адрес:\n<code>{addr}</code>\n\nПроверь адрес — перевод необратим.\nЗапрос активен {mins} мин.",
-        "en": "⚠️ <b>Confirm the withdrawal</b>\n\n💵 Amount: <b>{amount} USDC</b>\n🧾 Fee: <b>{fee} USDC</b>\n📉 Debited: <b>{total} USDC</b>\n💰 Balance after: <b>{after} USDC</b>\n\n📬 Address:\n<code>{addr}</code>\n\nCheck the address — the transfer is irreversible.\nRequest valid for {mins} min.",
-        "zh": "⚠️ <b>确认提现</b>\n\n💵 金额：<b>{amount} USDC</b>\n🧾 手续费：<b>{fee} USDC</b>\n📉 扣除：<b>{total} USDC</b>\n💰 之后余额：<b>{after} USDC</b>\n\n📬 地址：\n<code>{addr}</code>\n\n请核对地址——转账不可撤销。\n请求有效期 {mins} 分钟。",
+        "ru": "! <b>Подтверди вывод</b>\n\nСумма: <b>{amount} USDC</b>\nКомиссия: <b>{fee} USDC</b>\n↘ Спишется: <b>{total} USDC</b>\nБаланс после: <b>{after} USDC</b>\n\nАдрес:\n<code>{addr}</code>\n\nПроверь адрес — перевод необратим.\nЗапрос активен {mins} мин.",
+        "en": "! <b>Confirm the withdrawal</b>\n\nAmount: <b>{amount} USDC</b>\nFee: <b>{fee} USDC</b>\n↘ Debited: <b>{total} USDC</b>\nBalance after: <b>{after} USDC</b>\n\nAddress:\n<code>{addr}</code>\n\nCheck the address — the transfer is irreversible.\nRequest valid for {mins} min.",
+        "zh": "! <b>确认提现</b>\n\n金额：<b>{amount} USDC</b>\n手续费：<b>{fee} USDC</b>\n↘ 扣除：<b>{total} USDC</b>\n之后余额：<b>{after} USDC</b>\n\n地址：\n<code>{addr}</code>\n\n请核对地址——转账不可撤销。\n请求有效期 {mins} 分钟。",
     },
     "withdraw_confirm_btn": {
-        "ru": "✅ Подтвердить",
-        "en": "✅ Confirm",
-        "zh": "✅ 确认",
+        "ru": "✓ Подтвердить",
+        "en": "✓ Confirm",
+        "zh": "✓ 确认",
     },
     "withdraw_cancel_btn": {
-        "ru": "✖️ Отменить",
-        "en": "✖️ Cancel",
-        "zh": "✖️ 取消",
+        "ru": "× Отменить",
+        "en": "× Cancel",
+        "zh": "× 取消",
     },
     "withdraw_confirm_expired": {
-        "ru": "⌛ Запрос на вывод устарел или уже использован. Отправь /withdraw заново.",
-        "en": "⌛ That withdrawal request expired or was already used. Send /withdraw again.",
-        "zh": "⌛ 该提现请求已过期或已被使用。请重新发送 /withdraw。",
+        "ru": "… Запрос на вывод устарел или уже использован. Отправь /withdraw заново.",
+        "en": "… That withdrawal request expired or was already used. Send /withdraw again.",
+        "zh": "… 该提现请求已过期或已被使用。请重新发送 /withdraw。",
     },
     "withdraw_cancelled": {
-        "ru": "✖️ Вывод отменён — деньги остались на балансе.",
-        "en": "✖️ Withdrawal cancelled — the funds stayed on your balance.",
-        "zh": "✖️ 提现已取消——资金仍在你的余额中。",
+        "ru": "× Вывод отменён — деньги остались на балансе.",
+        "en": "× Withdrawal cancelled — the funds stayed on your balance.",
+        "zh": "× 提现已取消——资金仍在你的余额中。",
     },
     "withdraw_queued_short": {
         "ru": "Вывод поставлен в очередь",
@@ -1008,30 +1009,30 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "交易未找到（尚未确认或哈希无效）。",
     },
     "tx_info": {
-        "ru": "⛓️ <b>Транзакция на Base</b>\nОт: <code>{from_addr}</code>\nКому: <code>{to_addr}</code>\nСтатус: {status}\n{usdc_line}\n🔍 <a href=\"{url}\">Basescan</a>",
-        "en": "⛓️ <b>Base transaction</b>\nFrom: <code>{from_addr}</code>\nTo: <code>{to_addr}</code>\nStatus: {status}\n{usdc_line}\n🔍 <a href=\"{url}\">Basescan</a>",
-        "zh": "⛓️ <b>Base 交易</b>\n发送方：<code>{from_addr}</code>\n接收方：<code>{to_addr}</code>\n状态：{status}\n{usdc_line}\n🔍 <a href=\"{url}\">Basescan</a>",
+        "ru": "<b>Транзакция на Base</b>\nОт: <code>{from_addr}</code>\nКому: <code>{to_addr}</code>\nСтатус: {status}\n{usdc_line}\n<a href=\"{url}\">Basescan</a>",
+        "en": "<b>Base transaction</b>\nFrom: <code>{from_addr}</code>\nTo: <code>{to_addr}</code>\nStatus: {status}\n{usdc_line}\n<a href=\"{url}\">Basescan</a>",
+        "zh": "<b>Base 交易</b>\n发送方：<code>{from_addr}</code>\n接收方：<code>{to_addr}</code>\n状态：{status}\n{usdc_line}\n<a href=\"{url}\">Basescan</a>",
     },
     # ----- settings extra -----
     "settings_notif_on": {
-        "ru": "🔔 Уведомления включены.",
-        "en": "🔔 Notifications enabled.",
-        "zh": "🔔 通知已开启。",
+        "ru": "Уведомления включены.",
+        "en": "Notifications enabled.",
+        "zh": "通知已开启。",
     },
     "settings_notif_off": {
-        "ru": "🔕 Уведомления отключены.",
-        "en": "🔕 Notifications disabled.",
-        "zh": "🔕 通知已关闭。",
+        "ru": "Уведомления отключены.",
+        "en": "Notifications disabled.",
+        "zh": "通知已关闭。",
     },
     "settings_react_on": {
-        "ru": "⚡ Реакции-чаевые включены! Ставь 🔥/❤️/⚡ на сообщения в группах.",
-        "en": "⚡ Reaction tips enabled! React 🔥/❤️/⚡ to messages in groups.",
-        "zh": "⚡ 表情打赏已开启！在群聊中给消息添加 🔥/❤️/⚡ 表情。",
+        "ru": "Реакции-чаевые включены! Ставь //на сообщения в группах.",
+        "en": "Reaction tips enabled! React //to messages in groups.",
+        "zh": "表情打赏已开启！在群聊中给消息添加 //表情。",
     },
     "settings_react_off": {
-        "ru": "⚡ Реакции-чаевые отключены.",
-        "en": "⚡ Reaction tips disabled.",
-        "zh": "⚡ 表情打赏已关闭。",
+        "ru": "Реакции-чаевые отключены.",
+        "en": "Reaction tips disabled.",
+        "zh": "表情打赏已关闭。",
     },
     # ----- bets -----
     "bet_format": {
@@ -1060,14 +1061,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "选项超过 {n} 个字符：<i>{o}…</i>",
     },
     "bet_created": {
-        "ru": "🎲 Ставка #{id} создана!",
-        "en": "🎲 Bet #{id} created!",
-        "zh": "🎲 投注 #{id} 已创建！",
+        "ru": "Ставка #{id} создана!",
+        "en": "Bet #{id} created!",
+        "zh": "投注 #{id} 已创建！",
     },
     "bet_deadline_to": {
-        "ru": "\n⏰ Приём ставок до: {time}",
-        "en": "\n⏰ Bets accepted until: {time}",
-        "zh": "\n⏰ 投注截止时间：{time}",
+        "ru": "\nПриём ставок до: {time}",
+        "en": "\nBets accepted until: {time}",
+        "zh": "\n投注截止时间：{time}",
     },
     "bet_howto": {
         "ru": "Ставят: /bet {id} &lt;номер&gt; &lt;сумма&gt; или кнопки: /bets",
@@ -1075,9 +1076,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "下注：/bet {id} &lt;选项&gt; &lt;金额&gt; 或使用按钮：/bets",
     },
     "bet_confirmed": {
-        "ru": "✅ Ставка принята!\n🎯 #{id} — <b>{label}</b> на <b>{amount} USDC</b>\nОстаток: {bal} USDC",
-        "en": "✅ Bet accepted!\n🎯 #{id} — <b>{label}</b> for <b>{amount} USDC</b>\nBalance: {bal} USDC",
-        "zh": "✅ 投注已接受！\n🎯 #{id} —— <b>{label}</b> 下注 <b>{amount} USDC</b>\n余额：{bal} USDC",
+        "ru": "✓ Ставка принята!\n#{id} — <b>{label}</b> на <b>{amount} USDC</b>\nОстаток: {bal} USDC",
+        "en": "✓ Bet accepted!\n#{id} — <b>{label}</b> for <b>{amount} USDC</b>\nBalance: {bal} USDC",
+        "zh": "✓ 投注已接受！\n#{id} —— <b>{label}</b> 下注 <b>{amount} USDC</b>\n余额：{bal} USDC",
     },
     "bet_not_found": {
         "ru": "Ставка не найдена.",
@@ -1095,24 +1096,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "此投注已关闭。",
     },
     "bet_deadline_passed": {
-        "ru": "⏰ Время приёма ставок истекло. Жди решения: /bets",
-        "en": "⏰ Betting period ended. Wait for resolution: /bets",
-        "zh": "⏰ 投注时间已结束。等待结算：/bets",
+        "ru": "Время приёма ставок истекло. Жди решения: /bets",
+        "en": "Betting period ended. Wait for resolution: /bets",
+        "zh": "投注时间已结束。等待结算：/bets",
     },
     "bet_resolved": {
-        "ru": "✅ <b>Решён:</b> {winner}",
-        "en": "✅ <b>Resolved:</b> {winner}",
-        "zh": "✅ <b>已结算：</b> {winner}",
+        "ru": "✓ <b>Решён:</b> {winner}",
+        "en": "✓ <b>Resolved:</b> {winner}",
+        "zh": "✓ <b>已结算：</b> {winner}",
     },
     "bet_cancelled": {
-        "ru": "❌ Отменён — деньги возвращены всем.",
-        "en": "❌ Cancelled — funds returned to all.",
-        "zh": "❌ 已取消——资金已退还。",
+        "ru": "× Отменён — деньги возвращены всем.",
+        "en": "× Cancelled — funds returned to all.",
+        "zh": "× 已取消——资金已退还。",
     },
     "bet_expired": {
-        "ru": "🕳️ <b>Рынок истёк</b> — вернуть: /cancel {id}",
-        "en": "🕳️ <b>Market expired</b> — refund: /cancel {id}",
-        "zh": "🕳️ <b>市场已过期</b> —— 退款：/cancel {id}",
+        "ru": "<b>Рынок истёк</b> — вернуть: /cancel {id}",
+        "en": "<b>Market expired</b> — refund: /cancel {id}",
+        "zh": "<b>市场已过期</b> —— 退款：/cancel {id}",
     },
     "bet_pot": {
         "ru": "Пул итого: <b>{pot} USDC</b> · участников: {backers}",
@@ -1125,19 +1126,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "赢利手续费：{pct}%（归创建者）",
     },
     "bet_empty": {
-        "ru": "🎲 Открытых ставок нет.\nСоздай: /bet create <вопрос> | <в1> | <в2>",
-        "en": "🎲 No open bets.\nCreate: /bet create <question> | <o1> | <o2>",
-        "zh": "🎲 暂无开放投注。\n创建：/bet create <问题> | <选项1> | <选项2>",
+        "ru": "Открытых ставок нет.\nСоздай: /bet create <вопрос> | <в1> | <в2>",
+        "en": "No open bets.\nCreate: /bet create <question> | <o1> | <o2>",
+        "zh": "暂无开放投注。\n创建：/bet create <问题> | <选项1> | <选项2>",
     },
     "bet_list_header": {
-        "ru": "🎲 <b>Открытые ставки</b>",
-        "en": "🎲 <b>Open bets</b>",
-        "zh": "🎲 <b>开放投注</b>",
+        "ru": "<b>Открытые ставки</b>",
+        "en": "<b>Open bets</b>",
+        "zh": "<b>开放投注</b>",
     },
     "bet_list_expired": {
-        "ru": " 🕳️ истёк — /cancel {id}",
-        "en": " 🕳️ expired — /cancel {id}",
-        "zh": " 🕳️ 已过期 —— /cancel {id}",
+        "ru": " истёк — /cancel {id}",
+        "en": " expired — /cancel {id}",
+        "zh": " 已过期 —— /cancel {id}",
     },
     "bet_list_hint": {
         "ru": "Нажми на рынок — карточка со ставками.",
@@ -1145,14 +1146,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "点击市场查看详情。",
     },
     "bet_resolve_title": {
-        "ru": "🏁 <b>Закрыть #{id}</b> — «{question}»\n\nКто победил?\nПобедители делят пул ({pot} USDC), создатель получает {pct}%.",
-        "en": "🏁 <b>Close #{id}</b> — \"{question}\"\n\nWho won?\nWinners share pool ({pot} USDC), creator gets {pct}%.",
-        "zh": "🏁 <b>关闭 #{id}</b> ——「{question}」\n\n谁赢了？\n赢家瓜分奖池（{pot} USDC），创建者获得 {pct}%。",
+        "ru": "<b>Закрыть #{id}</b> — «{question}»\n\nКто победил?\nПобедители делят пул ({pot} USDC), создатель получает {pct}%.",
+        "en": "<b>Close #{id}</b> — \"{question}\"\n\nWho won?\nWinners share pool ({pot} USDC), creator gets {pct}%.",
+        "zh": "<b>关闭 #{id}</b> ——「{question}」\n\n谁赢了？\n赢家瓜分奖池（{pot} USDC），创建者获得 {pct}%。",
     },
     "bet_resolved_header": {
-        "ru": "✅ Ставка #{id} закрыта!",
-        "en": "✅ Bet #{id} resolved!",
-        "zh": "✅ 投注 #{id} 已结算！",
+        "ru": "✓ Ставка #{id} закрыта!",
+        "en": "✓ Bet #{id} resolved!",
+        "zh": "✓ 投注 #{id} 已结算！",
     },
     "bet_payouts_sent": {
         "ru": "Выплаты разосланы победителям.",
@@ -1160,19 +1161,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "奖金已发送给赢家。",
     },
     "bet_amount_ask": {
-        "ru": "🎯 #{id}: {question}\n\n<b>{label}</b> — сколько ставим?",
-        "en": "🎯 #{id}: {question}\n\n<b>{label}</b> — how much?",
-        "zh": "🎯 #{id}：{question}\n\n<b>{label}</b> —— 下注多少？",
+        "ru": "#{id}: {question}\n\n<b>{label}</b> — сколько ставим?",
+        "en": "#{id}: {question}\n\n<b>{label}</b> — how much?",
+        "zh": "#{id}：{question}\n\n<b>{label}</b> —— 下注多少？",
     },
     "bet_my_empty": {
-        "ru": "🎲 У тебя нет открытых позиций. Ставят: /bets",
-        "en": "🎲 No open positions. Bets: /bets",
-        "zh": "🎲 没有持仓。投注：/bets",
+        "ru": "У тебя нет открытых позиций. Ставят: /bets",
+        "en": "No open positions. Bets: /bets",
+        "zh": "没有持仓。投注：/bets",
     },
     "bet_my_header": {
-        "ru": "📌 <b>Твои открытые позиции</b>",
-        "en": "📌 <b>Your open positions</b>",
-        "zh": "📌 <b>你的持仓</b>",
+        "ru": "<b>Твои открытые позиции</b>",
+        "en": "<b>Your open positions</b>",
+        "zh": "<b>你的持仓</b>",
     },
     "bet_my_net": {
         "ru": "на руки: <b>{net} USDC</b> после комиссии {pct}%",
@@ -1185,19 +1186,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "已截止",
     },
     "bet_notify_win": {
-        "ru": "🏆 <b>Ты выиграл {amount} USDC!</b>\n🎲 #{id} — «{question}»\nПобедил: <b>{winner}</b>\nБаланс: /balance",
-        "en": "🏆 <b>You won {amount} USDC!</b>\n🎲 #{id} — \"{question}\"\nWinner: <b>{winner}</b>\nBalance: /balance",
-        "zh": "🏆 <b>你赢了 {amount} USDC！</b>\n🎲 #{id} ——「{question}」\n获胜者：<b>{winner}</b>\n余额：/balance",
+        "ru": "★ <b>Ты выиграл {amount} USDC!</b>\n#{id} — «{question}»\nПобедил: <b>{winner}</b>\nБаланс: /balance",
+        "en": "★ <b>You won {amount} USDC!</b>\n#{id} — \"{question}\"\nWinner: <b>{winner}</b>\nBalance: /balance",
+        "zh": "★ <b>你赢了 {amount} USDC！</b>\n#{id} ——「{question}」\n获胜者：<b>{winner}</b>\n余额：/balance",
     },
     "bet_notify_lose": {
-        "ru": "🎲 #{id} — «{question}» закрыта.\nПобедил: <b>{winner}</b>\nТвои ставки на «{labels}» не сыграли. /bets",
-        "en": "🎲 #{id} — \"{question}\" resolved.\nWinner: <b>{winner}</b>\nYour bets on \"{labels}\" didn't win. /bets",
-        "zh": "🎲 #{id} ——「{question}」已结算。\n获胜者：<b>{winner}</b>\n你对「{labels}」的投注未中奖。/bets",
+        "ru": "#{id} — «{question}» закрыта.\nПобедил: <b>{winner}</b>\nТвои ставки на «{labels}» не сыграли. /bets",
+        "en": "#{id} — \"{question}\" resolved.\nWinner: <b>{winner}</b>\nYour bets on \"{labels}\" didn't win. /bets",
+        "zh": "#{id} ——「{question}」已结算。\n获胜者：<b>{winner}</b>\n你对「{labels}」的投注未中奖。/bets",
     },
     "bet_notify_cancel": {
-        "ru": "↩️ Ставка #{id} — «{question}» отменена.\nДеньги возвращены: /history",
-        "en": "↩️ Bet #{id} — \"{question}\" cancelled.\nFunds returned: /history",
-        "zh": "↩️ 投注 #{id} ——「{question}」已取消。\n资金已退还：/history",
+        "ru": "← Ставка #{id} — «{question}» отменена.\nДеньги возвращены: /history",
+        "en": "← Bet #{id} — \"{question}\" cancelled.\nFunds returned: /history",
+        "zh": "← 投注 #{id} ——「{question}」已取消。\n资金已退还：/history",
     },
     "cancel_format": {
         "ru": "Формат: /cancel &lt;id&gt;",
@@ -1226,9 +1227,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "金额必须大于零。",
     },
     "no_balance": {
-        "ru": "❌ Недостаточно баланса. Пополни: /deposit",
-        "en": "❌ Insufficient balance. Top up: /deposit",
-        "zh": "❌ 余额不足。充值：/deposit",
+        "ru": "× Недостаточно баланса. Пополни: /deposit",
+        "en": "× Insufficient balance. Top up: /deposit",
+        "zh": "× 余额不足。充值：/deposit",
     },
     "bad_amount": {
         "ru": "Неверная сумма",
@@ -1242,9 +1243,9 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     # ----- button labels (extra) -----
     "btn_mk_create": {
-        "ru": "➕ Создать рынок",
-        "en": "➕ Create market",
-        "zh": "➕ 创建市场",
+        "ru": "+ Создать рынок",
+        "en": "+ Create market",
+        "zh": "+ 创建市场",
     },
     "btn_close_market": {
         "ru": "Закрыть рынок",
@@ -1252,14 +1253,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "关闭市场",
     },
     "btn_all_markets": {
-        "ru": "🎲 Все рынки",
-        "en": "🎲 All markets",
-        "zh": "🎲 全部市场",
+        "ru": "Все рынки",
+        "en": "All markets",
+        "zh": "全部市场",
     },
     "btn_market": {
-        "ru": "🎯 Рынок",
-        "en": "🎯 Market",
-        "zh": "🎯 市场",
+        "ru": "Рынок",
+        "en": "Market",
+        "zh": "市场",
     },
     "market_not_found": {
         "ru": "Рынок не найден",
@@ -1278,9 +1279,9 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     # ----- ai handler -----
     "ai_question_empty": {
-        "ru": "🧠 Спроси меня о чём угодно.\nФормат: <code>/ask вопрос</code>\nМожно ответом на сообщение — возьму контекст.",
-        "en": "🧠 Ask me anything.\nFormat: <code>/ask question</code>\nReply to a message for context.",
-        "zh": "🧠 随便问。\n格式：<code>/ask 问题</code>\n回复消息可提供上下文。",
+        "ru": "Спроси меня о чём угодно.\nФормат: <code>/ask вопрос</code>\nМожно ответом на сообщение — возьму контекст.",
+        "en": "Ask me anything.\nFormat: <code>/ask question</code>\nReply to a message for context.",
+        "zh": "随便问。\n格式：<code>/ask 问题</code>\n回复消息可提供上下文。",
     },
     "ai_question_long": {
         "ru": "Слишком длинный вопрос (макс {n} символов).",
@@ -1288,31 +1289,31 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "问题太长（最多 {n} 个字符）。",
     },
     "ai_empty_answer": {
-        "ru": "🤖 Пустой ответ от ИИ. Попробуй переформулировать.",
-        "en": "🤖 Empty response from AI. Try rephrasing.",
-        "zh": "🤖 AI 返回空答案。请换个说法。",
+        "ru": "Пустой ответ от ИИ. Попробуй переформулировать.",
+        "en": "Empty response from AI. Try rephrasing.",
+        "zh": "AI 返回空答案。请换个说法。",
     },
     # ----- /ask without a model (bot/ai_data.py): every string here is a label
     # over numbers that come from the ledger, never a number itself -----
     "ai_data_markets_head": {
-        "ru": "📈 Открытые рынки ({n}):",
-        "en": "📈 Open markets ({n}):",
-        "zh": "📈 当前市场（{n} 个）：",
+        "ru": "↗ Открытые рынки ({n}):",
+        "en": "↗ Open markets ({n}):",
+        "zh": "↗ 当前市场（{n} 个）：",
     },
     "ai_data_bets_head": {
-        "ru": "🎯 Открытые ставки ({n}):",
-        "en": "🎯 Open pool bets ({n}):",
-        "zh": "🎯 当前奖池投注（{n} 个）：",
+        "ru": "Открытые ставки ({n}):",
+        "en": "Open pool bets ({n}):",
+        "zh": "当前奖池投注（{n} 个）：",
     },
     "ai_data_market_meta": {
-        "ru": "   💧 {liquidity} USDC · 👥 {traders}",
-        "en": "   💧 {liquidity} USDC · 👥 {traders}",
-        "zh": "   💧 {liquidity} USDC · 👥 {traders}",
+        "ru": " {liquidity} USDC · {traders}",
+        "en": " {liquidity} USDC · {traders}",
+        "zh": " {liquidity} USDC · {traders}",
     },
     "ai_data_bet_meta": {
-        "ru": "   💰 Пот {amount} USDC",
-        "en": "   💰 Pot {amount} USDC",
-        "zh": "   💰 奖池 {amount} USDC",
+        "ru": " Пот {amount} USDC",
+        "en": " Pot {amount} USDC",
+        "zh": " 奖池 {amount} USDC",
     },
     "ai_data_market_hint": {
         "ru": "Полная карточка: /market <id>. Торгует: /trade <id> <вариант> <сумма>.",
@@ -1320,9 +1321,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "完整卡片：/market <id>。交易：/trade <id> <选项> <金额>。",
     },
     "ai_data_no_bets": {
-        "ru": "🎯 Открытых ставок пока нет. Создай первую: /bet create <вопрос> | <в1> | <в2>",
-        "en": "🎯 No open pool bets yet. Create one: /bet create <question> | <o1> | <o2>",
-        "zh": "🎯 暂无奖池投注。创建第一个：/bet create <问题> | <选项1> | <选项2>",
+        "ru": "Открытых ставок пока нет. Создай первую: /bet create <вопрос> | <в1> | <в2>",
+        "en": "No open pool bets yet. Create one: /bet create <question> | <o1> | <o2>",
+        "zh": "暂无奖池投注。创建第一个：/bet create <问题> | <选项1> | <选项2>",
     },
     "ai_data_not_found": {
         "ru": "Ничего не нашёл по этому id — открытые списки: /markets и /bets.",
@@ -1345,76 +1346,76 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "你可能需要这条命令：",
     },
     "ai_data_footer": {
-        "ru": "🤖 Ответ по данным бота, без модели.",
-        "en": "🤖 Answered from the bot's own data, no model involved.",
-        "zh": "🤖 根据机器人自身数据回答，未调用模型。",
+        "ru": "Ответ по данным бота, без модели.",
+        "en": "Answered from the bot's own data, no model involved.",
+        "zh": "根据机器人自身数据回答，未调用模型。",
     },
     # ----- menu extra -----
     "paywall_empty": {
-        "ru": "🔐 Платных постов пока нет. Создай первый: /paywall create 5 Заголовок",
-        "en": "🔐 No paid posts yet. Create the first: /paywall create 5 Title",
-        "zh": "🔐 暂无付费内容。创建第一个：/paywall create 5 标题",
+        "ru": "Платных постов пока нет. Создай первый: /paywall create 5 Заголовок",
+        "en": "No paid posts yet. Create the first: /paywall create 5 Title",
+        "zh": "暂无付费内容。创建第一个：/paywall create 5 标题",
     },
     "paywall_list_header": {
-        "ru": "🔐 <b>Платные посты</b>",
-        "en": "🔐 <b>Paid posts</b>",
-        "zh": "🔐 <b>付费内容</b>",
+        "ru": "<b>Платные посты</b>",
+        "en": "<b>Paid posts</b>",
+        "zh": "<b>付费内容</b>",
     },
     "paywall_buy_ok": {
-        "ru": "✅ Куплено за {amount} USDC.\n\n{content}",
-        "en": "✅ Purchased for {amount} USDC.\n\n{content}",
-        "zh": "✅ 已购买，花费 {amount} USDC。\n\n{content}",
+        "ru": "✓ Куплено за {amount} USDC.\n\n{content}",
+        "en": "✓ Purchased for {amount} USDC.\n\n{content}",
+        "zh": "✓ 已购买，花费 {amount} USDC。\n\n{content}",
     },
     "paywall_buy_dup": {
-        "ru": "🔓 Уже куплено. Контент:\n\n{content}",
-        "en": "🔓 Already purchased. Content:\n\n{content}",
-        "zh": "🔓 已购买。内容：\n\n{content}",
+        "ru": "Уже куплено. Контент:\n\n{content}",
+        "en": "Already purchased. Content:\n\n{content}",
+        "zh": "已购买。内容：\n\n{content}",
     },
     "paywall_buy_self": {
-        "ru": "❌ Это твой пост — покупать его не нужно.",
-        "en": "❌ This is your own post — no need to buy it.",
-        "zh": "❌ 这是你自己的帖子——无需购买。",
+        "ru": "× Это твой пост — покупать его не нужно.",
+        "en": "× This is your own post — no need to buy it.",
+        "zh": "× 这是你自己的帖子——无需购买。",
     },
     "paywall_buy_insufficient": {
-        "ru": "❌ Недостаточно средств: нужно {amount} USDC. Пополни: /deposit",
-        "en": "❌ Insufficient funds: need {amount} USDC. Top up: /deposit",
-        "zh": "❌ 余额不足：需要 {amount} USDC。充值：/deposit",
+        "ru": "× Недостаточно средств: нужно {amount} USDC. Пополни: /deposit",
+        "en": "× Insufficient funds: need {amount} USDC. Top up: /deposit",
+        "zh": "× 余额不足：需要 {amount} USDC。充值：/deposit",
     },
     "donate_landing": {
-        "ru": "💛 Поддержать <b>@{user}</b>\n\nОтправь USDC (<b>сеть Base</b>) на адрес:\n<code>{addr}</code>\n\nЗачислится автоматически после /link. Чаевые: /tip 5 @{user}",
-        "en": "💛 Support <b>@{user}</b>\n\nSend USDC (<b>Base network</b>) to:\n<code>{addr}</code>\n\nCredits automatically after /link. Tip: /tip 5 @{user}",
-        "zh": "💛 支持 <b>@{user}</b>\n\n将 USDC（<b>Base 网络</b>）发送到：\n<code>{addr}</code>\n\n/link 后自动到账。打赏：/tip 5 @{user}",
+        "ru": "Поддержать <b>@{user}</b>\n\nОтправь USDC (<b>сеть Base</b>) на адрес:\n<code>{addr}</code>\n\nЗачислится автоматически после /link. Чаевые: /tip 5 @{user}",
+        "en": "Support <b>@{user}</b>\n\nSend USDC (<b>Base network</b>) to:\n<code>{addr}</code>\n\nCredits automatically after /link. Tip: /tip 5 @{user}",
+        "zh": "支持 <b>@{user}</b>\n\n将 USDC（<b>Base 网络</b>）发送到：\n<code>{addr}</code>\n\n/link 后自动到账。打赏：/tip 5 @{user}",
     },
     "deep_link_market": {
-        "ru": "🎯 Ты пришёл по ссылке на рынок!",
-        "en": "🎯 You followed a market link!",
-        "zh": "🎯 你通过市场链接进入了！",
+        "ru": "Ты пришёл по ссылке на рынок!",
+        "en": "You followed a market link!",
+        "zh": "你通过市场链接进入了！",
     },
     "deep_link_market_not_found": {
-        "ru": "🎲 Рынок не найден или ещё не открыт.\nОткрытые: /bets",
-        "en": "🎲 Market not found or not yet open.\nOpen: /bets",
-        "zh": "🎲 市场未找到或尚未开放。\n开放市场：/bets",
+        "ru": "Рынок не найден или ещё не открыт.\nОткрытые: /bets",
+        "en": "Market not found or not yet open.\nOpen: /bets",
+        "zh": "市场未找到或尚未开放。\n开放市场：/bets",
     },
     "deep_link_paywall": {
-        "ru": "🔐 Ты пришёл по ссылке на платный пост!",
-        "en": "🔐 You followed a paid post link!",
-        "zh": "🔐 你通过付费内容链接进入了！",
+        "ru": "Ты пришёл по ссылке на платный пост!",
+        "en": "You followed a paid post link!",
+        "zh": "你通过付费内容链接进入了！",
     },
     "deep_link_paywall_not_found": {
-        "ru": "🔐 Пост не найден. Все посты: /paywall list",
-        "en": "🔐 Post not found. All posts: /paywall list",
-        "zh": "🔐 内容未找到。全部内容：/paywall list",
+        "ru": "Пост не найден. Все посты: /paywall list",
+        "en": "Post not found. All posts: /paywall list",
+        "zh": "内容未找到。全部内容：/paywall list",
     },
     # The whole /paywall screen used to be one Russian constant, so an English
     # or Chinese user who typed /paywall got a wall of Cyrillic back.
     "paywall_help": {
-        "ru": ("🔐 <b>Платный контент</b>\n"
+        "ru": ("<b>Платный контент</b>\n"
                "• /paywall create 5 Мой отчёт — создать пост за 5 USDC\n"
                "  (после этого пришли контент одним сообщением)\n"
                "• /paywall list — все платные посты\n"
                "• /paywall buy &lt;id&gt; — купить и открыть контент\n"
                "• /paywall cancel — отменить создание\n\n"
-               "📡 <b>Платные каналы</b>\n"
+               "<b>Платные каналы</b>\n"
                "• /paywall channel 5 — в канале: доступ за 5 USDC / 30 дней\n"
                "• /paywall channel off — выключить продажу доступа\n"
                "• /paywall subscribe @канал — купить/продлить доступ\n"
@@ -1422,13 +1423,13 @@ STRINGS: dict[str, dict[str, str]] = {
                "Продавец получает USDC на баланс сразу после покупки.\n"
                "Покупка идёт с баланса (/deposit). AI-агенты платят через API:\n"
                "POST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt; (x402-протокол)."),
-        "en": ("🔐 <b>Paid content</b>\n"
+        "en": ("<b>Paid content</b>\n"
                "• /paywall create 5 My report — publish a post for 5 USDC\n"
                "  (then send the content as one message)\n"
                "• /paywall list — all paid posts\n"
                "• /paywall buy &lt;id&gt; — buy and unlock the content\n"
                "• /paywall cancel — abandon the creation\n\n"
-               "📡 <b>Paid channels</b>\n"
+               "<b>Paid channels</b>\n"
                "• /paywall channel 5 — inside a channel: access for 5 USDC / 30 days\n"
                "• /paywall channel off — stop selling access\n"
                "• /paywall subscribe @channel — buy or renew access\n"
@@ -1436,13 +1437,13 @@ STRINGS: dict[str, dict[str, str]] = {
                "The seller receives the USDC on balance as soon as the post is bought.\n"
                "Purchases are taken from your balance (/deposit). AI agents pay via API:\n"
                "POST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt; (x402 protocol)."),
-        "zh": ("🔐 <b>付费内容</b>\n"
+        "zh": ("<b>付费内容</b>\n"
                "• /paywall create 5 我的报告 —— 以 5 USDC 发布帖子\n"
                "  （随后用一条消息发送正文）\n"
                "• /paywall list —— 全部付费帖子\n"
                "• /paywall buy &lt;id&gt; —— 购买并解锁内容\n"
                "• /paywall cancel —— 取消创建\n\n"
-               "📡 <b>付费频道</b>\n"
+               "<b>付费频道</b>\n"
                "• /paywall channel 5 —— 在频道内：5 USDC / 30 天访问\n"
                "• /paywall channel off —— 关闭访问出售\n"
                "• /paywall subscribe @频道 —— 购买或续期访问\n"
@@ -1452,14 +1453,14 @@ STRINGS: dict[str, dict[str, str]] = {
                "POST /api/x402/paywall?item=&lt;id&gt;&amount=&lt;usdc&gt;（x402 协议）。"),
     },
     "paywall_buy_btn": {
-        "ru": "🔓 Купить за {price} USDC",
-        "en": "🔓 Buy for {price} USDC",
-        "zh": "🔓 以 {price} USDC 购买",
+        "ru": "Купить за {price} USDC",
+        "en": "Buy for {price} USDC",
+        "zh": "以 {price} USDC 购买",
     },
     "paywall_all_btn": {
-        "ru": "🔐 Все посты",
-        "en": "🔐 All posts",
-        "zh": "🔐 全部内容",
+        "ru": "Все посты",
+        "en": "All posts",
+        "zh": "全部内容",
     },
     "paywall_card": {
         "ru": "<b>{title}</b>\nЦена: <b>{price} USDC</b>",
@@ -1467,9 +1468,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "<b>{title}</b>\n价格：<b>{price} USDC</b>",
     },
     "paywall_sub_expired": {
-        "ru": "🔑 Подписка на канал истекла, доступ закрыт.\nПродлить: /paywall channels",
-        "en": "🔑 Your channel subscription expired, access is closed.\nRenew: /paywall channels",
-        "zh": "🔑 频道订阅已到期，访问已关闭。\n续期：/paywall channels",
+        "ru": "Подписка на канал истекла, доступ закрыт.\nПродлить: /paywall channels",
+        "en": "Your channel subscription expired, access is closed.\nRenew: /paywall channels",
+        "zh": "频道订阅已到期，访问已关闭。\n续期：/paywall channels",
     },
     "broadcast_format": {
         "ru": "Формат: /broadcast <текст>",
@@ -1477,37 +1478,37 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/broadcast <文本>",
     },
     "broadcast_sent": {
-        "ru": "📣 Разослано: {n} пользователям.",
-        "en": "📣 Sent to {n} users.",
-        "zh": "📣 已发送给 {n} 位用户。",
+        "ru": "Разослано: {n} пользователям.",
+        "en": "Sent to {n} users.",
+        "zh": "已发送给 {n} 位用户。",
     },
     "broadcast_admin_only": {
-        "ru": "❌ Только для владельца бота.",
-        "en": "❌ Bot owner only.",
-        "zh": "❌ 仅限机器人所有者。",
+        "ru": "× Только для владельца бота.",
+        "en": "× Bot owner only.",
+        "zh": "× 仅限机器人所有者。",
     },
     # ----- deposit notification -----
     "deposit_notified": {
-        "ru": "✅ Депозит зачислен: <b>{amount} USDC</b>\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>\nБаланс: /balance",
-        "en": "✅ Deposit credited: <b>{amount} USDC</b>\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>\nBalance: /balance",
-        "zh": "✅ 充值已到账：<b>{amount} USDC</b>\nTx：<a href=\"{tx_url}\"><code>{tx}</code></a>\n余额：/balance",
+        "ru": "✓ Депозит зачислен: <b>{amount} USDC</b>\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>\nБаланс: /balance",
+        "en": "✓ Deposit credited: <b>{amount} USDC</b>\nTx: <a href=\"{tx_url}\"><code>{tx}</code></a>\nBalance: /balance",
+        "zh": "✓ 充值已到账：<b>{amount} USDC</b>\nTx：<a href=\"{tx_url}\"><code>{tx}</code></a>\n余额：/balance",
     },
     # ----- market deadline notification -----
     "deadline_notify": {
-        "ru": "⏰ Рынок #{id} — «{question}» достиг дедлайна.\nЗакрой: /resolve {id} <номер>.\nИначе после grace-периода любой вернёт деньги.",
-        "en": "⏰ Market #{id} — \"{question}\" hit the deadline.\nResolve: /resolve {id} <option>.\nOtherwise anyone can refund after grace period.",
-        "zh": "⏰ 市场 #{id} ——「{question}」已到截止时间。\n结算：/resolve {id} <选项>。\n否则宽限期后任何人都可以退款。",
+        "ru": "Рынок #{id} — «{question}» достиг дедлайна.\nЗакрой: /resolve {id} <номер>.\nИначе после grace-периода любой вернёт деньги.",
+        "en": "Market #{id} — \"{question}\" hit the deadline.\nResolve: /resolve {id} <option>.\nOtherwise anyone can refund after grace period.",
+        "zh": "市场 #{id} ——「{question}」已到截止时间。\n结算：/resolve {id} <选项>。\n否则宽限期后任何人都可以退款。",
     },
     "grace_warn": {
-        "ru": "⚠️ Рынок #{id} — «{question}»: через {hours}ч истекает grace-период.\nЛюбой сможет вернуть деньги: /cancel {id}",
-        "en": "⚠️ Market #{id} — \"{question}\": grace period ends in {hours}h.\nAnyone can then refund: /cancel {id}",
-        "zh": "⚠️ 市场 #{id} ——「{question}」：宽限期将在 {hours} 小时后结束。\n届时任何人都可以退款：/cancel {id}",
+        "ru": "! Рынок #{id} — «{question}»: через {hours}ч истекает grace-период.\nЛюбой сможет вернуть деньги: /cancel {id}",
+        "en": "! Market #{id} — \"{question}\": grace period ends in {hours}h.\nAnyone can then refund: /cancel {id}",
+        "zh": "! 市场 #{id} ——「{question}」：宽限期将在 {hours} 小时后结束。\n届时任何人都可以退款：/cancel {id}",
     },
     # ----- throttle -----
     "throttle": {
-        "ru": "⏳ Слишком часто. Подожди {sec} сек.",
-        "en": "⏳ Too fast. Wait {sec}s.",
-        "zh": "⏳ 操作太频繁。请等待 {sec} 秒。",
+        "ru": "… Слишком часто. Подожди {sec} сек.",
+        "en": "… Too fast. Wait {sec}s.",
+        "zh": "… 操作太频繁。请等待 {sec} 秒。",
     },
     # ----- market creation validation -----
     "market_min_options": {
@@ -1601,19 +1602,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "最高资金：<b>{n} USDC</b>。",
     },
     "market_deadline_fmt": {
-        "ru": "\n⏰ Дедлайн: {time}",
-        "en": "\n⏰ Deadline: {time}",
-        "zh": "\n⏰ 截止时间：{time}",
+        "ru": "\nДедлайн: {time}",
+        "en": "\nDeadline: {time}",
+        "zh": "\n截止时间：{time}",
     },
     "market_created_msg": {
-        "ru": "📈 Рынок #{id} создан!\n\n<b>{question}</b>\n{options}\n{liquidity}\n{deadline}\n\n{hint}",
-        "en": "📈 Market #{id} created!\n\n<b>{question}</b>\n{options}\n{liquidity}\n{deadline}\n\n{hint}",
-        "zh": "📈 市场 #{id} 已创建！\n\n<b>{question}</b>\n{options}\n{liquidity}\n{deadline}\n\n{hint}",
+        "ru": "↗ Рынок #{id} создан!\n\n<b>{question}</b>\n{options}\n{liquidity}\n{deadline}\n\n{hint}",
+        "en": "↗ Market #{id} created!\n\n<b>{question}</b>\n{options}\n{liquidity}\n{deadline}\n\n{hint}",
+        "zh": "↗ 市场 #{id} 已创建！\n\n<b>{question}</b>\n{options}\n{liquidity}\n{deadline}\n\n{hint}",
     },
     "market_liquidity": {
-        "ru": "🏦 Ликвидность: {amount} USDC (твоё)",
-        "en": "🏦 Liquidity: {amount} USDC (yours)",
-        "zh": "🏦 流动性：{amount} USDC（你的）",
+        "ru": "Ликвидность: {amount} USDC (твоё)",
+        "en": "Liquidity: {amount} USDC (yours)",
+        "zh": "流动性：{amount} USDC（你的）",
     },
     "market_trade_hint": {
         "ru": "Торговля: /trade {id} <номер> <сумма> или кнопки: /markets\nЦены движутся с спросом — как на Polymarket.",
@@ -1621,19 +1622,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "交易：/trade {id} <选项> <金额> 或使用按钮：/markets\n价格随供需波动——类似 Polymarket。",
     },
     "market_card_resolved": {
-        "ru": "✅ <b>Решён:</b> {label}",
-        "en": "✅ <b>Resolved:</b> {label}",
-        "zh": "✅ <b>已结算：</b> {label}",
+        "ru": "✓ <b>Решён:</b> {label}",
+        "en": "✓ <b>Resolved:</b> {label}",
+        "zh": "✓ <b>已结算：</b> {label}",
     },
     "market_card_cancelled": {
-        "ru": "❌ Отменён — деньги возвращены.",
-        "en": "❌ Cancelled — funds returned.",
-        "zh": "❌ 已取消——资金已退还。",
+        "ru": "× Отменён — деньги возвращены.",
+        "en": "× Cancelled — funds returned.",
+        "zh": "× 已取消——资金已退还。",
     },
     "market_card_deadline_passed": {
-        "ru": "⏰ Дедлайн прошёл — ждём решения создателя.",
-        "en": "⏰ Deadline passed — awaiting creator's resolution.",
-        "zh": "⏰ 截止时间已过——等待创建者结算。",
+        "ru": "Дедлайн прошёл — ждём решения создателя.",
+        "en": "Deadline passed — awaiting creator's resolution.",
+        "zh": "截止时间已过——等待创建者结算。",
     },
     "market_your_shares": {
         "ru": "\n     └ твои доли: {shares} (≈{value} USDC)",
@@ -1641,14 +1642,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "\n     └ 你的份额：{shares}（≈{value} USDC）",
     },
     "market_liquidity_pool": {
-        "ru": "🏦 Пул ликвидности: {amount} USDC",
-        "en": "🏦 Liquidity pool: {amount} USDC",
-        "zh": "🏦 流动性资金池：{amount} USDC",
+        "ru": "Пул ликвидности: {amount} USDC",
+        "en": "Liquidity pool: {amount} USDC",
+        "zh": "流动性资金池：{amount} USDC",
     },
     "market_resolution_note": {
-        "ru": "💰 Победные доли платят 1 USDC за долю при резолюции. Продать можно в любой момент.",
-        "en": "💰 Winning shares pay 1 USDC each at resolution. Sell anytime.",
-        "zh": "💰 获胜份额在结算时每份支付 1 USDC。可随时卖出。",
+        "ru": "Победные доли платят 1 USDC за долю при резолюции. Продать можно в любой момент.",
+        "en": "Winning shares pay 1 USDC each at resolution. Sell anytime.",
+        "zh": "获胜份额在结算时每份支付 1 USDC。可随时卖出。",
     },
     "market_fav": {
         "ru": " — фаворит: <b>{leader}</b>",
@@ -1676,9 +1677,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "卖出失败",
     },
     "market_closed_header": {
-        "ru": "✅ <b>Рынок #{id} закрыт!</b>",
-        "en": "✅ <b>Market #{id} closed!</b>",
-        "zh": "✅ <b>市场 #{id} 已关闭！</b>",
+        "ru": "✓ <b>Рынок #{id} закрыт!</b>",
+        "en": "✓ <b>Market #{id} closed!</b>",
+        "zh": "✓ <b>市场 #{id} 已关闭！</b>",
     },
     "market_sell_hint": {
         "ru": "Продать: /sell {mid} {opt}",
@@ -1691,9 +1692,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "百分比：1–100（例如 /sell 3 1 50%）",
     },
     "market_positions_header": {
-        "ru": "📌 <b>Твои позиции на рынках</b>\n",
-        "en": "📌 <b>Your market positions</b>\n",
-        "zh": "📌 <b>你的市场持仓</b>\n",
+        "ru": "<b>Твои позиции на рынках</b>\n",
+        "en": "<b>Your market positions</b>\n",
+        "zh": "<b>你的市场持仓</b>\n",
     },
     "market_position_line": {
         "ru": "   • {option} — {shares} долей @ {price}\n   • стоимость ≈ <b>{value} USDC</b> (PnL {pnl})",
@@ -1706,19 +1707,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "\nΣ 估值：≈<b>{value} USDC</b>",
     },
     "btn_buy": {
-        "ru": "🛒 Купить",
-        "en": "🛒 Buy",
-        "zh": "🛒 购买",
+        "ru": "Купить",
+        "en": "Buy",
+        "zh": "购买",
     },
     "btn_sell": {
-        "ru": "📉 Продать",
-        "en": "📉 Sell",
-        "zh": "📉 卖出",
+        "ru": "↘ Продать",
+        "en": "↘ Sell",
+        "zh": "↘ 卖出",
     },
     "btn_cancel_action": {
-        "ru": "✖️ Отменить",
-        "en": "✖️ Cancel",
-        "zh": "✖️ 取消",
+        "ru": "× Отменить",
+        "en": "× Cancel",
+        "zh": "× 取消",
     },
     "btn_buy_amount": {
         "ru": "Купить {amount} USDC",
@@ -1731,19 +1732,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "卖出 {pct}%",
     },
     "btn_winner": {
-        "ru": "🏆 {label}",
-        "en": "🏆 {label}",
-        "zh": "🏆 {label}",
+        "ru": "★ {label}",
+        "en": "★ {label}",
+        "zh": "★ {label}",
     },
     "btn_back_short": {
-        "ru": "◀️ Назад",
-        "en": "◀️ Back",
-        "zh": "◀️ 返回",
+        "ru": "← Назад",
+        "en": "← Back",
+        "zh": "← 返回",
     },
     "btn_all_markets_v2": {
-        "ru": "📈 Все рынки",
-        "en": "📈 All markets",
-        "zh": "📈 全部市场",
+        "ru": "↗ Все рынки",
+        "en": "↗ All markets",
+        "zh": "↗ 全部市场",
     },
     "paywall_price_range": {
         "ru": "Цена должна быть 0 < цена ≤ {max} USDC",
@@ -1751,19 +1752,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "价格必须为 0 < 价格 ≤ {max} USDC",
     },
     "paywall_title_too_long": {
-        "ru": "⚠️ Заголовок слишком длинный: максимум {n} символов.",
-        "en": "⚠️ Title too long: max {n} characters.",
-        "zh": "⚠️ 标题太长：最多 {n} 个字符。",
+        "ru": "! Заголовок слишком длинный: максимум {n} символов.",
+        "en": "! Title too long: max {n} characters.",
+        "zh": "! 标题太长：最多 {n} 个字符。",
     },
     "paywall_draft_ok": {
-        "ru": "💰 {amount} USDC · «{title}»\n\nТеперь пришли <b>контент</b> одним сообщением (текст).\n/paywall cancel — отмена.",
-        "en": "💰 {amount} USDC · «{title}»\n\nNow send the <b>content</b> as one message (text).\n/paywall cancel — cancel.",
-        "zh": "💰 {amount} USDC ·「{title}」\n\n现在请发送<b>内容</b>（文字）。\n/paywall cancel — 取消。",
+        "ru": "{amount} USDC · «{title}»\n\nТеперь пришли <b>контент</b> одним сообщением (текст).\n/paywall cancel — отмена.",
+        "en": "{amount} USDC · «{title}»\n\nNow send the <b>content</b> as one message (text).\n/paywall cancel — cancel.",
+        "zh": "{amount} USDC ·「{title}」\n\n现在请发送<b>内容</b>（文字）。\n/paywall cancel — 取消。",
     },
     "paywall_cancel_created": {
-        "ru": "❌ Создание отменено.",
-        "en": "❌ Creation cancelled.",
-        "zh": "❌ 创建已取消。",
+        "ru": "× Создание отменено.",
+        "en": "× Creation cancelled.",
+        "zh": "× 创建已取消。",
     },
     "paywall_no_active": {
         "ru": "Нет активного создания.",
@@ -1781,49 +1782,49 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "…仅显示最新 {n} 条",
     },
     "paywall_bought_for": {
-        "ru": "✅ Куплено за {amount} USDC.\n\n{content}",
-        "en": "✅ Purchased for {amount} USDC.\n\n{content}",
-        "zh": "✅ 已购买，花费 {amount} USDC。\n\n{content}",
+        "ru": "✓ Куплено за {amount} USDC.\n\n{content}",
+        "en": "✓ Purchased for {amount} USDC.\n\n{content}",
+        "zh": "✓ 已购买，花费 {amount} USDC。\n\n{content}",
     },
     "paywall_already_bought": {
-        "ru": "🔓 Уже куплено. Контент:\n\n{content}",
-        "en": "🔓 Already purchased. Content:\n\n{content}",
-        "zh": "🔓 已购买。内容：\n\n{content}",
+        "ru": "Уже куплено. Контент:\n\n{content}",
+        "en": "Already purchased. Content:\n\n{content}",
+        "zh": "已购买。内容：\n\n{content}",
     },
     "paywall_own_post": {
-        "ru": "❌ Это твой пост — покупать его не нужно.",
-        "en": "❌ This is your own post — no need to buy it.",
-        "zh": "❌ 这是你自己的帖子——无需购买。",
+        "ru": "× Это твой пост — покупать его не нужно.",
+        "en": "× This is your own post — no need to buy it.",
+        "zh": "× 这是你自己的帖子——无需购买。",
     },
     "paywall_insufficient": {
-        "ru": "❌ Недостаточно средств: нужно {amount} USDC.\nПополни: /deposit",
-        "en": "❌ Insufficient funds: need {amount} USDC.\nTop up: /deposit",
-        "zh": "❌ 余额不足：需要 {amount} USDC。\n充值：/deposit",
+        "ru": "× Недостаточно средств: нужно {amount} USDC.\nПополни: /deposit",
+        "en": "× Insufficient funds: need {amount} USDC.\nTop up: /deposit",
+        "zh": "× 余额不足：需要 {amount} USDC。\n充值：/deposit",
     },
     "paywall_need_admin_channel": {
-        "ru": "⚠️ Выполняй команду <b>в самом канале</b>, где бот — админ.",
-        "en": "⚠️ Run the command <b>in the channel itself</b> where the bot is an admin.",
-        "zh": "⚠️ 请在<b>频道内</b>执行命令，机器人需为管理员。",
+        "ru": "! Выполняй команду <b>в самом канале</b>, где бот — админ.",
+        "en": "! Run the command <b>in the channel itself</b> where the bot is an admin.",
+        "zh": "! 请在<b>频道内</b>执行命令，机器人需为管理员。",
     },
     "paywall_bot_admin": {
-        "ru": "⚠️ Сначала сделай бота <b>админом канала</b>.",
-        "en": "⚠️ Make the bot a <b>channel admin</b> first.",
-        "zh": "⚠️ 请先将机器人设为<b>频道管理员</b>。",
+        "ru": "! Сначала сделай бота <b>админом канала</b>.",
+        "en": "! Make the bot a <b>channel admin</b> first.",
+        "zh": "! 请先将机器人设为<b>频道管理员</b>。",
     },
     "paywall_user_admin": {
-        "ru": "⚠️ Только админ канала может включить продажу доступа.",
-        "en": "⚠️ Only a channel admin can enable paid access.",
-        "zh": "⚠️ 只有频道管理员才能开启付费访问。",
+        "ru": "! Только админ канала может включить продажу доступа.",
+        "en": "! Only a channel admin can enable paid access.",
+        "zh": "! 只有频道管理员才能开启付费访问。",
     },
     "paywall_check_error": {
-        "ru": "⚠️ Не удалось проверить права. Попробуй ещё раз.",
-        "en": "⚠️ Could not check permissions. Try again.",
-        "zh": "⚠️ 权限检查失败。请重试。",
+        "ru": "! Не удалось проверить права. Попробуй ещё раз.",
+        "en": "! Could not check permissions. Try again.",
+        "zh": "! 权限检查失败。请重试。",
     },
     "paywall_channel_disabled": {
-        "ru": "📡 Продажа доступа к каналу <b>выключена</b>. Подписки продолжают действовать.",
-        "en": "📡 Paid access to the channel is <b>disabled</b>. Existing subscriptions remain active.",
-        "zh": "📡 频道付费访问已<b>关闭</b>。现有订阅继续有效。",
+        "ru": "Продажа доступа к каналу <b>выключена</b>. Подписки продолжают действовать.",
+        "en": "Paid access to the channel is <b>disabled</b>. Existing subscriptions remain active.",
+        "zh": "频道付费访问已<b>关闭</b>。现有订阅继续有效。",
     },
     "paywall_channel_format": {
         "ru": "Формат: /paywall channel <цена USDC за 30 дней> или /paywall channel off",
@@ -1831,14 +1832,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/paywall channel <每 30 天 USDC 价格> 或 /paywall channel off",
     },
     "paywall_channel_limit": {
-        "ru": "⚠️ Лимит: не больше {n} платных каналов на юзера.",
-        "en": "⚠️ Limit: no more than {n} paid channels per user.",
-        "zh": "⚠️ 限制：每个用户最多 {n} 个付费频道。",
+        "ru": "! Лимит: не больше {n} платных каналов на юзера.",
+        "en": "! Limit: no more than {n} paid channels per user.",
+        "zh": "! 限制：每个用户最多 {n} 个付费频道。",
     },
     "paywall_channel_active": {
-        "ru": "📡 Канал продаётся: <b>{amount} USDC / 30 дней</b>.\nПодписчики: /paywall subscribe @{channel}",
-        "en": "📡 Channel priced at: <b>{amount} USDC / 30 days</b>.\nSubscribers: /paywall subscribe @{channel}",
-        "zh": "📡 频道定价：<b>{amount} USDC / 30 天</b>。\n订阅：/paywall subscribe @{channel}",
+        "ru": "Канал продаётся: <b>{amount} USDC / 30 дней</b>.\nПодписчики: /paywall subscribe @{channel}",
+        "en": "Channel priced at: <b>{amount} USDC / 30 days</b>.\nSubscribers: /paywall subscribe @{channel}",
+        "zh": "频道定价：<b>{amount} USDC / 30 天</b>。\n订阅：/paywall subscribe @{channel}",
     },
     "paywall_subscribe_format": {
         "ru": "Формат: /paywall subscribe @канал",
@@ -1846,64 +1847,64 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/paywall subscribe @频道",
     },
     "paywall_channel_not_found_msg": {
-        "ru": "❌ Канал не найден.",
-        "en": "❌ Channel not found.",
-        "zh": "❌ 频道未找到。",
+        "ru": "× Канал не найден.",
+        "en": "× Channel not found.",
+        "zh": "× 频道未找到。",
     },
     "paywall_not_selling": {
-        "ru": "❌ Этот канал не продаётся.",
-        "en": "❌ This channel is not for sale.",
-        "zh": "❌ 此频道未出售。",
+        "ru": "× Этот канал не продаётся.",
+        "en": "× This channel is not for sale.",
+        "zh": "× 此频道未出售。",
     },
     "paywall_you_are_admin": {
-        "ru": "⚠️ Ты админ канала — подписка не нужна.",
-        "en": "⚠️ You're a channel admin — no subscription needed.",
-        "zh": "⚠️ 你是频道管理员——无需订阅。",
+        "ru": "! Ты админ канала — подписка не нужна.",
+        "en": "! You're a channel admin — no subscription needed.",
+        "zh": "! 你是频道管理员——无需订阅。",
     },
     "paywall_self_channel": {
-        "ru": "❌ Это твой канал — подписка не нужна.",
-        "en": "❌ This is your channel — no subscription needed.",
-        "zh": "❌ 这是你自己的频道——无需订阅。",
+        "ru": "× Это твой канал — подписка не нужна.",
+        "en": "× This is your channel — no subscription needed.",
+        "zh": "× 这是你自己的频道——无需订阅。",
     },
     "paywall_subscribe_insufficient": {
-        "ru": "❌ Недостаточно средств: нужно {amount} USDC.\nПополни: /deposit",
-        "en": "❌ Insufficient funds: need {amount} USDC.\nTop up: /deposit",
-        "zh": "❌ 余额不足：需要 {amount} USDC。\n充值：/deposit",
+        "ru": "× Недостаточно средств: нужно {amount} USDC.\nПополни: /deposit",
+        "en": "× Insufficient funds: need {amount} USDC.\nTop up: /deposit",
+        "zh": "× 余额不足：需要 {amount} USDC。\n充值：/deposit",
     },
     "paywall_subscribe_fail": {
-        "ru": "❌ Не получилось оформить подписку.",
-        "en": "❌ Could not process subscription.",
-        "zh": "❌ 订阅处理失败。",
+        "ru": "× Не получилось оформить подписку.",
+        "en": "× Could not process subscription.",
+        "zh": "× 订阅处理失败。",
     },
     "paywall_access_renewed": {
-        "ru": "🔑 Доступ продлён до <b>{until}</b>. Остаёшься в канале.",
-        "en": "🔑 Access renewed until <b>{until}</b>. You stay in the channel.",
-        "zh": "🔑 访问已续期至 <b>{until}</b>。你将继续留在频道中。",
+        "ru": "Доступ продлён до <b>{until}</b>. Остаёшься в канале.",
+        "en": "Access renewed until <b>{until}</b>. You stay in the channel.",
+        "zh": "访问已续期至 <b>{until}</b>。你将继续留在频道中。",
     },
     "paywall_access_invite": {
-        "ru": "🔑 Доступ к каналу до <b>{until}</b>.\nЖми ссылку (действует 1 час): {link}",
-        "en": "🔑 Channel access until <b>{until}</b>.\nClick the link (valid 1 hour): {link}",
-        "zh": "🔑 频道访问权限至 <b>{until}</b>。\n点击链接（1 小时有效）：{link}",
+        "ru": "Доступ к каналу до <b>{until}</b>.\nЖми ссылку (действует 1 час): {link}",
+        "en": "Channel access until <b>{until}</b>.\nClick the link (valid 1 hour): {link}",
+        "zh": "频道访问权限至 <b>{until}</b>。\n点击链接（1 小时有效）：{link}",
     },
     "paywall_access_manual": {
-        "ru": "🔑 Оплачено. Доступ до <b>{until}</b>. Бот сам откроет доступ (проверь, что бот — админ канала).",
-        "en": "🔑 Paid. Access until <b>{until}</b>. The bot will grant access (make sure it's a channel admin).",
-        "zh": "🔑 已付款。访问权限至 <b>{until}</b>。机器人将自动授予访问权限（请确认机器人是频道管理员）。",
+        "ru": "Оплачено. Доступ до <b>{until}</b>. Бот сам откроет доступ (проверь, что бот — админ канала).",
+        "en": "Paid. Access until <b>{until}</b>. The bot will grant access (make sure it's a channel admin).",
+        "zh": "已付款。访问权限至 <b>{until}</b>。机器人将自动授予访问权限（请确认机器人是频道管理员）。",
     },
     "paywall_owner_notified": {
-        "ru": "💰 +{amount} USDC — подписка на канал «{title}».",
-        "en": "💰 +{amount} USDC — subscription to channel \"{title}\".",
-        "zh": "💰 +{amount} USDC — 频道「{title}」订阅。",
+        "ru": "+{amount} USDC — подписка на канал «{title}».",
+        "en": "+{amount} USDC — subscription to channel \"{title}\".",
+        "zh": "+{amount} USDC — 频道「{title}」订阅。",
     },
     "paywall_channels_empty": {
-        "ru": "📡 Платных каналов пока нет. Админ: /paywall channel 5 (в канале).",
-        "en": "📡 No paid channels yet. Admin: /paywall channel 5 (in the channel).",
-        "zh": "📡 暂无付费频道。管理员：/paywall channel 5（在频道内）。",
+        "ru": "Платных каналов пока нет. Админ: /paywall channel 5 (в канале).",
+        "en": "No paid channels yet. Admin: /paywall channel 5 (in the channel).",
+        "zh": "暂无付费频道。管理员：/paywall channel 5（在频道内）。",
     },
     "paywall_channels_header": {
-        "ru": "📡 <b>Платные каналы</b>\n\n{lines}\n\nКупить: /paywall subscribe @канал",
-        "en": "📡 <b>Paid channels</b>\n\n{lines}\n\nSubscribe: /paywall subscribe @channel",
-        "zh": "📡 <b>付费频道</b>\n\n{lines}\n\n订阅：/paywall subscribe @频道",
+        "ru": "<b>Платные каналы</b>\n\n{lines}\n\nКупить: /paywall subscribe @канал",
+        "en": "<b>Paid channels</b>\n\n{lines}\n\nSubscribe: /paywall subscribe @channel",
+        "zh": "<b>付费频道</b>\n\n{lines}\n\n订阅：/paywall subscribe @频道",
     },
     "paywall_channel_state": {
         "ru": " — <b>{amount} USDC/{period}д</b>",
@@ -1911,34 +1912,34 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": " — <b>{amount} USDC/{period} 天</b>",
     },
     "paywall_channel_until": {
-        "ru": " — 🔑 до {until}",
-        "en": " — 🔑 until {until}",
-        "zh": " — 🔑 至 {until}",
+        "ru": " — до {until}",
+        "en": " — until {until}",
+        "zh": " — 至 {until}",
     },
     "paywall_content_too_long": {
-        "ru": "⚠️ Контент слишком длинный: максимум {n} символов.\nПришли заново (укороти или разбей на части).",
-        "en": "⚠️ Content too long: max {n} characters.\nSend again (shorten or split).",
-        "zh": "⚠️ 内容太长：最多 {n} 个字符。\n请重新发送（缩短或分段）。",
+        "ru": "! Контент слишком длинный: максимум {n} символов.\nПришли заново (укороти или разбей на части).",
+        "en": "! Content too long: max {n} characters.\nSend again (shorten or split).",
+        "zh": "! 内容太长：最多 {n} 个字符。\n请重新发送（缩短或分段）。",
     },
     "paywall_post_limit": {
-        "ru": "⚠️ Лимит: не больше {n} платных постов на юзера.",
-        "en": "⚠️ Limit: no more than {n} paid posts per user.",
-        "zh": "⚠️ 限制：每个用户最多 {n} 个付费帖子。",
+        "ru": "! Лимит: не больше {n} платных постов на юзера.",
+        "en": "! Limit: no more than {n} paid posts per user.",
+        "zh": "! 限制：每个用户最多 {n} 个付费帖子。",
     },
     "paywall_post_created": {
-        "ru": "✅ Пост #{id} «{title}» создан за {amount} USDC.\nПосмотреть: /paywall list · купить: /paywall buy {id}",
-        "en": "✅ Post #{id} \"{title}\" created for {amount} USDC.\nView: /paywall list · buy: /paywall buy {id}",
-        "zh": "✅ 帖子 #{id}「{title}」已创建，价格 {amount} USDC。\n查看：/paywall list · 购买：/paywall buy {id}",
+        "ru": "✓ Пост #{id} «{title}» создан за {amount} USDC.\nПосмотреть: /paywall list · купить: /paywall buy {id}",
+        "en": "✓ Post #{id} \"{title}\" created for {amount} USDC.\nView: /paywall list · buy: /paywall buy {id}",
+        "zh": "✓ 帖子 #{id}「{title}」已创建，价格 {amount} USDC。\n查看：/paywall list · 购买：/paywall buy {id}",
     },
     "paywall_draft_timeout": {
-        "ru": "⏰ Время ожидания контента истекло — начни заново: /paywall create",
-        "en": "⏰ Content wait expired — start over: /paywall create",
-        "zh": "⏰ 内容等待超时——请重新开始：/paywall create",
+        "ru": "Время ожидания контента истекло — начни заново: /paywall create",
+        "en": "Content wait expired — start over: /paywall create",
+        "zh": "内容等待超时——请重新开始：/paywall create",
     },
     "paywall_draft_cancelled_cmd": {
-        "ru": "❌ Отменено (пришла команда). Создание: /paywall create",
-        "en": "❌ Cancelled (command received). Create: /paywall create",
-        "zh": "❌ 已取消（收到命令）。创建：/paywall create",
+        "ru": "× Отменено (пришла команда). Создание: /paywall create",
+        "en": "× Cancelled (command received). Create: /paywall create",
+        "zh": "× 已取消（收到命令）。创建：/paywall create",
     },
     "paywall_no_paid_channels": {
         "ru": "Платных каналов пока нет.",
@@ -1946,24 +1947,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "暂无付费频道。",
     },
     "paywall_reaction_balance": {
-        "ru": "❌ Реакция — это чаевые автору. Пополни баланс: /deposit",
-        "en": "❌ Reactions tip the author. Top up your balance: /deposit",
-        "zh": "❌ 反应是对作者的打赏。请充值余额：/deposit",
+        "ru": "× Реакция — это чаевые автору. Пополни баланс: /deposit",
+        "en": "× Reactions tip the author. Top up your balance: /deposit",
+        "zh": "× 反应是对作者的打赏。请充值余额：/deposit",
     },
     "paywall_reaction_sent": {
-        "ru": "⚡ Отправлено {amount} USDC автору сообщения.",
-        "en": "⚡ Sent {amount} USDC to the message author.",
-        "zh": "⚡ 已向消息作者发送 {amount} USDC。",
+        "ru": "Отправлено {amount} USDC автору сообщения.",
+        "en": "Sent {amount} USDC to the message author.",
+        "zh": "已向消息作者发送 {amount} USDC。",
     },
     "paywall_reaction_received": {
-        "ru": "⚡ +{amount} USDC — реакция от @{reactor}!\nБаланс: /balance",
-        "en": "⚡ +{amount} USDC — reaction from @{reactor}!\nBalance: /balance",
-        "zh": "⚡ +{amount} USDC — @{reactor} 的反应打赏！\n余额：/balance",
+        "ru": "+{amount} USDC — реакция от @{reactor}!\nБаланс: /balance",
+        "en": "+{amount} USDC — reaction from @{reactor}!\nBalance: /balance",
+        "zh": "+{amount} USDC — @{reactor} 的反应打赏！\n余额：/balance",
     },
     "paywall_post_not_found": {
-        "ru": "❌ Пост не найден.",
-        "en": "❌ Post not found.",
-        "zh": "❌ 帖子未找到。",
+        "ru": "× Пост не найден.",
+        "en": "× Post not found.",
+        "zh": "× 帖子未找到。",
     },
     "paywall_buy_id_hint": {
         "ru": "Купить: /paywall buy <id>",
@@ -1971,44 +1972,44 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "购买：/paywall buy <id>",
     },
     "app_open": {
-        "ru": "🚀 Открыть приложение",
-        "en": "🚀 Open app",
-        "zh": "🚀 打开应用",
+        "ru": "Открыть приложение",
+        "en": "Open app",
+        "zh": "打开应用",
     },
     "app_description": {
-        "ru": "📱 <b>Tippy Mini App</b>\n\nОткрой полноэкранный интерфейс прямо в Telegram:",
-        "en": "📱 <b>Tippy Mini App</b>\n\nOpen a full-screen interface right in Telegram:",
-        "zh": "📱 <b>Tippy Mini App</b>\n\n直接在 Telegram 中打开全屏界面：",
+        "ru": "<b>Tippy Mini App</b>\n\nОткрой полноэкранный интерфейс прямо в Telegram:",
+        "en": "<b>Tippy Mini App</b>\n\nOpen a full-screen interface right in Telegram:",
+        "zh": "<b>Tippy Mini App</b>\n\n直接在 Telegram 中打开全屏界面：",
     },
     "app_mini_description": {
-        "ru": "📱 <b>Tippy Mini App</b>\n\nОткрой полноэкранный интерфейс:",
-        "en": "📱 <b>Tippy Mini App</b>\n\nOpen a full-screen interface:",
-        "zh": "📱 <b>Tippy Mini App</b>\n\n打开全屏界面：",
+        "ru": "<b>Tippy Mini App</b>\n\nОткрой полноэкранный интерфейс:",
+        "en": "<b>Tippy Mini App</b>\n\nOpen a full-screen interface:",
+        "zh": "<b>Tippy Mini App</b>\n\n打开全屏界面：",
     },
     "btn_donate_page": {
-        "ru": "💛 Хочу такую же страницу",
-        "en": "💛 I want the same page",
-        "zh": "💛 我也想要这样的页面",
+        "ru": "Хочу такую же страницу",
+        "en": "I want the same page",
+        "zh": "我也想要这样的页面",
     },
     "donate_support": {
-        "ru": "💛 Поддержать <b>@{user}</b>\n\nОтправь USDC (<b>сеть Base</b>) на адрес:\n<code>{addr}</code>\n\nЗачислится на баланс отправителя автоматически после привязки кошелька /link. Передать чаевые @{user}: /tip 5 @{user}. Спасибо! 🫡",
-        "en": "💛 Support <b>@{user}</b>\n\nSend USDC (<b>Base network</b>) to:\n<code>{addr}</code>\n\nCredits automatically after wallet linking with /link. Tip @{user}: /tip 5 @{user}. Thanks! 🫡",
-        "zh": "💛 支持 <b>@{user}</b>\n\n将 USDC（<b>Base 网络</b>）发送到：\n<code>{addr}</code>\n\n绑定钱包（/link）后自动到账。打赏 @{user}：/tip 5 @{user}。谢谢！🫡",
+        "ru": "Поддержать <b>@{user}</b>\n\nОтправь USDC (<b>сеть Base</b>) на адрес:\n<code>{addr}</code>\n\nЗачислится на баланс отправителя автоматически после привязки кошелька /link. Передать чаевые @{user}: /tip 5 @{user}. Спасибо! ",
+        "en": "Support <b>@{user}</b>\n\nSend USDC (<b>Base network</b>) to:\n<code>{addr}</code>\n\nCredits automatically after wallet linking with /link. Tip @{user}: /tip 5 @{user}. Thanks! ",
+        "zh": "支持 <b>@{user}</b>\n\n将 USDC（<b>Base 网络</b>）发送到：\n<code>{addr}</code>\n\n绑定钱包（/link）后自动到账。打赏 @{user}：/tip 5 @{user}。谢谢！",
     },
     "betcreate_hint_v2": {
-        "ru": "🎲 <b>Создание рынка</b>\n\n/bet create <вопрос> | <вариант1> | <вариант2> [24h]\n\nДо 4 вариантов, дедлайн — например <i>24h</i> или <i>7d</i>, по умолчанию <i>{default}</i>. Создатель получает {pct}% от выигрыша победителя.",
-        "en": "🎲 <b>Create a market</b>\n\n/bet create <question> | <option1> | <option2> [24h]\n\nUp to 4 options, deadline (e.g. <i>24h</i> or <i>7d</i>, default <i>{default}</i>). Creator gets {pct}% of winner's winnings.",
-        "zh": "🎲 <b>创建市场</b>\n\n/bet create <问题> | <选项1> | <选项2> [24h]\n\n最多 4 个选项，截止时间（如 <i>24h</i> 或 <i>7d</i>），默认 <i>{default}</i>。创建者获得赢家 {pct}% 手续费。",
+        "ru": "<b>Создание рынка</b>\n\n/bet create <вопрос> | <вариант1> | <вариант2> [24h]\n\nДо 4 вариантов, дедлайн — например <i>24h</i> или <i>7d</i>, по умолчанию <i>{default}</i>. Создатель получает {pct}% от выигрыша победителя.",
+        "en": "<b>Create a market</b>\n\n/bet create <question> | <option1> | <option2> [24h]\n\nUp to 4 options, deadline (e.g. <i>24h</i> or <i>7d</i>, default <i>{default}</i>). Creator gets {pct}% of winner's winnings.",
+        "zh": "<b>创建市场</b>\n\n/bet create <问题> | <选项1> | <选项2> [24h]\n\n最多 4 个选项，截止时间（如 <i>24h</i> 或 <i>7d</i>），默认 <i>{default}</i>。创建者获得赢家 {pct}% 手续费。",
     },
     "hot_wallet_admin": {
-        "ru": "🟦 <b>Hot wallet бота</b>\n\nАдрес: <code>{addr}</code>\n\n⚠️ Приватный ключ хранится только в конфигурации сервера. Никогда не выводи его в чат.",
-        "en": "🟦 <b>Bot hot wallet</b>\n\nAddress: <code>{addr}</code>\n\n⚠️ The private key lives only in server configuration. Never print it in chat.",
-        "zh": "🟦 <b>机器人热钱包</b>\n\n地址：<code>{addr}</code>\n\n⚠️ 私钥仅存于服务器配置中。切勿在聊天中输出。",
+        "ru": "● <b>Hot wallet бота</b>\n\nАдрес: <code>{addr}</code>\n\n! Приватный ключ хранится только в конфигурации сервера. Никогда не выводи его в чат.",
+        "en": "● <b>Bot hot wallet</b>\n\nAddress: <code>{addr}</code>\n\n! The private key lives only in server configuration. Never print it in chat.",
+        "zh": "● <b>机器人热钱包</b>\n\n地址：<code>{addr}</code>\n\n! 私钥仅存于服务器配置中。切勿在聊天中输出。",
     },
     "deposit_qr_button": {
-        "ru": "💳 Сканируй и отправь USDC",
-        "en": "💳 Scan and send USDC",
-        "zh": "💳 扫描并发送 USDC",
+        "ru": "Сканируй и отправь USDC",
+        "en": "Scan and send USDC",
+        "zh": "扫描并发送 USDC",
     },
     "tx_format": {
         "ru": "Формат: /tx <i>&lt;0x:tx_hash&gt;</i>",
@@ -2016,14 +2017,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/tx <i>&lt;0x:tx_hash&gt;</i>",
     },
     "confirm_sig_error": {
-        "ru": "❌ Не удалось разобрать подпись.",
-        "en": "❌ Could not parse signature.",
-        "zh": "❌ 无法解析签名。",
+        "ru": "× Не удалось разобрать подпись.",
+        "en": "× Could not parse signature.",
+        "zh": "× 无法解析签名。",
     },
     "confirm_not_owner": {
-        "ru": "❌ Этот депозит отправлен с кошелька <code>{addr}</code>.\nЗачислить может только владелец. Привяжи его: /link <i>&lt;адрес&gt;</i>",
-        "en": "❌ This deposit was sent from wallet <code>{addr}</code>.\nOnly the owner can credit it. Link it: /link <i>&lt;address&gt;</i>",
-        "zh": "❌ 此充值来自钱包 <code>{addr}</code>。\n只有所有者可以入账。请绑定：/link <i>&lt;地址&gt;</i>",
+        "ru": "× Этот депозит отправлен с кошелька <code>{addr}</code>.\nЗачислить может только владелец. Привяжи его: /link <i>&lt;адрес&gt;</i>",
+        "en": "× This deposit was sent from wallet <code>{addr}</code>.\nOnly the owner can credit it. Link it: /link <i>&lt;address&gt;</i>",
+        "zh": "× 此充值来自钱包 <code>{addr}</code>。\n只有所有者可以入账。请绑定：/link <i>&lt;地址&gt;</i>",
     },
     "confirm_extra": {
         "ru": "\nСразу зачислено: {n} депозит(ов)",
@@ -2031,59 +2032,59 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "\n已立即入账：{n} 笔充值",
     },
     "import_seed_error": {
-        "ru": "❌ Не удалось восстановить кошелёк из этой сид-фразы.",
-        "en": "❌ Could not restore wallet from this seed phrase.",
-        "zh": "❌ 无法从此助记词恢复钱包。",
+        "ru": "× Не удалось восстановить кошелёк из этой сид-фразы.",
+        "en": "× Could not restore wallet from this seed phrase.",
+        "zh": "× 无法从此助记词恢复钱包。",
     },
     "import_has_wallet": {
-        "ru": "⚠️ У тебя уже есть кошелёк <code>{addr}</code>. Сначала выведи (/withdraw), затем импортируй новый.",
-        "en": "⚠️ You already have wallet <code>{addr}</code>. Withdraw first (/withdraw), then import a new one.",
-        "zh": "⚠️ 你已有钱包 <code>{addr}</code>。请先提现（/withdraw），然后导入新的。",
+        "ru": "! У тебя уже есть кошелёк <code>{addr}</code>. Сначала выведи (/withdraw), затем импортируй новый.",
+        "en": "! You already have wallet <code>{addr}</code>. Withdraw first (/withdraw), then import a new one.",
+        "zh": "! 你已有钱包 <code>{addr}</code>。请先提现（/withdraw），然后导入新的。",
     },
     "import_wallet_taken": {
-        "ru": "❌ Кошелёк <code>{addr}</code> уже привязан к другому пользователю.",
-        "en": "❌ Wallet <code>{addr}</code> is already linked to another user.",
-        "zh": "❌ 钱包 <code>{addr}</code> 已绑定到其他用户。",
+        "ru": "× Кошелёк <code>{addr}</code> уже привязан к другому пользователю.",
+        "en": "× Wallet <code>{addr}</code> is already linked to another user.",
+        "zh": "× 钱包 <code>{addr}</code> 已绑定到其他用户。",
     },
     "stats_your": {
-        "ru": "📊 <b>Твоя статистика</b>",
-        "en": "📊 <b>Your stats</b>",
-        "zh": "📊 <b>你的统计</b>",
+        "ru": "<b>Твоя статистика</b>",
+        "en": "<b>Your stats</b>",
+        "zh": "<b>你的统计</b>",
     },
     "stats_sent": {
-        "ru": "💸 Отправил чаевых: <b>{amount} USDC</b>",
-        "en": "💸 Tips sent: <b>{amount} USDC</b>",
-        "zh": "💸 已发送打赏：<b>{amount} USDC</b>",
+        "ru": "Отправил чаевых: <b>{amount} USDC</b>",
+        "en": "Tips sent: <b>{amount} USDC</b>",
+        "zh": "已发送打赏：<b>{amount} USDC</b>",
     },
     "stats_received": {
-        "ru": "💛 Получил чаевых: <b>{amount} USDC</b>",
-        "en": "💛 Tips received: <b>{amount} USDC</b>",
-        "zh": "💛 已收到打赏：<b>{amount} USDC</b>",
+        "ru": "Получил чаевых: <b>{amount} USDC</b>",
+        "en": "Tips received: <b>{amount} USDC</b>",
+        "zh": "已收到打赏：<b>{amount} USDC</b>",
     },
     "stats_won": {
-        "ru": "🏆 Выиграл ставками: <b>{amount} USDC</b>",
-        "en": "🏆 Won from bets: <b>{amount} USDC</b>",
-        "zh": "🏆 投注赢额：<b>{amount} USDC</b>",
+        "ru": "★ Выиграл ставками: <b>{amount} USDC</b>",
+        "en": "★ Won from bets: <b>{amount} USDC</b>",
+        "zh": "★ 投注赢额：<b>{amount} USDC</b>",
     },
     "stats_bet": {
-        "ru": "🎲 Поставил в рынках: <b>{amount} USDC</b>",
-        "en": "🎲 Wagered on markets: <b>{amount} USDC</b>",
-        "zh": "🎲 市场下注：<b>{amount} USDC</b>",
+        "ru": "Поставил в рынках: <b>{amount} USDC</b>",
+        "en": "Wagered on markets: <b>{amount} USDC</b>",
+        "zh": "市场下注：<b>{amount} USDC</b>",
     },
     "top_empty": {
-        "ru": "🏆 Пока никто не кидал чаевых. Будь первым!",
-        "en": "🏆 No tips yet. Be the first!",
-        "zh": "🏆 暂无打赏记录。成为第一个！",
+        "ru": "★ Пока никто не кидал чаевых. Будь первым!",
+        "en": "★ No tips yet. Be the first!",
+        "zh": "★ 暂无打赏记录。成为第一个！",
     },
     "top_title": {
-        "ru": "🏆 <b>Топ чаевых (все время)</b>",
-        "en": "🏆 <b>Top tippers (all time)</b>",
-        "zh": "🏆 <b>打赏排行榜（全部时间）</b>",
+        "ru": "★ <b>Топ чаевых (все время)</b>",
+        "en": "★ <b>Top tippers (all time)</b>",
+        "zh": "★ <b>打赏排行榜（全部时间）</b>",
     },
     "history_title": {
-        "ru": "🧾 <b>Последние операции</b>",
-        "en": "🧾 <b>Recent transactions</b>",
-        "zh": "🧾 <b>最近交易</b>",
+        "ru": "<b>Последние операции</b>",
+        "en": "<b>Recent transactions</b>",
+        "zh": "<b>最近交易</b>",
     },
     "hist_bet_cancel": {
         "ru": " (отмена)",
@@ -2146,14 +2147,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "（访问出售）",
     },
     "markets_earning": {
-        "ru": "🧾 Заработано на рынках: <b>{amount} USDC</b>",
-        "en": "🧾 Earned on markets: <b>{amount} USDC</b>",
-        "zh": "🧾 市场收益：<b>{amount} USDC</b>",
+        "ru": "Заработано на рынках: <b>{amount} USDC</b>",
+        "en": "Earned on markets: <b>{amount} USDC</b>",
+        "zh": "市场收益：<b>{amount} USDC</b>",
     },
     "markets_earning_line": {
-        "ru": "\n🧾 Заработано на рынках: <b>{amount} USDC</b>",
-        "en": "\n🧾 Earned on markets: <b>{amount} USDC</b>",
-        "zh": "\n🧾 市场收益：<b>{amount} USDC</b>",
+        "ru": "\nЗаработано на рынках: <b>{amount} USDC</b>",
+        "en": "\nEarned on markets: <b>{amount} USDC</b>",
+        "zh": "\n市场收益：<b>{amount} USDC</b>",
     },
     "rain_and_more": {
         "ru": " и ещё {n}",
@@ -2161,20 +2162,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": " 还有 {n} 人",
     },
     "private_chat_only": {
-        "ru": "🔒 Эта команда доступна только в личном чате с ботом. Напишите боту в личку.",
-        "en": "🔒 This command works only in a private chat with the bot. Message the bot in DM.",
-        "zh": "🔒 该命令仅在私聊中可用，请通过私信使用机器人。",
+        "ru": "Эта команда доступна только в личном чате с ботом. Напишите боту в личку.",
+        "en": "This command works only in a private chat with the bot. Message the bot in DM.",
+        "zh": "该命令仅在私聊中可用，请通过私信使用机器人。",
     },
     # ----- on-chain markets (/oc*) -----
     "oc_disabled": {
-        "ru": "🎯 Cally выключен: контракт ончейн-рынков не задеплоен (OUTCOME_MARKET_ADDRESS не настроен).",
-        "en": "🎯 Cally is off: the on-chain markets contract is not deployed (OUTCOME_MARKET_ADDRESS not set).",
-        "zh": "🎯 Cally 未启用：链上市场合约未部署（未配置 OUTCOME_MARKET_ADDRESS）。",
+        "ru": "Cally выключен: контракт ончейн-рынков не задеплоен (OUTCOME_MARKET_ADDRESS не настроен).",
+        "en": "Cally is off: the on-chain markets contract is not deployed (OUTCOME_MARKET_ADDRESS not set).",
+        "zh": "Cally 未启用：链上市场合约未部署（未配置 OUTCOME_MARKET_ADDRESS）。",
     },
     "oc_list_header": {
-        "ru": "🎯 <b>Cally</b> — ончейн-рынки на Base: доли ERC-1155, расчёты в USDC на-цепи:",
-        "en": "🎯 <b>Cally</b> — on-chain markets on Base: ERC-1155 shares, USDC settled on-chain:",
-        "zh": "🎯 <b>Cally</b> — Base 链上市场：ERC-1155 份额，USDC 链上结算：",
+        "ru": "<b>Cally</b> — ончейн-рынки на Base: доли ERC-1155, расчёты в USDC на-цепи:",
+        "en": "<b>Cally</b> — on-chain markets on Base: ERC-1155 shares, USDC settled on-chain:",
+        "zh": "<b>Cally</b> — Base 链上市场：ERC-1155 份额，USDC 链上结算：",
     },
     "oc_list_empty": {
         "ru": "Пока пусто. Создай первый: /oc_create 50 Вопрос | Вариант 1 | Вариант 2 7d",
@@ -2182,9 +2183,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "暂无市场。创建第一个：/oc_create 50 问题 | 选项1 | 选项2 7d",
     },
     "oc_help": {
-        "ru": "<b>Команды:</b> /oc &lt;id&gt; — карточка • /oc_create 50 Вопрос | Да | Нет [24h] • /oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt; • /oc_sell &lt;id&gt; &lt;вариант&gt; [50%] • /oc_redeem &lt;id&gt; — забрать выигрыш • /oc_pos — мои доли.\n\n💸 Средства берутся с твоего личного кошелька (/wallet). Пополнить его: /withdraw &lt;адрес_кошелька&gt; &lt;сумма&gt;.",
-        "en": "<b>Commands:</b> /oc &lt;id&gt; — card • /oc_create 50 Question | Yes | No [24h] • /oc_buy &lt;id&gt; &lt;option&gt; &lt;amount&gt; • /oc_sell &lt;id&gt; &lt;option&gt; [50%] • /oc_redeem &lt;id&gt; — claim winnings • /oc_pos — my shares.\n\n💸 Funds come from your personal wallet (/wallet). Top it up: /withdraw &lt;wallet_address&gt; &lt;amount&gt;.",
-        "zh": "<b>命令：</b>/oc &lt;id&gt;—卡片 • /oc_create 50 问题 | 选项1 | 选项2 [24h] • /oc_buy &lt;id&gt; &lt;选项&gt; &lt;金额&gt; • /oc_sell &lt;id&gt; &lt;选项&gt; [50%] • /oc_redeem &lt;id&gt;—领取收益 • /oc_pos—我的份额。\n\n💸 资金来自你的个人钱包（/wallet）。充值：/withdraw &lt;钱包地址&gt; &lt;金额&gt;。",
+        "ru": "<b>Команды:</b> /oc &lt;id&gt; — карточка • /oc_create 50 Вопрос | Да | Нет [24h] • /oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt; • /oc_sell &lt;id&gt; &lt;вариант&gt; [50%] • /oc_redeem &lt;id&gt; — забрать выигрыш • /oc_pos — мои доли.\n\nСредства берутся с твоего личного кошелька (/wallet). Пополнить его: /withdraw &lt;адрес_кошелька&gt; &lt;сумма&gt;.",
+        "en": "<b>Commands:</b> /oc &lt;id&gt; — card • /oc_create 50 Question | Yes | No [24h] • /oc_buy &lt;id&gt; &lt;option&gt; &lt;amount&gt; • /oc_sell &lt;id&gt; &lt;option&gt; [50%] • /oc_redeem &lt;id&gt; — claim winnings • /oc_pos — my shares.\n\nFunds come from your personal wallet (/wallet). Top it up: /withdraw &lt;wallet_address&gt; &lt;amount&gt;.",
+        "zh": "<b>命令：</b>/oc &lt;id&gt;—卡片 • /oc_create 50 问题 | 选项1 | 选项2 [24h] • /oc_buy &lt;id&gt; &lt;选项&gt; &lt;金额&gt; • /oc_sell &lt;id&gt; &lt;选项&gt; [50%] • /oc_redeem &lt;id&gt;—领取收益 • /oc_pos—我的份额。\n\n资金来自你的个人钱包（/wallet）。充值：/withdraw &lt;钱包地址&gt; &lt;金额&gt;。",
     },
     "oc_unknown": {
         "ru": "Ончейн-рынок не найден. Список: /oc",
@@ -2192,9 +2193,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "未找到链上市场。列表：/oc",
     },
     "oc_deadline": {
-        "ru": "⏰ Закрытие: {dt}",
-        "en": "⏰ Closes: {dt}",
-        "zh": "⏰ 截止：{dt}",
+        "ru": "Закрытие: {dt}",
+        "en": "Closes: {dt}",
+        "zh": "截止：{dt}",
     },
     "oc_hint": {
         "ru": "Купить: /oc_buy {id} &lt;вариант&gt; &lt;сумма&gt; • Продать: /oc_sell {id} &lt;вариант&gt; [50%]",
@@ -2222,9 +2223,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/oc_redeem &lt;id&gt; — 或直接发送 /oc_redeem 一次性领取全部",
     },
     "oc_pending": {
-        "ru": "⏳ Отправляю транзакцию в Base… (это живая ончейн-операция)",
-        "en": "⏳ Sending the transaction to Base… (real on-chain operation)",
-        "zh": "⏳ 正在向 Base 发送交易…（真实链上操作）",
+        "ru": "… Отправляю транзакцию в Base… (это живая ончейн-операция)",
+        "en": "… Sending the transaction to Base… (real on-chain operation)",
+        "zh": "… 正在向 Base 发送交易…（真实链上操作）",
     },
     "oc_wallet_error": {
         "ru": "Не удалось получить кошелёк. Открой /wallet и создай его.",
@@ -2237,49 +2238,49 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "你的个人钱包 <code>{addr}</code> 仅有 {have} USDC。请从内部余额充值：/withdraw <code>{addr}</code> &lt;金额&gt;",
     },
     "oc_created": {
-        "ru": "🎯 Рынок <b>#{id}</b> создан в Cally НА-ЦЕПИ: <b>{q}</b>\nСубсидия заблокирована в контракте, кошелёк: <code>{addr}</code>\nТорговля: /oc_buy {id} &lt;вариант&gt; &lt;сумма&gt;",
-        "en": "🎯 Market <b>#{id}</b> created on Cally ON-CHAIN: <b>{q}</b>\nSubsidy locked in the contract, wallet: <code>{addr}</code>\nTrade: /oc_buy {id} &lt;option&gt; &lt;amount&gt;",
-        "zh": "🎯 市场 <b>#{id}</b> 已在 Cally 链上创建：<b>{q}</b>\n补贴已锁定在合约中，钱包：<code>{addr}</code>\n交易：/oc_buy {id} &lt;选项&gt; &lt;金额&gt;",
+        "ru": "Рынок <b>#{id}</b> создан в Cally НА-ЦЕПИ: <b>{q}</b>\nСубсидия заблокирована в контракте, кошелёк: <code>{addr}</code>\nТорговля: /oc_buy {id} &lt;вариант&gt; &lt;сумма&gt;",
+        "en": "Market <b>#{id}</b> created on Cally ON-CHAIN: <b>{q}</b>\nSubsidy locked in the contract, wallet: <code>{addr}</code>\nTrade: /oc_buy {id} &lt;option&gt; &lt;amount&gt;",
+        "zh": "市场 <b>#{id}</b> 已在 Cally 链上创建：<b>{q}</b>\n补贴已锁定在合约中，钱包：<code>{addr}</code>\n交易：/oc_buy {id} &lt;选项&gt; &lt;金额&gt;",
     },
     "oc_bought": {
-        "ru": "🎯 Куплено на Cally: <b>{shares}</b> долей «{label}» за {cost} USDC\n🔗 {url}",
-        "en": "🎯 Bought on Cally: <b>{shares}</b> shares of “{label}” for {cost} USDC\n🔗 {url}",
-        "zh": "🎯 已在 Cally 买入：<b>{shares}</b> 份「{label}」，花费 {cost} USDC\n🔗 {url}",
+        "ru": "Куплено на Cally: <b>{shares}</b> долей «{label}» за {cost} USDC\n↗ {url}",
+        "en": "Bought on Cally: <b>{shares}</b> shares of “{label}” for {cost} USDC\n↗ {url}",
+        "zh": "已在 Cally 买入：<b>{shares}</b> 份「{label}」，花费 {cost} USDC\n↗ {url}",
     },
     "oc_sold": {
-        "ru": "🎯 Продано на Cally: <b>{shares}</b> долей «{label}» за {value} USDC\n🔗 {url}",
-        "en": "🎯 Sold on Cally: <b>{shares}</b> shares of “{label}” for {value} USDC\n🔗 {url}",
-        "zh": "🎯 已在 Cally 卖出：<b>{shares}</b> 份「{label}」，获得 {value} USDC\n🔗 {url}",
+        "ru": "Продано на Cally: <b>{shares}</b> долей «{label}» за {value} USDC\n↗ {url}",
+        "en": "Sold on Cally: <b>{shares}</b> shares of “{label}” for {value} USDC\n↗ {url}",
+        "zh": "已在 Cally 卖出：<b>{shares}</b> 份「{label}」，获得 {value} USDC\n↗ {url}",
     },
     "oc_redeemed": {
-        "ru": "🏆 Выигрыш забран с контракта: <b>{amount} USDC</b> → <code>{addr}</code>",
-        "en": "🏆 Winnings claimed from the contract: <b>{amount} USDC</b> → <code>{addr}</code>",
-        "zh": "🏆 已从合约领取收益：<b>{amount} USDC</b> → <code>{addr}</code>",
+        "ru": "★ Выигрыш забран с контракта: <b>{amount} USDC</b> → <code>{addr}</code>",
+        "en": "★ Winnings claimed from the contract: <b>{amount} USDC</b> → <code>{addr}</code>",
+        "zh": "★ 已从合约领取收益：<b>{amount} USDC</b> → <code>{addr}</code>",
     },
     "oc_refunded": {
-        "ru": "↩️ Отменённый рынок: возврат забран с контракта <b>{amount} USDC</b> → <code>{addr}</code>",
-        "en": "↩️ Cancelled market: refund pulled from the contract <b>{amount} USDC</b> → <code>{addr}</code>",
-        "zh": "↩️ 已取消市场：已从合约取回退款 <b>{amount} USDC</b> → <code>{addr}</code>",
+        "ru": "← Отменённый рынок: возврат забран с контракта <b>{amount} USDC</b> → <code>{addr}</code>",
+        "en": "← Cancelled market: refund pulled from the contract <b>{amount} USDC</b> → <code>{addr}</code>",
+        "zh": "← 已取消市场：已从合约取回退款 <b>{amount} USDC</b> → <code>{addr}</code>",
     },
     "oc_redeem_not_ready": {
-        "ru": "⏳ Рынок #{id} ещё не закрыт — забирать нечего. Исхода ждёт: /oc {id}",
-        "en": "⏳ Market #{id} has not settled yet — there is nothing to claim. Status: /oc {id}",
-        "zh": "⏳ 市场 #{id} 尚未结算，暂无可领取内容。查看：/oc {id}",
+        "ru": "… Рынок #{id} ещё не закрыт — забирать нечего. Исхода ждёт: /oc {id}",
+        "en": "… Market #{id} has not settled yet — there is nothing to claim. Status: /oc {id}",
+        "zh": "… 市场 #{id} 尚未结算，暂无可领取内容。查看：/oc {id}",
     },
     "oc_settle_scanning": {
-        "ru": "🔎 Считаю твои позиции на цепочке…",
-        "en": "🔎 Checking your positions on-chain…",
-        "zh": "🔎 正在链上核对你的持仓……",
+        "ru": "Считаю твои позиции на цепочке…",
+        "en": "Checking your positions on-chain…",
+        "zh": "正在链上核对你的持仓……",
     },
     "oc_settle_empty": {
-        "ru": "🎯 Забирать нечего: позиции ещё не разрешены (или ты уже всё забрал). Позиции: /oc_pos",
-        "en": "🎯 Nothing to claim: your positions have not settled yet (or you already claimed everything). Positions: /oc_pos",
-        "zh": "🎯 暂无可领取内容：持仓尚未结算（或已全部领取）。持仓：/oc_pos",
+        "ru": "Забирать нечего: позиции ещё не разрешены (или ты уже всё забрал). Позиции: /oc_pos",
+        "en": "Nothing to claim: your positions have not settled yet (or you already claimed everything). Positions: /oc_pos",
+        "zh": "暂无可领取内容：持仓尚未结算（或已全部领取）。持仓：/oc_pos",
     },
     "oc_settle_result": {
-        "ru": "🎯 Забрано с контракта: <b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
-        "en": "🎯 Claimed from the contract: <b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
-        "zh": "🎯 已从合约领取：<b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
+        "ru": "Забрано с контракта: <b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
+        "en": "Claimed from the contract: <b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
+        "zh": "已从合约领取：<b>{amount} USDC</b> → <code>{addr}</code>\n{lines}",
     },
     "oc_settle_winnings": {
         "ru": "выигрыши",
@@ -2297,9 +2298,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "你的钱包没有该选项的份额。持仓：/oc_pos",
     },
     "oc_pos_header": {
-        "ru": "🎯 Доли Cally личного кошелька <code>{addr}</code>:",
-        "en": "🎯 Cally shares of personal wallet <code>{addr}</code>:",
-        "zh": "🎯 个人钱包 <code>{addr}</code> 的 Cally 份额：",
+        "ru": "Доли Cally личного кошелька <code>{addr}</code>:",
+        "en": "Cally shares of personal wallet <code>{addr}</code>:",
+        "zh": "个人钱包 <code>{addr}</code> 的 Cally 份额：",
     },
     "oc_pos_empty": {
         "ru": "Долей пока нет. Купи: /oc_buy &lt;id&gt; &lt;вариант&gt; &lt;сумма&gt;",
@@ -2307,9 +2308,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "暂无份额。购买：/oc_buy &lt;id&gt; &lt;选项&gt; &lt;金额&gt;",
     },
     "oc_tx_failed": {
-        "ru": "❌ Транзакция не прошла: {err}",
-        "en": "❌ Transaction failed: {err}",
-        "zh": "❌ 交易失败：{err}",
+        "ru": "× Транзакция не прошла: {err}",
+        "en": "× Transaction failed: {err}",
+        "zh": "× 交易失败：{err}",
     },
     "oc_resolve_format": {
         "ru": "Формат: /oc_resolve &lt;id&gt; &lt;номер_варианта&gt; — например /oc_resolve 3 1",
@@ -2327,24 +2328,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "市场已{state}——无需再判定。",
     },
     "oc_resolved": {
-        "ru": "Исход <b>{idx}</b> зафиксирован НА-ЦЕПИ. Победители забирают по 1 USDC за долю: /oc_redeem\n🔗 {url}",
-        "en": "Outcome <b>{idx}</b> finalized ON-CHAIN. Winners redeem 1 USDC per share: /oc_redeem\n🔗 {url}",
-        "zh": "结果 <b>{idx}</b> 已在链上敲定。赢家可按 1 USDC/份额 领取：/oc_redeem\n🔗 {url}",
+        "ru": "Исход <b>{idx}</b> зафиксирован НА-ЦЕПИ. Победители забирают по 1 USDC за долю: /oc_redeem\n↗ {url}",
+        "en": "Outcome <b>{idx}</b> finalized ON-CHAIN. Winners redeem 1 USDC per share: /oc_redeem\n↗ {url}",
+        "zh": "结果 <b>{idx}</b> 已在链上敲定。赢家可按 1 USDC/份额 领取：/oc_redeem\n↗ {url}",
     },
     "oc_pick": {
-        "ru": "🎯 Рынок Cally <b>#{id}</b> закрылся: <b>{q}</b>\n\nВыбери победивший исход — я зафиксирую его в контракте на Base.",
-        "en": "🎯 Cally market <b>#{id}</b> closed: <b>{q}</b>\n\nPick the winning outcome — I will finalize it in the contract on Base.",
-        "zh": "⛓️ 市场 <b>#{id}</b> 已截止：<b>{q}</b>\n\n请选择获胜结果——我将在 Base 合约中敲定。",
+        "ru": "Рынок Cally <b>#{id}</b> закрылся: <b>{q}</b>\n\nВыбери победивший исход — я зафиксирую его в контракте на Base.",
+        "en": "Cally market <b>#{id}</b> closed: <b>{q}</b>\n\nPick the winning outcome — I will finalize it in the contract on Base.",
+        "zh": "市场 <b>#{id}</b> 已截止：<b>{q}</b>\n\n请选择获胜结果——我将在 Base 合约中敲定。",
     },
     "oc_won_dm": {
-        "ru": "🏆 Рынок <b>#{id}</b> завершён — победил «{label}». У тебя {shares} долей: забери выигрыш командой /oc_redeem {id}",
-        "en": "🏆 Market <b>#{id}</b> finished — “{label}” won. You hold {shares} shares: claim with /oc_redeem {id}",
-        "zh": "🏆 市场 <b>#{id}</b> 已结束——「{label}」获胜。你持有 {shares} 份额：用 /oc_redeem {id} 领取",
+        "ru": "★ Рынок <b>#{id}</b> завершён — победил «{label}». У тебя {shares} долей: забери выигрыш командой /oc_redeem {id}",
+        "en": "★ Market <b>#{id}</b> finished — “{label}” won. You hold {shares} shares: claim with /oc_redeem {id}",
+        "zh": "★ 市场 <b>#{id}</b> 已结束——「{label}」获胜。你持有 {shares} 份额：用 /oc_redeem {id} 领取",
     },
     "oc_cancelled_dm": {
-        "ru": "⚠️ Рынок <b>#{id}</b> отменён — исход так и не назван. Твои {shares} долей возвращаются из контракта пропорционально остатку эскроу: забери деньги командой /oc_redeem {id}",
-        "en": "⚠️ Market <b>#{id}</b> was cancelled — no outcome was ever declared. Your {shares} shares are refunded pro-rata from the contract escrow: pull them back with /oc_redeem {id}",
-        "zh": "⚠️ 市场 <b>#{id}</b> 已取消——从未公布结果。你持有的 {shares} 份额将按合约托管余额比例退款：请用 /oc_redeem {id} 取回",
+        "ru": "! Рынок <b>#{id}</b> отменён — исход так и не назван. Твои {shares} долей возвращаются из контракта пропорционально остатку эскроу: забери деньги командой /oc_redeem {id}",
+        "en": "! Market <b>#{id}</b> was cancelled — no outcome was ever declared. Your {shares} shares are refunded pro-rata from the contract escrow: pull them back with /oc_redeem {id}",
+        "zh": "! 市场 <b>#{id}</b> 已取消——从未公布结果。你持有的 {shares} 份额将按合约托管余额比例退款：请用 /oc_redeem {id} 取回",
     },
     "oc_resolve_disputed": {
         "ru": "Этот исход оспорен владельцем контракта — финальное слово за ним (ownerResolve).",
@@ -2378,9 +2379,9 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     # ----- basenames (on-chain identity on Base) -----
     "basename_mine": {
-        "ru": "🏷 Твой ончейн-нейм: <b>{name}</b>\n\nЭто имя твоего кошелька на Base — по нему тебе можно слать чаевые: /tip {name}",
-        "en": "🏷 Your on-chain name: <b>{name}</b>\n\nIt belongs to your wallet on Base — anyone can tip you by it: /tip {name}",
-        "zh": "🏷 你的链上名字：<b>{name}</b>\n\n它属于你在 Base 上的钱包——别人可以用它给你打赏：/tip {name}",
+        "ru": "Твой ончейн-нейм: <b>{name}</b>\n\nЭто имя твоего кошелька на Base — по нему тебе можно слать чаевые: /tip {name}",
+        "en": "Your on-chain name: <b>{name}</b>\n\nIt belongs to your wallet on Base — anyone can tip you by it: /tip {name}",
+        "zh": "你的链上名字：<b>{name}</b>\n\n它属于你在 Base 上的钱包——别人可以用它给你打赏：/tip {name}",
     },
     "basename_none": {
         "ru": "У твоего кошелька пока нет Basename (имени вида <b>name.base.eth</b>).\n\nЗарегистрируй на basenames.app и он появится здесь автоматически — по нему можно получать чаевые.",
@@ -2399,24 +2400,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "代理已禁用（AGENT_TG_ID=0）。在环境中启用后即可自主运行。",
     },
     "agent_header": {
-        "ru": "🤖 <b>Агент Tippy</b> (tg_id {tg_id})",
-        "en": "🤖 <b>Tippy agent</b> (tg_id {tg_id})",
-        "zh": "🤖 <b>Tippy 代理</b>（tg_id {tg_id}）",
+        "ru": "<b>Агент Tippy</b> (tg_id {tg_id})",
+        "en": "<b>Tippy agent</b> (tg_id {tg_id})",
+        "zh": "<b>Tippy 代理</b>（tg_id {tg_id}）",
     },
     "agent_spend": {
-        "ru": "💸 Расход за сутки: <b>{spent} USDC</b> из {cap} USDC",
-        "en": "💸 Spent today: <b>{spent} USDC</b> of {cap} USDC",
-        "zh": "💸 今日支出：<b>{spent} USDC</b> / {cap} USDC",
+        "ru": "Расход за сутки: <b>{spent} USDC</b> из {cap} USDC",
+        "en": "Spent today: <b>{spent} USDC</b> of {cap} USDC",
+        "zh": "今日支出：<b>{spent} USDC</b> / {cap} USDC",
     },
     "agent_actions": {
-        "ru": "⚡ Действий за час: {done} из {cap}",
-        "en": "⚡ Actions this hour: {done} of {cap}",
-        "zh": "⚡ 本小时动作：{done} / {cap}",
+        "ru": "Действий за час: {done} из {cap}",
+        "en": "Actions this hour: {done} of {cap}",
+        "zh": "本小时动作：{done} / {cap}",
     },
     "agent_errors": {
-        "ru": "🛡 Ошибок подряд: {n} · автомат-предохранитель: {cb}",
-        "en": "🛡 Consecutive errors: {n} · circuit breaker: {cb}",
-        "zh": "🛡 连续错误：{n} · 熔断器：{cb}",
+        "ru": "Ошибок подряд: {n} · автомат-предохранитель: {cb}",
+        "en": "Consecutive errors: {n} · circuit breaker: {cb}",
+        "zh": "连续错误：{n} · 熔断器：{cb}",
     },
     "agent_caps_line": {
         "ru": "Капы: {daily} USDC/день, {per_tx} USDC/транзакция (зашиты в код)",
@@ -2439,9 +2440,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "无法读取代理状态：{err}",
     },
     "btn_basename": {
-        "ru": "🏷 Мой Basename",
-        "en": "🏷 My Basename",
-        "zh": "🏷 我的 Basename",
+        "ru": "Мой Basename",
+        "en": "My Basename",
+        "zh": "我的 Basename",
     },
     "basename_invalid": {
         "ru": "Непохоже на Basename. Формат: <b>/basename myname.base.eth</b>",
@@ -2449,19 +2450,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "看起来不像 Basename。格式：<b>/basename myname.base.eth</b>",
     },
     "basename_free": {
-        "ru": "✅ <b>{name}</b> — свободно!\n\nЗарегистрируй на basenames.app — и имя автоматически появится у тебя в /basename.",
-        "en": "✅ <b>{name}</b> is free!\n\nRegister it on basenames.app and it will automatically appear in /basename.",
-        "zh": "✅ <b>{name}</b> 可注册！\n\n在 basenames.app 注册后它会自动出现在 /basename 中。",
+        "ru": "✓ <b>{name}</b> — свободно!\n\nЗарегистрируй на basenames.app — и имя автоматически появится у тебя в /basename.",
+        "en": "✓ <b>{name}</b> is free!\n\nRegister it on basenames.app and it will automatically appear in /basename.",
+        "zh": "✓ <b>{name}</b> 可注册！\n\n在 basenames.app 注册后它会自动出现在 /basename 中。",
     },
     "basename_taken": {
-        "ru": "❌ <b>{name}</b> занято.\nВладелец: <code>{addr}</code>",
-        "en": "❌ <b>{name}</b> is taken.\nOwner: <code>{addr}</code>",
-        "zh": "❌ <b>{name}</b> 已被注册。\n所有者：<code>{addr}</code>",
+        "ru": "× <b>{name}</b> занято.\nВладелец: <code>{addr}</code>",
+        "en": "× <b>{name}</b> is taken.\nOwner: <code>{addr}</code>",
+        "zh": "× <b>{name}</b> 已被注册。\n所有者：<code>{addr}</code>",
     },
     "basename_owned": {
-        "ru": "🏷 <b>{name}</b> — подтверждено, это твой кошелек!\n\nТебе можно слать чаевые по имени: /tip {name}",
-        "en": "🏷 <b>{name}</b> — confirmed, it's your wallet!\n\nPeople can tip you by name: /tip {name}",
-        "zh": "🏷 <b>{name}</b> — 已确认，是你的钱包！\n\n别人可以用这个名字给你打赏：/tip {name}",
+        "ru": "<b>{name}</b> — подтверждено, это твой кошелек!\n\nТебе можно слать чаевые по имени: /tip {name}",
+        "en": "<b>{name}</b> — confirmed, it's your wallet!\n\nPeople can tip you by name: /tip {name}",
+        "zh": "<b>{name}</b> — 已确认，是你的钱包！\n\n别人可以用这个名字给你打赏：/tip {name}",
     },
     "basename_rpc_error": {
         "ru": "Не удалось проверить имя (RPC недоступен). Попробуй позже.",
@@ -2470,14 +2471,14 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     # ----- breakthrough features -----
     "gasless_eligible": {
-        "ru": "🎁 У тебя осталось <b>{remaining}</b> из {total} бесплатных транзакций!\n\nГаз оплачивается базой — ты ничего не платишь.",
-        "en": "🎁 You have <b>{remaining}</b> of {total} free transactions left!\n\nGas is sponsored by Base — you pay nothing.",
-        "zh": "🎁 你还剩 <b>{remaining}</b> / {total} 笔免费交易！\n\nGas 由 Base 赞助——你无需支付。",
+        "ru": "У тебя осталось <b>{remaining}</b> из {total} бесплатных транзакций!\n\nГаз оплачивается базой — ты ничего не платишь.",
+        "en": "You have <b>{remaining}</b> of {total} free transactions left!\n\nGas is sponsored by Base — you pay nothing.",
+        "zh": "你还剩 <b>{remaining}</b> / {total} 笔免费交易！\n\nGas 由 Base 赞助——你无需支付。",
     },
     "gasless_not_eligible": {
-        "ru": "ℹ️ Бесплатные транзакции закончились. Но газ на Base всё равно копеечный!",
-        "en": "ℹ️ Free transactions used up. But Base gas is still pennies!",
-        "zh": "ℹ️ 免费交易已用完。但 Base 的 gas 仍然很便宜！",
+        "ru": "Бесплатные транзакции закончились. Но газ на Base всё равно копеечный!",
+        "en": "Free transactions used up. But Base gas is still pennies!",
+        "zh": "免费交易已用完。但 Base 的 gas 仍然很便宜！",
     },
     "subscribe_format": {
         "ru": "Формат: /subscribe @username сумма интервал\nПример: /subscribe @alice 10 weekly\nИнтервалы: daily, weekly, biweekly, monthly",
@@ -2485,24 +2486,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/subscribe @username 金额 间隔\n示例：/subscribe @alice 10 weekly\n间隔：daily, weekly, biweekly, monthly",
     },
     "subscribe_invalid_interval": {
-        "ru": "❌ Неверный интервал. Используй: daily, weekly, biweekly, monthly",
-        "en": "❌ Invalid interval. Use: daily, weekly, biweekly, monthly",
-        "zh": "❌ 间隔无效。请使用：daily, weekly, biweekly, monthly",
+        "ru": "× Неверный интервал. Используй: daily, weekly, biweekly, monthly",
+        "en": "× Invalid interval. Use: daily, weekly, biweekly, monthly",
+        "zh": "× 间隔无效。请使用：daily, weekly, biweekly, monthly",
     },
     "subscribe_created": {
-        "ru": "✅ Подписка создана!\n\n📤 @{to_username}: {amount} USDC каждые {interval}\n\nИспользуй /subscriptions чтобы увидеть все.",
-        "en": "✅ Subscription created!\n\n📤 @{to_username}: {amount} USDC every {interval}\n\nUse /subscriptions to see all.",
-        "zh": "✅ 订阅已创建！\n\n📤 @{to_username}：每 {interval} {amount} USDC\n\n使用 /subscriptions 查看全部。",
+        "ru": "✓ Подписка создана!\n\n@{to_username}: {amount} USDC каждые {interval}\n\nИспользуй /subscriptions чтобы увидеть все.",
+        "en": "✓ Subscription created!\n\n@{to_username}: {amount} USDC every {interval}\n\nUse /subscriptions to see all.",
+        "zh": "✓ 订阅已创建！\n\n@{to_username}：每 {interval} {amount} USDC\n\n使用 /subscriptions 查看全部。",
     },
     "no_subscriptions": {
-        "ru": "📭 У тебя нет активных подписок.\n\nСоздай: /subscribe @user сумма интервал",
-        "en": "📭 You have no active subscriptions.\n\nCreate one: /subscribe @user amount interval",
-        "zh": "📭 你没有活跃的订阅。\n\n创建一个：/subscribe @user 金额 间隔",
+        "ru": "У тебя нет активных подписок.\n\nСоздай: /subscribe @user сумма интервал",
+        "en": "You have no active subscriptions.\n\nCreate one: /subscribe @user amount interval",
+        "zh": "你没有活跃的订阅。\n\n创建一个：/subscribe @user 金额 间隔",
     },
     "subscriptions_list": {
-        "ru": "📋 <b>Мои подписки:</b>\n\n{list}",
-        "en": "📋 <b>My subscriptions:</b>\n\n{list}",
-        "zh": "📋 <b>我的订阅：</b>\n\n{list}",
+        "ru": "<b>Мои подписки:</b>\n\n{list}",
+        "en": "<b>My subscriptions:</b>\n\n{list}",
+        "zh": "<b>我的订阅：</b>\n\n{list}",
     },
     "cancel_sub_format": {
         "ru": "Формат: /cancelsub <id>\n\nИспользуй /subscriptions чтобы увидеть ID.",
@@ -2510,14 +2511,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/cancelsub <id>\n\n使用 /subscriptions 查看 ID。",
     },
     "subscription_cancelled": {
-        "ru": "✅ Подписка отменена.",
-        "en": "✅ Subscription cancelled.",
-        "zh": "✅ 订阅已取消。",
+        "ru": "✓ Подписка отменена.",
+        "en": "✓ Subscription cancelled.",
+        "zh": "✓ 订阅已取消。",
     },
     "subscription_not_found": {
-        "ru": "❌ Подписка не найдена или у тебя нет прав.",
-        "en": "❌ Subscription not found or you don't have permission.",
-        "zh": "❌ 未找到订阅或你没有权限。",
+        "ru": "× Подписка не найдена или у тебя нет прав.",
+        "en": "× Subscription not found or you don't have permission.",
+        "zh": "× 未找到订阅或你没有权限。",
     },
     "create_token_format": {
         "ru": "Формат: /createtoken <name> <SYMBOL> <supply> <price>\nПример: /createtoken \"My Token\" MTK 1000000 0.10",
@@ -2525,9 +2526,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/createtoken <名称> <符号> <供应量> <价格>\n示例：/createtoken \"My Token\" MTK 1000000 0.10",
     },
     "token_created": {
-        "ru": "🪙 <b>Токен создан!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nДержатели получают дивиденды от твоего заработка автоматически.",
-        "en": "🪙 <b>Token created!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nHolders receive dividends from your earnings automatically.",
-        "zh": "🪙 <b>代币已创建！</b>\n\n{name}（${symbol}）\nID：<code>{token_id}</code>\n\n持有者自动从你的收入中获得分红。",
+        "ru": "<b>Токен создан!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nДержатели получают дивиденды от твоего заработка автоматически.",
+        "en": "<b>Token created!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nHolders receive dividends from your earnings automatically.",
+        "zh": "<b>代币已创建！</b>\n\n{name}（${symbol}）\nID：<code>{token_id}</code>\n\n持有者自动从你的收入中获得分红。",
     },
     "buy_token_format": {
         "ru": "Формат: /buytoken <token_id> <amount>",
@@ -2535,14 +2536,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/buytoken <token_id> <数量>",
     },
     "token_buy_failed": {
-        "ru": "❌ Не удалось купить токены. Проверь ID и баланс.",
-        "en": "❌ Failed to buy tokens. Check ID and balance.",
-        "zh": "❌ 购买代币失败。请检查 ID 和余额。",
+        "ru": "× Не удалось купить токены. Проверь ID и баланс.",
+        "en": "× Failed to buy tokens. Check ID and balance.",
+        "zh": "× 购买代币失败。请检查 ID 和余额。",
     },
     "token_bought": {
-        "ru": "✅ Куплено <b>{amount}</b> токенов за {cost} USDC!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
-        "en": "✅ Bought <b>{amount}</b> tokens for {cost} USDC!\n\nYou'll receive dividends. Check: /claim <token_id>",
-        "zh": "✅ 已购买 <b>{amount}</b> 个代币，花费 {cost} USDC！\n\n你将获得分红。查看：/claim <token_id>",
+        "ru": "✓ Куплено <b>{amount}</b> токенов за {cost} USDC!\n\nТы будешь получать дивиденды. Проверь: /claim <token_id>",
+        "en": "✓ Bought <b>{amount}</b> tokens for {cost} USDC!\n\nYou'll receive dividends. Check: /claim <token_id>",
+        "zh": "✓ 已购买 <b>{amount}</b> 个代币，花费 {cost} USDC！\n\n你将获得分红。查看：/claim <token_id>",
     },
     "claim_format": {
         "ru": "Формат: /claim <token_id>",
@@ -2550,14 +2551,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/claim <token_id>",
     },
     "no_dividends": {
-        "ru": "ℹ️ Нет дивидендов для получения.",
-        "en": "ℹ️ No dividends to claim.",
-        "zh": "ℹ️ 没有可领取的分红。",
+        "ru": "Нет дивидендов для получения.",
+        "en": "No dividends to claim.",
+        "zh": "没有可领取的分红。",
     },
     "dividends_claimed": {
-        "ru": "💰 Получено <b>{amount} USDC</b> дивидендов!",
-        "en": "💰 Claimed <b>{amount} USDC</b> in dividends!",
-        "zh": "💰 已领取 <b>{amount} USDC</b> 分红！",
+        "ru": "Получено <b>{amount} USDC</b> дивидендов!",
+        "en": "Claimed <b>{amount} USDC</b> in dividends!",
+        "zh": "已领取 <b>{amount} USDC</b> 分红！",
     },
     "kind_deposit": {"ru": "Пополнение", "en": "Deposit", "zh": "充值"},
     "kind_withdraw": {"ru": "Вывод", "en": "Withdrawal", "zh": "提现"},
@@ -2589,7 +2590,7 @@ STRINGS: dict[str, dict[str, str]] = {
     # ---------- /admin: the owner's panel (bot/handlers/admin.py) ----------
     # Read-only screens. The numbers are deliberately terse: this is a chat window,
     # not the web dashboard, and an operator reads it with one thumb.
-    "admin_title": {"ru": "🛠 Админ-панель", "en": "🛠 Admin panel", "zh": "🛠 管理面板"},
+    "admin_title": {"ru": "Админ-панель", "en": "Admin panel", "zh": "管理面板"},
     "admin_denied": {
         "ru": "Команда доступна только владельцу бота.",
         "en": "This command is for the bot owner.",
@@ -2600,11 +2601,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Could not load the data: {err}",
         "zh": "无法加载数据：{err}",
     },
-    "admin_btn_summary": {"ru": "📊 Сводка", "en": "📊 Summary", "zh": "📊 概览"},
-    "admin_btn_ai": {"ru": "🤖 ИИ", "en": "🤖 AI", "zh": "🤖 AI"},
-    "admin_btn_treasury": {"ru": "💰 Казна", "en": "💰 Treasury", "zh": "💰 国库"},
-    "admin_btn_markets": {"ru": "🎯 Рынки", "en": "🎯 Markets", "zh": "🎯 市场"},
-    "admin_btn_agent": {"ru": "🛰 Агент", "en": "🛰 Agent", "zh": "🛰 代理"},
+    "admin_btn_summary": {"ru": "Сводка", "en": "Summary", "zh": "概览"},
+    "admin_btn_ai": {"ru": "ИИ", "en": "AI", "zh": "AI"},
+    "admin_btn_treasury": {"ru": "Казна", "en": "Treasury", "zh": "国库"},
+    "admin_btn_markets": {"ru": "Рынки", "en": "Markets", "zh": "市场"},
+    "admin_btn_agent": {"ru": "Агент", "en": "Agent", "zh": "代理"},
     "admin_users": {"ru": "Пользователей: {n}", "en": "Users: {n}", "zh": "用户数：{n}"},
     "admin_volume": {
         "ru": "Объём: {v} USDC (за 30 дней: {v30})",
@@ -2658,9 +2659,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "储备充足：盈余 {v} USDC",
     },
     "admin_solvent_no": {
-        "ru": "⚠ Резервов не хватает: {v} USDC",
-        "en": "⚠ Reserves fall short: {v} USDC",
-        "zh": "⚠ 储备不足：{v} USDC",
+        "ru": "! Резервов не хватает: {v} USDC",
+        "en": "! Reserves fall short: {v} USDC",
+        "zh": "! 储备不足：{v} USDC",
     },
     "admin_top_balances": {"ru": "Топ балансов", "en": "Top balances", "zh": "余额排行"},
     "admin_pending_withdraws": {
@@ -2698,9 +2699,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "今日操作：{n}",
     },
     "admin_agent_breaker": {
-        "ru": "⚠ Circuit breaker взведён — агент остановлен",
-        "en": "⚠ Circuit breaker is tripped — the agent is stopped",
-        "zh": "⚠ 熔断器已触发——代理已停止",
+        "ru": "! Circuit breaker взведён — агент остановлен",
+        "en": "! Circuit breaker is tripped — the agent is stopped",
+        "zh": "! 熔断器已触发——代理已停止",
     },
     "admin_agent_last": {
         "ru": "Последние действия агента",

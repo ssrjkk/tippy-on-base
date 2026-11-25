@@ -1,4 +1,4 @@
-﻿"""/ask — the assistant: an LLM provider when one answers, ledger data when none does."""
+"""/ask — the assistant: an LLM provider when one answers, ledger data when none does."""
 import html
 
 from aiogram import types
@@ -47,7 +47,7 @@ async def cmd_ask(message: types.Message) -> None:
         return
     if len(answer) > common.config.AI_MAX_ANSWER_CHARS:
         answer = answer[:common.config.AI_MAX_ANSWER_CHARS - 1] + '…'
-    header = '🧠 <b>Tippy AI</b>\n\n'
+    header = '<b>Tippy AI</b>\n\n'
     body = html.escape(answer)[:4096 - len(header)]
     # The cut can land inside an escaped entity ('&l' without ';'), which
     # Telegram rejects as malformed markup — drop a dangling partial entity.

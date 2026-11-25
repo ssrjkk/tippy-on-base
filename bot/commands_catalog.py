@@ -49,7 +49,7 @@ BOT_COMMAND_SPECS = [
     ('language', 'Сменить язык / Language', 'account'),
     ('about', 'О боте — что это такое', 'account'),
     ('app', 'Мини-приложение', 'account'),
-    ('ask', 'Спросить ИИ-ассистента', 'account'),
+    ('ask', 'Спросить AI-ассистента', 'account'),
     ('gasless', 'Бесплатные транзакции', 'wallet'),
     ('subscribe', 'Подписка на платежи', 'tips'),
     ('subscriptions', 'Мои подписки', 'tips'),

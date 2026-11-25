@@ -2647,6 +2647,38 @@ def test_no_emoji_is_used_as_an_icon_in_the_web_ui():
     assert not offenders, offenders[:10]
 
 
+def test_telegram_bot_ui_uses_typographic_marks_not_pictograms():
+    """The bot, site and Mini App share one plain-text terminal voice. Telegram
+    cannot theme an emoji, so the bot may use only the same typographic marks as
+    the web surfaces: arrows, checks, crosses, dots and stars."""
+    allowed = set("✓↗★●○→↘≈−≤└↑←↓▰▱▲▼▫")
+    pattern = re.compile(r"[\U0001F000-\U0001FAFF\u2100-\u27FF\u2B00-\u2BFF]")
+    files = [ROOT / "bot" / "i18n.py", ROOT / "bot" / "main.py", ROOT / "bot" / "commands_catalog.py"]
+    files.extend(sorted((ROOT / "bot" / "handlers").glob("*.py")))
+    offenders = []
+    for path in files:
+        text = path.read_text(encoding="utf-8-sig")
+        for match in pattern.finditer(text):
+            if match.group() in allowed:
+                continue
+            line = text[: match.start()].count("\n") + 1
+            offenders.append((path.relative_to(ROOT).as_posix(), line, ascii(match.group())))
+    assert not offenders, offenders[:10]
+
+
+def test_telegram_bot_button_labels_fit_the_client_limit():
+    from bot import i18n
+
+    offenders = [
+        (key, lang, len(text))
+        for key, translations in i18n.STRINGS.items()
+        if key.startswith("btn_")
+        for lang, text in translations.items()
+        if len(text) > 64
+    ]
+    assert not offenders, offenders
+
+
 def test_every_escaper_that_builds_html_escapes_quotes():
     """The four files below build markup by string concatenation and interpolate
     esc() INSIDE attributes (`data-val="${esc(r.to)}"`, `aria-label="${…}"`).

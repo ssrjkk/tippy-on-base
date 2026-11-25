@@ -7,10 +7,10 @@ from decimal import Decimal
 from aiogram import F, types
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from bot.ledger import blocked_destination
 from eth_utils import is_address, to_checksum_address
 
 from bot import i18n
-from bot.ledger import blocked_destination
 
 from . import _common as common
 
@@ -27,7 +27,7 @@ async def _notify_aml(bot, tg_id: int, warnings: list[str]) -> None:
         log.warning("no alert chat configured, an AML flag for tg_id=%s was not sent", tg_id)
         return
     text = (
-        f"🚩 <b>AML flag</b> (user <code>{tg_id}</code>):\n"
+        f"<b>AML flag</b> (user <code>{tg_id}</code>):\n"
         + "\n".join(f"• {html.escape(w)}" for w in warnings)
     )
     await bot.send_message(chat_id, text, parse_mode="HTML")
@@ -228,7 +228,7 @@ async def cmd_wallet(message: types.Message) -> None:
         from bot.tip_targets import display_name_for
         bname = await display_name_for(message.from_user.id)
         if bname:
-            text += f"\n\n🏷 <b>{common._esc(bname)}</b>"
+            text += f"\n\n<b>{common._esc(bname)}</b>"
     except Exception:
         pass  # RPC down — wallet view must not break
 
@@ -280,7 +280,7 @@ def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[In
     """
     slot_lines = [
         i18n.t(lang, 'wallet_slot_line',
-               marker='🟢' if w['active'] else '⚪', slot=w['slot'],
+               marker='●' if w['active'] else '○', slot=w['slot'],
                addr=common._esc(w['address']))
         for w in wallets
     ]
@@ -288,7 +288,7 @@ def _wallet_list_view(wallets: list[dict], lang: str) -> tuple[str, list[list[In
     row: list[InlineKeyboardButton] = []
     for w in wallets:
         row.append(InlineKeyboardButton(
-            text=common.btn_text(f"{'🟢' if w['active'] else '⚪'}{w['slot']}"),
+            text=common.btn_text(f"{'●' if w['active'] else '○'}{w['slot']}"),
             callback_data=f"wallet_sel:{w['id']}"))
         if len(row) == 5:
             kb.append(row)
@@ -553,9 +553,9 @@ async def cmd_tx(message: types.Message) -> None:
     if not info:
         await message.answer(i18n.t(lang, 'tx_not_found'))
     else:
-        status = '⏳ pending' if info['status'] is None else '✅ confirmed' if info['status'] else '❌ reverted'
+        status = '… pending' if info['status'] is None else '✓ confirmed' if info['status'] else '× reverted'
         usdc_line = ''
         if info['value_micro'] is not None:
-            usdc_line = f"🪙 USDC: <b>{common._fmt(info['value_micro'])} USDC</b> → <code>{common._h(info['usdc_to'])}</code>"
+            usdc_line = f"USDC: <b>{common._fmt(info['value_micro'])} USDC</b> → <code>{common._h(info['usdc_to'])}</code>"
         to_addr = common._h(info['to'] or 'contract creation')
         await message.answer(i18n.t(lang, 'tx_info', from_addr=common._h(info['from']), to_addr=to_addr, status=status, usdc_line=usdc_line, url=f"{common.config.BASESCAN_URL}/tx/{info['hash']}"))

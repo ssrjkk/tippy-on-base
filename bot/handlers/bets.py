@@ -8,9 +8,9 @@ from decimal import Decimal
 from aiogram import F, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from bot.fees import win_fee_pct_label
 
 from bot import i18n
-from bot.fees import win_fee_pct_label
 
 from . import _common as common
 
@@ -152,7 +152,7 @@ async def _bet_card(bet, tg_id: int | None=None) -> str:
 
 async def _market_detail_text(view: dict, tg_id: int | None=None) -> str:
     lang = await _lang(tg_id)
-    lines = [f"🎯 #{view['id']} <b>{common._h(view['question'])}</b>"]
+    lines = [f"#{view['id']} <b>{common._h(view['question'])}</b>"]
     if view['status'] == 'resolved':
         winner = view['options'][view['winner']]['label'] if view['winner'] is not None and view['winner'] < len(view['options']) else '?'
         lines.append(i18n.t(lang, 'bet_resolved', winner=common._h(winner)))
@@ -162,11 +162,11 @@ async def _market_detail_text(view: dict, tg_id: int | None=None) -> str:
         lines.append(i18n.t(lang, 'bet_expired', id=view['id']))
     else:
         creator = view['creator']['username'] or 'id' + str(view['creator']['id'])
-        lines.append(f"⏰ {_rel_deadline(view['close_at'], lang)} · @{common._h(creator)}")
+        lines.append(f"{_rel_deadline(view['close_at'], lang)} · @{common._h(creator)}")
     my_stake = await common.ledger.user_bet_stake(view['id'], tg_id) if tg_id else {}
     for o in view['options']:
         mine = f" · <b>{i18n.t(lang, 'your_stake', amt=common._fmt(my_stake[o['index']]))}</b>" if my_stake.get(o['index']) else ''
-        backers = f"{o['backers']}👤" if o['backers'] else ''
+        backers = f"{o['backers']}" if o['backers'] else ''
         lines.append(f"{o['index'] + 1}) {common._h(o['label'])} — <b>{common._fmt(o['pool'])} USDC</b> ({o['probability']}%, {backers}){mine}")
     lines.append(i18n.t(lang, 'bet_pot', pot=common._fmt(view['pot']), backers=view['total_backers']))
     lines.append(i18n.t(lang, 'bet_fee_note', pct=win_fee_pct_label()))
@@ -187,12 +187,12 @@ async def _bets_text(tg_id: int | None=None) -> tuple[str, InlineKeyboardMarkup]
         if view['expired']:
             meta = i18n.t(lang, 'bet_list_expired', id=view['id'])
         else:
-            meta = ' ⏰ ' + _rel_deadline(view['close_at'], lang)
-        lines.append(f"#{view['id']} {common._h(view['question'])} — {common._fmt(view['pot'])} USDC · {view['total_backers']}👤{meta}")
+            meta = ' ' + _rel_deadline(view['close_at'], lang)
+        lines.append(f"#{view['id']} {common._h(view['question'])} — {common._fmt(view['pot'])} USDC · {view['total_backers']}{meta}")
     lines.append(i18n.t(lang, 'bet_list_hint'))
     # Buttons follow `views`, not `bets`: a market that has no view has no line
     # above it either, and a button that opens nothing is a dead end.
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"🎯 #{v['id']}: {v['question'][:38]}"), callback_data=f"market:{v['id']}")] for v in views] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')],
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"#{v['id']}: {v['question'][:38]}"), callback_data=f"market:{v['id']}")] for v in views] + [[InlineKeyboardButton(text=i18n.t(lang, 'btn_mk_create'), callback_data='betcreate')],
                               [common._back_row(lang)]])
     return ('\n'.join(lines), kb)
 
@@ -218,7 +218,7 @@ async def cb_market(cb: types.CallbackQuery) -> None:
     # ever answer with an error while trading is still open.
     closed = view['status'] == 'open' and int(time.time()) >= int(view['close_at'])
     if user and closed and (user.id == view['creator']['id']):
-        rows.append([InlineKeyboardButton(text='🏁 ' + i18n.t(lang, 'btn_close_market'), callback_data=f'res:{bet_id}')])
+        rows.append([InlineKeyboardButton(text=i18n.t(lang, 'btn_close_market'), callback_data=f'res:{bet_id}')])
     rows.append([InlineKeyboardButton(text=i18n.t(lang, 'btn_all_markets'), callback_data='bets')])
     kb = InlineKeyboardMarkup(inline_keyboard=rows)
     await common._edit_menu(cb, await _market_detail_text(view, user.id if user else None), kb)
@@ -246,7 +246,7 @@ async def cb_res(cb: types.CallbackQuery) -> None:
         await cb.answer(i18n.t(lang, 'market_only_creator'), show_alert=True)
         return
     if len(ids) == 1:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"🏆 {o['label'][:30]}"), callback_data=f"res:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f"★ {o['label'][:30]}"), callback_data=f"res:{bet_id}:{o['index']}")] for o in view['options']] + [[InlineKeyboardButton(text='← ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
         await common._edit_menu(cb, i18n.t(lang, 'bet_resolve_title', id=bet_id, question=common._h(view['question']), pot=common._fmt(view['pot']), pct=win_fee_pct_label()), kb)
         await cb.answer()
         return
@@ -282,7 +282,7 @@ async def cb_bet_amount(cb: types.CallbackQuery) -> None:
         await cb.answer(i18n.t(lang, 'bet_bad_option'), show_alert=True)
         return
     label = view['options'][opt]['label']
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f'{a} USDC'), callback_data=f'bets:{bet_id}:{opt}:{a}') for a in common.QUICK_AMOUNTS], [InlineKeyboardButton(text='◀️ ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=common.btn_text(f'{a} USDC'), callback_data=f'bets:{bet_id}:{opt}:{a}') for a in common.QUICK_AMOUNTS], [InlineKeyboardButton(text='← ' + i18n.t(lang, 'btn_back'), callback_data=f'market:{bet_id}')]])
     await common._edit_menu(cb, i18n.t(lang, 'bet_amount_ask', id=bet_id, question=common._h(view['question']), label=common._h(label)), kb)
     await cb.answer()
 
@@ -342,7 +342,7 @@ async def cmd_resolve(message: types.Message) -> None:
         return
     ok, msg = await common.ledger.resolve_bet(bet_id, winning_idx, message.from_user.id)
     if not ok:
-        await message.answer(f'❌ {msg}')
+        await message.answer(f'× {msg}')
         return
     await message.answer(i18n.t(lang, 'bet_resolved_header', id=bet_id) + f'\n{common._h(msg)}\n\n' + i18n.t(lang, 'bet_payouts_sent'))
     await _notify_bet_result(message, bet_id)
@@ -400,9 +400,9 @@ async def cmd_cancel(message: types.Message) -> None:
         return
     ok, msg = await common.ledger.cancel_bet(int(parts[1]), message.from_user.id)
     if not ok:
-        await message.answer(f'❌ {msg}')
+        await message.answer(f'× {msg}')
         return
-    await message.answer(f'✅ {msg}')
+    await message.answer(f'✓ {msg}')
     await _notify_bet_cancelled(message, int(parts[1]))
 
 @common.router.message(Command('mybets'))
@@ -416,7 +416,7 @@ async def cmd_mybets(message: types.Message) -> None:
     for p in positions:
         stake = p['stake_micro']
         lines.append(
-            f"🎯 #{p['bet_id']} <b>{common._h(p['question'])}</b>\n"
+            f"#{p['bet_id']} <b>{common._h(p['question'])}</b>\n"
             f"   • {common._h(p['option'])} — {common._fmt(stake)} USDC\n"
             f"   • {i18n.t(lang, 'potential_win', amt=common._fmt(p['potential_micro']))}"
             f" · {i18n.t(lang, 'bet_my_net', net=common._fmt(p['net_micro']), pct=win_fee_pct_label())}"

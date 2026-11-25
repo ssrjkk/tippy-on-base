@@ -28,7 +28,7 @@ __all__ = [
     "BTN_TEXT_LIMIT",
     "DEADLINE_RE",
     "DONATE_LINK_RE",
-    "KIND_EMOJI",
+    "KIND_MARK",
     "PAYWALL_LINK_RE",
     "QUICK_AMOUNTS",
     "SIG_RE",
@@ -143,7 +143,7 @@ async def _on_error(event: types.ErrorEvent) -> None:
     try:
         await bot.send_message(
             admin,
-            f"⚠️ <b>Bot error</b>\n{html.escape(type(event.exception).__name__)}: {html.escape(str(event.exception)[:200])}\n{html.escape(ctx)}",
+            f"! <b>Bot error</b>\n{html.escape(type(event.exception).__name__)}: {html.escape(str(event.exception)[:200])}\n{html.escape(ctx)}",
             parse_mode="HTML",
         )
     except Exception:
@@ -197,29 +197,29 @@ def help_text(lang: str = "ru") -> str:
     return i18n.help_text(lang)
 
 
-KIND_EMOJI = {
-    "deposit": "⬇️",
-    "tip": "💸",
-    "tip_in": "💸",
-    "rain_in": "🌧️",
-    "withdraw": "⬆️",
-    "withdraw_refund": "⬇️",
-    "fee": "🧾",
-    "creator_income": "🧾",
-    "dividend": "🧾",
-    "bet": "🎲",
-    "bet_win": "🏆",
-    "bet_cancel": "↩️",
-    "x402": "🤖",
-    "paywall": "🔐",
-    "paywall_earn": "💰",
-    "channel_pay": "🔑",
-    "channel_earn": "💰",
-    "market_create": "🏦",
-    "market_buy": "📈",
-    "market_sell": "📉",
-    "market_win": "🏆",
-    "market_cancel": "↩️",
+KIND_MARK = {
+    "deposit": "↓",
+    "tip": "",
+    "tip_in": "",
+    "rain_in": "",
+    "withdraw": "↑",
+    "withdraw_refund": "↓",
+    "fee": "",
+    "creator_income": "",
+    "dividend": "",
+    "bet": "",
+    "bet_win": "★",
+    "bet_cancel": "←",
+    "x402": "",
+    "paywall": "",
+    "paywall_earn": "",
+    "channel_pay": "",
+    "channel_earn": "",
+    "market_create": "",
+    "market_buy": "↗",
+    "market_sell": "↘",
+    "market_win": "★",
+    "market_cancel": "←",
 }
 
 _bot_username: str | None = None

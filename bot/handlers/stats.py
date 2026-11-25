@@ -1,11 +1,11 @@
-﻿"""Stats / leaderboard / history handlers."""
+"""Stats / leaderboard / history handlers."""
 import html
 
 from aiogram import types
 from aiogram.filters import Command
+from bot.ledger import is_credit
 
 from bot import i18n, tip_targets
-from bot.ledger import is_credit
 from bot.tx_view import label_for
 
 from . import _common as common
@@ -40,11 +40,10 @@ async def _top_text(tg_id: int | None = None) -> str:
     # ten of each walked one after another.
     basenames = await tip_targets.display_names_for([i for i in ids if not names[i]])
     lines = []
-    for i, row in enumerate(rows, 1):
+    for row in rows:
         tg_id = int(row['tg_id'])
         uname = names[tg_id] or basenames.get(tg_id) or f"id{tg_id}"
-        medal = '🥇' if i == 1 else '🥈' if i == 2 else '🥉' if i == 3 else '▫️'
-        lines.append(f"{medal} <b>@{common._h(uname)}</b> — {common._fmt(row['total'])} USDC")
+        lines.append(f"<b>@{common._h(uname)}</b> — {common._fmt(row['total'])} USDC")
     return i18n.t(lang, 'top_title') + '\n\n' + '\n'.join(lines)
 
 
@@ -77,60 +76,61 @@ async def _history_text(tg_id: int, limit: int=15, rows_override: list[dict] | N
     lang = await common.user_lang(tg_id)
     names = await common.ledger.usernames_bulk(_tip_counterparties(rows))
     for r in rows:
-        emoji = common.KIND_EMOJI.get(r['kind'], '•')
+        mark = common.KIND_MARK.get(r['kind'], '•')
+        prefix = f'{mark} ' if mark else ''
         amt = common._fmt(r['amount'])
         if r['kind'] == 'tip':
             if r['note'] == 'rain':
                 n = len([c for c in str(r['counterparty'] or '').split(',') if c])
-                lines.append(f'{emoji} −{amt} {i18n.t(lang, "hist_rain")} ×{n}')
+                lines.append(f'{prefix}−{amt} {i18n.t(lang, "hist_rain")} ×{n}')
             else:
                 cid = int(r['counterparty']) if r['counterparty'].isdigit() else None
                 cname = names.get(cid) if cid else None
                 who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
-                lines.append(f'{emoji} {amt} → {who}')
+                lines.append(f'{prefix}{amt} → {who}')
         elif r['kind'] in ('rain_in', 'tip_in'):
             cid = int(r['counterparty']) if str(r['counterparty'] or '').isdigit() else None
             cname = names.get(cid) if cid else None
             who = f'@{common._h(cname)}' if cname else common._h(r['counterparty'] or '?')
-            lines.append(f'{emoji} +{amt} ← {who}')
+            lines.append(f'{prefix}+{amt} ← {who}')
         elif r['kind'] == 'creator_income':
-            lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_creator_fee')}")
+            lines.append(f"{prefix}+{amt} #{r['counterparty']}{i18n.t(lang, 'hist_creator_fee')}")
         elif r['kind'] == 'dividend':
-            lines.append(f"{emoji} +{amt} {html.escape(r['note'] or '')}")
+            lines.append(f"{prefix}+{amt} {html.escape(r['note'] or '')}")
         elif r['kind'] == 'deposit':
-            lines.append(f"{emoji} +{amt} <code>{common._esc(r['counterparty'])}</code>")
+            lines.append(f"{prefix}+{amt} <code>{common._esc(r['counterparty'])}</code>")
         elif r['kind'] == 'withdraw':
             lines.append(
-                f"{emoji} −{amt} → <code>{common._esc(r['counterparty'])}</code>"
+                f"{prefix}−{amt} → <code>{common._esc(r['counterparty'])}</code>"
                 f"{_withdraw_state(lang, r)}"
             )
         elif r['kind'] == 'withdraw_refund':
-            lines.append(f"{emoji} +{amt} <code>{common._esc(r['counterparty'])}</code>")
+            lines.append(f"{prefix}+{amt} <code>{common._esc(r['counterparty'])}</code>")
         elif r['kind'] == 'fee':
-            lines.append(f"{emoji} −{amt}{i18n.t(lang, 'hist_fee')}{_withdraw_state(lang, r)}")
+            lines.append(f"{prefix}−{amt}{i18n.t(lang, 'hist_fee')}{_withdraw_state(lang, r)}")
         elif r['kind'] == 'bet':
-            lines.append(f"{emoji} −{amt} #{r['counterparty']} ({html.escape(r['note'] or '')})")
+            lines.append(f"{prefix}−{amt} #{r['counterparty']} ({html.escape(r['note'] or '')})")
         elif r['kind'] == 'bet_win':
-            lines.append(f"{emoji} +{amt} #{r['counterparty']}")
+            lines.append(f"{prefix}+{amt} #{r['counterparty']}")
         elif r['kind'] == 'bet_cancel':
-            lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_bet_cancel')}")
+            lines.append(f"{prefix}+{amt} #{r['counterparty']}{i18n.t(lang, 'hist_bet_cancel')}")
         elif r['kind'] == 'x402':
             sender = r['counterparty'] or '?'
             short = f'{sender[:10]}…{sender[-4:]}' if sender.startswith('0x') else sender
-            lines.append(f"{emoji} +{amt} {i18n.t(lang, 'hist_agent')} <code>{common._esc(short)}</code>")
+            lines.append(f"{prefix}+{amt} {i18n.t(lang, 'hist_agent')} <code>{common._esc(short)}</code>")
         elif r['kind'] == 'paywall':
-            lines.append(f"{emoji} −{amt} #{r['counterparty']}{i18n.t(lang, 'hist_paywall')}")
+            lines.append(f"{prefix}−{amt} #{r['counterparty']}{i18n.t(lang, 'hist_paywall')}")
         elif r['kind'] == 'paywall_earn':
-            lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_paywall_sell')}")
+            lines.append(f"{prefix}+{amt} #{r['counterparty']}{i18n.t(lang, 'hist_paywall_sell')}")
         elif r['kind'] == 'channel_pay':
-            lines.append(f"{emoji} −{amt} #{r['counterparty']}{i18n.t(lang, 'hist_channel_sub')}")
+            lines.append(f"{prefix}−{amt} #{r['counterparty']}{i18n.t(lang, 'hist_channel_sub')}")
         elif r['kind'] == 'channel_earn':
-            lines.append(f"{emoji} +{amt} #{r['counterparty']}{i18n.t(lang, 'hist_channel_sell')}")
+            lines.append(f"{prefix}+{amt} #{r['counterparty']}{i18n.t(lang, 'hist_channel_sell')}")
         else:
             # Never print the raw kind: it is an internal identifier, and the
             # label already exists for every kind the ledger writes.
             sign = '+' if is_credit(r['kind']) else '−'
-            lines.append(f"{emoji} {sign}{amt} {html.escape(label_for(r['kind'], lang))}")
+            lines.append(f"{prefix}{sign}{amt} {html.escape(label_for(r['kind'], lang))}")
     return i18n.t(lang, 'history_title') + '\n\n' + '\n'.join(lines)
 
 @common.router.message(Command('top'))
