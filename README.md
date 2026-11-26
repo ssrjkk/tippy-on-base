@@ -1,5 +1,7 @@
 # Tippy - Community Economy in USDC on Base
 
+> **Languages:** [English](README.md) · [Русский](README.ru.md)
+
 A Telegram bot that turns any chat or community into a financial ecosystem:
 **instant USDC tips, Polymarket-style prediction markets with live AMM odds,
 an AI assistant, paywalled content, and per-user wallets** — all on Base.
