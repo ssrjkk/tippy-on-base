@@ -20,7 +20,7 @@ External funding figures are quoted from the programs' own pages and listed in
   (паримутуэл и LMSR-AMM), платный контент, токены авторов с дивидендами,
   рекуррентные подписки, автономный AI-агент и приём платежей от AI-агентов по x402.
 - **Что уже написано:** 47 команд бота, 53 HTTP-маршрута, 9 контрактов, 18 доменных
-  миксинов леджера, 10 модулей агента, 1565 обычных тестов + 199 боевых. Три языка.
+  миксинов леджера, 10 модулей агента, 1568 обычных тестов + 199 боевых. Три языка.
 - **Что выключено флагами:** ончейн-рынки (ERC-1155) и gasless-кошельки (ERC-4337).
   Код есть, деплой на mainnet — нет.
 - **Что приносит деньги сегодня:** ровно одна строка — комиссия 1% с вывода.
@@ -237,8 +237,9 @@ filled into both request forms, and the refusal paths next to it.
 loop: RSS news ingestion (CryptoPanic with a token, plus free public fallbacks),
 an LLM decision layer that turns news into structured market/bet decisions, direct
 tool calls into the ledger, spend caps and a circuit breaker, PnL attribution with
-a stop-loss on drawdown, EAS attestations of its actions, and **signal selling** —
-the agent publishes its own analysis as a paywall post.
+a stop-loss on drawdown, EAS attestations when configured (local audit records
+otherwise), and **signal selling** — the agent publishes its own analysis as a
+paywall post.
 
 Agent safety knobs are real configuration, not prose: daily spend cap 50 USDC,
 per-transaction cap 10 USDC, 20 actions per hour, stop-loss at 20% drawdown, halt
@@ -306,7 +307,7 @@ data through `bot/ai_data.py` and says that it did.
 
 | Measure | Value |
 | --- | --- |
-| Tests | 1565 ordinary + 199 production (rendered-page and live-site gates) |
+| Tests | 1568 ordinary + 199 production (rendered-page and live-site gates) |
 | Languages | ru / en / zh, two independent catalogs, key sets gated equal |
 | Ledger domain mixins | 18 (every base of `Ledger` in `bot/ledger/__init__.py`) |
 | Agent modules | 10 (`git ls-files agent/*.py`) |
@@ -499,9 +500,10 @@ repository today):
 4. **ERC-4337 gasless onboarding** implemented: account, factory, verifying
    paymaster with chain-id-bound signatures, per-operation and global gas ceilings.
 5. An autonomous agent with spend caps, a circuit breaker, stop-loss and EAS
-   attestations, which also sells its analysis through the same paywall rail.
+   attestations when configured (local audit records otherwise), which also
+   sells its analysis through the same paywall rail.
 6. Published solvency across six liability categories, an append-only audit trail,
-   and 1565 + 199 tests including structural gates that fail the build when a
+   and 1568 + 199 tests including structural gates that fail the build when a
    documented claim stops being true.
 7. Three languages, with the Mini App as the primary mobile surface.
 
@@ -590,7 +592,7 @@ Lines of code: every file `git ls-files` reports with one of `.py .sol .js .css
 .html .sh .ps1`, counted as `len(splitlines())` and grouped by top-level directory
 — so the vendored `contracts/lib/` (a `.gitkeep` in git) never enters, and neither
 does a scratch file `.gitignore` keeps out of the clone. Measured this way the tree
-is **84,963** lines: tests 41,174 · bot 20,821 · web 12,538 · scripts 2,906 ·
+is **85,021** lines: tests 41,230 · bot 20,822 · web 12,539 · scripts 2,906 ·
 contracts 2,649 · agent 1,636 · alembic 1,462 · deploy 1,373 · functions 348 ·
 script 56 (the one Foundry deploy script at the repository root).
 

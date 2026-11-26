@@ -342,11 +342,11 @@ CHAINLINK_ETH_USD_FEED: str = os.environ.get(
 )
 CHAINLINK_USDC_USD_FEED: str = os.environ.get(
     "CHAINLINK_USDC_USD_FEED",
-    "0x7e860098F58bBFC8648a4311b374B1D669aB2f0f",  # USDC/USD (Base)
+    "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",  # USDC/USD (Base)
 )
 CHAINLINK_L2_SEQUENCER_FEED: str = os.environ.get(
     "CHAINLINK_L2_SEQUENCER_FEED",
-    "0x7A94057f40E4d9c4E5a9E2A90Aeaf7A428C0BbC2",  # Base sequencer uptime
+    "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433",  # Base sequencer uptime
 )
 # Oracle staleness windows: ETH updates per block (short), USDC on a long
 # heartbeat (wider), sequencer uptime (generous).
@@ -371,11 +371,11 @@ BASE_L2_RESOLVER_ADDRESS: str = os.environ.get(
 )
 BASE_REVERSE_REGISTRAR_ADDRESS: str = os.environ.get(
     "BASE_REVERSE_REGISTRAR_ADDRESS",
-    "0x0AfD16d8D0B5a7b4C0AA13a7e7F0BB6d2b52A4AC",  # ENSIP-19 reverse registrar
+    "0x79ea96012eea67a83431f1701b3dff7e37f9e282",  # ENSIP-19 reverse registrar
 )
 BASE_REGISTRY_ADDRESS: str = os.environ.get(
     "BASE_REGISTRY_ADDRESS",
-    "0x4cCb0BB02FCABA27e82a56646E81d3c12C45C903",  # Basenames registry
+    "0xb94704422c2a1e396835a571837aa5ae53285a95",  # Basenames registry
 )
 
 # On-chain treasury (TipBotVault, see contracts/). Users deposit into the

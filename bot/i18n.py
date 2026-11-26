@@ -2526,9 +2526,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "格式：/createtoken <名称> <符号> <供应量> <价格>\n示例：/createtoken \"My Token\" MTK 1000000 0.10",
     },
     "token_created": {
-        "ru": "<b>Токен создан!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nДержатели получают дивиденды от твоего заработка автоматически.",
-        "en": "<b>Token created!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nHolders receive dividends from your earnings automatically.",
-        "zh": "<b>代币已创建！</b>\n\n{name}（${symbol}）\nID：<code>{token_id}</code>\n\n持有者自动从你的收入中获得分红。",
+        "ru": "<b>Токен создан!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nДержатели получают дивиденды от твоего заработка автоматически.\nЭто внутренний учётный токен Tippy, не ERC-20 и не on-chain актив.",
+        "en": "<b>Token created!</b>\n\n{name} (${symbol})\nID: <code>{token_id}</code>\n\nHolders receive dividends from your earnings automatically.\nThis is an internal Tippy ledger token, not an ERC-20 or an on-chain asset.",
+        "zh": "<b>代币已创建！</b>\n\n{name}（${symbol}）\nID：<code>{token_id}</code>\n\n持有者自动从你的收入中获得分红。\n这是 Tippy 内部记账代币，不是 ERC-20，也不是链上资产。",
     },
     "buy_token_format": {
         "ru": "Формат: /buytoken &lt;token_id&gt; &lt;amount&gt;",

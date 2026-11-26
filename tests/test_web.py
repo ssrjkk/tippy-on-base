@@ -65,6 +65,24 @@ def test_info(client):
     assert "bot_username" in r.json()
 
 
+def test_demo_payload_uses_the_real_chain_and_default_bounds():
+    from bot import config as cfg
+
+    root = Path(__file__).resolve().parents[1]
+    expected = {
+        "max_withdraws_per_day": cfg.MAX_WITHDRAWS_PER_DAY,
+        "default_deadline_hours": cfg.MARKET_DEFAULT_HOURS,
+        "deposit_confirmations": cfg.DEPOSIT_CONFIRM_BLOCKS,
+        "max_deadline_hours": cfg.MARKET_MAX_DEADLINE_HOURS,
+    }
+    address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    for name in ("app.js", "app.html"):
+        text = (root / "web/static" / name).read_text(encoding="utf-8-sig")
+        assert re.search(rf"usdc_address:\s*['\"]{re.escape(address)}['\"]", text)
+        for key, value in expected.items():
+            assert re.search(rf"\b{key}:\s*{value}\b", text), f"{name}: stale demo {key}"
+
+
 def test_info_publishes_the_x402_terms_the_sandbox_prints(client, monkeypatch):
     """/api/info's x402 block is what the handshake sandbox puts into the amount
     field's `min`/`max` and into the sentence about the range it accepts. If the

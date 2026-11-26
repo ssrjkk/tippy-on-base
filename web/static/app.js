@@ -6,10 +6,10 @@ let DEMO_MODE = false;
 
 const DEMO_DATA = {
   info: {
-    bot_username: "TippyOnBaseBot",
+    bot_username: "tippy_on_base_bot",
     chain_name: "Base",
     chain_id: 8453,
-    usdc_address: "0x833589fCD6edb6E04fC7C1D01bAad89c3D045c0b7d",
+    usdc_address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     explorer: "https://basescan.org",
     limits: {
       max_tip_usdc: 1000,
@@ -17,11 +17,12 @@ const DEMO_DATA = {
       min_trade_usdc: 0.01,
       max_bet_usdc: 500,
       min_withdraw_usdc: 1,
-      max_withdraws_per_day: 3,
+      max_withdraws_per_day: 5,
       min_subsidy_usdc: 10,
       max_subsidy_usdc: 1000,
       max_deadline_hours: 720,
-      default_deadline_hours: 24,
+      default_deadline_hours: 168,
+      deposit_confirmations: 10,
     },
     fees: { withdraw_pct: 1, win_pct: 2 },
     x402: { enabled: false, min_usdc: 0.01, max_usdc: 100, invoice_ttl_seconds: 900 },

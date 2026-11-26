@@ -1,4 +1,4 @@
-"""Handler for breakthrough Base features — gasless, recurring, creator tokens."""
+"""Handlers for gasless wallets, recurring payments and creator revenue shares."""
 
 import time
 from decimal import Decimal, InvalidOperation

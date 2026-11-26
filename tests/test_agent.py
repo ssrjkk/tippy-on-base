@@ -318,6 +318,26 @@ class TestEAS:
         assert isinstance(encoded, bytes)
         assert len(encoded) > 0
 
+    def test_base_deployment_and_request_match_the_eas_abi(self, monkeypatch):
+        import agent.eas as eas
+
+        monkeypatch.setattr(eas, "SCHEMA_UID", "0x" + "11" * 32)
+        data = eas.AttestationData(
+            action_type="create_market",
+            market_id=42,
+            amount_micro=10_000_000,
+            confidence=75,
+            reasoning="Audit",
+        )
+        components = eas.EAS_ABI[0]["inputs"][0]["components"]
+        assert eas.EAS_ADDRESS == "0x4200000000000000000000000000000000000021"
+        assert [item["name"] for item in components] == [
+            "recipient", "expirationTime", "revocable", "refUUID", "schema", "data", "value",
+        ]
+        request = eas._attestation_request(data)
+        assert len(request) == len(components)
+        assert request[-1] == 0
+
     def test_reasoning_hash(self):
         from agent.eas import AttestationData
         data = AttestationData(
