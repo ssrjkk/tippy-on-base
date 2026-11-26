@@ -127,8 +127,9 @@ winners proportionally to their stake.
 
 ## Creator tokens & dividends
 
-Launch a token on yourself; buyers hold shares and earn dividends from your
-revenue.
+Create an internal revenue-share unit in Tippy's PostgreSQL ledger; buyers hold
+shares and earn dividends from your revenue. These units are not ERC-20 tokens
+and are not on-chain assets.
 
 | Command | What it does |
 |---|---|
@@ -140,9 +141,10 @@ revenue.
 
 ## Smart wallet, gasless & basenames
 
-- **`/gasless`** — get a smart wallet sponsored by the paymaster: your first
-  on-chain actions cost you zero gas.
-- **`/basename`** — register a `you.base.eth` name and use it as your address.
+- **`/gasless`** — check sponsored transactions when the Smart Wallet stack and
+  paymaster are deployed and enabled.
+- **`/basename`** — check a `you.base.eth` name and its owner; register names on
+  basenames.app, then they resolve automatically.
 - **`/app`** — open the Tippy Mini App: charts, markets and your portfolio in
   a native-feeling window.
 

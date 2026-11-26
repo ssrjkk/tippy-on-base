@@ -3,7 +3,7 @@ FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6
 LABEL org.opencontainers.image.title="Tippy" \
       org.opencontainers.image.description="Community economy in USDC on Base: tips, Polymarket-style on-chain markets, x402" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/ssrjkk/Tippy-on-base"
+      org.opencontainers.image.source="https://github.com/ssrjkk/tippy-on-base"
 ENV PYTHONUNBUFFERED=1 \
     PYTHONUTF8=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1

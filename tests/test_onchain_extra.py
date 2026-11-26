@@ -8,6 +8,7 @@ Signing crypto is real; no network access anywhere.
 import asyncio
 import time
 import types
+from pathlib import Path
 
 import pytest
 from web3 import Web3
@@ -398,6 +399,23 @@ def test_usdc_and_eth_price_wrappers_use_config_feeds(monkeypatch):
     # USDC gets its own wider heartbeat-aware window
     assert base.get_usdc_price_usd_sync() == config.USDC_PRICE_FEED_MAX_AGE_SECONDS
     assert config.CHAINLINK_USDC_USD_FEED in seen
+
+
+def test_base_mainnet_contract_defaults_match_the_published_deployments():
+    expected = {
+        "CHAINLINK_USDC_USD_FEED": "0x7e860098F58bBFC8648a4311b374B1D669a2bc6B",
+        "CHAINLINK_L2_SEQUENCER_FEED": "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433",
+        "BASE_REVERSE_REGISTRAR_ADDRESS": "0x79ea96012eea67a83431f1701b3dff7e37f9e282",
+        "BASE_REGISTRY_ADDRESS": "0xb94704422c2a1e396835a571837aa5ae53285a95",
+    }
+    values = {}
+    for line in (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.lstrip().startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+    for key, address in expected.items():
+        assert getattr(config, key) == address
+        assert values[key] == address
 
 
 # ------------------------------------------------------- L2 sequencer guard

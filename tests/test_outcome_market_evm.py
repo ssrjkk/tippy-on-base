@@ -1,7 +1,7 @@
 ﻿"""OutcomeMarket + LMSR on a real local EVM (EthereumTester/py-evm).
 
 The 2026-08-24 security fixes (signed-cast wrap, cancelExpired refund theft)
-verified end-to-end with real compiled bytecode вЂ” the same scenarios as
+verified end-to-end with real compiled bytecode — the same scenarios as
 contracts/test/forge/SecurityFixes.t.sol, but executable in CI without foundry.
 """
 import ast

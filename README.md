@@ -5,9 +5,10 @@
 A Telegram bot that turns any chat or community into a financial ecosystem:
 **instant USDC tips, Polymarket-style prediction markets with live AMM odds,
 an AI assistant, paywalled content, and per-user wallets** — all on Base.
-No custom contracts in the hot path: only the official USDC contract plus an
-optional audited-style treasury vault; everything else is instant internal
-accounting backed by public proof-of-reserves.
+Core tips use the official USDC contract and instant internal accounting backed
+by public proof-of-reserves. Optional on-chain prediction markets and ERC-4337
+smart wallets use the contracts listed below; the contracts have not been
+externally audited.
 
 **Made by [@ssrjkk](https://github.com/ssrjkk).**
 
@@ -56,9 +57,9 @@ the growth roadmap, and what the product can earn (grants, subscriptions, fees).
 - `/positions` — your portfolio with live mark-to-market value and PnL
 - Resolution pays **1 USDC per winning share**; the market creator keeps the
   remaining liquidity pool as their earnings
-- **Guaranteed solvency by the LMSR funding theorem**: the escrow can always
-  cover the worst-case payout, verified by property tests along aggressive
-  random trading paths
+- **LMSR funding theorem**: the escrow covers the worst-case payout under the
+  model's assumptions; property tests exercise aggressive random trading paths,
+  and public proof-of-reserves reports actual backing
 - Deadline pings + grace-period auto-refund protection for forgotten markets
 
 ### Parimutuel polls (quick group games)
@@ -123,7 +124,8 @@ the growth roadmap, and what the product can earn (grants, subscriptions, fees).
 
 ### Autonomous agent (fail-closed)
 - Perceives crypto news → LLM filters noise → creates markets, bets, sells
-  analysis as paywall posts — **every action EAS-attested on Base**
+  analysis as paywall posts — actions are EAS-attested on Base when configured,
+  otherwise recorded in the local audit trail
 - News sources: CryptoPanic (with `CRYPTOPANIC_TOKEN`) plus free RSS fallbacks
   (CoinDesk, CoinTelegraph); deduplication and relevance scoring built in
 - Runs inside the main process (`deploy/run.py`) when `AGENT_TG_ID > 0` and the
@@ -164,24 +166,20 @@ the growth roadmap, and what the product can earn (grants, subscriptions, fees).
   `approveAndTrade` from the wallet's own USDC
 - Details: `docs/ARCHITECTURE.md` (Smart Wallet section)
 
-### Breakthrough Base L2 Features
-
-4 killer functions leveraging unique Base L2 capabilities:
+### Additional Base L2 Features
 
 #### 1. Gasless Onboarding
-**New users get 10 FREE transactions — zero barrier to entry.**
+When the paymaster is enabled, new wallets get 10 sponsored transactions.
 
 - `/gasless` — check your free transaction balance
-- Uses Base Paymaster API (Pimlico) to sponsor UserOperations
-- New wallets automatically qualify; gas paid by the protocol
-- After 10 free txs — standard Base fees (still just fractions of a cent)
+- Uses the configured Base Paymaster API (Pimlico by default) to sponsor UserOperations
+- New wallets qualify only after the factory and paymaster are deployed
+- After 10 sponsored transactions, standard Base fees apply
 
 ```
 /gasless -> You have 10 of 10 free transactions left!
            Gas is sponsored by Base — you pay nothing.
 ```
-
-**Why it's a breakthrough:** Traditional bots require users to hold ETH for gas. Base Paymaster eliminates this entirely — users onboard with USDC only and transact for free until they're hooked.
 
 #### 2. Recurring Payments (Subscriptions)
 **Automated scheduled transfers — daily, weekly, biweekly, monthly.**
@@ -199,10 +197,11 @@ the growth roadmap, and what the product can earn (grants, subscriptions, fees).
 
 **Why it matters:** the schedule lives in the bot's own Postgres and an hourly watcher debits the internal USDC balance — no external billing service, nothing to renew by hand. Creators use it for patronage, communities for paid memberships.
 
-#### 3. Creator Tokens with Revenue Sharing
-**Issue tokens that automatically distribute your earnings to holders.**
+#### 3. Creator Revenue Shares
+**Issue internal revenue-share units that distribute creator earnings to holders.**
 
-- `/createtoken <name> <SYMBOL> <supply> <price>` — launch a creator token
+- `/createtoken <name> <SYMBOL> <supply> <price>` — create a PostgreSQL-backed creator token
+- These units are not ERC-20 tokens and do not move on-chain
 - `/buytoken <token_id> <amount>` — buy a creator's tokens
 - `/claim <token_id>` — claim your share of their revenue
 - When creators earn (tips, market winnings), revenue automatically splits:
@@ -225,8 +224,6 @@ the growth roadmap, and what the product can earn (grants, subscriptions, fees).
 -> Claimed $50.00 in dividends!
 ```
 
-**Why it's a breakthrough:** This is the creator economy natively on-chain. Fans invest in creators, creators share revenue automatically — all powered by Base's smart accounts. No traditional equity needed; the token IS the revenue share.
-
 ### On-chain treasury (TipBotVault)
 - Users deposit USDC into the vault contract — visible to anyone on Base
 - Relayer distributes under a daily limit; owner (multisig) keeps full control
@@ -234,10 +231,10 @@ the growth roadmap, and what the product can earn (grants, subscriptions, fees).
 
 ## Operations
 
-Tippy runs as a private production deployment operated by its maintainers.
-The source is published for transparency and audit; there is no public
-run-it-yourself guide, and contract deployment stays with the team
-(vault/market owners are multisigs, never the hot wallet).
+Tippy's production deployment is operated privately by its maintainers.
+The source and local setup guide are published for transparency and audit;
+production credentials and contract ownership stay with the maintainers.
+Vault and market owners must be multisigs, never the hot wallet.
 
 ## Commands
 
@@ -265,7 +262,7 @@ A plain-language walkthrough for Telegram users lives in
 | `/subscribe @user <amt> <interval>` · `/subscriptions` · `/cancelsub` | Recurring payments |
 | `/createtoken <name> <SYM> <supply> <price>` | Launch a creator token |
 | `/buytoken <id> <amount>` · `/claim <id>` | Buy tokens / claim dividends |
-| `/basename` | Claim a Basename (on-chain identity) |
+| `/basename` | Check a Basename and its on-chain owner; register names on basenames.app |
 | `/settings` · `/language` · `/about` · `/app` | Notifications, ru/en/zh, what this is, Mini App |
 | `/admin` | Owner-only panel: users, volume, fees, treasury against liabilities, deposit-scanner lag, AI chain and its daily budget — read-only, private chat only |
 
@@ -366,7 +363,7 @@ tests/                  real Postgres, real dispatcher, real crypto, local EVM
 
 ```bash
 python -m ruff check bot web tests deploy agent scripts alembic
-python -m pytest -q -m "not production"   # 1565 tests (1 skipped in CI)
+python -m pytest -q -m "not production"   # 1568 tests (1 skipped in CI)
 ```
 
 Tests need a PostgreSQL 16 on `localhost:5432` with a `tipbot` role (password

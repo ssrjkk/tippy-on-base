@@ -1,6 +1,7 @@
-"""Revenue sharing tokens — creator economy with automatic dividend distribution.
+"""PostgreSQL-backed creator revenue shares with automatic dividends.
 
-Creators issue tokens that represent a share of their future revenue.
+These are internal ledger units, not ERC-20 tokens and not on-chain assets.
+Creators issue units that represent a share of their future revenue.
 Holders automatically receive proportional dividends when the creator
 earns income (tips, market winnings, etc).
 

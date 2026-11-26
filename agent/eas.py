@@ -1,13 +1,11 @@
-"""EAS (Ethereum Attestation Service) on-chain attestation for agent actions.
+"""EAS (Ethereum Attestation Service) helper for agent actions.
 
-Every agent action produces a public, immutable attestation on Base.
-This creates an audit trail = trust + grant bait.
+When ``AGENT_EAS_KEY`` and a registered ``EAS_SCHEMA_UID`` are configured, the
+action is attested on Base. Otherwise the same audit record is appended to a
+local JSONL trail and the missing on-chain configuration is logged.
 
-EAS contract on Base mainnet: 0xC2679fBD36d5E93C340e118209b9F0D949c0b167
-Schema (simplified): action_type(string), market_id(uint256), amount_usdc(uint256),
-                      confidence(uint8), reasoning_hash(bytes32), timestamp(uint256)
-
-Requires: web3.py (already in requirements.txt)
+Schema: action_type(string), market_id(uint256), amount_micro(uint256),
+        confidence(uint8), reasoning_hash(bytes32), timestamp(uint256)
 """
 
 import json
@@ -22,7 +20,7 @@ from web3 import Web3
 from . import config
 
 # EAS contract on Base mainnet
-EAS_ADDRESS = "0xC2679fBD36d5E93C340e118209b9F0D949c0b167"
+EAS_ADDRESS = "0x4200000000000000000000000000000000000021"
 
 # Minimal ABI for EAS attestation
 EAS_ABI = [
@@ -36,6 +34,7 @@ EAS_ABI = [
                     {"name": "refUUID", "type": "bytes32"},
                     {"name": "schema", "type": "bytes32"},
                     {"name": "data", "type": "bytes"},
+                    {"name": "value", "type": "uint256"},
                 ],
                 "name": "request",
                 "type": "tuple",
@@ -102,12 +101,20 @@ def _get_attester_key() -> str | None:
     return os.environ.get("AGENT_EAS_KEY")
 
 
-def attest_action(data: AttestationData) -> str | None:
-    """Submit an EAS attestation on Base. Returns tx hash or None on failure.
+def _attestation_request(data: AttestationData) -> tuple:
+    return (
+        Web3.to_checksum_address("0x0000000000000000000000000000000000000000"),
+        0,
+        True,
+        b"\x00" * 32,
+        Web3.to_bytes(hexstr=SCHEMA_UID),
+        data.encode_data(),
+        0,
+    )
 
-    For the demo, this logs locally and prints the attestation data.
-    Production would submit on-chain via the attester key.
-    """
+
+def attest_action(data: AttestationData) -> str | None:
+    """Submit an EAS attestation on Base, or record it locally when unavailable."""
     w3 = _get_w3()
     key = _get_attester_key()
 
@@ -129,14 +136,7 @@ def attest_action(data: AttestationData) -> str | None:
         )
         attester = w3.eth.account.from_key(key)
 
-        request = (
-            Web3.to_checksum_address("0x0000000000000000000000000000000000000000"),  # recipient
-            0,  # expirationTime (0 = no expiry)
-            True,  # revocable
-            b"\x00" * 32,  # refUUID
-            Web3.to_bytes(hexstr=SCHEMA_UID),
-            data.encode_data(),
-        )
+        request = _attestation_request(data)
 
         tx = eas.functions.attest(request).build_transaction({
             "from": attester.address,
