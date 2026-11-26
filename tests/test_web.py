@@ -1810,7 +1810,7 @@ def test_the_documents_agree_on_the_size_of_their_own_run():
     assert len(pairs) == 1, [t.groups() for t in stated]
     ordinary, production = pairs.pop()
 
-    readme_run = re.search(r'-m "not production"\s+# (\d+) passed', readme)
+    readme_run = re.search(r'-m "not production"\s+# (\d+) (?:passed|tests)', readme)
     readme_prod = re.search(r"The\s+(\d+) `production`-marked tests are excluded", readme)
     assert readme_run and readme_prod, "the README stopped counting the run it documents"
     assert readme_run.group(1) == ordinary, (readme_run.group(1), ordinary)
@@ -1853,7 +1853,7 @@ def test_the_documented_suite_size_is_the_size_of_this_run(request):
         "whitepaper en": re.search(r"(\d+) ordinary \+ \d+ production", paper),
         "whitepaper short": re.search(r"(\d+) \+ \d+ tests", paper),
         "AGENTS.md": re.search(r"(\d+) tests \((\d+) more, marked", agents),
-        "README run line": re.search(r'-m "not production"\s+# (\d+) passed', readme),
+        "README run line": re.search(r'-m "not production"\s+# (\d+) (?:passed|tests)', readme),
     }
     assert all(claims.values()), [k for k, v in claims.items() if not v]
     stated = {key: int(match.group(1)) for key, match in claims.items()}
