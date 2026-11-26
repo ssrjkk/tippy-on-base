@@ -3165,7 +3165,7 @@ def test_frame_page_exposes_paywall_card(client, ledger, monkeypatch):
     assert r.status_code == 200
     html = r.text
     assert "fc:frame" in html
-    assert "https://tipbot.example.com/miniapp-hero.png" in html
+    assert "https://tipbot.example.com/og-card.png" in html
     assert "https://t.me/base_tipbot?start=paywall_" + str(item_id) in html
     assert "x402" in html
     assert "https://tipbot.example.com/api/x402/paywall?item=" + str(item_id) in html

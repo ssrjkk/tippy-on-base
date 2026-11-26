@@ -704,7 +704,7 @@ async def mini_lang(body: LangBody, request: Request) -> dict:
 # fc:miniapp.imageUrl (spelled in the template), fc:frame:image — names this
 # file, and test_no_share_image_points_at_a_path_the_bundle_does_not_have
 # resolves each one against the directory.
-SHARE_IMAGE = "/miniapp-hero.png"
+SHARE_IMAGE = "/og-card.png"
 
 
 def public_base_url() -> str:
