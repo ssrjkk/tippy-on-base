@@ -1094,6 +1094,9 @@ def _document_meta(html: str, *, path: str, title: str | None = None,
     the row the page is about, which is what makes ``/m/12`` and ``/m/13`` two
     different documents.
     """
+    # Pages serves the static card; the server replaces it for dynamic routes and origins.
+    html = re.sub(r'<link\b[^>]*\brel=["\']canonical["\'][^>]*>\s*', '', html, flags=re.I)
+    html = re.sub(r'<meta\b[^>]*(?:property=["\']og:|name=["\']twitter:)[^>]*>\s*', '', html, flags=re.I)
     title_tag = _TITLE_RE.search(html)
     desc_tag = _DESC_RE.search(html)
     doc_title = title if title is not None else (_unesc(title_tag.group(1)) if title_tag else '')

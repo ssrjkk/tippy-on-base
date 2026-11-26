@@ -2754,8 +2754,8 @@ def test_no_substitution_key_is_dead():
 
 # Two documents are not pages of the site: `app.html` is the launch card the Base
 # App crawls (and therefore owns its own `og:` tags) and `not_found.html` is the
-# dead end, which must never name itself as a canonical. Everything else in the
-# bundle is expected to declare a title, a description and no hand-typed card.
+# dead end, which must never name itself as a canonical. The landing also owns a
+# static card for Pages; the server removes it before deriving the dynamic card.
 NOT_PAGES = ("app.html", "not_found.html")
 INDEXABLE_PAGES = tuple(name for name in PAGES if name not in NOT_PAGES)
 
@@ -2764,19 +2764,14 @@ TITLE_RE = re.compile(r"<title>")
 DESC_RE = re.compile(r'<meta name="description" content="([^"]+)"')
 
 
-def test_only_the_server_writes_a_share_card():
-    """``og:`` and ``twitter:`` are derived from ``<title>`` and the description
-    meta by `web/server.py`, so a template that also types them can only end up
-    disagreeing with its own document — which is exactly what `user.html` did:
-    the tab said «Профиль — Tippy» and the card said «Профиль в Tippy».
+def test_pages_card_is_replaced_by_the_server_card():
+    from web.server import _document_meta
 
-    `app.html` is the exception and owns it: it is not a page of the site, it is
-    the launch card the Base App crawls, and its tags carry the Mini App's own
-    copy.
-    """
     for name in INDEXABLE_PAGES:
-        found = CARD_RE.findall(read(name))
-        assert not found, f"{name} writes {found} — the server already does"
+        static = read(name)
+        assert len(CARD_RE.findall(static)) == (11 if name == "index.html" else 0), name
+        served = _document_meta(static, path="/")
+        assert len(CARD_RE.findall(served)) == 12, f"{name} duplicates or drops card tags"
     app = read("app.html")
     assert app.count('<meta property="og:title"') == 1
     assert app.count('<meta property="og:image"') == 1
